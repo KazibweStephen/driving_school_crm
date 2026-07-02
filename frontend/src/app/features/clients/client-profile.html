@@ -648,6 +648,7 @@
                     @if (templateLessons.length > 0) {
                       <p-button icon="pi pi-plus" severity="secondary" (onClick)="showAddFromTemplateLessonDialog.set(true); selectedPlanForTemplateLessons.set(plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Add from template" tooltipPosition="top" />
                     }
+                    <p-button icon="pi pi-print" severity="secondary" (onClick)="printLessonPlan(ci, plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Print PDF" tooltipPosition="top" />
                     <span class="text-xs text-gray-400">{{ activeLessons.length }} active</span>
                   </div>
                 </div>

@@ -1409,6 +1409,92 @@ export class ClientProfile implements OnInit {
     printWindow.print();
   }
 
+  printLessonPlan(ci: CartItemRead, plan: ClientLessonPlan) {
+    const consultation = this.consultation();
+    if (!consultation) return;
+    const studentName = this.fullName(consultation);
+    const prodName = this.productName(ci);
+    const pkgName = this.packageName(ci);
+    const startDate = plan.start_date ? new Date(plan.start_date).toLocaleDateString() : '—';
+    const transmission = plan.transmission_type === 'manual' ? 'Manual'
+      : plan.transmission_type === 'automatic' ? 'Automatic' : 'Manual/Automatic';
+    const activeLessons = plan.lessons.filter(l => l.is_active).sort((a, b) => a.order - b.order);
+
+    const statusLabel = (s: string) => {
+      switch (s) {
+        case 'completed': return 'Completed';
+        case 'in_progress': return 'In Progress';
+        case 'skipped': return 'Skipped';
+        case 'cancelled': return 'Cancelled';
+        case 'carried_over': return 'Carried Over';
+        case 'makeup': return 'Makeup';
+        case 'excused': return 'Excused';
+        case 'partially_completed': return 'Partial';
+        case 'ready': return 'Ready';
+        case 'started': return 'Started';
+        default: return 'Pending';
+      }
+    };
+
+    const rows = activeLessons.map(l => `
+      <tr>
+        <td>${l.day_number}</td>
+        <td>${l.week_number}</td>
+        <td>${l.title}</td>
+        <td>${l.lesson_objectives?.join('; ') || ''}</td>
+        <td>${l.practical_objectives?.join('; ') || ''}</td>
+        <td>${statusLabel(l.status)}</td>
+      </tr>
+    `).join('');
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html><head><title>Lesson Plan — ${studentName}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 30px; font-size: 12px; color: #333; }
+        h1 { font-size: 18px; margin: 0 0 4px; }
+        h2 { font-size: 14px; margin: 0 0 4px; color: #555; }
+        .header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #333; padding-bottom: 12px; }
+        .header h1 { font-size: 20px; }
+        .info-grid { display: flex; gap: 24px; margin-bottom: 20px; }
+        .info-grid div { flex: 1; }
+        .info-grid label { font-weight: bold; font-size: 11px; color: #777; text-transform: uppercase; display: block; margin-bottom: 2px; }
+        .info-grid span { font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th { background: #f5f5f5; text-align: left; padding: 6px 8px; font-size: 11px; text-transform: uppercase; color: #555; border-bottom: 2px solid #ddd; }
+        td { padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 12px; }
+        .status { font-weight: bold; }
+        .status-completed { color: #2e7d32; }
+        .status-in_progress { color: #1565c0; }
+        .status-pending { color: #888; }
+        .status-skipped { color: #e65100; }
+        .footer { margin-top: 24px; font-size: 10px; color: #aaa; text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
+      </style></head><body>
+      <div class="header">
+        <h1>Lesson Plan</h1>
+      </div>
+      <div class="info-grid">
+        <div><label>Student</label><span>${studentName}</span></div>
+        <div><label>Product</label><span>${prodName}${pkgName ? ' — ' + pkgName : ''}</span></div>
+        <div><label>Transmission</label><span>${transmission}</span></div>
+        <div><label>Start Date</label><span>${startDate}</span></div>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Day</th><th>Week</th><th>Lesson</th><th>Lesson Objectives</th><th>Practical Objectives</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          ${rows || '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:20px;">No active lessons.</td></tr>'}
+        </tbody>
+      </table>
+      <div class="footer">Generated on ${new Date().toLocaleDateString()} — Driving School CRM</div>
+      </body></html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  }
+
   closeAddReceipt() {
     this.showAddProductDialog.set(false);
     this.addStep.set(1);

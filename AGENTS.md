@@ -1,0 +1,143 @@
+# AGENTS.md — Driving School CRM Anchored Summary
+
+**Goal:** Build a production-ready driving school CRM with unified consultation/client lifecycle, per-product-package workflow via CartItems + installments, receipt-numbered payments, derived consultation status, multi-step creation, stage-based filtering, training/permit progress tracking per cart item, backend-stored computed payment totals, auto-generated training sessions from package durations, competence-based skills per session, **comprehensive Lesson Planning & Training Management** module — including LessonLibrary (reusable lesson templates with JSONB objectives/competencies), VideoLibrary (upload + embed streaming), Vehicle management, Instructor qualification tracking, student plan generation from templates (lesson-level state machine with 10 states, lock/unlock, difficulty), lesson execution (checklists, competencies, live GPS distance tracking, timer with 30min/3km/competencies logic), TheorySession auto-generation on Saturdays, and instructor/vehicle assignment per lesson.
+
+## Constraints & Preferences
+- Phone + 4-digit PIN auth (no self-registration), JWT tokens, bcrypt hashing
+- PostgreSQL via Docker, async SQLAlchemy + Alembic
+- Angular 21 (standalone) + PrimeNG 21 + Tailwind CSS v4
+- Monorepo: `/backend` + `/frontend`, Docker Compose
+- Mobile-first responsive (375px minimum); `appendTo="body"` on all `p-select` and `p-datepicker`
+- CartItem table drives all active workflow; `interested_products` JSON feature-frozen
+- Consultation status auto-derived from cart items
+- Follow-ups M2M on CartItems; type `conversion` or `payment`
+- Products sorted by `created_at` descending
+- Lost/converted/converted_paid/converted_paying cart items cannot be deleted or selected for follow-ups (frontend + backend guard)
+- Recovery of lost items requires a reason; marking lost requires a note + creates completed follow-up
+- Receipt numbers: manual entry + auto-generated system receipt as transaction ID
+- Consultation creation deferred until products added (at least one with price); single-transaction endpoint `POST /api/v1/consultations/full`
+- Nginx proxy timeout 120s; loading overlay on all payment/submit flows
+- Pre-fill existing `interested`/`consulting` cart items in Add to Cart dialog
+- `/consultations` is the only list page; stage filter replaces separate `/clients` page
+- Multi-step creation (Info → Products → Payment → Receipt) + Multi-step Add to Cart (Steps 1–3)
+- Complete Sale dialog + Make Payment dialog with receipt validation, installment builder
+- Package training flags: `requires_driving_training`, `requires_theory_training`, `requires_permit_processing` with conditional duration fields
+- CartItem training/permit fields inherited from Package at creation (denormalized, not looked up at runtime)
+- Training sessions per cart item with theory/driving minutes split; summary computed against cart-item-stored duration fields
+- Permit progress 1:1 with CartItem; dates stored, days-to-event computed client-side
+- All enum columns use `Enum(..., values_callable=...)` for asyncpg lowercase
+- Pay-now amounts on consultation creation entered manually (not auto-filled)
+- Up to 2 future installments auto-suggested (split remaining balance in half, 1 week apart); user can override amounts and dates – recalculated on every allocation change
+- Receipt shows per-item balance column + upcoming installment schedule
+- Payment `total_paid` and `balance` computed backend-side and stored on the Payment record; frontend reads them directly
+- `paymentInstallments` is a signal (not plain array) for reliable Angular change detection
+- Lesson plan templates per transmission type (manual/automatic/both); per-client instance with `p-orderList` drag-reorder, add/remove lessons from template pool, toggle, week organization
+- Each lesson is 30min or 3km whichever comes first; competence-based completion
+- Clients can combine sessions (1hr or 1.5hr); each session can combine theory + practical
+- Training session auto-generation: user enters start date, system creates sessions from package duration fields (`driving_training_duration_days` × 30 = total driving min, `theory_training_hours` × 60 = total theory min)
+- Playwright tests use system Chrome at `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`, base URL `http://localhost:80`, 30s timeout, 1 retry, screenshots on failure
+- Frontend deploy: `npm run build && docker cp dist/frontend/browser/. crm-frontend:/usr/share/nginx/html/`
+- Video upload limited to 500MB, allowed types: mp4, webm, mov, avi; stored in `uploads/videos/`, streamed with Range headers for seeking
+- YouTube/Vimeo links stored as `source = 'youtube' | 'vimeo'` with URL; no embed sanitization needed at rest
+- JSONB arrays for lesson_objectives and practical_objectives on LessonTemplateItem and ClientLesson (not text)
+- Lesson plan templates can be duplicated, archived, exported/imported as JSON; imports validated before saving
+- ClientLesson state machine: pending → unlocked → in_progress → completed / partially_completed / skipped / cancelled / carried_over / makeup / excused
+- Active lesson days: purchased lessons only unlocked; remaining days greyed-out (`is_locked`)
+- Auto-generation creates lessons for `purchased_days`; upgrade adds more days with new lessons and shifts existing
+- TheorySession entity separate from ClientLesson; auto-generated on Saturdays, 2-hour duration
+- Live GPS tracking via browser Geolocation API; stored in `ClientLessonTimer.distance_km`
+- 30min OR 3km OR competencies achieved (whichever first) ends a lesson timer
+- Frontend Lesson Library and Video Library pages registered in sidebar and routes
+
+## Progress
+### Done
+- Complete monorepo scaffold, Docker Compose, Angular 21 + PrimeNG 21 + Tailwind v4, FastAPI `/health`, multi-stage Dockerfiles, nginx proxy
+- User model + auth (rate-limited, 5-attempt lockout, JWT, bcrypt, session refresh 160s countdown)
+- User management (7 endpoints) + seed script
+- Product + Package models + CRUD + accordion UI
+- Consultation CRUD + deduped search + pagination + status filter, create dialog, profile with workflow + follow-ups
+- CartItem model + API (`POST/GET /consultations/{id}/cart-items`, `PATCH/DELETE /cart-items/{id}`)
+- Payment + Installment models + API
+- Consultation status derivation (auto-derived, never downgrades from converted)
+- Multi-step consultation creation + Add to Cart + Complete Sale + Make Payment dialogs
+- Follow-up update and auto-close on cart item status changes
+- Backend `stage` filter on `GET /api/v1/consultations/` (consulting/active/completed/lost)
+- Frontend stage filter dropdown replacing separate `/clients` page
+- Package model extended with training/permit flags + duration fields
+- TrainingSession model, PermitProgress model, all CRUD endpoints
+- Package dialog with training/permit checkboxes + conditional duration inputs
+- Training Sessions + Permit Progress sections on consultation profile
+- CartItem model extended with same 6 training/permit fields (denormalized from Package at creation)
+- `add_cart_item()` copies Package training/permit fields to CartItem at creation
+- `get_training_summary()` reads expected minutes from CartItem stored fields
+- Payment model: added `total_paid` and `balance` columns (Numeric, server default 0.00)
+- Payment service: `_recompute_payment_totals()`; called in `create_payment()` and `mark_installment_paid()`
+- `create_full_consultation()`: recomputes payment totals after creating payment+installments
+- Frontend uses `p.total_paid` and `p.balance` directly from Payment records
+- `installmentBuilder()` always recalculates 2 future installments (removed stale `length === 0` guard)
+- `paymentInstallments` converted from plain array to `signal`
+- Template guard: `@if (pp) { ... }` around permit progress card
+- TrainingSession model extended with 7 fields: `video_url`, `video_cached`, `video_invalidated`, `started_at`, `started_by`, `timer_seconds`, `timer_started_at`
+- Skill model: `name`, `description`, `competency_level` (1-5), `achieved`, `order`
+- Alembic migration `a1b2c3d4e5f6`: extends training_sessions + creates skills table
+- Backend: auto-generate sessions, start session, update timer, cache/invalidate video, skill CRUD
+- Frontend: generate sessions dialog, skills manager dialog, start-timer flow, video cache/invalidate buttons, extended session table with video/timer/skills columns
+- Backend lesson plan system: `LessonPlanTemplate`, `LessonTemplateItem`, `ClientLessonPlan`, `ClientLesson` with JSONB `skills_achieved`
+- Lesson plan schemas + service (`backend/app/services/lesson_plan.py`): template CRUD, client plan CRUD with create-from-template, lesson update (toggle, status, reorder), bulk reorder
+- Lesson plan API router (`backend/app/api/v1/lesson_plan.py`): 19 endpoints, registered in `main.py`
+- Alembic migration `b2c3d4e5f6a7`: creates 4 lesson plan tables + 3 enum types (`transmissiontype`, `lessonplanstatus`, `clientlessonstatus`)
+- Dedicated Lesson Plans page (`/lesson-plans`): template CRUD with `p-orderList` drag-and-drop reorder, create/edit dialog with Add Lesson button; sidebar link between Products and Consultations
+- Client lesson plan section on consultation profile: per-cart-item view with `p-orderList` drag-and-drop reorder, add/remove from template pool, status progression, lesson detail/edit dialog
+- Products page "Templates" button with quick template management dialog
+- Playwright tests: 4 lesson-plans tests pass (sidebar load, API create+verify, dialog Escape close, UI delete)
+- **Comprehensive Lesson Planning Module design document** covering all entities, relationships, state machines, API endpoints, and frontend pages
+- Backend models: VideoLibrary, LessonLibrary, LessonLibraryVideo, ClientLessonChecklist, ClientLessonCompetency, ClientLessonTimer, TheorySession, LessonHistory, ImportLog, InstructorQualification, Vehicle — all with UUID PKs, audit timestamps, appropriate FKs
+- UserRole enum extended with `manager` and `reception`
+- ClientLesson expanded: 10-state LessonState enum, JSONB objectives, `lesson_library_id`, `is_locked`, `difficulty`, `outcome`, `instructor_id`, `vehicle_id`
+- ClientLessonPlan: `purchased_days`, `auto_generated` columns
+- LessonPlanTemplate: `status`, `is_locked` columns
+- All new Pydantic schemas in `schemas/lesson_plan.py`
+- Backend services: `library.py` (LessonLibrary CRUD), `video.py` (VideoLibrary CRUD + upload + file management), `vehicle.py` (Vehicle CRUD)
+- Backend API routers: `api/v1/library.py`, `api/v1/video_library.py`, `api/v1/vehicles.py`, `api/v1/lesson_execution.py`
+- Existing `lesson_plan.py` service + router extended with duplicate/archive/export/import/validate/generate/upgrade/move/start/complete/skip/history endpoints
+- Alembic migration `c3d4e5f6a7b8_comprehensive_lesson_module_v2.py`: 9 new tables, 8 enum types, ALTER COLUMN for JSONB, new columns on existing tables
+- Frontend services: `lesson-library.service.ts`, `video-library.service.ts`, `vehicle.service.ts`, `lesson-execution.service.ts`
+- Frontend `lesson-plan.service.ts` updated: JSONB objectives on ClientLesson, 10-state support, new locked/difficulty/outcome/instructor/vehicle fields, new API methods
+- Frontend LessonLibrary page (`/lesson-library`): full CRUD with JSONB objectives/competencies arrays UI, difficulty tags, search, pagination
+- Frontend VideoLibrary page (`/video-library`): upload with drag-drop area, YouTube/Vimeo embed links, preview dialog with video/iframe player, source tags
+- Frontend routes and sidebar updated with `/lesson-library` and `/video-library` entries
+
+### Next Steps
+1. Write Playwright tests for training sessions (create, list, summary, generate, start timer, skills)
+2. Write Playwright tests for permit progress (update, display)
+3. Write Playwright tests for consultation create with installments (partial payment + future installments)
+4. Seed the 20-day manual driving curriculum as a default `LessonPlanTemplate`
+5. Add Trainings and Documents models/API/sections if not yet completed
+6. Remove templates button from products page (superseded by dedicated `/lesson-plans` page)
+7. Create Vehicle management frontend page (CRUD for vehicles)
+8. Create Instructor Qualification page/section
+9. Update ClientProfile to use new LessonState, lock/unlock UI, competency dashboard
+10. Build lesson execution flow (checklists, competencies, GPS timer, 30min/3km/competencies logic)
+11. Build TheorySession auto-generation and display
+12. Run migration `c3d4e5f6a7b8` and test all new backend endpoints
+
+## Test Credentials
+Super Admin `256700000000`, pin=`1234`
+
+## Docker
+Postgres `:5433` (external), backend `:8000`, frontend `:80`
+
+## Backend Restart
+`docker compose restart backend`
+
+## Alembic
+`docker compose exec backend bash -c 'PYTHONPATH=/app alembic upgrade head'`
+If migration files are missing from container: `docker cp backend/alembic/versions/<file> crm-backend:/app/alembic/versions/`
+
+## Migration Head
+`6d6f3d2f0547` (fix entitystatus to lowercase); parent `c3d4e5f6a7b8` (comprehensive lesson v2); parent `b2c3d4e5f6a7` (lesson plan tables)
+
+## Test Files
+- `e2e/login.spec.ts` (11 tests): login, sidebar, user CRUD/search/PIN
+- `e2e/consultations.spec.ts` (15 tests): list/search, stage filter, profile with products/payments/Add to Cart, API create+verify, products page, users page
+- `e2e/lesson-plans.spec.ts` (4 tests): sidebar load, API create+verify, dialog close, UI delete

@@ -1,0 +1,63 @@
+<div class="flex min-h-dvh items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+  <div class="w-full max-w-sm">
+    <!-- Logo area -->
+    <div class="mb-6 text-center">
+      <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 shadow-lg">
+        <span class="pi pi-car text-2xl text-white"></span>
+      </div>
+      <h1 class="text-2xl font-bold text-gray-900">Driving School CRM</h1>
+      <p class="mt-1 text-sm text-gray-500">Sign in to manage your operations</p>
+    </div>
+
+    <!-- Login card -->
+    <div class="rounded-2xl bg-white p-6 shadow-xl shadow-blue-100/50">
+      @if (error()) {
+        <div class="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          <span class="pi pi-exclamation-circle text-base"></span>
+          <span>{{ error() }}</span>
+        </div>
+      }
+
+      <form (ngSubmit)="onSubmit()" class="space-y-4">
+        <div>
+          <label for="phone" class="mb-1.5 block text-sm font-medium text-gray-700">Phone Number</label>
+          <input
+            id="phone"
+            pInputText
+            type="tel"
+            [(ngModel)]="phone"
+            name="phone"
+            placeholder="e.g. 256700000000"
+            class="w-full"
+            required
+          />
+        </div>
+
+        <div>
+          <label for="pin" class="mb-1.5 block text-sm font-medium text-gray-700">PIN</label>
+          <p-password
+            [(ngModel)]="pin"
+            name="pin"
+            [feedback]="false"
+            placeholder="Enter your 4-digit PIN"
+            [style]="{ width: '100%' }"
+            [inputStyle]="{ width: '100%' }"
+            required
+          />
+        </div>
+
+        <p-button
+          type="submit"
+          [loading]="loading()"
+          [disabled]="loading()"
+          label="Sign In"
+          styleClass="w-full p-button-lg justify-center"
+        />
+      </form>
+    </div>
+
+    <p class="mt-6 text-center text-xs text-gray-400">
+      Authorized personnel only &bull; Driving School CRM v0.1
+    </p>
+  </div>
+</div>

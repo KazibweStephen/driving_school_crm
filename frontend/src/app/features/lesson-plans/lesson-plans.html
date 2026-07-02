@@ -1,0 +1,526 @@
+<div class="p-4 sm:p-6">
+  <!-- Header -->
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-gray-900">Lesson Plan Templates</h1>
+    <div class="flex gap-2">
+      <p-button label="Schema" icon="pi pi-download" severity="secondary" (onClick)="downloadSchema()" pTooltip="Download JSON schema" />
+      <p-button label="Import" icon="pi pi-upload" severity="secondary" (onClick)="openImport()" />
+      <p-button label="New Template" icon="pi pi-plus" (onClick)="openCreate()" />
+    </div>
+  </div>
+
+  <!-- Loading -->
+  @if (loading() && templates().length === 0) {
+    <div class="flex items-center justify-center py-16">
+      <span class="pi pi-spin pi-spinner text-3xl text-blue-600"></span>
+    </div>
+  }
+
+  <!-- Empty state -->
+  @if (!loading() && templates().length === 0) {
+    <div class="py-16 text-center text-gray-400">
+      <span class="pi pi-book mb-3 block text-4xl"></span>
+      <p class="text-lg">No lesson plan templates yet</p>
+      <p class="mt-1 text-sm">Create your first curriculum template to get started.</p>
+      <p-button label="Create Template" icon="pi pi-plus" (onClick)="openCreate()" class="mt-4" />
+    </div>
+  }
+
+  <!-- Templates list -->
+  @if (!loading() || templates().length > 0) {
+    <div class="flex flex-col gap-4">
+      @for (tpl of templates(); track tpl.id) {
+        <div class="rounded-xl border bg-white shadow-sm">
+          <div class="flex items-start justify-between border-b px-5 py-4 cursor-pointer select-none" (click)="toggleCollapse(tpl.id)">
+            <div class="min-w-0 flex-1">
+              <h2 class="text-lg font-semibold text-gray-900">{{ tpl.name }}</h2>
+              <p class="mt-0.5 text-sm text-gray-500">
+                {{ transmissionLabel(tpl.transmission_type) }}
+                · {{ tpl.total_days }} days / {{ tpl.total_weeks }} weeks
+                · {{ tpl.lesson_items.length }} lessons
+              </p>
+              @if (tpl.description) {
+                <p class="mt-1 text-sm text-gray-600">{{ tpl.description }}</p>
+              }
+            </div>
+            <div class="flex items-center gap-1" (click)="$event.stopPropagation()">
+              <p-button icon="pi pi-download" severity="secondary" (onClick)="exportTemplate(tpl)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Export JSON" tooltipPosition="top" />
+              <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openEdit(tpl)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Edit" tooltipPosition="top" />
+              <p-button icon="pi pi-trash" severity="danger" (onClick)="confirmDelete(tpl)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Delete" tooltipPosition="top" />
+              <span class="pi pi-chevron-down ml-1 text-gray-400 transition-transform duration-200" [class.rotate-180]="!isCollapsed(tpl.id)"></span>
+            </div>
+          </div>
+
+          @if (!isCollapsed(tpl.id)) {
+            <!-- Desktop: items table -->
+            <div class="hidden sm:block">
+              <p-table [value]="tpl.lesson_items" dataKey="id" styleClass="p-datatable-sm">
+                <ng-template pTemplate="header">
+                  <tr>
+                    <th style="width: 2.5rem">#</th>
+                    <th style="width: 3rem">Day</th>
+                    <th style="width: 3.5rem">Week</th>
+                    <th>Title</th>
+                    <th style="width: 8rem">Objectives</th>
+                    <th style="width: 8rem">Location</th>
+                  </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-item let-i="rowIndex">
+                  <tr>
+                    <td class="text-xs text-gray-400">{{ item.order }}</td>
+                    <td class="text-sm">{{ item.day_number }}</td>
+                    <td class="text-sm">{{ item.week_number }}</td>
+                    <td class="text-sm font-medium">{{ item.title }}</td>
+                    <td class="max-w-40 truncate text-xs text-gray-500" [pTooltip]="item.lesson_objectives || ''" tooltipPosition="top">{{ item.lesson_objectives || '—' }}</td>
+                    <td class="max-w-32 truncate text-xs text-gray-500" [pTooltip]="item.preferred_location || ''" tooltipPosition="top">{{ item.preferred_location || '—' }}</td>
+                  </tr>
+                </ng-template>
+                <ng-template pTemplate="emptydata">
+                  <tr>
+                    <td colspan="6" class="py-6 text-center text-sm text-gray-400">No lessons in this template</td>
+                  </tr>
+                </ng-template>
+              </p-table>
+            </div>
+
+            <!-- Mobile: compact list -->
+            <div class="sm:hidden">
+              @for (item of tpl.lesson_items; track item.id) {
+                <div class="flex items-center border-b px-4 py-2 last:border-0">
+                  <span class="mr-2 text-xs text-gray-400 w-5">{{ item.order }}</span>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium truncate">{{ item.title }}</p>
+                    <p class="text-xs text-gray-500">Day {{ item.day_number }} · Week {{ item.week_number }}</p>
+                  </div>
+                </div>
+              } @empty {
+                <p class="py-4 text-center text-sm text-gray-400">No lessons</p>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Create / Edit Template Dialog -->
+  <p-dialog
+    [header]="editingTemplate() ? 'Edit Template' : 'New Template'"
+    [(visible)]="showCreateDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '700px' }"
+    [draggable]="false"
+    [resizable]="false"
+    [closable]="!loading()"
+  >
+    <div class="flex flex-col gap-4 pt-2">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Name</label>
+          <input pInputText [(ngModel)]="form.name" placeholder="e.g. 20-Day Manual Curriculum" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Transmission Type</label>
+          <p-select [(ngModel)]="form.transmission_type" [options]="transmissionTypes" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+        </div>
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Description</label>
+        <textarea [(ngModel)]="form.description" rows="2" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Optional description"></textarea>
+      </div>
+      <div class="flex gap-4">
+        <div class="flex-1">
+          <label class="mb-1 block text-sm font-medium text-gray-700">Total Days</label>
+          <p-inputNumber [(ngModel)]="form.total_days" [min]="1" styleClass="w-full" />
+        </div>
+        <div class="flex-1">
+          <label class="mb-1 block text-sm font-medium text-gray-700">Total Weeks</label>
+          <p-inputNumber [(ngModel)]="form.total_weeks" [min]="1" styleClass="w-full" />
+        </div>
+      </div>
+
+      <!-- Lesson Items summary -->
+      <div class="border-t pt-3">
+        <div class="mb-2 flex items-center justify-between">
+          <label class="text-sm font-semibold text-gray-700">Lesson Items ({{ form.items.length }})</label>
+          <p-button label="Add Lesson" icon="pi pi-plus" size="small" severity="secondary" (onClick)="openAddItem()" />
+        </div>
+        @if (form.items.length > 0) {
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead>
+                <tr class="border-b text-xs text-gray-500">
+                  <th class="px-2 py-1 w-8">#</th>
+                  <th class="px-2 py-1 w-10">Day</th>
+                  <th class="px-2 py-1 w-10">Week</th>
+                  <th class="px-2 py-1">Title</th>
+                  <th class="px-2 py-1 w-16">Min</th>
+                  <th class="px-2 py-1 w-12">Km</th>
+                  <th class="px-2 py-1 w-20"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (item of form.items; track idx; let idx = $index) {
+                  <tr class="border-b hover:bg-gray-50">
+                    <td class="px-2 py-1.5 text-xs text-gray-400">{{ item.order }}</td>
+                    <td class="px-2 py-1.5">{{ item.day_number }}</td>
+                    <td class="px-2 py-1.5">{{ item.week_number }}</td>
+                    <td class="px-2 py-1.5 font-medium">{{ item.title }}</td>
+                    <td class="px-2 py-1.5">{{ item.estimated_minutes }}</td>
+                    <td class="px-2 py-1.5">{{ item.estimated_distance_km }}</td>
+                    <td class="px-2 py-1.5">
+                      <div class="flex gap-1">
+                        <button pButton icon="pi pi-pencil" class="p-button-sm p-button-text" (click)="openEditItem(idx)" pTooltip="Edit"></button>
+                        <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger" (click)="removeItem(idx)" pTooltip="Remove"></button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="py-4 text-center text-sm text-gray-400">No lessons added. Click "Add Lesson" to add items from the library.</p>
+        }
+      </div>
+
+      <p-button
+        [label]="editingTemplate() ? 'Save Changes' : 'Create Template'"
+        [loading]="loading()"
+        (onClick)="save()"
+        styleClass="w-full justify-center"
+      />
+    </div>
+    @if (loading()) {
+      <div class="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/70">
+        <span class="pi pi-spin pi-spinner text-3xl text-blue-600"></span>
+      </div>
+    }
+  </p-dialog>
+
+  <!-- Item Picker Dialog -->
+  <p-dialog
+    [header]="editingItemIndex() >= 0 ? 'Edit Lesson' : 'Add Lesson'"
+    [(visible)]="showPicker"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '600px' }"
+    appendTo="body"
+  >
+    <div class="flex flex-col gap-3 pt-2">
+      <!-- Mode toggle -->
+      <div class="flex gap-2">
+        <button pButton [label]="'Pick from Library'" [class]="pickerMode === 'library' ? 'p-button-sm' : 'p-button-sm p-button-outlined'"
+          (click)="switchToLibrary()"></button>
+        <button pButton [label]="'Create New'" [class]="pickerMode === 'create' && !itemForm.lesson_library_id ? 'p-button-sm' : 'p-button-sm p-button-outlined'"
+          (click)="switchToCreate()"></button>
+      </div>
+
+      @if (pickerMode === 'library') {
+        <!-- Library search -->
+        <input pInputText [(ngModel)]="librarySearch" placeholder="Search lessons..." class="w-full text-sm"
+          (input)="loadLibraryLessons()" />
+        <!-- Library list -->
+        <div class="max-h-60 overflow-y-auto border rounded">
+          @if (libraryLoading()) {
+            <div class="flex items-center justify-center py-8"><span class="pi pi-spin pi-spinner text-xl text-blue-600"></span></div>
+          } @else {
+            @for (lesson of libraryLessons(); track lesson.id) {
+              @let alreadyAdded = isLessonAdded(lesson.id);
+              <div class="flex items-center gap-3 px-3 py-2 border-b last:border-0 transition-colors"
+                [class.opacity-50.bg-gray-50]="alreadyAdded"
+                (click)="!alreadyAdded && selectLibraryLesson(lesson)">
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium truncate">{{ lesson.title }}</p>
+                  <p class="text-xs text-gray-400">
+                    {{ lesson.day_number ? 'Day ' + lesson.day_number : '' }}
+                    {{ lesson.week_number ? '· Week ' + lesson.week_number : '' }}
+                    {{ lesson.estimated_minutes }}min · {{ lesson.estimated_distance_km }}km
+                    @if (lesson.preferred_location) { · {{ lesson.preferred_location }} }
+                  </p>
+                </div>
+                @if (alreadyAdded) {
+                  <p-tag value="Added" severity="secondary" styleClass="text-xs" />
+                } @else {
+                  <p-tag [value]="lesson.difficulty" [severity]="lesson.difficulty === 'beginner' ? 'info' : lesson.difficulty === 'intermediate' ? 'warn' : 'danger'" />
+                }
+              </div>
+            } @empty {
+              <p class="py-6 text-center text-sm text-gray-400">No lessons found. Switch to "Create New" to add one.</p>
+            }
+          }
+        </div>
+      }
+
+      @if (pickerMode === 'create') {
+        <!-- Create / Edit form — unified with lesson-library fields -->
+        <div class="flex flex-col gap-3 max-h-[65vh] overflow-y-auto pr-1">
+          <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+            <div class="sm:col-span-2">
+              <label class="mb-0.5 block text-xs text-gray-500">Title *</label>
+              <input pInputText [(ngModel)]="itemForm.title" placeholder="Lesson title" class="w-full text-sm" />
+            </div>
+            <div class="sm:col-span-2">
+              <label class="mb-0.5 block text-xs text-gray-500">Description</label>
+              <textarea [(ngModel)]="itemForm.description" rows="2" class="w-full text-sm border rounded-lg px-3 py-2" placeholder="Brief description"></textarea>
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Day</label>
+              <p-inputNumber [(ngModel)]="itemForm.day_number" [min]="1" styleClass="w-full" inputStyleClass="w-full text-sm" />
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Week</label>
+              <p-inputNumber [(ngModel)]="itemForm.week_number" [min]="1" styleClass="w-full" inputStyleClass="w-full text-sm" />
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Order</label>
+              <p-inputNumber [(ngModel)]="itemForm.order" [min]="0" styleClass="w-full" inputStyleClass="w-full text-sm" />
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Estimated Minutes</label>
+              <p-inputNumber [(ngModel)]="itemForm.estimated_minutes" [min]="1" [max]="240" styleClass="w-full" inputStyleClass="w-full text-sm" />
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Estimated Km</label>
+              <p-inputNumber [(ngModel)]="itemForm.estimated_distance_km" [min]="0" [max]="100" [step]="0.5" styleClass="w-full" inputStyleClass="w-full text-sm" />
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Difficulty</label>
+              <p-select [(ngModel)]="itemForm.difficulty" [options]="difficulties" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Transmission Type</label>
+              <p-select [(ngModel)]="itemForm.transmission_type" [options]="transmissionOpts" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Training Category</label>
+              <p-select [(ngModel)]="itemForm.training_category" [options]="trainingCategories" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Preferred Location</label>
+              <input pInputText [(ngModel)]="itemForm.preferred_location" placeholder="e.g. Parking Lot A" class="w-full text-sm" />
+            </div>
+            <div class="flex items-center gap-2 self-end pb-2">
+              <p-checkbox [(ngModel)]="itemForm.enforce_prerequisites" [binary]="true" inputId="enf_pre" />
+              <label for="enf_pre" class="text-sm text-gray-700">Enforce prerequisites</label>
+            </div>
+          </div>
+          <div class="border-t pt-2 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Lesson Objectives</label>
+              @for (obj of itemForm.lesson_objectives; track $index) {
+                <div class="flex gap-1 mb-1 items-center">
+                  <input pInputText [(ngModel)]="itemForm.lesson_objectives[$index]" placeholder="Objective" class="w-full text-sm" />
+                  <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeArrayItem('lesson_objectives', $index)" [disabled]="itemForm.lesson_objectives.length <= 1"></button>
+                </div>
+              }
+              <button pButton icon="pi pi-plus" label="Add" class="p-button-sm p-button-outlined mt-1" (click)="addArrayItem('lesson_objectives')"></button>
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Practical Objectives</label>
+              @for (obj of itemForm.practical_objectives; track $index) {
+                <div class="flex gap-1 mb-1 items-center">
+                  <input pInputText [(ngModel)]="itemForm.practical_objectives[$index]" placeholder="Practical" class="w-full text-sm" />
+                  <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeArrayItem('practical_objectives', $index)" [disabled]="itemForm.practical_objectives.length <= 1"></button>
+                </div>
+              }
+              <button pButton icon="pi pi-plus" label="Add" class="p-button-sm p-button-outlined mt-1" (click)="addArrayItem('practical_objectives')"></button>
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Competencies</label>
+              @for (c of itemForm.competencies; track $index) {
+                <div class="flex gap-1 mb-1 items-center">
+                  <input pInputText [(ngModel)]="itemForm.competencies[$index]" placeholder="Competency" class="w-full text-sm" />
+                  <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeArrayItem('competencies', $index)" [disabled]="itemForm.competencies.length <= 1"></button>
+                </div>
+              }
+              <button pButton icon="pi pi-plus" label="Add" class="p-button-sm p-button-outlined mt-1" (click)="addArrayItem('competencies')"></button>
+            </div>
+            <div>
+              <label class="mb-0.5 block text-xs text-gray-500">Prerequisite Competencies</label>
+              @for (pc of itemForm.prerequisite_competencies; track $index) {
+                <div class="flex gap-1 mb-1 items-center">
+                  <input pInputText [(ngModel)]="itemForm.prerequisite_competencies[$index]" placeholder="Prerequisite" class="w-full text-sm" />
+                  <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeArrayItem('prerequisite_competencies', $index)" [disabled]="itemForm.prerequisite_competencies.length <= 1"></button>
+                </div>
+              }
+              <button pButton icon="pi pi-plus" label="Add" class="p-button-sm p-button-outlined mt-1" (click)="addArrayItem('prerequisite_competencies')"></button>
+            </div>
+          </div>
+          <div class="border-t pt-2">
+            <label class="mb-0.5 block text-xs text-gray-500">Prerequisite Lessons</label>
+            <p-multiSelect [(ngModel)]="itemForm.prerequisite_lesson_ids" [options]="allLibraryLessons()" optionLabel="title" optionValue="id" placeholder="Select prerequisites..." styleClass="w-full" appendTo="body" />
+          </div>
+
+          <!-- Videos Section -->
+          <div class="border-t pt-3">
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-xs font-medium text-gray-500">Videos</label>
+              @if (itemForm.lesson_library_id) {
+                <div class="flex gap-1">
+                  <button pButton icon="pi pi-upload" label="Upload" class="p-button-sm p-button-outlined" (click)="openItemVideoUpload()"></button>
+                  <button pButton icon="pi pi-link" label="Add Link" class="p-button-sm p-button-outlined" (click)="openItemVideoEmbed()"></button>
+                </div>
+              }
+            </div>
+            @if (!itemForm.lesson_library_id) {
+              <p class="text-xs text-gray-400 italic">Select a library lesson or save to add videos.</p>
+            }
+            @if (itemForm.lesson_library_id && currentItemVideos().length === 0) {
+              <p class="text-xs text-gray-400 italic">No videos yet.</p>
+            }
+            @if (itemForm.lesson_library_id) {
+              <div class="flex flex-col gap-1">
+                @for (video of currentItemVideos(); track video.id) {
+                  <div class="flex items-center gap-2 border rounded p-1.5 text-xs">
+                    <div class="flex-1 flex items-center gap-2 min-w-0">
+                      <i [class]="itemGetSourceIcon(video.source)" class="text-base"></i>
+                      <span class="truncate font-medium">{{ video.title }}</span>
+                      <p-tag [value]="video.source" [severity]="itemGetSourceColor(video.source)" styleClass="text-xs" />
+                    </div>
+                    <button pButton icon="pi pi-eye" class="p-button-sm p-button-text" pTooltip="Preview" (click)="openItemVideoPreview(video)"></button>
+                    <button pButton icon="pi pi-unlink" class="p-button-sm p-button-text p-button-warn" pTooltip="Detach" (click)="detachItemVideo(video)"></button>
+                    <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger" pTooltip="Delete" (click)="deleteItemVideo(video)"></button>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <p-button
+        label="Confirm"
+        [disabled]="pickerMode === 'create' && !itemForm.title"
+        (onClick)="confirmItem()"
+        styleClass="w-full justify-center mt-2"
+      />
+    </div>
+  </p-dialog>
+
+  <!-- Video Upload Dialog (item picker) -->
+  <p-dialog header="Upload Video" [(visible)]="showItemVideoUpload" [modal]="true" [style]="{ width: '450px' }" appendTo="body">
+    <div class="flex flex-col gap-3 pt-2">
+      <div class="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50" (click)="itemFileInput.click()">
+        @if (itemVideoUploadFile) {
+          <p class="text-sm">{{ itemVideoUploadFile.name }} ({{ (itemVideoUploadFile.size / 1024 / 1024).toFixed(1) }} MB)</p>
+        } @else {
+          <p class="text-sm text-gray-400">Click to select a video file (max 500MB)</p>
+        }
+        <input #itemFileInput type="file" accept="video/mp4,video/webm,video/quicktime,video/x-msvideo" class="hidden" (change)="onItemVideoFileSelected($event)" />
+      </div>
+    </div>
+    <ng-template pTemplate="footer">
+      <button pButton label="Cancel" class="p-button-text" (click)="showItemVideoUpload.set(false)"></button>
+      <button pButton label="Upload" [disabled]="!itemVideoUploadFile || itemVideoUploading()" [loading]="itemVideoUploading()" (click)="uploadItemVideo()"></button>
+    </ng-template>
+  </p-dialog>
+
+  <!-- Video Embed Dialog (item picker) -->
+  <p-dialog header="Add Video Link" [(visible)]="showItemVideoEmbed" [modal]="true" [style]="{ width: '450px' }" appendTo="body">
+    <div class="flex flex-col gap-3 pt-2">
+      <div>
+        <label class="block text-sm font-medium mb-1">Title</label>
+        <input pInputText [(ngModel)]="itemVideoEmbedTitle" class="w-full" placeholder="Video title" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">YouTube or Vimeo URL</label>
+        <input pInputText [(ngModel)]="itemVideoEmbedUrl" class="w-full" placeholder="https://youtube.com/watch?v=..." />
+      </div>
+    </div>
+    <ng-template pTemplate="footer">
+      <button pButton label="Cancel" class="p-button-text" (click)="showItemVideoEmbed.set(false)"></button>
+      <button pButton label="Add" [disabled]="!itemVideoEmbedUrl || !itemVideoEmbedTitle || itemVideoUploading()" [loading]="itemVideoUploading()" (click)="addItemVideoEmbedLink()"></button>
+    </ng-template>
+  </p-dialog>
+
+  <!-- Video Preview Dialog (item picker) -->
+  <p-dialog header="Video Preview" [(visible)]="showItemVideoPreview" [modal]="true" [style]="{ width: '640px' }" appendTo="body" (onHide)="selectedItemVideo.set(null)">
+    @if (selectedItemVideo(); as video) {
+      <div class="pt-2">
+        @if (video.source === 'youtube' || video.source === 'vimeo') {
+          <div class="aspect-video">
+            <iframe [src]="itemGetSafeUrl(video.url || '')" class="w-full h-full rounded" frameborder="0" allowfullscreen></iframe>
+          </div>
+        } @else {
+          <video class="w-full rounded" controls controlsList="nodownload"
+            [src]="itemGetVideoUrl(video)"
+            (timeupdate)="itemSaveResumeTime(video.id, $event)"
+            (loadedmetadata)="itemRestoreResumeTime($event, video.id)">
+          </video>
+        }
+        <p class="mt-2 text-sm text-gray-600">{{ video.title }}</p>
+      </div>
+    }
+  </p-dialog>
+
+  <!-- Import Dialog -->
+  <p-dialog
+    header="Import Template"
+    [(visible)]="showImportDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '650px' }"
+    appendTo="body"
+  >
+    <div class="flex flex-col gap-3 pt-2">
+      <!-- Tabs -->
+      <div class="flex gap-2">
+        <button pButton [label]="'Paste JSON'" [class]="importTab === 'paste' ? 'p-button-sm' : 'p-button-sm p-button-outlined'"
+          (click)="importTab = 'paste'; importResult.set(null); importSuccess.set(false)"></button>
+        <button pButton [label]="'Upload File'" [class]="importTab === 'upload' ? 'p-button-sm' : 'p-button-sm p-button-outlined'"
+          (click)="importTab = 'upload'; importResult.set(null); importSuccess.set(false)"></button>
+      </div>
+
+      @if (importTab === 'paste') {
+        <textarea [(ngModel)]="importJsonText" rows="12" class="w-full font-mono text-sm border rounded-lg px-3 py-2"
+          placeholder='&#123;&#10;  "title": "My Curriculum",&#10;  "transmission_type": "manual",&#10;  "total_days": 20,&#10;  "total_weeks": 4,&#10;  "weeks": [...]&#10;&#125;'
+          (input)="importResult.set(null); importSuccess.set(false)"></textarea>
+      }
+
+      @if (importTab === 'upload') {
+        <div class="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50"
+          (click)="fileInput.click()">
+          <span class="pi pi-upload text-2xl text-gray-400 mb-2 block"></span>
+          <p class="text-sm text-gray-500">Click to select a .json file</p>
+          @if (importFile) {
+            <p class="text-sm text-blue-600 mt-1">{{ importFile.name }}</p>
+          }
+        </div>
+        <input #fileInput type="file" accept=".json" class="hidden" (change)="onImportFileSelected($event)" />
+      }
+
+      @if (parseError) {
+        <p class="text-sm text-red-500">Parse error: {{ parseError }}</p>
+      }
+
+      <!-- Validation results -->
+      @if (importResult(); as res) {
+        <div class="border rounded-lg p-3 text-sm" [class.bg-green-50]="res.valid" [class.bg-red-50]="!res.valid">
+          <p class="font-semibold mb-1" [class.text-green-700]="res.valid" [class.text-red-700]="!res.valid">
+            <span [class]="res.valid ? 'pi pi-check-circle' : 'pi pi-exclamation-circle'" class="mr-1"></span>
+            {{ res.valid ? 'Valid JSON' : 'Validation errors' }}
+          </p>
+          @for (err of res.errors; track $index) {
+            <p class="text-red-600 ml-5">• {{ err.field }}: {{ err.message }}</p>
+          }
+          @for (warn of res.warnings; track $index) {
+            <p class="text-yellow-600 ml-5">• {{ warn.field }}: {{ warn.message }}</p>
+          }
+        </div>
+      }
+
+      @if (importSuccess()) {
+        <div class="bg-green-50 border rounded-lg p-3 text-sm text-green-700">
+          <span class="pi pi-check-circle mr-1"></span> Template imported successfully!
+        </div>
+      }
+
+      <div class="flex gap-2 justify-end">
+        <p-button label="Validate" severity="secondary" [disabled]="!importJsonText().trim() || !!parseError || importLoading()" [loading]="importLoading()" (onClick)="validateImport()" />
+        <p-button label="Import" [disabled]="!importJsonText().trim() || !!parseError || importLoading()" [loading]="importLoading()" (onClick)="doImport()" />
+      </div>
+    </div>
+  </p-dialog>
+
+  <p-confirmDialog />
+  <p-toast />
+</div>

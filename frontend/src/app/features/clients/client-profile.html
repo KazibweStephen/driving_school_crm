@@ -1,0 +1,1456 @@
+<div class="p-4 sm:p-6">
+  <a [routerLink]="['/consultations']" class="mb-4 inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800">
+    <span class="pi pi-arrow-left"></span> Back to Consultations
+  </a>
+
+  @if (consultation(); as c) {
+    <!-- Person Info Card -->
+    <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-bold text-gray-900 sm:text-2xl">{{ fullName(c) }}</h1>
+          <div class="mt-2 space-y-1 text-sm text-gray-600">
+            <p><span class="font-medium">Phone:</span> {{ c.phone }}</p>
+            @if (c.location) { <p><span class="font-medium">Location:</span> {{ c.location }}</p> }
+            @if (c.how_they_knew_us) { <p><span class="font-medium">How they knew us:</span> {{ c.how_they_knew_us }}</p> }
+            @if (c.interest_level) { <p><span class="font-medium">Interest Level:</span> {{ c.interest_level }}</p> }
+            @if (c.start_date) { <p><span class="font-medium">Expected Start Date:</span> {{ c.start_date }}</p> }
+            @if (c.notes) { <p><span class="font-medium">Notes:</span> {{ c.notes }}</p> }
+          </div>
+        </div>
+        <div class="flex flex-col items-end gap-2">
+          <p-tag [value]="c.status" [severity]="statusSeverity(c.status)" />
+          <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openEdit()" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Edit Info" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Workflow Section -->
+    <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
+      <h2 class="mb-4 text-lg font-bold text-gray-900">Workflow</h2>
+      <div class="flex flex-wrap items-center gap-2">
+        @for (t of transitions(); track t.status) {
+          <p-button
+            [label]="t.label"
+            [icon]="t.icon"
+            (onClick)="transitionTo(t.status)"
+            [loading]="loading()"
+            size="small"
+            [styleClass]="t.btnClass"
+          />
+        }
+        @if (transitions().length === 0) {
+          <p class="text-sm text-gray-500">This consultation is in its final state.</p>
+        }
+      </div>
+    </div>
+    
+    <!-- Products Section -->
+    <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-lg font-bold text-gray-900">Products</h2>
+        <div class="flex items-center gap-2">
+          <p-button icon="pi pi-question-circle" (onClick)="openGuide('products')" styleClass="p-button-sm p-button-rounded p-button-text p-button-secondary" pTooltip="Guide" />
+          @if (followUpCheckIds().length) {
+            <p-button label="Follow Up" icon="pi pi-calendar" size="small" severity="warn" (onClick)="openBulkFollowUp()" />
+          }
+          @if (c.status !== 'lost') {
+            <p-button label="Add to Cart" icon="pi pi-plus" size="small" (onClick)="openAddProduct()" [disabled]="followUpCheckIds().length > 0" />
+          }
+        </div>
+      </div>
+      @if (c.cart_items?.length) {
+        <div class="hidden sm:block">
+          <p-table [value]="sortedCartItems()" dataKey="id" styleClass="p-datatable-sm">
+            <ng-template pTemplate="header">
+              <tr>
+                <th style="width:2rem"><p-checkbox [binary]="true" (onChange)="sortedCartItems().length && (followUpCheckIds().length === sortedCartItems().length ? followUpCheckIds.set([]) : followUpCheckIds.set(sortedCartItems().filter(ci => ci.status !== 'converted' && ci.status !== 'lost').map(ci => ci.id)))" /></th>
+                <th>Product</th>
+                <th>Package</th>
+                <th>Price</th>
+                <th>Duration</th>
+                <th>Note</th>
+                <th>Date Added</th>
+                <th>Status</th>
+                <th>Follow-ups</th>
+                <th>Actions</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-ci>
+              <tr>
+                <td>
+                  @if (ci.status !== 'converted' && ci.status !== 'lost') {
+                    <p-checkbox [binary]="true" [ngModel]="isFollowUpChecked(ci.id)" (onChange)="toggleFollowUpCheck(ci.id)" />
+                  }
+                </td>
+                <td class="text-sm font-medium text-gray-700">{{ productName(ci) }}</td>
+                <td class="text-sm text-gray-600">{{ packageName(ci) || '—' }}</td>
+                <td class="text-sm text-gray-600">{{ packagePrice(ci) }}</td>
+                <td class="text-sm text-gray-600">{{ packageDuration(ci) }}</td>
+                <td class="text-sm text-gray-600">
+                  @if (ci.notes) {
+                    <span class="inline-flex items-center gap-1">
+                      @if (ci.is_important) { <span class="pi pi-star-fill text-amber-500 text-xs"></span> }
+                      {{ ci.notes }}
+                    </span>
+                  } @else {
+                    <span class="text-gray-400">—</span>
+                  }
+                </td>
+                <td class="text-sm text-gray-500 whitespace-nowrap">{{ timeAgo(ci.created_at) }}</td>
+                <td>
+                  <div class="flex items-center gap-1">
+                    <p-tag [value]="ci.status" [severity]="cartItemSeverity(ci.status)" />
+                    @if (ci.recovery_reason) {
+                      <span class="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-700" pTooltip="{{ ci.recovery_reason }}">
+                        <span class="pi pi-refresh"></span> Recovered
+                      </span>
+                    }
+                  </div>
+                </td>
+                <td>
+                  @if (cartItemFollowUpCount(ci); as count) {
+                    <button type="button" class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 cursor-pointer" (click)="openCartItemFollowUpsDialog(ci)">
+                      <span class="pi pi-calendar"></span>
+                      {{ cartItemCompletedCount(ci) }}/{{ count }}
+                    </button>
+                  } @else {
+                    <span class="text-xs text-gray-400">0</span>
+                  }
+                </td>
+                <td>
+                  <div class="flex items-center gap-1">
+                    <p-button icon="pi pi-calendar" severity="warn" (onClick)="openPerItemFollowUp(ci)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Follow up" [disabled]="ci.status === 'converted' || ci.status === 'lost'" />
+                    @for (a of cartItemActions(ci); track a.status) {
+                      <p-button
+                        [icon]="a.icon"
+                        [severity]="a.severity"
+                        (onClick)="updateCartItemStatus(ci, a.status)"
+                        styleClass="p-button-sm p-button-rounded p-button-text"
+                        [pTooltip]="a.label"
+                      />
+                    }
+                    <p-button icon="pi pi-trash" severity="danger" (onClick)="removeCartItem(ci)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" [disabled]="ci.status === 'converted'" />
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+          <div class="sm:hidden">
+          @for (ci of sortedCartItems(); track ci.id) {
+            <div class="mb-2 rounded-lg border bg-gray-50 p-3">
+              <div class="mb-1 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  @if (ci.status !== 'converted' && ci.status !== 'lost') {
+                    <p-checkbox [binary]="true" [ngModel]="isFollowUpChecked(ci.id)" (onChange)="toggleFollowUpCheck(ci.id)" />
+                  }
+                  <span class="text-sm font-medium">{{ productName(ci) }}</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <p-tag [value]="ci.status" [severity]="cartItemSeverity(ci.status)" />
+                  @if (ci.recovery_reason) {
+                    <span class="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-700" pTooltip="{{ ci.recovery_reason }}">
+                      <span class="pi pi-refresh"></span> Recovered
+                    </span>
+                  }
+                </div>
+              </div>
+              <p class="text-xs text-gray-500">{{ packageName(ci) || '—' }}</p>
+              <p class="text-xs text-gray-500">
+                {{ packagePrice(ci) }}{{ packagePrice(ci) !== '—' ? ' · ' : '' }}{{ packageDuration(ci) }}
+              </p>
+              <p class="text-xs text-gray-400 mt-1">{{ timeAgo(ci.created_at) }}</p>
+              @if (ci.notes) {
+                <p class="mt-1 text-xs text-gray-600 inline-flex items-center gap-1">
+                  @if (ci.is_important) { <span class="pi pi-star-fill text-amber-500 text-xs"></span> }
+                  {{ ci.notes }}
+                </p>
+              }
+              @if (cartItemFollowUpCount(ci); as count) {
+                <button type="button" class="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-100 cursor-pointer" (click)="openCartItemFollowUpsDialog(ci)">
+                  <span class="pi pi-calendar"></span>
+                  {{ cartItemCompletedCount(ci) }}/{{ count }} follow-ups
+                </button>
+              }
+              <div class="mt-2 flex flex-wrap gap-1">
+                <p-button icon="pi pi-calendar" severity="warn" (onClick)="openPerItemFollowUp(ci)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Follow up" [disabled]="ci.status === 'converted' || ci.status === 'lost'" />
+                @for (a of cartItemActions(ci); track a.status) {
+                  <p-button
+                    [icon]="a.icon"
+                    [severity]="a.severity"
+                    (onClick)="updateCartItemStatus(ci, a.status)"
+                    styleClass="p-button-sm p-button-rounded p-button-text"
+                  />
+                }
+                <p-button icon="pi pi-trash" severity="danger" (onClick)="removeCartItem(ci)" styleClass="p-button-sm p-button-rounded p-button-text" [disabled]="ci.status === 'converted'" />
+              </div>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="py-4 text-center text-sm text-gray-400">
+          No products in cart yet.
+          <p-button label="Add to Cart" icon="pi pi-plus" (onClick)="openAddProduct()" styleClass="p-button-sm ml-2" />
+        </div>
+      }
+    </div>
+
+    <!-- Follow-ups Section -->
+    <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
+      <div class="mb-3 flex items-center justify-between">
+        <h2 class="text-lg font-bold text-gray-900">Follow-ups</h2>
+        <div class="flex items-center gap-2">
+          <p-button icon="pi pi-question-circle" (onClick)="openGuide('followups')" styleClass="p-button-sm p-button-rounded p-button-text p-button-secondary" pTooltip="Guide" />
+          @if (c.status !== 'lost' && c.status !== 'converted_completed') {
+            <p-button label="Schedule Follow-up" icon="pi pi-calendar" (onClick)="openAddFollowUp()" size="small" />
+          }
+        </div>
+      </div>
+
+      <div class="hidden sm:block">
+        <p-table [value]="sortedFollowUps()" dataKey="id" styleClass="p-datatable-sm">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Products</th>
+              <th>Note</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-fu>
+            <tr>
+              <td class="text-sm text-gray-700">{{ fu.follow_up_date }}</td>
+              <td><p-tag [value]="fu.type" severity="info" /></td>
+              <td>
+                <div class="flex flex-wrap gap-1">
+                  @for (ci of followUpCartItems(fu); track ci.id) {
+                    <span class="inline-flex items-center gap-1 rounded-md border bg-gray-50 px-2 py-0.5 text-xs text-gray-700">
+                      <span class="font-medium">{{ productName(ci) }}</span>
+                      @if (packageName(ci)) {
+                        <span class="text-gray-400">·</span>
+                        <span>{{ packageName(ci) }}</span>
+                      }
+                      @if (packagePrice(ci) !== '—') {
+                        <span class="text-gray-400">·</span>
+                        <span>{{ packagePrice(ci) }}</span>
+                      }
+                      @if (packageDuration(ci) !== '—') {
+                        <span class="text-gray-400">·</span>
+                        <span>{{ packageDuration(ci) }}</span>
+                      }
+                    </span>
+                  }
+                  @if (!fu.cart_item_ids?.length) {
+                    <span class="text-sm text-gray-400">—</span>
+                  }
+                </div>
+              </td>
+              <td class="text-sm text-gray-600">
+                  @if (followUpDurationLabel(fu); as dLabel) {
+                    <p class="text-xs text-amber-600 font-medium mb-0.5">{{ dLabel }}</p>
+                  }
+                  {{ fu.note || '—' }}
+                </td>
+              <td><p-tag [value]="fu.status" [severity]="followUpStatusSeverity(fu.status)" /></td>
+              <td>
+                @if (fu.status === 'pending') {
+                  <p-button icon="pi pi-check" (onClick)="openCompleteFollowUp(fu)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Complete" />
+                }
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptydata">
+            <tr>
+              <td colspan="6" class="py-8 text-center text-gray-400">No follow-ups scheduled</td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+
+      <div class="sm:hidden">
+        @for (fu of sortedFollowUps(); track fu.id) {
+          <div class="mb-3 rounded-lg border bg-white p-3 shadow-sm">
+            <div class="mb-2 flex items-center justify-between">
+              <span class="text-sm font-medium">{{ fu.follow_up_date }}</span>
+              <p-tag [value]="fu.type" severity="info" />
+            </div>
+            @if (followUpDurationLabel(fu); as dLabel) {
+              <p class="mb-1 text-xs text-amber-600 font-medium">{{ dLabel }}</p>
+            }
+            @if (fu.note) { <p class="mb-2 text-sm text-gray-600">{{ fu.note }}</p> }
+            @if (fu.cart_item_ids.length) {
+              <div class="mb-2 flex flex-wrap gap-1">
+                @for (ci of followUpCartItems(fu); track ci.id) {
+                  <span class="inline-flex items-center gap-1 rounded-md border bg-gray-50 px-2 py-0.5 text-xs text-gray-700">
+                    <span class="font-medium">{{ productName(ci) }}</span>
+                    @if (packageName(ci)) {
+                      <span class="text-gray-400">·</span>
+                      <span>{{ packageName(ci) }}</span>
+                    }
+                    @if (packagePrice(ci) !== '—') {
+                      <span class="text-gray-400">·</span>
+                      <span>{{ packagePrice(ci) }}</span>
+                    }
+                    @if (packageDuration(ci) !== '—') {
+                      <span class="text-gray-400">·</span>
+                      <span>{{ packageDuration(ci) }}</span>
+                    }
+                  </span>
+                }
+              </div>
+            }
+            <div class="flex items-center justify-between">
+              <p-tag [value]="fu.status" [severity]="followUpStatusSeverity(fu.status)" />
+              @if (fu.status === 'pending') {
+                <p-button label="Complete" icon="pi pi-check" size="small" (onClick)="openCompleteFollowUp(fu)" />
+              }
+            </div>
+          </div>
+        } @empty {
+          <div class="py-8 text-center text-gray-400">No follow-ups scheduled</div>
+        }
+      </div>
+    </div>
+
+    <!-- Payment Summary (for paid/paying products) -->
+    @if (paidCartItems().length) {
+      <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-lg font-bold text-gray-900">Payments &amp; Balances</h2>
+        </div>
+        <div class="hidden sm:block">
+          <p-table [value]="paidCartItems()" dataKey="id" styleClass="p-datatable-sm">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Product</th>
+                <th>Package</th>
+                <th>Status</th>
+                <th>Amount Paid</th>
+                <th>Balance</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-ci>
+              <tr>
+                <td class="text-sm font-medium text-gray-700">{{ productName(ci) }}</td>
+                <td class="text-sm text-gray-600">{{ packageName(ci) || '—' }}</td>
+                <td>
+                  <p-tag [value]="ci.status === 'converted_paid' ? 'Paid' : 'Paying'" [severity]="ci.status === 'converted_paid' ? 'success' : 'warn'" />
+                </td>
+                <td class="text-sm text-green-600 font-medium">{{ paidForProduct(ci) | number:'1.0-0' }}</td>
+                <td class="text-sm" [class.text-green-600]="balanceForProduct(ci) === 0" [class.text-amber-600]="balanceForProduct(ci) > 0">
+                  {{ balanceForProduct(ci) | number:'1.0-0' }}
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+        <div class="sm:hidden">
+          @for (ci of paidCartItems(); track ci.id) {
+            <div class="mb-3 rounded-lg border p-4" [class.bg-green-50]="ci.status === 'converted_paid'" [class.bg-amber-50]="ci.status === 'converted_paying'">
+              <div class="flex items-start justify-between">
+                <div>
+                  <span class="text-sm font-medium">{{ productName(ci) }}</span>
+                  @if (packageName(ci)) { <p class="text-xs text-gray-500">{{ packageName(ci) }}</p> }
+                </div>
+                <p-tag [value]="ci.status === 'converted_paid' ? 'Paid' : 'Paying'" [severity]="ci.status === 'converted_paid' ? 'success' : 'warn'" />
+              </div>
+              <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+                <span>Paid: <strong class="text-green-600">{{ paidForProduct(ci) | number:'1.0-0' }}</strong></span>
+                <span>Balance: <strong [class.text-green-600]="balanceForProduct(ci) === 0" [class.text-amber-600]="balanceForProduct(ci) > 0">{{ balanceForProduct(ci) | number:'1.0-0' }}</strong></span>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Payment History -->
+    @if (sortedPayments().length) {
+      <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
+        <h2 class="mb-3 text-lg font-bold text-gray-900">Payment History</h2>
+        <div class="hidden sm:block">
+          <p-table [value]="sortedPayments()" dataKey="id" styleClass="p-datatable-sm">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Product</th>
+                <th>Paid</th>
+                <th>Balance</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Installments</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-pay>
+              <tr>
+                <td class="text-sm font-medium text-gray-700">{{ paymentProductName(pay) }}</td>
+                <td class="text-sm text-green-600 font-medium">{{ paymentPaidAmount(pay) | number:'1.0-0' }}</td>
+                <td class="text-sm" [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</td>
+                <td><p-tag [value]="paymentStatus(pay)" [severity]="paymentSeverity(paymentStatus(pay))" /></td>
+                <td class="text-sm text-gray-500">{{ pay.created_at | date:'shortDate' }}</td>
+                <td class="text-sm text-gray-500">{{ pay.installments.length }}</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+        <div class="sm:hidden">
+          @for (pay of sortedPayments(); track pay.id) {
+            <div class="mb-3 rounded-lg border bg-gray-50 p-3">
+              <div class="mb-1 flex items-center justify-between">
+                <span class="text-sm font-medium">{{ paymentProductName(pay) }}</span>
+                <p-tag [value]="paymentStatus(pay)" [severity]="paymentSeverity(paymentStatus(pay))" />
+              </div>
+              <div class="space-y-1 text-xs text-gray-500">
+                <p>Paid: <span class="text-green-600 font-medium">{{ paymentPaidAmount(pay) | number:'1.0-0' }}</span> | Balance: <span [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</span></p>
+                <p>{{ pay.created_at | date:'shortDate' }}</p>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Training Sessions -->
+    <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
+      <div class="mb-3 flex items-center justify-between">
+        <h2 class="text-lg font-bold text-gray-900">Training Sessions</h2>
+        <div class="flex gap-2">
+          @if (trainableCartItems().length) {
+            <p-button label="Add Session" icon="pi pi-plus" size="small" (onClick)="openAddTrainingSession()" />
+          }
+        </div>
+      </div>
+
+      @let trainingItems = trainableCartItems().filter(ci => ci.requires_driving_training || ci.requires_theory_training);
+      @if (trainingItems.length === 0) {
+        <p class="py-4 text-center text-sm text-gray-400">
+          <span class="pi pi-info-circle mr-2"></span> Complete a sale to start tracking training sessions.
+        </p>
+      } @else {
+        @for (ci of trainingItems; track ci.id) {
+          @let summary = trainingSummaryFor(ci.id);
+          @let sessions = sessionsForCartItem(ci.id);
+          <div class="mb-4 rounded-lg border bg-gray-50 p-3">
+            <div class="mb-2 flex items-start justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-900">{{ productName(ci) }}{{ packageName(ci) ? ' — ' + packageName(ci) : '' }}</p>
+                @if (summary) {
+                  <div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
+                    @if (summary.expected_driving_minutes !== null) {
+                      <span>Driving: {{ summary.total_driving_minutes }}/{{ summary.expected_driving_minutes }}min</span>
+                    }
+                    @if (summary.expected_theory_minutes !== null) {
+                      <span>Theory: {{ summary.total_theory_minutes }}/{{ summary.expected_theory_minutes }}min</span>
+                    }
+                    <span>Sessions: {{ summary.sessions_count }}</span>
+                  </div>
+                }
+              </div>
+              <div class="flex gap-1">
+                @if (!sessions.length) {
+                  <p-button label="Generate" icon="pi pi-calendar" size="small" severity="secondary" (onClick)="openGenerateSessions(ci)" />
+                }
+              </div>
+            </div>
+
+            @if (sessions.length === 0) {
+              <p class="py-2 text-xs text-gray-400">No sessions recorded yet. Click Generate to auto-create from package duration, or click Add Session to create manually.</p>
+            } @else {
+              <div class="hidden sm:block overflow-x-auto">
+                <p-table [value]="sessions" dataKey="id" styleClass="p-datatable-sm">
+                  <ng-template pTemplate="header">
+                    <tr>
+                      <th>Date</th>
+                      <th>Duration</th>
+                      <th>Theory</th>
+                      <th>Driving</th>
+                      <th>Video</th>
+                      <th>Timer</th>
+                      <th>Skills</th>
+                      <th>Notes</th>
+                      <th>Actions</th>
+                    </tr>
+                  </ng-template>
+                  <ng-template pTemplate="body" let-s>
+                    <tr>
+                      <td class="text-sm whitespace-nowrap">{{ s.session_date | date:'shortDate' }}</td>
+                      <td class="text-sm">{{ s.duration_minutes }}min</td>
+                      <td class="text-sm text-blue-600">{{ s.theory_minutes || '—' }}</td>
+                      <td class="text-sm text-green-600">{{ s.driving_minutes || '—' }}</td>
+                      <td>
+                        @if (s.video_url) {
+                          <div class="flex gap-1 items-center">
+                            <i class="pi pi-video" [class.text-green-500]="s.video_cached" [class.text-gray-400]="!s.video_cached"></i>
+                            @if (!s.video_cached && !s.video_invalidated) {
+                              <p-button icon="pi pi-download" severity="secondary" pTooltip="Cache video" (onClick)="cacheVideo(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                            }
+                            @if (s.video_cached && !s.video_invalidated) {
+                              <p-button icon="pi pi-refresh" severity="warn" pTooltip="Invalidate cache" (onClick)="invalidateVideo(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                            }
+                            @if (s.video_invalidated) {
+                              <span class="text-xs text-red-500">Invalidated</span>
+                            }
+                          </div>
+                        } @else {
+                          <span class="text-xs text-gray-400">—</span>
+                        }
+                      </td>
+                      <td>
+                        @if (s.started_at) {
+                          <span class="text-xs font-mono">{{ formatTimer(s.timer_seconds) }}</span>
+                        } @else {
+                          <p-button icon="pi pi-play" severity="success" pTooltip="Start session" (onClick)="startSession(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                        }
+                      </td>
+                      <td>
+                        <p-button label="{{ s.skills.length }}" icon="pi pi-list" severity="secondary" pTooltip="Manage skills" (onClick)="openSkillsDialog(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                      </td>
+                      <td class="text-sm text-gray-500 max-w-32 truncate">{{ s.notes || '—' }}</td>
+                      <td>
+                        <div class="flex gap-1">
+                          <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openEditTrainingSession(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                          <p-button icon="pi pi-trash" severity="danger" (onClick)="deleteTrainingSession(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                        </div>
+                      </td>
+                    </tr>
+                  </ng-template>
+                </p-table>
+              </div>
+              <div class="sm:hidden space-y-2">
+                @for (s of sessions; track s.id) {
+                  <div class="rounded border bg-white p-2 text-xs">
+                    <div class="flex items-center justify-between">
+                      <span class="font-medium">{{ s.session_date | date:'shortDate' }}</span>
+                      <div class="flex gap-1">
+                        <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openEditTrainingSession(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                        <p-button icon="pi pi-trash" severity="danger" (onClick)="deleteTrainingSession(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                      </div>
+                    </div>
+                    <p class="text-gray-500">{{ s.duration_minutes }}min | Theory: {{ s.theory_minutes || '—' }} | Driving: {{ s.driving_minutes || '—' }}</p>
+                    <div class="mt-1 flex flex-wrap gap-2">
+                      @if (s.video_url) {
+                        <span class="inline-flex items-center gap-1">
+                          <i class="pi pi-video" [class.text-green-500]="s.video_cached" [class.text-gray-400]="!s.video_cached"></i>
+                          @if (!s.video_cached && !s.video_invalidated) { <p-button icon="pi pi-download" severity="secondary" (onClick)="cacheVideo(s)" styleClass="p-button-sm p-button-rounded p-button-text" /> }
+                        </span>
+                      }
+                      @if (s.started_at) {
+                        <span class="text-xs font-mono">{{ formatTimer(s.timer_seconds) }}</span>
+                      }
+                      <p-button label="Skills: {{ s.skills.length }}" severity="secondary" (onClick)="openSkillsDialog(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                    </div>
+                    @if (s.notes) { <p class="text-gray-400 italic">{{ s.notes }}</p> }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      }
+    </div>
+
+    <!-- Permit Progress -->
+    @if (trainableCartItems().length) {
+      @for (ci of trainableCartItems(); track ci.id) {
+        @if (ci.requires_permit_processing) {
+          @let pp = permitForCartItem(ci.id);
+          @if (pp) {
+          <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
+            <h2 class="mb-3 text-lg font-bold text-gray-900">Permit Processing — {{ productName(ci) }}{{ packageName(ci) ? ' (' + packageName(ci) + ')' : '' }}</h2>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label class="mb-1 block text-xs font-medium text-gray-600">Start Date</label>
+                <p-datepicker [(ngModel)]="pp!.start_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-medium text-gray-600">Got Learners Permit</label>
+                <p-datepicker [(ngModel)]="pp!.got_learners_permit_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                @if (pp?.got_learners_permit_date) {
+                  <p class="mt-0.5 text-xs text-gray-400">{{ permitDaysRemaining(pp!.got_learners_permit_date) }}</p>
+                }
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-medium text-gray-600">Learners Due For Test</label>
+                <p-datepicker [(ngModel)]="pp!.learners_due_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                @if (pp?.learners_due_date) {
+                  <p class="mt-0.5 text-xs" [class.text-red-500]="permitDaysRemaining(pp!.learners_due_date).includes('overdue')" [class.text-amber-500]="!permitDaysRemaining(pp!.learners_due_date).includes('overdue')">{{ permitDaysRemaining(pp!.learners_due_date) }}</p>
+                }
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-medium text-gray-600">Learners Expiring</label>
+                <p-datepicker [(ngModel)]="pp!.learners_expiry_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                @if (pp?.learners_expiry_date) {
+                  <p class="mt-0.5 text-xs text-gray-400">{{ permitDaysRemaining(pp!.learners_expiry_date) }}</p>
+                }
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-medium text-gray-600">Tested On</label>
+                <p-datepicker [(ngModel)]="pp!.tested_on_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-medium text-gray-600">Expecting Permit On</label>
+                <p-datepicker [(ngModel)]="pp!.expecting_permit_on_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                @if (pp?.expecting_permit_on_date) {
+                  <p class="mt-0.5 text-xs text-gray-400">{{ permitDaysRemaining(pp!.expecting_permit_on_date) }}</p>
+                }
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-medium text-gray-600">Delayed (Days)</label>
+                <p-inputNumber [(ngModel)]="pp!.delayed_days" [min]="0" styleClass="w-full" />
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-medium text-gray-600">Notes</label>
+                <textarea [(ngModel)]="pp!.notes" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="2" placeholder="Optional notes..."></textarea>
+              </div>
+            </div>
+            <div class="mt-3">
+              <p-button label="Save Permit Progress" icon="pi pi-check" size="small" (onClick)="savePermitProgress(ci.id)" [loading]="loading()" />
+            </div>
+          </div>
+          }
+        }
+      }
+    }
+
+    <!-- Lesson Plans -->
+    @if (trainableCartItems().filter(ci => ci.requires_driving_training || ci.requires_theory_training).length) {
+      @for (ci of trainableCartItems().filter(ci => ci.requires_driving_training || ci.requires_theory_training); track ci.id) {
+        @let plans = lessonPlansForCartItem(ci.id);
+        <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
+          <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-lg font-bold text-gray-900">Lesson Plan — {{ productName(ci) }}{{ packageName(ci) ? ' (' + packageName(ci) + ')' : '' }}</h2>
+            <p-button label="Create Plan" icon="pi pi-plus" size="small" severity="secondary"
+                      (onClick)="openCreateLessonPlan(ci.id)" />
+          </div>
+
+          @if (plans.length === 0) {
+            <p class="py-4 text-center text-sm text-gray-400">No lesson plans yet. Click "Create Plan" to get started.</p>
+          } @else {
+            @for (plan of plans; track plan.id) {
+              @let activeLessons = plan.lessons.filter(l => l.is_active);
+              @let templateLessons = getTemplateLessonsNotInPlan(plan);
+              <div class="mb-3 rounded-lg border bg-gray-50 p-3">
+                <div class="mb-2 flex items-center justify-between">
+                  <div>
+                    <p class="text-sm font-semibold text-gray-700">
+                      {{ plan.transmission_type === 'manual' ? 'Manual' : plan.transmission_type === 'automatic' ? 'Automatic' : 'Manual/Automatic' }}
+                      @if (plan.status === 'completed') {
+                        <span class="ml-2 text-xs text-green-600">(Completed)</span>
+                      }
+                    </p>
+                    @if (plan.start_date) {
+                      <p class="text-xs text-gray-500">Start: {{ plan.start_date | date:'dd/MM/yy' }}</p>
+                    }
+                  </div>
+                  <div class="flex items-center gap-1">
+                    @if (templateLessons.length > 0) {
+                      <p-button icon="pi pi-plus" severity="secondary" (onClick)="showAddFromTemplateLessonDialog.set(true); selectedPlanForTemplateLessons.set(plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Add from template" tooltipPosition="top" />
+                    }
+                    <span class="text-xs text-gray-400">{{ activeLessons.length }} active</span>
+                  </div>
+                </div>
+
+                <!-- Drag-and-drop reorder list -->
+                @if (activeLessons.length > 0) {
+                  <p-orderList
+                    [value]="activeLessons"
+                    (onReorder)="onPlanLessonsReorder(plan.id, $event)"
+                    [listStyle]="{ 'max-height': '500px', 'border': 'none' }"
+                    dragdrop
+                    styleClass="w-full"
+                  >
+                    <ng-template pTemplate="item" let-lesson>
+                      <div class="flex items-center gap-3 px-2 py-2" [class.opacity-50]="!lesson.is_active">
+                        <span class="pi pi-bars cursor-grab text-gray-400"></span>
+                        <div class="min-w-0 flex-1">
+                          <p class="text-sm font-medium truncate">{{ lesson.title }}</p>
+                          <p class="text-xs text-gray-500">Day {{ lesson.day_number }} · Week {{ lesson.week_number }}</p>
+                        </div>
+                        <p-tag
+                          [value]="lesson.status === 'in_progress' ? 'In Progress' : lesson.status === 'completed' ? 'Done' : lesson.status === 'skipped' ? 'Skipped' : 'Pending'"
+                          [severity]="lesson.status === 'completed' ? 'success' : lesson.status === 'in_progress' ? 'info' : lesson.status === 'skipped' ? 'warn' : 'contrast'"
+                          styleClass="text-xs"
+                        />
+                        <div class="flex">
+                          <p-button icon="pi pi-eye" severity="secondary" (onClick)="openLessonDetail(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Details" tooltipPosition="top" />
+                          @if (lesson.status === 'pending') {
+                            <p-button icon="pi pi-play" severity="info" (onClick)="updateLessonStatus(lesson, 'in_progress')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Start" tooltipPosition="top" />
+                          }
+                          @if (lesson.status === 'in_progress') {
+                            <p-button icon="pi pi-check" severity="success" (onClick)="updateLessonStatus(lesson, 'completed')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Complete" tooltipPosition="top" />
+                          }
+                          @if (lesson.status === 'pending' || lesson.status === 'in_progress') {
+                            <p-button icon="pi pi-ban" severity="danger" (onClick)="updateLessonStatus(lesson, 'skipped')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Skip" tooltipPosition="top" />
+                          }
+                          <p-button icon="pi pi-trash" severity="danger" (click)="removeLessonFromPlan(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" tooltipPosition="top" />
+                        </div>
+                      </div>
+                    </ng-template>
+                  </p-orderList>
+                } @else {
+                  <p class="py-4 text-center text-sm text-gray-400">No active lessons. Add lessons from the template to get started.</p>
+                }
+              </div>
+            }
+          }
+        </div>
+      }
+    }
+
+    <!-- Generate Training Sessions Dialog -->
+    <p-dialog header="Generate Training Sessions" [(visible)]="showGenerateTrainingDialog" [modal]="true"
+              [style]="{ width: '90vw', maxWidth: '480px' }" [draggable]="false" [resizable]="false"
+              [closable]="!loading()">
+      <div class="flex flex-col gap-4 pt-2">
+        <p class="text-sm text-gray-600">Enter a start date to auto-generate training sessions based on the package training durations.</p>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Training Start Date</label>
+          <p-datepicker [(ngModel)]="generateForm.start_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+        </div>
+        <p-button label="Generate Sessions" icon="pi pi-calendar-plus" [loading]="loading()"
+                  (onClick)="doGenerateSessions()" [disabled]="!generateForm.start_date" styleClass="w-full justify-center" />
+      </div>
+    </p-dialog>
+
+    <!-- Add/Edit Training Session Dialog -->
+    <p-dialog
+      [header]="editingTrainingSession() ? 'Edit Training Session' : 'Add Training Session'"
+      [(visible)]="showAddTrainingDialog"
+      [modal]="true"
+      [style]="{ width: '90vw', maxWidth: '520px' }"
+      [draggable]="false"
+      [resizable]="false"
+      [closable]="!loading()"
+    >
+      <div class="flex flex-col gap-4 pt-2">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Cart Item</label>
+          <p-select
+            [(ngModel)]="trainingForm.cart_item_id"
+            [options]="trainableCartItems()"
+            optionLabel="product_id"
+            optionValue="id"
+            placeholder="Select product/package..."
+            styleClass="w-full"
+            appendTo="body"
+          >
+            <ng-template let-ci pTemplate="item">
+              <span class="text-sm">{{ productName(ci) }}{{ packageName(ci) ? ' — ' + packageName(ci) : '' }}</span>
+            </ng-template>
+            <ng-template let-ci pTemplate="selectedItem">
+              <span class="text-sm">{{ productName(ci) }}{{ packageName(ci) ? ' — ' + packageName(ci) : '' }}</span>
+            </ng-template>
+          </p-select>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Session Date</label>
+          <p-datepicker [(ngModel)]="trainingForm.session_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Total Duration (minutes)</label>
+          <p-inputNumber [(ngModel)]="trainingForm.duration_minutes" [min]="1" styleClass="w-full" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Theory (minutes)</label>
+            <p-inputNumber [(ngModel)]="trainingForm.theory_minutes" [min]="0" styleClass="w-full" />
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Driving (minutes)</label>
+            <p-inputNumber [(ngModel)]="trainingForm.driving_minutes" [min]="0" styleClass="w-full" />
+          </div>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Learning Video URL</label>
+          <input pInputText [(ngModel)]="trainingForm.video_url" class="w-full" placeholder="https://..." />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+          <textarea [(ngModel)]="trainingForm.notes" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="2" placeholder="Session notes..."></textarea>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Instructor Notes</label>
+          <textarea [(ngModel)]="trainingForm.instructor_notes" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="2" placeholder="Instructor remarks..."></textarea>
+        </div>
+        <p-button
+          [label]="editingTrainingSession() ? 'Save Changes' : 'Add Session'"
+          [loading]="loading()"
+          (onClick)="saveTrainingSession()"
+          [disabled]="!trainingForm.session_date || !trainingForm.cart_item_id"
+          styleClass="w-full justify-center"
+        />
+      </div>
+    </p-dialog>
+
+    <!-- Skills Dialog -->
+    <p-dialog header="Manage Skills" [(visible)]="showSkillsDialog" [modal]="true"
+              [style]="{ width: '90vw', maxWidth: '520px' }" [draggable]="false" [resizable]="false"
+              [closable]="!loading()">
+      <div class="flex flex-col gap-3 pt-2">
+        <p class="text-sm text-gray-500">Competence-based skills for this training session.</p>
+        @for (sk of skillsFormList(); track sk; let idx = $index) {
+          <div class="rounded-lg border bg-gray-50 p-3">
+            <div class="mb-2 flex items-center justify-between">
+              <span class="text-xs font-semibold text-gray-500">Skill {{ idx + 1 }}</span>
+              <p-button icon="pi pi-trash" severity="danger" (onClick)="removeSkillFromForm(idx)" styleClass="p-button-sm p-button-rounded p-button-text" />
+            </div>
+            <div class="grid grid-cols-1 gap-2">
+              <div>
+                <label class="mb-0.5 block text-xs font-medium text-gray-600">Name</label>
+                <input pInputText [(ngModel)]="sk.name" class="w-full" placeholder="Skill name" />
+              </div>
+              <div>
+                <label class="mb-0.5 block text-xs font-medium text-gray-600">Description</label>
+                <textarea [(ngModel)]="sk.description" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="2" placeholder="Optional description..."></textarea>
+              </div>
+              <div>
+                <label class="mb-0.5 block text-xs font-medium text-gray-600">Competency Level (1-5)</label>
+                <p-select [(ngModel)]="sk.competency_level" [options]="[1,2,3,4,5]" styleClass="w-full" appendTo="body" />
+              </div>
+            </div>
+          </div>
+        }
+        <p-button label="Add Skill" icon="pi pi-plus" severity="secondary" (onClick)="addSkillToForm()" styleClass="w-full justify-center" />
+        <p-button label="Save Skills" icon="pi pi-check" [loading]="loading()" (onClick)="saveSkills()" styleClass="w-full justify-center" />
+      </div>
+    </p-dialog>
+
+    <!-- Multi-step Add to Cart Dialog -->
+    <p-dialog header="Add to Cart" [(visible)]="showAddProductDialog" [modal]="true"
+              [style]="{ width: '95vw', maxWidth: '520px' }"
+              [draggable]="false" [resizable]="false" [closable]="!loading()">
+      <div class="relative">
+        <div class="flex flex-col gap-4 pt-2">
+
+          <!-- Step Indicator -->
+          <div class="flex items-center justify-center gap-2">
+            <div class="flex items-center gap-1" [class.text-blue-600]="addStep() >= 1" [class.text-gray-400]="addStep() < 1">
+              <span class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold"
+                    [class.bg-blue-600]="addStep() >= 1" [class.bg-gray-300]="addStep() < 1" [class.text-white]="addStep() >= 1">1</span>
+              <span class="text-xs font-medium">Products</span>
+            </div>
+            @if (addConvertNow()) {
+              <div class="h-px w-8 bg-gray-300"></div>
+              <div class="flex items-center gap-1" [class.text-blue-600]="addStep() >= 2" [class.text-gray-400]="addStep() < 2">
+                <span class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold"
+                      [class.bg-blue-600]="addStep() >= 2" [class.bg-gray-300]="addStep() < 2" [class.text-white]="addStep() >= 2">2</span>
+                <span class="text-xs font-medium">Payment</span>
+              </div>
+              @if (addStep() === 3) {
+                <div class="h-px w-8 bg-gray-300"></div>
+                <div class="flex items-center gap-1 text-blue-600">
+                  <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">3</span>
+                  <span class="text-xs font-medium">Receipt</span>
+                </div>
+              }
+            }
+          </div>
+
+          <!-- Step 1: Products -->
+          @if (addStep() === 1) {
+            <div class="flex flex-col gap-3">
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="mb-1 block text-sm font-medium text-gray-700">Product</label>
+                  <p-select [(ngModel)]="selectedProduct" [options]="products()" optionLabel="name" placeholder="Select product" styleClass="w-full" appendTo="body" />
+                </div>
+                <div>
+                  <label class="mb-1 block text-sm font-medium text-gray-700">Package</label>
+                  <p-select [(ngModel)]="selectedPackageId" [options]="selectedProduct()?.packages || []" optionLabel="name" optionValue="id" placeholder="Select package" styleClass="w-full" [showClear]="true" appendTo="body" />
+                </div>
+              </div>
+              <p-button label="Add to List" icon="pi pi-plus" (onClick)="addSelectedProductToList()" styleClass="w-full justify-center" [disabled]="!selectedProduct()" severity="secondary" />
+              @if (addSelectedProducts().length) {
+                <div class="rounded-lg border p-3">
+                  <label class="mb-2 block text-sm font-medium text-gray-700">Selected Products</label>
+                  @for (sp of addSelectedProducts(); track $index; let i = $index) {
+                    <div class="flex items-center justify-between border-b py-2 last:border-0">
+                      <div class="flex-1">
+                        <span class="text-sm font-medium">{{ sp.product.name }}</span>
+                        @if (sp.packageName) { <span class="text-xs text-gray-500"> ({{ sp.packageName }})</span> }
+                      </div>
+                      <div class="flex items-center gap-3">
+                        <span class="text-sm font-semibold">{{ sp.price | number:'1.0-0' }}</span>
+                        <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="removeSelectedProduct(i)" />
+                      </div>
+                    </div>
+                  }
+                  <div class="mt-2 flex justify-between border-t pt-2 text-sm font-bold">
+                    <span>Total</span>
+                    <span>{{ addSelectedProductTotal | number:'1.0-0' }}</span>
+                  </div>
+                </div>
+              }
+              <div class="flex items-center gap-2">
+                <p-checkbox [binary]="true" [(ngModel)]="addConvertNow" inputId="addConvertNow" />
+                <label for="addConvertNow" class="cursor-pointer text-sm text-gray-700">Convert Now (process payment)</label>
+              </div>
+              <p-button [label]="addConvertNow() ? 'Next: Payment' : 'Add Products'" [icon]="addConvertNow() ? 'pi pi-arrow-right' : 'pi pi-check'"
+                        [loading]="loading()" (onClick)="nextAddStep()" styleClass="w-full justify-center"
+                        [disabled]="!addSelectedProducts().length" />
+            </div>
+          }
+
+          <!-- Step 2: Payment -->
+          @if (addStep() === 2) {
+            <div class="flex flex-col gap-3">
+              <div class="rounded-lg border">
+                <div class="grid grid-cols-12 gap-2 border-b bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600">
+                  <div class="col-span-5">Package</div>
+                  <div class="col-span-3 text-right">Price</div>
+                  <div class="col-span-4 text-right">Pay Now</div>
+                </div>
+                @for (sp of addSelectedProducts(); track $index; let i = $index) {
+                  <div class="grid grid-cols-12 items-center gap-2 border-b px-3 py-2 last:border-0">
+                    <div class="col-span-5 text-sm">
+                      <div class="font-medium">{{ sp.product.name }}</div>
+                      @if (sp.packageName) { <div class="text-xs text-gray-400">{{ sp.packageName }}</div> }
+                    </div>
+                    <div class="col-span-3 text-right text-sm font-medium">{{ sp.price | number:'1.0-0' }}</div>
+                    <div class="col-span-4 text-right">
+                      <p-inputNumber [ngModel]="getAllocation(i)" (onInput)="onAllocationInput(i, $event)" [min]="0" [max]="sp.price" placeholder="0" inputStyleClass="w-full px-2 py-1 text-sm text-right" />
+                    </div>
+                  </div>
+                }
+              </div>
+              <div class="rounded-lg bg-gray-50 p-3 text-sm">
+                <div class="flex justify-between"><span class="text-gray-600">Total Price</span><span class="font-semibold">{{ addSelectedProductTotal | number:'1.0-0' }}</span></div>
+                <div class="flex justify-between mt-1"><span class="text-gray-600">Allocated</span><span class="font-semibold text-green-600">{{ addTotalAllocated | number:'1.0-0' }}</span></div>
+                @if (addUnallocatedAmount > 0) {
+                  <div class="flex justify-between mt-1 border-t border-gray-200 pt-1"><span class="text-gray-600">Remaining</span><span class="font-semibold text-amber-600">{{ addUnallocatedAmount | number:'1.0-0' }}</span></div>
+                }
+              </div>
+              <div>
+                <label class="mb-1 block text-sm font-medium text-gray-700">Receipt Number (optional)</label>
+                <div class="relative">
+                  <input [(ngModel)]="addPaymentReceiptNumber" (blur)="validateAddReceipt()" type="text"
+                         class="w-full rounded-lg border px-3 py-2 text-sm pr-10"
+                         [class.border-red-400]="receiptAvailable() === false"
+                         [class.border-green-400]="receiptAvailable() === true"
+                         [class.border-gray-300]="receiptAvailable() === null"
+                         placeholder="e.g. RCP-001234" />
+                  <span class="absolute right-3 top-1/2 -translate-y-1/2">
+                    @if (receiptChecking()) { <span class="pi pi-spin pi-spinner text-sm text-gray-400"></span> }
+                    @else if (receiptAvailable() === true) { <span class="pi pi-check-circle text-sm text-green-500"></span> }
+                    @else if (receiptAvailable() === false) { <span class="pi pi-times-circle text-sm text-red-500"></span> }
+                  </span>
+                </div>
+                @if (receiptAvailable() === false) { <p class="mt-1 text-xs text-red-500">This receipt number already exists</p> }
+                @else if (receiptAvailable() === true) { <p class="mt-1 text-xs text-green-600">Receipt number is available</p> }
+                @else { <p class="mt-1 text-xs text-gray-400">Must be unique if provided</p> }
+              </div>
+              <div class="flex gap-2">
+                <p-button label="Back" icon="pi pi-arrow-left" severity="secondary" (onClick)="prevAddStep()" styleClass="flex-1 justify-center" />
+                <p-button label="Complete Payment" icon="pi pi-check" [loading]="loading()" (onClick)="completeAddPayment()" styleClass="flex-1 justify-center" severity="success" [disabled]="!canCompleteAddPayment()" />
+              </div>
+            </div>
+          }
+
+          <!-- Step 3: Receipt -->
+          @if (addStep() === 3) {
+            <div class="flex flex-col gap-4">
+              <div class="rounded-lg border p-4" id="add-receipt-content">
+                <div class="mb-4 text-center">
+                  <h2 class="text-lg font-bold">Payment Receipt</h2>
+                  @if (consultation(); as c) {
+                    <p class="text-xs text-gray-500">{{ addReceiptDate() }}</p>
+                    <div class="mt-2 text-sm">
+                      <div class="flex justify-between"><span class="text-gray-600">Customer</span><span class="font-medium">{{ fullName(c) }}</span></div>
+                      <div class="flex justify-between"><span class="text-gray-600">Phone</span><span>{{ c.phone }}</span></div>
+                      <div class="flex justify-between"><span class="text-gray-600">Served By</span><span>{{ addReceiptUserName() }}</span></div>
+                    </div>
+                  }
+                </div>
+                <div class="border-t pt-3">
+                  <div class="grid grid-cols-4 gap-2 text-xs font-medium text-gray-600 border-b pb-1">
+                    <div class="col-span-2">Item</div>
+                    <div class="text-right">Price</div>
+                    <div class="text-right">Paid</div>
+                  </div>
+                  @for (item of addReceiptItems(); track $index) {
+                    <div class="grid grid-cols-4 gap-2 py-1 text-xs">
+                      <div class="col-span-2">
+                        <span class="font-medium">{{ item.productName }}</span>
+                        @if (item.packageName) { <span class="text-gray-400">({{ item.packageName }})</span> }
+                      </div>
+                      <div class="text-right">{{ item.price | number:'1.0-0' }}</div>
+                      <div class="text-right">{{ item.paid | number:'1.0-0' }}</div>
+                    </div>
+                  }
+                  <div class="grid grid-cols-4 gap-2 border-t pt-1 text-xs font-bold">
+                    <div class="col-span-2">Total Paid</div>
+                    <div></div>
+                    <div class="text-right">{{ addReceiptTotalPaid() | number:'1.0-0' }}</div>
+                  </div>
+                </div>
+                @if (addReceiptSystemNumber()) {
+                  <div class="mt-3 border-t pt-2 text-xs text-gray-500">
+                    <div class="flex justify-between"><span>System Receipt #</span><span class="font-mono">{{ addReceiptSystemNumber() }}</span></div>
+                    @if (addPaymentReceiptNumber()) {
+                      <div class="flex justify-between mt-1"><span>Receipt #</span><span class="font-mono">{{ addPaymentReceiptNumber() }}</span></div>
+                    }
+                  </div>
+                }
+              </div>
+              <div class="flex gap-2">
+                <p-button label="Print" icon="pi pi-print" (onClick)="printAddReceipt()" styleClass="flex-1 justify-center" severity="secondary" />
+                <p-button label="Close" icon="pi pi-times" (onClick)="closeAddReceipt()" styleClass="flex-1 justify-center" />
+              </div>
+            </div>
+          }
+
+          @if (loading() && addStep() < 3) {
+            <div class="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/70">
+              <span class="pi pi-spin pi-spinner text-3xl text-blue-600"></span>
+            </div>
+          }
+        </div>
+      </div>
+    </p-dialog>
+
+    <!-- Edit Dialog -->
+    <p-dialog header="Edit Consultation" [(visible)]="showEditDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '480px' }" [draggable]="false" [resizable]="false">
+      <div class="flex flex-col gap-4 pt-2">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Status</label>
+          <p-select [(ngModel)]="editForm.status" [options]="statuses" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">First Name</label>
+          <input pInputText [(ngModel)]="editForm.first_name" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Middle Name</label>
+          <input pInputText [(ngModel)]="editForm.middle_name" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Last Name</label>
+          <input pInputText [(ngModel)]="editForm.last_name" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Phone</label>
+          <input pInputText [(ngModel)]="editForm.phone" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Location</label>
+          <input pInputText [(ngModel)]="editForm.location" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">How they knew us</label>
+          <p-select [(ngModel)]="editForm.how_they_knew_us" [options]="howTheyKnewUsOptions" optionLabel="label" optionValue="value" placeholder="Select" styleClass="w-full" appendTo="body" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Interest Level</label>
+          <p-select [(ngModel)]="editForm.interest_level" [options]="interestLevels" optionLabel="label" optionValue="value" placeholder="Select interest" styleClass="w-full" appendTo="body" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Expected Start Date</label>
+          <p-datepicker [(ngModel)]="editForm.start_date" dateFormat="yy-mm-dd" [showIcon]="true" styleClass="w-full" appendTo="body" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+          <textarea [(ngModel)]="editForm.notes" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="3"></textarea>
+        </div>
+        <p-button label="Save Changes" [loading]="loading()" (onClick)="saveEdit()" styleClass="w-full justify-center" />
+      </div>
+    </p-dialog>
+
+    <!-- Follow-up Dialog -->
+    <p-dialog header="Schedule Follow-up" [(visible)]="showFollowUpDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '480px' }" [draggable]="false" [resizable]="false">
+      <div class="flex flex-col gap-4 pt-2">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Date</label>
+          <p-datepicker [(ngModel)]="followUpForm.follow_up_date" dateFormat="yy-mm-dd" [showIcon]="true" styleClass="w-full" appendTo="body" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Type</label>
+          <p-select [(ngModel)]="followUpForm.type" [options]="followUpTypes" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Note</label>
+          <textarea [(ngModel)]="followUpForm.note" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="2"></textarea>
+        </div>
+        @if (c.cart_items?.length) {
+          <div>
+            <label class="mb-2 block text-sm font-medium text-gray-700">Linked Products *</label>
+          @for (ci of sortedCartItems(); track ci.id) {
+              <div class="mb-1 flex items-center gap-2">
+                <p-checkbox
+                  [binary]="true"
+                  [ngModel]="isCartItemSelected(ci.id)"
+                  (onChange)="toggleCartItemSelection(ci.id)"
+                  [inputId]="'ci-' + ci.id"
+                  [disabled]="ciDisableFollowUpCheck(ci)"
+                />
+                <label [for]="'ci-' + ci.id" class="cursor-pointer text-sm" [class.text-gray-400]="ciDisableFollowUpCheck(ci)" [class.text-gray-700]="!ciDisableFollowUpCheck(ci)">
+                  {{ productName(ci) }}{{ packageName(ci) ? ' (' + packageName(ci) + ')' : '' }}
+                  @if (ci.status === 'lost') { <span class="text-xs text-gray-400">(lost)</span> }
+                  @if (ci.status === 'converted') { <span class="text-xs text-gray-400">(converted)</span> }
+                </label>
+              </div>
+            }
+          </div>
+        }
+        @if (followUpForm.type === 'payment' && followUpForm.cart_item_ids.length && payments().length) {
+          <div class="rounded-lg bg-blue-50 p-3 text-sm">
+            <p class="font-medium text-blue-800">Balance Summary</p>
+            @for (ciId of followUpForm.cart_item_ids; track ciId) {
+              @if (balanceInfo(ciId); as bi) {
+                <div class="mt-1 flex justify-between text-blue-700">
+                  <span>{{ bi.label }}</span>
+                  <span class="font-mono font-medium" [class.text-red-600]="bi.balance > 0">Balance: {{ bi.balance | number:'1.2-2' }}</span>
+                </div>
+              }
+            }
+          </div>
+        }
+        <p-button label="Add Follow-up" [loading]="loading()" (onClick)="saveFollowUp()" styleClass="w-full justify-center" [disabled]="!followUpForm.follow_up_date || !followUpForm.cart_item_ids.length" />
+      </div>
+    </p-dialog>
+
+    <!-- Complete Follow-up Dialog -->
+    <p-dialog header="Complete Follow-up" [(visible)]="showCompleteFollowUpDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '480px' }" [draggable]="false" [resizable]="false">
+      <div class="flex flex-col gap-4 pt-2">
+        @if (completingFollowUp(); as fu) {
+          @if (followUpCartItems(fu).length) {
+            <div>
+              <label class="mb-2 block text-sm font-medium text-gray-700">Linked Products</label>
+              <div class="rounded-lg border bg-gray-50 p-2 text-sm">
+                @for (ci of followUpCartItems(fu); track ci.id) {
+                  <div class="flex items-center justify-between px-2 py-1">
+                    <span class="font-medium text-gray-700">{{ productName(ci) }}</span>
+                    <span class="text-xs text-gray-500">
+                      {{ packageName(ci) }}{{ packageName(ci) ? ' · ' : '' }}{{ packagePrice(ci) }}{{ packagePrice(ci) !== '—' ? ' · ' : '' }}{{ packageDuration(ci) }}
+                    </span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        }
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+          <textarea [(ngModel)]="completeFollowUpForm.note" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="3" placeholder="Add notes about this follow-up..."></textarea>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Next Follow-up Date (optional)</label>
+          <p-datepicker [(ngModel)]="completeFollowUpForm.next_follow_up_date" dateFormat="yy-mm-dd" [showIcon]="true" styleClass="w-full" appendTo="body" />
+        </div>
+        <p-button label="Complete Follow-up" [loading]="loading()" (onClick)="saveCompleteFollowUp()" styleClass="w-full justify-center" />
+      </div>
+    </p-dialog>
+
+    <!-- Cart Item Follow-ups Dialog -->
+    @if (cartItemFollowUpsTarget(); as target) {
+      <p-dialog [header]="'Follow-ups — ' + productName(target)" [(visible)]="showCartItemFollowUpsDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '500px' }" [draggable]="false" [resizable]="false">
+        <div class="flex flex-col gap-3 pt-2">
+          @for (fu of cartItemFollowUps(target); track fu.id; let i = $index) {
+            <div class="rounded-lg border p-3 text-sm">
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-medium text-gray-900">{{ fu.follow_up_date }}</span>
+                <div class="flex items-center gap-2">
+                  <p-tag [value]="fu.type" severity="info" />
+                  <p-tag [value]="fu.status" [severity]="cartItemFollowUpSeverity(fu.status)" />
+                </div>
+              </div>
+              @if (fu.note) {<p class="text-gray-600">{{ fu.note }}</p>}
+              @if (fu.status === 'cancelled' && target.recovery_reason) {
+                <p class="mt-1 text-xs text-cyan-600 inline-flex items-center gap-1">
+                  <span class="pi pi-refresh"></span> Item recovered: {{ target.recovery_reason }}
+                </p>
+              }
+              <div class="mt-2 flex items-center justify-between">
+                <span class="text-xs text-gray-400">#{{ i + 1 }}</span>
+                @if (fu.status === 'pending') {
+                  <p-button label="Complete" icon="pi pi-check" size="small" (onClick)="openCompleteFollowUp(fu); showCartItemFollowUpsDialog.set(false)" />
+                }
+              </div>
+            </div>
+          }
+          @if (!cartItemFollowUps(target).length) {
+            <p class="py-8 text-center text-sm text-gray-400">No follow-ups for this product</p>
+          }
+        </div>
+      </p-dialog>
+    }
+
+    <!-- Recover Dialog -->
+    @if (recoverTarget(); as rt) {
+      <p-dialog header="Recover Product" [(visible)]="showRecoverDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '480px' }" [draggable]="false" [resizable]="false">
+        <div class="flex flex-col gap-4 pt-2">
+          <p class="text-sm text-gray-600">
+            Recovering <strong>{{ productName(rt) }}{{ packageName(rt) ? ' (' + packageName(rt) + ')' : '' }}</strong>. Please provide a reason for the recovery.
+          </p>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Recovery Reason *</label>
+            <textarea [(ngModel)]="recoverReason" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="3" placeholder="Why was this item recovered?"></textarea>
+          </div>
+          <p-button label="Recover Product" [loading]="loading()" (onClick)="saveRecover()" styleClass="w-full justify-center" [disabled]="!recoverReason()" />
+        </div>
+      </p-dialog>
+    }
+
+    <!-- Mark Lost Dialog -->
+    @if (markLostTarget(); as ml) {
+      <p-dialog header="Mark Product as Lost" [(visible)]="showMarkLostDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '480px' }" [draggable]="false" [resizable]="false">
+        <div class="flex flex-col gap-4 pt-2">
+          <p class="text-sm text-gray-600">
+            Marking <strong>{{ productName(ml) }}{{ packageName(ml) ? ' (' + packageName(ml) + ')' : '' }}</strong> as lost. Provide a note explaining why.
+          </p>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Lost Note *</label>
+            <textarea [(ngModel)]="markLostNote" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="3" placeholder="Why was this product lost?"></textarea>
+          </div>
+          <p-button label="Mark as Lost" [loading]="loading()" (onClick)="saveMarkLost()" styleClass="w-full justify-center" [disabled]="!markLostNote()" />
+        </div>
+      </p-dialog>
+    }
+
+    <!-- Complete Sale Dialog -->
+    @if (completeSaleTarget(); as cs) {
+      <p-dialog header="Complete Sale" [(visible)]="showCompleteSaleDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '520px' }" [draggable]="false" [resizable]="false" [closable]="!loading()">
+        <div class="relative">
+          <div class="flex flex-col gap-4 pt-2">
+            <p class="text-sm text-gray-600">
+              Product: <strong>{{ productName(cs) }}</strong>
+              @if (packageName(cs)) {
+                <span><br/>Package: <strong>{{ packageName(cs) }}</strong></span>
+              }
+            </p>
+
+            <div class="rounded-lg bg-gray-50 p-3 text-sm">
+              <div class="flex justify-between">
+                <span class="text-gray-600">Total Price</span>
+                <span class="font-semibold">{{ completeSaleTotal() | currency:config.currencySymbol:'symbol':'1.0-0' }}</span>
+              </div>
+            </div>
+
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Receipt Number (optional)</label>
+              <div class="relative">
+                <input
+                  [(ngModel)]="completeSaleReceiptNumber"
+                  (blur)="validateReceipt()"
+                  type="text"
+                  class="w-full rounded-lg border px-3 py-2 text-sm pr-10"
+                  [class.border-red-400]="receiptAvailable() === false"
+                  [class.border-green-400]="receiptAvailable() === true"
+                  [class.border-gray-300]="receiptAvailable() === null"
+                  placeholder="e.g. RCP-001234"
+                />
+                <span class="absolute right-3 top-1/2 -translate-y-1/2">
+                  @if (receiptChecking()) {
+                    <span class="pi pi-spin pi-spinner text-sm text-gray-400"></span>
+                  } @else if (receiptAvailable() === true) {
+                    <span class="pi pi-check-circle text-sm text-green-500"></span>
+                  } @else if (receiptAvailable() === false) {
+                    <span class="pi pi-times-circle text-sm text-red-500"></span>
+                  }
+                </span>
+              </div>
+              @if (receiptAvailable() === false) {
+                <p class="mt-1 text-xs text-red-500">This receipt number already exists</p>
+              } @else if (receiptAvailable() === true) {
+                <p class="mt-1 text-xs text-green-600">Receipt number is available</p>
+              } @else {
+                <p class="mt-1 text-xs text-gray-400">Manually entered. Must be unique if provided.</p>
+              }
+            </div>
+
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Amount Paid</label>
+              <p-inputNumber [(ngModel)]="completeSalePaidAmount" (onInput)="onCompleteSalePaidChange()" [min]="0" [max]="completeSaleTotal()" [placeholder]="'0'" class="w-full" inputStyleClass="w-full px-3 py-2 text-sm" />
+            </div>
+
+            @if (completeSaleBalance(); as balance) {
+              @if (balance > 0) {
+                <div class="rounded-lg bg-amber-50 p-3 text-sm">
+                  <div class="flex justify-between">
+                    <span class="text-gray-600">Remaining Balance</span>
+                    <span class="font-semibold text-amber-700">{{ balance | currency:config.currencySymbol:'symbol':'1.0-0' }}</span>
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                  <label class="mb-1 block text-sm font-medium text-gray-700">Installment Schedule</label>
+                  @for (inst of completeSaleInstallments; track $index) {
+                    <div class="flex items-center gap-2">
+                      <p-datepicker [(ngModel)]="inst.due_date" dateFormat="yy-mm-dd" appendTo="body" placeholder="Due date" inputStyleClass="px-3 py-2 text-sm w-full" />
+                      <p-inputNumber [(ngModel)]="inst.amount" [min]="0" placeholder="Amount" inputStyleClass="px-3 py-2 text-sm w-32" />
+                      <p-button icon="pi pi-trash" (onClick)="removeCompleteSaleInstallment($index)" severity="danger" [text]="true" />
+                    </div>
+                  }
+                  <p-button label="Add Installment" (onClick)="addCompleteSaleInstallment()" [text]="true" icon="pi pi-plus" styleClass="justify-start" [disabled]="!canAddCompleteSaleInstallment()" />
+                </div>
+              } @else {
+                <div class="rounded-lg bg-green-50 p-3 text-sm">
+                  <div class="flex justify-between">
+                    <span class="text-gray-600">Balance</span>
+                    <span class="font-semibold text-green-700">Paid in Full</span>
+                  </div>
+                </div>
+              }
+            }
+
+            <p-button label="Complete Sale" [loading]="loading()" (onClick)="completeSale()" styleClass="w-full justify-center" severity="success" [disabled]="!canCompleteSale()" />
+          </div>
+
+          @if (loading()) {
+            <div class="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/70">
+              <span class="pi pi-spin pi-spinner text-3xl text-blue-600"></span>
+            </div>
+          }
+        </div>
+      </p-dialog>
+    }
+
+    <!-- Create Lesson Plan Dialog -->
+    <p-dialog header="Create Lesson Plan" [(visible)]="showCreateLessonPlanDialog" [modal]="true"
+              [style]="{ width: '90vw', maxWidth: '500px' }" [draggable]="false" [resizable]="false"
+              [closable]="!loading()">
+      <div class="flex flex-col gap-4 pt-2">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Transmission Type</label>
+          <p-select [(ngModel)]="lessonPlanForm.transmission_type"
+                    [options]="[{label:'Manual',value:'manual'},{label:'Automatic',value:'automatic'},{label:'Both',value:'both'}]"
+                    optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Template (optional)</label>
+          <p-select [(ngModel)]="lessonPlanForm.template_id"
+                    [options]="templates()" optionLabel="name" optionValue="id"
+                    placeholder="Select a template..." styleClass="w-full" [showClear]="true" appendTo="body" />
+          @if (selectedTemplateTpl(); as tpl) {
+            <p class="mt-1 text-xs text-gray-500">{{ tpl.total_days }} days · {{ tpl.total_weeks }} weeks · {{ tpl.lesson_items.length }} lessons</p>
+          }
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Start Date (optional)</label>
+          <p-datepicker [(ngModel)]="lessonPlanForm.start_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+        </div>
+        <p-button label="Create Plan" [loading]="loading()" (onClick)="createLessonPlan()" styleClass="w-full justify-center" />
+      </div>
+    </p-dialog>
+
+    <!-- Add from Template Dialog -->
+    <p-dialog header="Add Lesson from Template" [(visible)]="showAddFromTemplateLessonDialog" [modal]="true"
+              [style]="{ width: '90vw', maxWidth: '520px' }" [draggable]="false" [resizable]="false"
+              [closable]="!loading()">
+      @if (selectedPlanForTemplateLessons(); as plan) {
+        @let available = getTemplateLessonsNotInPlan(plan);
+        <div class="flex flex-col gap-3 pt-2">
+          @if (available.length === 0) {
+            <p class="py-8 text-center text-sm text-gray-400">All template lessons are already in this plan.</p>
+          } @else {
+            @for (item of available; track item.title) {
+              <div class="flex items-center justify-between rounded-lg border p-3">
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-medium">{{ item.title }}</p>
+                  <p class="text-xs text-gray-500">Day {{ item.day_number }} · Week {{ item.week_number }}</p>
+                  @if (item.lesson_objectives) {
+                    <p class="text-xs text-gray-400 mt-0.5">{{ item.lesson_objectives }}</p>
+                  }
+                </div>
+                <p-button icon="pi pi-plus" severity="success" (onClick)="addTemplateLessonToPlan(plan, item); showAddFromTemplateLessonDialog.set(false)"
+                          styleClass="p-button-sm p-button-rounded" pTooltip="Add to plan" tooltipPosition="top" />
+              </div>
+            }
+          }
+        </div>
+      }
+    </p-dialog>
+
+    <!-- Lesson Detail Dialog -->
+    <p-dialog header="Lesson Details" [(visible)]="showLessonDetailDialog" [modal]="true"
+              [style]="{ width: '90vw', maxWidth: '520px' }" [draggable]="false" [resizable]="false"
+              [closable]="!loading()">
+      @if (editingLesson(); as lesson) {
+        <div class="flex flex-col gap-4 pt-2">
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Title</label>
+            <input pInputText [(ngModel)]="lessonEditForm.title" class="w-full" />
+          </div>
+          <div class="flex gap-3">
+            <div class="flex-1">
+              <label class="mb-1 block text-sm font-medium text-gray-700">Day</label>
+              <p-inputNumber [(ngModel)]="lessonEditForm.day_number" [min]="1" styleClass="w-full" />
+            </div>
+            <div class="flex-1">
+              <label class="mb-1 block text-sm font-medium text-gray-700">Week</label>
+              <p-inputNumber [(ngModel)]="lessonEditForm.week_number" [min]="1" styleClass="w-full" />
+            </div>
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Status</label>
+            <p-select [(ngModel)]="lessonEditForm.status"
+                      [options]="[{label:'Pending',value:'pending'},{label:'In Progress',value:'in_progress'},{label:'Completed',value:'completed'},{label:'Skipped',value:'skipped'}]"
+                      optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+          </div>
+          <div class="flex items-center gap-2">
+            <p-checkbox [(ngModel)]="lessonEditForm.is_active" [binary]="true" inputId="lesson_active" />
+            <label for="lesson_active" class="text-sm">Active</label>
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Lesson Objectives</label>
+            <textarea [(ngModel)]="lessonEditForm.lesson_objectives" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="2"></textarea>
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Practical Objectives</label>
+            <textarea [(ngModel)]="lessonEditForm.practical_objectives" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="2"></textarea>
+          </div>
+          <div class="border-t pt-3">
+            <label class="mb-2 block text-sm font-semibold text-gray-700">Session Tracking</label>
+            <div class="flex flex-wrap gap-3 sm:flex-nowrap">
+              <div class="min-w-20 flex-1">
+                <label class="mb-1 block text-xs text-gray-500">Driving (min)</label>
+                <p-inputNumber [(ngModel)]="lessonEditForm.driving_minutes" [min]="0" styleClass="w-full" />
+              </div>
+              <div class="min-w-20 flex-1">
+                <label class="mb-1 block text-xs text-gray-500">Theory (min)</label>
+                <p-inputNumber [(ngModel)]="lessonEditForm.theory_minutes" [min]="0" styleClass="w-full" />
+              </div>
+              <div class="min-w-20 flex-1">
+                <label class="mb-1 block text-xs text-gray-500">Mileage (km)</label>
+                <p-inputNumber [(ngModel)]="lessonEditForm.mileage_km" [min]="0" [minFractionDigits]="1" [maxFractionDigits]="1" styleClass="w-full" />
+              </div>
+            </div>
+            <div class="mt-2 flex items-center gap-2">
+              <p-checkbox [(ngModel)]="lessonEditForm.combined_with_next" [binary]="true" inputId="combined_next" />
+              <label for="combined_next" class="text-sm">Combined with next lesson</label>
+            </div>
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+            <textarea [(ngModel)]="lessonEditForm.notes" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="2"></textarea>
+          </div>
+          <p-button label="Save Changes" [loading]="loading()" (onClick)="saveLessonDetail()" styleClass="w-full justify-center" />
+        </div>
+      }
+    </p-dialog>
+
+    <p-confirmDialog />
+    <p-toast />
+
+    <!-- Guide Dialog -->
+    <p-dialog header="Guide" [(visible)]="showGuide" [modal]="true" [style]="{ width: '90vw', maxWidth: '520px' }" [draggable]="false" [resizable]="false">
+      <div class="flex flex-col gap-3 pt-2">
+        @for (line of guideContent().split('\n'); track $index) {
+          @if (line.trim()) {
+            <p class="text-sm text-gray-700 leading-relaxed">{{ line }}</p>
+          }
+        }
+      </div>
+    </p-dialog>
+  } @else {
+    <div class="py-12 text-center text-gray-400">
+      @if (loading()) {
+        <span class="pi pi-spin pi-spinner mb-2 block text-3xl"></span>
+        <p>Loading...</p>
+      } @else {
+        <p>Consultation not found</p>
+      }
+    </div>
+  }
+</div>

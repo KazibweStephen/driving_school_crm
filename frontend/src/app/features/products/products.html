@@ -1,0 +1,794 @@
+<div class="p-4 sm:p-6">
+  <!-- Header -->
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-gray-900">Products</h1>
+    <div class="flex flex-wrap gap-2">
+      <p-button
+        label="Templates"
+        icon="pi pi-book"
+        severity="secondary"
+        (onClick)="openTemplatesDialog()"
+        pTooltip="Manage lesson plan templates"
+        tooltipPosition="bottom"
+      />
+      <p-button
+        label="Add Product"
+        icon="pi pi-plus"
+        (onClick)="openCreateProduct()"
+        pTooltip="Create new product"
+        tooltipPosition="bottom"
+      />
+    </div>
+  </div>
+
+  <!-- Search + Filter -->
+  <div class="mb-4 flex flex-wrap items-center gap-2">
+    <span class="p-input-icon-left">
+      <i class="pi pi-search text-gray-400"></i>
+      <input
+        pInputText
+        [(ngModel)]="search"
+        (keyup.enter)="onSearch()"
+        placeholder="Search name..."
+        class="w-56"
+      />
+    </span>
+    <p-select
+      [(ngModel)]="statusFilter"
+      [options]="statuses"
+      optionLabel="label"
+      optionValue="value"
+      placeholder="All statuses"
+      styleClass="w-40"
+      (onChange)="onSearch()"
+    />
+    @if (search() || statusFilter()) {
+      <p-button
+        label="Clear"
+        icon="pi pi-times"
+        severity="secondary"
+        (onClick)="clearFilters()"
+        styleClass="p-button-sm"
+      />
+    }
+  </div>
+
+  <!-- Desktop (>= 1024px) — PrimeNG table with row expansion -->
+  <div class="hidden lg:block">
+    <p-table
+      [value]="products()"
+      dataKey="id"
+      [rowHover]="true"
+      [paginator]="true"
+      [rows]="pageSize()"
+      [totalRecords]="total()"
+      [lazy]="true"
+      (onPage)="onPageChange($event)"
+      [loading]="loading()"
+      styleClass="p-datatable-sm"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th style="width: 2rem"></th>
+          <th>Name</th>
+          <th>Duration</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-product let-expanded="expanded">
+        <tr>
+          <td>
+            <button
+              pButton
+              [pRowToggler]="product"
+              [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
+              class="p-button-text p-button-rounded p-button-sm"
+            ></button>
+          </td>
+          <td class="font-medium">{{ product.name }}</td>
+          <td class="text-sm text-gray-500">{{ product.duration_label || '—' }}</td>
+          <td>
+            <p-tag [value]="product.status" [severity]="productStatusSeverity(product.status)" />
+          </td>
+          <td>
+            <div class="flex items-center gap-1">
+              <p-button
+                icon="pi pi-pencil"
+                severity="secondary"
+                (onClick)="openEditProduct(product)"
+                styleClass="p-button-sm p-button-rounded p-button-text"
+                pTooltip="Edit product"
+                tooltipPosition="top"
+              />
+              <p-button
+                icon="pi pi-ban"
+                severity="danger"
+                (onClick)="confirmDeactivateProduct(product)"
+                styleClass="p-button-sm p-button-rounded p-button-text"
+                pTooltip="Deactivate product"
+                tooltipPosition="top"
+              />
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="expandedrow" let-product>
+        <tr>
+          <td colspan="5">
+            <div class="p-3">
+              <h4 class="mb-2 text-sm font-semibold text-gray-600 uppercase tracking-wide">Packages</h4>
+              <p-table [value]="product.packages" dataKey="id">
+                <ng-template pTemplate="header">
+                  <tr>
+                    <th>Name</th>
+                    <th>Price</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-pkg>
+                  <tr>
+                    <td class="font-medium">{{ pkg.name }}</td>
+                    <td>{{ pkg.price | number:'1.0-0' }}</td>
+                    <td class="text-sm text-gray-500">{{ pkg.duration_label || '—' }}</td>
+                    <td>
+                      <p-tag [value]="pkg.status" [severity]="packageStatusSeverity(pkg.status)" />
+                    </td>
+                    <td>
+                      <div class="flex items-center gap-1">
+                        <p-button
+                          icon="pi pi-pencil"
+                          severity="secondary"
+                          (onClick)="openEditPackage(pkg)"
+                          styleClass="p-button-sm p-button-rounded p-button-text"
+                          pTooltip="Edit package"
+                          tooltipPosition="top"
+                        />
+                        <p-button
+                          icon="pi pi-ban"
+                          severity="danger"
+                          (onClick)="confirmDeactivatePackage(pkg)"
+                          styleClass="p-button-sm p-button-rounded p-button-text"
+                          pTooltip="Deactivate package"
+                          tooltipPosition="top"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                </ng-template>
+                <ng-template pTemplate="emptydata">
+                  <tr>
+                    <td colspan="5" class="text-center text-gray-400 py-4">No packages for this product</td>
+                  </tr>
+                </ng-template>
+              </p-table>
+              <p-button
+                label="Add Package"
+                icon="pi pi-plus"
+                size="small"
+                (onClick)="openCreatePackage(product)"
+                class="mt-2"
+              />
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- Mobile (< 1024px) — card-based expandable list -->
+  <div class="lg:hidden">
+    @for (product of products(); track product.id) {
+      <div class="mb-3 rounded-xl border bg-white shadow-sm">
+        <button
+          type="button"
+          (click)="toggleExpanded(product.id)"
+          class="flex w-full items-center justify-between px-4 py-3 text-left"
+        >
+          <div class="min-w-0 flex-1">
+            <p class="font-medium text-gray-900">{{ product.name }}</p>
+            @if (product.duration_label) {
+              <p class="mt-0.5 text-sm text-gray-500">{{ product.duration_label }}</p>
+            }
+          </div>
+          <div class="flex items-center gap-2">
+            <p-tag [value]="product.status" [severity]="productStatusSeverity(product.status)" />
+            <span
+              class="pi"
+              [class.pi-chevron-down]="isExpanded(product.id)"
+              [class.pi-chevron-right]="!isExpanded(product.id)"
+            ></span>
+          </div>
+        </button>
+        @if (isExpanded(product.id)) {
+          <div class="border-t px-4 py-3">
+            <div class="mb-3 flex items-center justify-between">
+              <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Packages</h4>
+              <p-button
+                label="Add"
+                icon="pi pi-plus"
+                size="small"
+                (onClick)="openCreatePackage(product)"
+              />
+            </div>
+            @for (pkg of product.packages; track pkg.id) {
+              <div class="mb-2 rounded-lg border bg-gray-50 p-3">
+                <div class="flex items-start justify-between">
+                  <div class="min-w-0 flex-1">
+                    <p class="font-medium text-gray-900">{{ pkg.name }}</p>
+                    <p class="text-sm font-semibold text-gray-700">{{ pkg.price | number:'1.0-0' }} UGX</p>
+                    @if (pkg.duration_label) {
+                      <p class="text-xs text-gray-500">{{ pkg.duration_label }}</p>
+                    }
+                  </div>
+                  <div class="flex flex-col items-end gap-1">
+                    <p-tag [value]="pkg.status" [severity]="packageStatusSeverity(pkg.status)" />
+                    <div class="mt-1 flex gap-1">
+                      <p-button
+                        icon="pi pi-pencil"
+                        severity="secondary"
+                        (onClick)="openEditPackage(pkg)"
+                        styleClass="p-button-sm p-button-rounded p-button-text"
+                        pTooltip="Edit package"
+                        tooltipPosition="top"
+                      />
+                      <p-button
+                        icon="pi pi-ban"
+                        severity="danger"
+                        (onClick)="confirmDeactivatePackage(pkg)"
+                        styleClass="p-button-sm p-button-rounded p-button-text"
+                        pTooltip="Deactivate package"
+                        tooltipPosition="top"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            } @empty {
+              <p class="py-3 text-center text-sm text-gray-400">No packages</p>
+            }
+          </div>
+        }
+      </div>
+      <!-- Product action buttons outside the expand toggle -->
+      <div class="mb-4 flex items-center gap-2 px-2">
+        <p-button
+          icon="pi pi-pencil"
+          severity="secondary"
+          (onClick)="openEditProduct(product)"
+          styleClass="p-button-sm p-button-rounded p-button-text"
+          pTooltip="Edit product"
+          tooltipPosition="top"
+          label="Edit"
+        />
+        <p-button
+          icon="pi pi-ban"
+          severity="danger"
+          (onClick)="confirmDeactivateProduct(product)"
+          styleClass="p-button-sm p-button-rounded p-button-text"
+          pTooltip="Deactivate product"
+          tooltipPosition="top"
+          label="Deactivate"
+        />
+      </div>
+    } @empty {
+      @if (!loading()) {
+        <div class="py-12 text-center text-gray-400">
+          <span class="pi pi-box mb-2 block text-3xl"></span>
+          <p>No products found</p>
+        </div>
+      }
+    }
+  </div>
+
+  <!-- Create Product Dialog -->
+  <p-dialog
+    header="New Product"
+    [(visible)]="showCreateProductDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '420px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    <div class="flex flex-col gap-4 pt-2">
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Name</label>
+        <input pInputText [(ngModel)]="productForm.name" placeholder="e.g. Driving & Permit Processing (B)" class="w-full" />
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Duration Label</label>
+        <input pInputText [(ngModel)]="productForm.duration_label" placeholder="e.g. 1.5 Months" class="w-full" />
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Description</label>
+        <textarea [(ngModel)]="productForm.description" placeholder="Optional description" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="3"></textarea>
+      </div>
+      <p-button
+        label="Create Product"
+        [loading]="loading()"
+        (onClick)="createProduct()"
+        styleClass="w-full justify-center"
+      />
+    </div>
+  </p-dialog>
+
+  <!-- Edit Product Dialog -->
+  <p-dialog
+    header="Edit Product"
+    [(visible)]="showEditProductDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '420px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    @if (editingProduct()) {
+      <div class="flex flex-col gap-4 pt-2">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Name</label>
+          <input pInputText [(ngModel)]="productForm.name" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Duration Label</label>
+          <input pInputText [(ngModel)]="productForm.duration_label" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Description</label>
+          <textarea [(ngModel)]="productForm.description" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="3"></textarea>
+        </div>
+        <p-button
+          label="Save Changes"
+          [loading]="loading()"
+          (onClick)="saveEditProduct()"
+          styleClass="w-full justify-center"
+        />
+      </div>
+    }
+  </p-dialog>
+
+  <!-- Create Package Dialog -->
+  <p-dialog
+    header="New Package"
+    [(visible)]="showCreatePackageDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '500px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    @if (selectedProductForPackage()) {
+      <div class="flex flex-col gap-4 pt-2">
+        <div class="mb-1 text-sm text-gray-500">
+          Product: <span class="font-medium text-gray-700">{{ selectedProductForPackage()!.name }}</span>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Name</label>
+          <input pInputText [(ngModel)]="packageForm.name" placeholder="e.g. 5 Years Permit" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Price</label>
+          <p-inputNumber
+            [(ngModel)]="packageForm.price"
+            [min]="0"
+            [minFractionDigits]="0"
+            placeholder="830000"
+            styleClass="w-full"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Duration Label</label>
+          <input pInputText [(ngModel)]="packageForm.duration_label" placeholder="e.g. 5 Years" class="w-full" />
+        </div>
+
+        <div class="border-t pt-3">
+          <label class="mb-2 block text-sm font-semibold text-gray-700">Training &amp; Permit Options</label>
+
+          <div class="mb-2 flex items-center gap-2">
+            <p-checkbox
+              [(ngModel)]="packageForm.requires_driving_training"
+              [binary]="true"
+              inputId="req_driving"
+            />
+            <label for="req_driving" class="text-sm">Requires Driving Training</label>
+          </div>
+          @if (packageForm.requires_driving_training) {
+            <div class="ml-6 mb-2">
+              <label class="mb-1 block text-xs text-gray-500">Driving Training Duration (Days)</label>
+              <p-inputNumber
+                [(ngModel)]="packageForm.driving_training_duration_days"
+                [min]="0"
+                styleClass="w-full"
+              />
+            </div>
+          }
+
+          <div class="mb-2 flex items-center gap-2">
+            <p-checkbox
+              [(ngModel)]="packageForm.requires_theory_training"
+              [binary]="true"
+              inputId="req_theory"
+            />
+            <label for="req_theory" class="text-sm">Requires Theory Training</label>
+          </div>
+          @if (packageForm.requires_theory_training) {
+            <div class="ml-6 mb-2">
+              <label class="mb-1 block text-xs text-gray-500">Theory Training (Hours)</label>
+              <p-inputNumber
+                [(ngModel)]="packageForm.theory_training_hours"
+                [min]="0"
+                styleClass="w-full"
+              />
+            </div>
+          }
+
+          <div class="mb-2 flex items-center gap-2">
+            <p-checkbox
+              [(ngModel)]="packageForm.requires_permit_processing"
+              [binary]="true"
+              inputId="req_permit"
+            />
+            <label for="req_permit" class="text-sm">Requires Permit Processing</label>
+          </div>
+          @if (packageForm.requires_permit_processing) {
+            <div class="ml-6 mb-2">
+              <label class="mb-1 block text-xs text-gray-500">Permit Processing Duration (Days)</label>
+              <p-inputNumber
+                [(ngModel)]="packageForm.permit_processing_duration_days"
+                [min]="0"
+                styleClass="w-full"
+              />
+            </div>
+          }
+        </div>
+
+        <p-button
+          label="Create Package"
+          [loading]="loading()"
+          (onClick)="createPackage()"
+          styleClass="w-full justify-center"
+        />
+      </div>
+    }
+  </p-dialog>
+
+  <!-- Edit Package Dialog -->
+  <p-dialog
+    header="Edit Package"
+    [(visible)]="showEditPackageDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '500px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    @if (editingPackage()) {
+      <div class="flex flex-col gap-4 pt-2">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Name</label>
+          <input pInputText [(ngModel)]="packageForm.name" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Price</label>
+          <p-inputNumber
+            [(ngModel)]="packageForm.price"
+            [min]="0"
+            [minFractionDigits]="0"
+            styleClass="w-full"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Duration Label</label>
+          <input pInputText [(ngModel)]="packageForm.duration_label" class="w-full" />
+        </div>
+
+        <div class="border-t pt-3">
+          <label class="mb-2 block text-sm font-semibold text-gray-700">Training &amp; Permit Options</label>
+
+          <div class="mb-2 flex items-center gap-2">
+            <p-checkbox
+              [(ngModel)]="packageForm.requires_driving_training"
+              [binary]="true"
+              inputId="edit_req_driving"
+            />
+            <label for="edit_req_driving" class="text-sm">Requires Driving Training</label>
+          </div>
+          @if (packageForm.requires_driving_training) {
+            <div class="ml-6 mb-2">
+              <label class="mb-1 block text-xs text-gray-500">Driving Training Duration (Days)</label>
+              <p-inputNumber
+                [(ngModel)]="packageForm.driving_training_duration_days"
+                [min]="0"
+                styleClass="w-full"
+              />
+            </div>
+          }
+
+          <div class="mb-2 flex items-center gap-2">
+            <p-checkbox
+              [(ngModel)]="packageForm.requires_theory_training"
+              [binary]="true"
+              inputId="edit_req_theory"
+            />
+            <label for="edit_req_theory" class="text-sm">Requires Theory Training</label>
+          </div>
+          @if (packageForm.requires_theory_training) {
+            <div class="ml-6 mb-2">
+              <label class="mb-1 block text-xs text-gray-500">Theory Training (Hours)</label>
+              <p-inputNumber
+                [(ngModel)]="packageForm.theory_training_hours"
+                [min]="0"
+                styleClass="w-full"
+              />
+            </div>
+          }
+
+          <div class="mb-2 flex items-center gap-2">
+            <p-checkbox
+              [(ngModel)]="packageForm.requires_permit_processing"
+              [binary]="true"
+              inputId="edit_req_permit"
+            />
+            <label for="edit_req_permit" class="text-sm">Requires Permit Processing</label>
+          </div>
+          @if (packageForm.requires_permit_processing) {
+            <div class="ml-6 mb-2">
+              <label class="mb-1 block text-xs text-gray-500">Permit Processing Duration (Days)</label>
+              <p-inputNumber
+                [(ngModel)]="packageForm.permit_processing_duration_days"
+                [min]="0"
+                styleClass="w-full"
+              />
+            </div>
+          }
+        </div>
+
+        <p-button
+          label="Save Changes"
+          [loading]="loading()"
+          (onClick)="saveEditPackage()"
+          styleClass="w-full justify-center"
+        />
+      </div>
+    }
+  </p-dialog>
+
+  <!-- Lesson Plan Templates Dialog -->
+  <p-dialog
+    header="Lesson Plan Templates"
+    [(visible)]="showTemplatesDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '800px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    <div class="flex flex-col gap-3 pt-2">
+      <p-button label="New Template" icon="pi pi-plus" size="small" (onClick)="openCreateTemplate()" styleClass="self-start" />
+      @if (templates().length === 0) {
+        <p class="py-8 text-center text-sm text-gray-400">No templates yet</p>
+      } @else {
+        @for (tpl of templates(); track tpl.id) {
+          <div class="rounded-lg border p-3">
+            <div class="flex items-start justify-between">
+              <div class="min-w-0 flex-1">
+                <p class="font-medium text-gray-900">{{ tpl.name }}</p>
+                <p class="text-xs text-gray-500">{{ tpl.transmission_type }} · {{ tpl.total_days }} days / {{ tpl.total_weeks }} weeks</p>
+                @if (tpl.description) {
+                  <p class="mt-1 text-sm text-gray-600">{{ tpl.description }}</p>
+                }
+                <p class="mt-1 text-xs text-gray-400">{{ tpl.lesson_items.length }} lessons</p>
+              </div>
+              <div class="flex gap-1">
+                <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openEditTemplate(tpl)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Edit" tooltipPosition="top" />
+                <p-button icon="pi pi-trash" severity="danger" (onClick)="confirmDeleteTemplate(tpl)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Delete" tooltipPosition="top" />
+              </div>
+            </div>
+          </div>
+        }
+      }
+    </div>
+  </p-dialog>
+
+  <!-- Create / Edit Template Dialog -->
+  <p-dialog
+    [header]="editingTemplate() ? 'Edit Template' : 'New Template'"
+    [(visible)]="showCreateTemplateDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '600px' }"
+    [draggable]="false"
+    [resizable]="false"
+    [closable]="!loading()"
+  >
+    <div class="flex flex-col gap-4 pt-2">
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Name</label>
+        <input pInputText [(ngModel)]="templateForm.name" placeholder="e.g. 20-Day Manual Curriculum" class="w-full" />
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Transmission Type</label>
+        <p-select
+          [(ngModel)]="templateForm.transmission_type"
+          [options]="transmissionTypes"
+          optionLabel="label"
+          optionValue="value"
+          styleClass="w-full"
+          appendTo="body"
+        ></p-select>
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Description</label>
+        <textarea [(ngModel)]="templateForm.description" rows="2" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Optional description"></textarea>
+      </div>
+      <div class="flex gap-4">
+        <div class="flex-1">
+          <label class="mb-1 block text-sm font-medium text-gray-700">Total Days</label>
+          <p-inputNumber [(ngModel)]="templateForm.total_days" [min]="1" styleClass="w-full" />
+        </div>
+        <div class="flex-1">
+          <label class="mb-1 block text-sm font-medium text-gray-700">Total Weeks</label>
+          <p-inputNumber [(ngModel)]="templateForm.total_weeks" [min]="1" styleClass="w-full" />
+        </div>
+      </div>
+
+      <div class="border-t pt-3">
+        <div class="mb-2 flex items-center justify-between">
+          <label class="text-sm font-semibold text-gray-700">Lesson Items ({{ templateForm.items.length }})</label>
+          <p-button label="Add Lesson" icon="pi pi-plus" size="small" severity="secondary" (onClick)="openAddTemplateItem()" />
+        </div>
+        @if (templateForm.items.length > 0) {
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead>
+                <tr class="border-b text-xs text-gray-500">
+                  <th class="px-2 py-1 w-8">#</th>
+                  <th class="px-2 py-1 w-10">Day</th>
+                  <th class="px-2 py-1 w-10">Week</th>
+                  <th class="px-2 py-1">Title</th>
+                  <th class="px-2 py-1 w-16">Min</th>
+                  <th class="px-2 py-1 w-12">Km</th>
+                  <th class="px-2 py-1 w-20"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (item of templateForm.items; track idx; let idx = $index) {
+                  <tr class="border-b hover:bg-gray-50">
+                    <td class="px-2 py-1.5 text-xs text-gray-400">{{ item.order }}</td>
+                    <td class="px-2 py-1.5">{{ item.day_number }}</td>
+                    <td class="px-2 py-1.5">{{ item.week_number }}</td>
+                    <td class="px-2 py-1.5 font-medium">{{ item.title }}</td>
+                    <td class="px-2 py-1.5">{{ item.estimated_minutes }}</td>
+                    <td class="px-2 py-1.5">{{ item.estimated_distance_km }}</td>
+                    <td class="px-2 py-1.5">
+                      <div class="flex gap-1">
+                        <button pButton icon="pi pi-pencil" class="p-button-sm p-button-text" (click)="openEditTemplateItem(idx)" pTooltip="Edit"></button>
+                        <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger" (click)="removeTemplateItem(idx)" pTooltip="Remove"></button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="py-4 text-center text-sm text-gray-400">No lessons added. Click "Add Lesson" to add items from the library.</p>
+        }
+      </div>
+
+      <p-button
+        [label]="editingTemplate() ? 'Save Changes' : 'Create Template'"
+        [loading]="loading()"
+        (onClick)="saveTemplate()"
+        styleClass="w-full justify-center"
+      />
+    </div>
+    @if (loading()) {
+      <div class="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/70">
+        <span class="pi pi-spin pi-spinner text-3xl text-blue-600"></span>
+      </div>
+    }
+  </p-dialog>
+
+  <!-- Template Item Picker Dialog -->
+  <p-dialog
+    [header]="editingTemplateItemIndex() >= 0 ? 'Edit Lesson' : 'Add Lesson'"
+    [(visible)]="showTemplateItemPicker"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '600px' }"
+    appendTo="body"
+  >
+    <div class="flex flex-col gap-3 pt-2">
+      <div class="flex gap-2">
+        <button pButton [label]="'Pick from Library'" [class]="templatePickerMode === 'library' ? 'p-button-sm' : 'p-button-sm p-button-outlined'"
+          (click)="switchTemplatePickerToLibrary()"></button>
+        <button pButton [label]="'Create New'" [class]="templatePickerMode === 'create' && !templateItemForm.lesson_library_id ? 'p-button-sm' : 'p-button-sm p-button-outlined'"
+          (click)="switchTemplatePickerToCreate()"></button>
+      </div>
+
+      @if (templatePickerMode === 'library') {
+        <input pInputText [(ngModel)]="librarySearch" placeholder="Search lessons..." class="w-full text-sm"
+          (input)="loadLibraryLessons()" />
+        <div class="max-h-60 overflow-y-auto border rounded">
+          @if (libraryLoading()) {
+            <div class="flex items-center justify-center py-8"><span class="pi pi-spin pi-spinner text-xl text-blue-600"></span></div>
+          } @else {
+            @for (lesson of libraryLessons(); track lesson.id) {
+              <div class="flex items-center gap-3 px-3 py-2 border-b last:border-0 cursor-pointer hover:bg-blue-50 transition-colors"
+                (click)="selectLibraryLesson(lesson)">
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium truncate">{{ lesson.title }}</p>
+                  <p class="text-xs text-gray-400">
+                    {{ lesson.day_number ? 'Day ' + lesson.day_number : '' }}
+                    {{ lesson.week_number ? '· Week ' + lesson.week_number : '' }}
+                    {{ lesson.estimated_minutes }}min · {{ lesson.estimated_distance_km }}km
+                  </p>
+                </div>
+                <p-tag [value]="lesson.difficulty" [severity]="lesson.difficulty === 'beginner' ? 'info' : lesson.difficulty === 'intermediate' ? 'warn' : 'danger'" />
+              </div>
+            } @empty {
+              <p class="py-6 text-center text-sm text-gray-400">No lessons found. Switch to "Create New" to add one.</p>
+            }
+          }
+        </div>
+      }
+
+      @if (templatePickerMode === 'create') {
+        <div>
+          <label class="mb-0.5 block text-xs text-gray-500">Title *</label>
+          <input pInputText [(ngModel)]="templateItemForm.title" placeholder="Lesson title" class="w-full text-sm" />
+        </div>
+        <div class="flex gap-2">
+          <div>
+            <label class="mb-0.5 block text-xs text-gray-500">Day</label>
+            <p-inputNumber [(ngModel)]="templateItemForm.day_number" [min]="1" styleClass="w-full" inputStyleClass="w-16 text-sm" />
+          </div>
+          <div>
+            <label class="mb-0.5 block text-xs text-gray-500">Week</label>
+            <p-inputNumber [(ngModel)]="templateItemForm.week_number" [min]="1" styleClass="w-full" inputStyleClass="w-16 text-sm" />
+          </div>
+          <div>
+            <label class="mb-0.5 block text-xs text-gray-500">Order</label>
+            <p-inputNumber [(ngModel)]="templateItemForm.order" [min]="0" styleClass="w-full" inputStyleClass="w-16 text-sm" />
+          </div>
+          <div>
+            <label class="mb-0.5 block text-xs text-gray-500">Min *</label>
+            <p-inputNumber [(ngModel)]="templateItemForm.estimated_minutes" [min]="1" [max]="240" styleClass="w-full" inputStyleClass="w-16 text-sm" />
+          </div>
+          <div>
+            <label class="mb-0.5 block text-xs text-gray-500">Km</label>
+            <p-inputNumber [(ngModel)]="templateItemForm.estimated_distance_km" [min]="0" [max]="100" [step]="0.5" styleClass="w-full" inputStyleClass="w-16 text-sm" />
+          </div>
+        </div>
+        <div class="flex gap-4">
+          <div class="flex-1">
+            <label class="mb-0.5 block text-xs text-gray-500">Lesson Objectives</label>
+            @for (obj of templateItemForm.lesson_objectives; track $index) {
+              <div class="flex gap-1 mb-1 items-center">
+                <input pInputText [(ngModel)]="templateItemForm.lesson_objectives[$index]" placeholder="Objective" class="w-full text-sm" />
+                <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeTemplateItemArrayItem('lesson_objectives', $index)" [disabled]="templateItemForm.lesson_objectives.length <= 1"></button>
+              </div>
+            }
+            <button pButton icon="pi pi-plus" label="Add" class="p-button-sm p-button-outlined mt-1" (click)="addTemplateItemArrayItem('lesson_objectives')"></button>
+          </div>
+          <div class="flex-1">
+            <label class="mb-0.5 block text-xs text-gray-500">Practical Objectives</label>
+            @for (obj of templateItemForm.practical_objectives; track $index) {
+              <div class="flex gap-1 mb-1 items-center">
+                <input pInputText [(ngModel)]="templateItemForm.practical_objectives[$index]" placeholder="Practical" class="w-full text-sm" />
+                <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeTemplateItemArrayItem('practical_objectives', $index)" [disabled]="templateItemForm.practical_objectives.length <= 1"></button>
+              </div>
+            }
+            <button pButton icon="pi pi-plus" label="Add" class="p-button-sm p-button-outlined mt-1" (click)="addTemplateItemArrayItem('practical_objectives')"></button>
+          </div>
+        </div>
+      }
+
+      <p-button
+        label="Confirm"
+        [disabled]="templatePickerMode === 'create' && !templateItemForm.title"
+        (onClick)="confirmTemplateItem()"
+        styleClass="w-full justify-center mt-2"
+      />
+    </div>
+  </p-dialog>
+
+  <p-confirmDialog />
+  <p-toast />
+</div>

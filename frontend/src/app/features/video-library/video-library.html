@@ -1,0 +1,183 @@
+<p-toast></p-toast>
+<p-confirmdialog></p-confirmdialog>
+
+<div class="p-4">
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-bold">Video Library</h1>
+    <input pInputText [(ngModel)]="search" (input)="onSearch()" placeholder="Search lessons..." class="w-64" />
+  </div>
+
+  <!-- Loading -->
+  @if (loading() && lessons().length === 0) {
+    <div class="flex items-center justify-center py-16">
+      <span class="pi pi-spin pi-spinner text-3xl text-blue-600"></span>
+    </div>
+  }
+
+  <!-- Lessons list -->
+  @if (!loading() || lessons().length > 0) {
+    <div class="flex flex-col gap-4">
+      @for (lesson of lessons(); track lesson.id) {
+        <div class="rounded-xl border bg-white shadow-sm">
+          <div class="flex items-start justify-between border-b px-5 py-4">
+            <div class="min-w-0 flex-1">
+              <h2 class="text-lg font-semibold text-gray-900">{{ lesson.title }}</h2>
+              @if (lesson.description) {
+                <p class="mt-0.5 text-sm text-gray-500">{{ lesson.description }}</p>
+              }
+              <p class="mt-1 text-xs text-gray-400">
+                <span class="font-medium">{{ lesson.videos.length }}</span> video(s)
+                @if (lesson.difficulty) {
+                  · <p-tag [value]="lesson.difficulty" [severity]="getSourceColor('upload')" styleClass="text-xs" />
+                }
+              </p>
+            </div>
+            <div class="flex gap-1">
+              <button pButton icon="pi pi-upload" class="p-button-sm p-button-rounded p-button-text"
+                (click)="openUpload(lesson)" pTooltip="Upload video"></button>
+              <button pButton icon="pi pi-link" class="p-button-sm p-button-rounded p-button-text"
+                (click)="openEmbed(lesson)" pTooltip="Add video link"></button>
+            </div>
+          </div>
+
+          <!-- Videos table -->
+          @if (lesson.videos.length > 0) {
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b bg-gray-50 text-left text-xs text-gray-500">
+                    <th class="px-4 py-2 font-medium">Preview</th>
+                    <th class="px-4 py-2 font-medium">Title</th>
+                    <th class="px-4 py-2 font-medium w-24">Source</th>
+                    <th class="px-4 py-2 font-medium w-24">Duration</th>
+                    <th class="px-4 py-2 font-medium w-36">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (video of lesson.videos; track video.id) {
+                    <tr class="border-b hover:bg-gray-50">
+                      <td class="px-4 py-2">
+                        <div class="w-16 h-10 bg-gray-800 rounded overflow-hidden cursor-pointer"
+                          (click)="openPreview(video)">
+                          @if (getThumbnailUrl(video)) {
+                            <img [src]="getThumbnailUrl(video)" class="w-full h-full object-cover" />
+                          } @else {
+                            <div class="flex items-center justify-center h-full text-gray-400">
+                              <i [class]="getSourceIcon(video.source) + ' text-lg'"></i>
+                            </div>
+                          }
+                        </div>
+                      </td>
+                      <td class="px-4 py-2 font-medium cursor-pointer hover:text-primary"
+                        (click)="openPreview(video)">{{ video.title }}</td>
+                      <td class="px-4 py-2">
+                        <p-tag [value]="video.source" [icon]="getSourceIcon(video.source)"
+                          [severity]="getSourceColor(video.source)" styleClass="text-xs" />
+                      </td>
+                      <td class="px-4 py-2 text-gray-500">{{ video.duration_seconds ? (video.duration_seconds + 's') : '-' }}</td>
+                      <td class="px-4 py-2">
+                        <div class="flex gap-1">
+                          <button pButton icon="pi pi-play" class="p-button-sm p-button-text"
+                            (click)="openPreview(video)" pTooltip="Preview"></button>
+                          <button pButton icon="pi pi-times" class="p-button-sm p-button-text p-button-warning"
+                            (click)="detachVideo(lesson, video)" pTooltip="Detach from lesson"></button>
+                          <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger"
+                            (click)="deleteVideo(video)" pTooltip="Delete"></button>
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else {
+            <p class="px-5 py-4 text-center text-sm text-gray-400">No videos attached. Use the buttons above to add videos.</p>
+          }
+        </div>
+      } @empty {
+        <div class="py-16 text-center text-gray-400">
+          <span class="pi pi-video mb-3 block text-4xl"></span>
+          <p class="text-lg">No lessons found</p>
+          <p class="mt-1 text-sm">Create lessons in the Lesson Library to attach videos.</p>
+        </div>
+      }
+    </div>
+  }
+</div>
+
+<!-- Upload Dialog -->
+<p-dialog [(visible)]="showUploadDialog" header="Upload Video" [modal]="true"
+  [style]="{ width: '450px' }" appendTo="body">
+  <div class="flex flex-col gap-4">
+    <div class="text-sm text-gray-600 mb-2">
+      Attaching to: <span class="font-semibold">{{ targetLesson()?.title }}</span>
+    </div>
+    <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-primary"
+      (click)="fileInput.click()">
+      @if (uploadFile) {
+        <p class="font-medium">{{ uploadFile.name }}</p>
+        <p class="text-sm text-gray-500">{{ (uploadFile.size / 1048576).toFixed(1) }} MB</p>
+      } @else {
+        <i class="pi pi-cloud-upload text-4xl text-gray-400 mb-2"></i>
+        <p class="text-sm text-gray-500">Click to select a video file</p>
+        <p class="text-xs text-gray-400 mt-1">Max 500MB (MP4, WebM, MOV, AVI)</p>
+      }
+    </div>
+    <input #fileInput type="file" accept="video/mp4,video/webm,video/quicktime,video/x-msvideo"
+      (change)="onFileSelected($event)" class="hidden" />
+  </div>
+  <ng-template pTemplate="footer">
+    <button pButton label="Cancel" class="p-button-text" (click)="showUploadDialog.set(false)"></button>
+    <button pButton label="Upload" [disabled]="!uploadFile || uploading()" [loading]="uploading()" (click)="uploadVideo()"></button>
+  </ng-template>
+</p-dialog>
+
+<!-- Embed Dialog -->
+<p-dialog [(visible)]="showEmbedDialog" header="Add Video Link" [modal]="true"
+  [style]="{ width: '450px' }" appendTo="body">
+  <div class="flex flex-col gap-4">
+    <div class="text-sm text-gray-600 mb-2">
+      Attaching to: <span class="font-semibold">{{ targetLesson()?.title }}</span>
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Video Title *</label>
+      <input pInputText [(ngModel)]="embedTitle" class="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">YouTube / Vimeo URL *</label>
+      <input pInputText [(ngModel)]="embedUrl" class="w-full" placeholder="https://youtube.com/watch?v=..." />
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <button pButton label="Cancel" class="p-button-text" (click)="showEmbedDialog.set(false)"></button>
+    <button pButton label="Add" [disabled]="!embedUrl || !embedTitle || uploading()" [loading]="uploading()" (click)="addEmbedLink()"></button>
+  </ng-template>
+</p-dialog>
+
+<!-- Preview Dialog -->
+<p-dialog [(visible)]="showPreview" [header]="selectedVideo()?.title" [modal]="true"
+  [style]="{ width: '800px' }" appendTo="body">
+  @if (selectedVideo(); as video) {
+    <div class="flex flex-col gap-4">
+      @if (video.source === 'upload') {
+        <video controls class="w-full rounded" [src]="getVideoUrl(video)" preload="metadata"
+          (timeupdate)="saveResumeTime(video.id, $event)"
+          (loadedmetadata)="restoreResumeTime($event, video.id)"
+          (ended)="clearResumeTime(video.id)"
+          (seeking)="onVideoSeeking(video.id, $event)">
+          Your browser does not support video playback.
+        </video>
+      } @else {
+        <div class="aspect-video rounded overflow-hidden">
+          <iframe class="w-full h-full"
+            [src]="getSafeUrl(video.url!)"
+            frameborder="0" allowfullscreen>
+          </iframe>
+        </div>
+      }
+    </div>
+  }
+  <ng-template pTemplate="footer">
+    <button pButton label="Close" (click)="showPreview.set(false)"></button>
+  </ng-template>
+</p-dialog>

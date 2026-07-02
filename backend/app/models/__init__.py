@@ -1,0 +1,69 @@
+from app.models.cart import CartItem, CartItemStatus, follow_up_cart_items
+from app.models.consultation import (
+    Consultation,
+    ConsultationStatus,
+    FollowUp,
+    FollowUpStatus,
+    FollowUpType,
+    InterestLevel,
+)
+from app.models.lesson_plan import (
+    ChecklistType,
+    ClientLesson,
+    ClientLessonChecklist,
+    ClientLessonCompetency,
+    ClientLessonPlan,
+    ClientLessonTimer,
+    CompetencyProgress,
+    EntityStatus,
+    ImportLog,
+    ImportStatus,
+    InstructorQualification,
+    LessonDifficulty,
+    LessonHistory,
+    LessonLibrary,
+    LessonLibraryVideo,
+    LessonPlanStatus,
+    LessonPlanTemplate,
+    LessonPrerequisite,
+    LessonState,
+    LessonTemplateItem,
+    TheorySession,
+    TheorySessionStatus,
+    TransmissionType,
+    Vehicle,
+    VehicleStatus,
+    VideoLibrary,
+    VideoSource,
+)
+from app.models.payment import (
+    Installment,
+    InstallmentStatus,
+    NotificationChannel,
+    NotificationPreference,
+    Payment,
+)
+from app.models.permit import PermitProgress
+from app.models.product import Package, Product
+from app.models.training import TrainingSession
+from app.models.user import User, UserRole, UserStatus
+
+__all__ = [
+    "User", "UserRole", "UserStatus",
+    "EntityStatus", "Package", "Product",
+    "Consultation", "ConsultationStatus", "FollowUp", "FollowUpStatus", "FollowUpType", "InterestLevel",
+    "Payment", "Installment", "InstallmentStatus", "NotificationPreference", "NotificationChannel",
+    "CartItem", "CartItemStatus", "follow_up_cart_items",
+    "TrainingSession", "PermitProgress",
+    "LessonPlanTemplate", "LessonTemplateItem", "TransmissionType",
+    "ClientLessonPlan", "ClientLesson", "LessonPlanStatus",
+    "LessonState", "ChecklistType", "CompetencyProgress", "LessonDifficulty",
+    "VideoLibrary", "VideoSource",
+    "LessonLibrary", "LessonLibraryVideo", "LessonPrerequisite",
+    "ClientLessonChecklist", "ClientLessonCompetency", "ClientLessonTimer",
+    "TheorySession", "TheorySessionStatus",
+    "LessonHistory",
+    "ImportLog", "ImportStatus",
+    "InstructorQualification",
+    "Vehicle", "VehicleStatus",
+]

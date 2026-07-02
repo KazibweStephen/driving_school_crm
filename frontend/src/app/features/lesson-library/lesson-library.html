@@ -1,0 +1,263 @@
+<p-toast></p-toast>
+<p-confirmdialog></p-confirmdialog>
+
+<div class="p-4">
+  <div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold">Lesson Library</h1>
+    <div class="flex gap-2">
+      <input pInputText [(ngModel)]="search" (input)="onSearch()" placeholder="Search lessons..." class="w-64" />
+      <button pButton label="Create Lesson" icon="pi pi-plus" (click)="openCreate()"></button>
+    </div>
+  </div>
+
+  <p-table [value]="lessons()" [loading]="loading()" [paginator]="true" [rows]="20"
+    [rowsPerPageOptions]="[10,20,50]" sortField="title" [sortOrder]="1"
+    [globalFilterFields]="['title','description','difficulty']">
+    <ng-template pTemplate="header">
+      <tr>
+        <th pSortableColumn="title">Title <p-sortIcon field="title"></p-sortIcon></th>
+        <th pSortableColumn="day_number">Day <p-sortIcon field="day_number"></p-sortIcon></th>
+        <th pSortableColumn="week_number">Week <p-sortIcon field="week_number"></p-sortIcon></th>
+        <th pSortableColumn="order">Order <p-sortIcon field="order"></p-sortIcon></th>
+        <th pSortableColumn="difficulty">Difficulty <p-sortIcon field="difficulty"></p-sortIcon></th>
+        <th>Transmission</th>
+        <th>Category</th>
+        <th>Location</th>
+        <th>Min</th>
+        <th>Km</th>
+        <th>Objectives</th>
+        <th>Actions</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-lesson>
+      <tr>
+        <td class="font-medium">{{ lesson.title }}</td>
+        <td>{{ lesson.day_number ?? '-' }}</td>
+        <td>{{ lesson.week_number ?? '-' }}</td>
+        <td>{{ lesson.order ?? '-' }}</td>
+        <td><p-tag [value]="lesson.difficulty" [severity]="difficultyColor(lesson.difficulty)"></p-tag></td>
+        <td>{{ lesson.transmission_type ?? 'Any' }}</td>
+        <td><p-tag [value]="lesson.training_category" severity="info" /></td>
+        <td>{{ lesson.preferred_location || '-' }}</td>
+        <td>{{ lesson.estimated_minutes }}</td>
+        <td>{{ lesson.estimated_distance_km }}</td>
+        <td>
+          @if (lesson.lesson_objectives?.length) {
+            <span class="text-xs text-gray-500">{{ lesson.lesson_objectives.length }} objective(s)</span>
+          }
+        </td>
+        <td>
+          <div class="flex gap-1">
+            <button pButton icon="pi pi-pencil" class="p-button-sm p-button-text"
+              (click)="openEdit(lesson)" pTooltip="Edit"></button>
+            <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger"
+              (click)="confirmDelete(lesson)" pTooltip="Delete"></button>
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr><td colspan="12" class="text-center py-4 text-gray-400">No lessons found.</td></tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<p-dialog [(visible)]="showDialog" [header]="editingLesson() ? 'Edit Lesson' : 'Create Lesson'"
+  [modal]="true" [style]="{ width: '700px' }" appendTo="body">
+  <div class="flex flex-col gap-4">
+    <div>
+      <label class="block text-sm font-medium mb-1">Title *</label>
+      <input pInputText [(ngModel)]="form.title" class="w-full" required />
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Description</label>
+      <textarea [(ngModel)]="form.description" class="w-full border rounded p-2 text-sm" rows="2"></textarea>
+    </div>
+    <div class="flex gap-4">
+      <div class="flex-1">
+        <label class="block text-sm font-medium mb-1">Transmission Type</label>
+        <p-select [(ngModel)]="form.transmission_type" [options]="transmissionTypes" optionLabel="label" optionValue="value" class="w-full" appendTo="body"></p-select>
+      </div>
+      <div class="flex-1">
+        <label class="block text-sm font-medium mb-1">Difficulty</label>
+        <p-select [(ngModel)]="form.difficulty" [options]="difficulties" optionLabel="label" optionValue="value" class="w-full" appendTo="body"></p-select>
+      </div>
+    </div>
+    <div class="flex gap-2 mb-2">
+      <div>
+        <label class="mb-0.5 block text-xs text-gray-500">Day</label>
+        <p-inputNumber [(ngModel)]="form.day_number" [min]="1" styleClass="w-full" inputStyleClass="w-16 text-sm" />
+      </div>
+      <div>
+        <label class="mb-0.5 block text-xs text-gray-500">Week</label>
+        <p-inputNumber [(ngModel)]="form.week_number" [min]="1" styleClass="w-full" inputStyleClass="w-16 text-sm" />
+      </div>
+      <div>
+        <label class="mb-0.5 block text-xs text-gray-500">Order</label>
+        <p-inputNumber [(ngModel)]="form.order" [min]="0" styleClass="w-full" inputStyleClass="w-16 text-sm" />
+      </div>
+      <div>
+        <label class="mb-0.5 block text-xs text-gray-500">Min *</label>
+        <p-inputNumber [(ngModel)]="form.estimated_minutes" [min]="1" [max]="240" styleClass="w-full" inputStyleClass="w-16 text-sm" />
+      </div>
+      <div>
+        <label class="mb-0.5 block text-xs text-gray-500">Km</label>
+        <p-inputNumber [(ngModel)]="form.estimated_distance_km" [min]="0" [max]="100" [step]="0.5" styleClass="w-full" inputStyleClass="w-16 text-sm" />
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1">Lesson Objectives</label>
+        @for (obj of form.lesson_objectives ?? []; track $index) {
+          <div class="flex gap-2 mb-1">
+            <input pInputText [(ngModel)]="form.lesson_objectives[$index]" class="flex-1" placeholder="Objective" />
+            <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeArrayItem('lesson_objectives', $index)" [disabled]="form.lesson_objectives.length <= 1"></button>
+          </div>
+        }
+        <button pButton icon="pi pi-plus" label="Add Objective" class="p-button-sm p-button-outlined mt-1" (click)="addArrayItem('lesson_objectives')"></button>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Practical Objectives</label>
+        @for (obj of form.practical_objectives ?? []; track $index) {
+          <div class="flex gap-2 mb-1">
+            <input pInputText [(ngModel)]="form.practical_objectives[$index]" class="flex-1" placeholder="Practical" />
+            <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeArrayItem('practical_objectives', $index)" [disabled]="form.practical_objectives.length <= 1"></button>
+          </div>
+        }
+        <button pButton icon="pi pi-plus" label="Add Practical" class="p-button-sm p-button-outlined mt-1" (click)="addArrayItem('practical_objectives')"></button>
+      </div>
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Competencies</label>
+      @for (comp of form.competencies ?? []; track $index) {
+        <div class="flex gap-2 mb-1">
+          <input pInputText [(ngModel)]="form.competencies[$index]" class="flex-1" placeholder="Competency" />
+          <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeArrayItem('competencies', $index)" [disabled]="form.competencies.length <= 1"></button>
+        </div>
+      }
+      <button pButton icon="pi pi-plus" label="Add Competency" class="p-button-sm p-button-outlined mt-1" (click)="addArrayItem('competencies')"></button>
+    </div>
+    <div class="flex gap-4">
+      <div class="flex-1">
+        <label class="block text-sm font-medium mb-1">Preferred Location</label>
+        <input pInputText [(ngModel)]="form.preferred_location" class="w-full" placeholder="e.g. Parking Lot A" />
+      </div>
+      <div class="flex-1">
+        <label class="block text-sm font-medium mb-1">Training Category</label>
+        <p-select [(ngModel)]="form.training_category" [options]="trainingCategories" optionLabel="label" optionValue="value" class="w-full" appendTo="body"></p-select>
+      </div>
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Prerequisite Competencies</label>
+      @for (pc of form.prerequisite_competencies ?? []; track $index) {
+        <div class="flex gap-2 mb-1">
+          <input pInputText [(ngModel)]="form.prerequisite_competencies[$index]" class="flex-1" placeholder="Prerequisite competency" />
+          <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeArrayItem('prerequisite_competencies', $index)" [disabled]="form.prerequisite_competencies.length <= 1"></button>
+        </div>
+      }
+      <button pButton icon="pi pi-plus" label="Add Prerequisite" class="p-button-sm p-button-outlined mt-1" (click)="addArrayItem('prerequisite_competencies')"></button>
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Prerequisite Lessons</label>
+      <p-multiSelect [(ngModel)]="form.prerequisite_lesson_ids" [options]="allLessons()" optionLabel="title" optionValue="id" styleClass="w-full" appendTo="body" placeholder="Select prerequisite lessons..." [maxSelectedLabels]="3"></p-multiSelect>
+    </div>
+
+    <!-- Videos Section -->
+    <div class="border-t pt-3">
+      <div class="flex items-center justify-between mb-2">
+        <label class="block text-sm font-medium">Videos</label>
+        @if (lessonIdForVideo) {
+          <div class="flex gap-1">
+            <button pButton icon="pi pi-upload" label="Upload" class="p-button-sm p-button-outlined" (click)="openVideoUpload()"></button>
+            <button pButton icon="pi pi-link" label="Add Link" class="p-button-sm p-button-outlined" (click)="openVideoEmbed()"></button>
+          </div>
+        }
+      </div>
+      @if (!lessonIdForVideo) {
+        <p class="text-sm text-gray-400 italic">Save the lesson first to add videos.</p>
+      }
+      @if (lessonIdForVideo && currentVideos().length === 0) {
+        <p class="text-sm text-gray-400 italic">No videos yet.</p>
+      }
+      @if (lessonIdForVideo) {
+        <div class="flex flex-col gap-2">
+          @for (video of currentVideos(); track video.id) {
+            <div class="flex items-center gap-2 border rounded p-2 text-sm">
+              <div class="flex-1 flex items-center gap-2 min-w-0">
+                <i [class]="getSourceIcon(video.source)" class="text-lg"></i>
+                <span class="truncate font-medium">{{ video.title }}</span>
+                <p-tag [value]="video.source" [severity]="getSourceColor(video.source)" styleClass="text-xs" />
+                @if (video.duration_seconds) {
+                  <span class="text-xs text-gray-400">{{ video.duration_seconds }}s</span>
+                }
+              </div>
+              <button pButton icon="pi pi-eye" class="p-button-sm p-button-text" pTooltip="Preview" (click)="openVideoPreview(video)"></button>
+              <button pButton icon="pi pi-unlink" class="p-button-sm p-button-text p-button-warn" pTooltip="Detach" (click)="detachVideo(video)"></button>
+              <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger" pTooltip="Delete" (click)="deleteVideo(video)"></button>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <button pButton label="Cancel" class="p-button-text" (click)="showDialog.set(false)"></button>
+    <button pButton [label]="editingLesson() ? 'Update' : 'Create'" [disabled]="!form.title" (click)="save()"></button>
+  </ng-template>
+</p-dialog>
+
+<!-- Video Upload Dialog -->
+<p-dialog header="Upload Video" [(visible)]="showVideoUpload" [modal]="true" [style]="{ width: '450px' }" appendTo="body">
+  <div class="flex flex-col gap-3 pt-2">
+    <div class="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50" (click)="fileInput.click()">
+      @if (videoUploadFile) {
+        <p class="text-sm">{{ videoUploadFile.name }} ({{ (videoUploadFile.size / 1024 / 1024).toFixed(1) }} MB)</p>
+      } @else {
+        <p class="text-sm text-gray-400">Click to select a video file (max 500MB)</p>
+      }
+      <input #fileInput type="file" accept="video/mp4,video/webm,video/quicktime,video/x-msvideo" class="hidden" (change)="onVideoFileSelected($event)" />
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <button pButton label="Cancel" class="p-button-text" (click)="showVideoUpload.set(false)"></button>
+    <button pButton label="Upload" [disabled]="!videoUploadFile || videoUploading()" [loading]="videoUploading()" (click)="uploadVideo()"></button>
+  </ng-template>
+</p-dialog>
+
+<!-- Video Embed Dialog -->
+<p-dialog header="Add Video Link" [(visible)]="showVideoEmbed" [modal]="true" [style]="{ width: '450px' }" appendTo="body">
+  <div class="flex flex-col gap-3 pt-2">
+    <div>
+      <label class="block text-sm font-medium mb-1">Title</label>
+      <input pInputText [(ngModel)]="videoEmbedTitle" class="w-full" placeholder="Video title" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">YouTube or Vimeo URL</label>
+      <input pInputText [(ngModel)]="videoEmbedUrl" class="w-full" placeholder="https://youtube.com/watch?v=..." />
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <button pButton label="Cancel" class="p-button-text" (click)="showVideoEmbed.set(false)"></button>
+    <button pButton label="Add" [disabled]="!videoEmbedUrl || !videoEmbedTitle || videoUploading()" [loading]="videoUploading()" (click)="addVideoEmbedLink()"></button>
+  </ng-template>
+</p-dialog>
+
+<!-- Video Preview Dialog -->
+<p-dialog header="Video Preview" [(visible)]="showVideoPreview" [modal]="true" [style]="{ width: '640px' }" appendTo="body" (onHide)="selectedVideo.set(null)">
+  @if (selectedVideo(); as video) {
+    <div class="pt-2">
+      @if (video.source === 'youtube' || video.source === 'vimeo') {
+        <div class="aspect-video">
+          <iframe [src]="getSafeUrl(video.url || '')" class="w-full h-full rounded" frameborder="0" allowfullscreen></iframe>
+        </div>
+      } @else {
+        <video class="w-full rounded" controls controlsList="nodownload"
+          [src]="getVideoUrl(video)"
+          (timeupdate)="saveResumeTime(video.id, $event)"
+          (loadedmetadata)="restoreResumeTime($event, video.id)">
+        </video>
+      }
+      <p class="mt-2 text-sm text-gray-600">{{ video.title }}</p>
+    </div>
+  }
+</p-dialog>

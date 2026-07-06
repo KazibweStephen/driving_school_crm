@@ -25,6 +25,7 @@ import { ProductService, Product } from '../../core/services/product.service';
 import { CartItemService } from '../../core/services/cart.service';
 import { PaymentService, PaymentRead } from '../../core/services/payment.service';
 import { AuthService } from '../../core/auth/auth.service';
+import { CompanyService, Branch } from '../../core/services/company.service';
 import { APP_CONFIG } from '../../core/config';
 
 interface SelectedProduct {
@@ -88,6 +89,8 @@ export class Clients implements OnInit, OnDestroy {
   createdConsultation = signal<Consultation | null>(null);
   convertNow = signal(false);
 
+  branches = signal<Branch[]>([]);
+
   form: any = {
     phone: '',
     first_name: '',
@@ -98,6 +101,7 @@ export class Clients implements OnInit, OnDestroy {
     notes: '',
     interest_level: '',
     start_date: null,
+    branch_id: null,
   };
 
   selectedProduct = signal<Product | null>(null);
@@ -156,6 +160,7 @@ export class Clients implements OnInit, OnDestroy {
     private cartItemService: CartItemService,
     private paymentService: PaymentService,
     private authService: AuthService,
+    private companyService: CompanyService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private router: Router,
@@ -198,6 +203,17 @@ export class Clients implements OnInit, OnDestroy {
     this.loading.set(true);
     this.loadConsultations();
     this.loadProducts();
+    this.loadBranches();
+  }
+
+  private loadBranches() {
+    this.companyService.list().subscribe(companies => {
+      for (const c of companies) {
+        this.companyService.listBranches(c.id).subscribe(branches => {
+          this.branches.update(existing => [...existing, ...branches]);
+        });
+      }
+    });
   }
 
   ngOnDestroy() {
@@ -533,6 +549,7 @@ export class Clients implements OnInit, OnDestroy {
       if (this.form.interest_level) payload.interest_level = this.form.interest_level;
       if (this.form.start_date) payload.start_date = this.form.start_date.toISOString().split('T')[0];
       if (this.form.notes) payload.notes = this.form.notes;
+      if (this.form.branch_id) payload.branch_id = this.form.branch_id;
       payload.items = items;
       if (this.paymentReceiptNumber()) {
         payload.payment = { receipt_number: this.paymentReceiptNumber() };
@@ -606,6 +623,7 @@ export class Clients implements OnInit, OnDestroy {
       if (this.form.interest_level) payload.interest_level = this.form.interest_level;
       if (this.form.start_date) payload.start_date = this.form.start_date.toISOString().split('T')[0];
       if (this.form.notes) payload.notes = this.form.notes;
+      if (this.form.branch_id) payload.branch_id = this.form.branch_id;
       const c = await this.consultationService.create(payload).toPromise();
       if (!c) throw new Error('Failed to create consultation');
 

@@ -28,6 +28,7 @@ async def create_consultation(
     interested_products: list | None = None,
     start_date: date | None = None,
     notes: str | None = None,
+    branch_id: uuid.UUID | None = None,
     created_by_phone: str | None = None,
 ) -> Consultation:
     consultation = Consultation(
@@ -41,6 +42,7 @@ async def create_consultation(
         interested_products=interested_products,
         start_date=start_date,
         notes=notes,
+        branch_id=branch_id,
         created_by_phone=created_by_phone,
     )
     db.add(consultation)

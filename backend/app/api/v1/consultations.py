@@ -56,6 +56,7 @@ async def create_consultation(
         ),
         start_date=data.start_date,
         notes=data.notes,
+        branch_id=data.branch_id,
         created_by_phone=current_user.phone,
     )
     return ConsultationRead.from_orm_with_cart(consultation)
@@ -80,6 +81,7 @@ async def create_full_consultation(
         interest_level=data.interest_level,
         start_date=data.start_date,
         notes=data.notes,
+        branch_id=data.branch_id,
         created_by_phone=current_user.phone,
     )
 

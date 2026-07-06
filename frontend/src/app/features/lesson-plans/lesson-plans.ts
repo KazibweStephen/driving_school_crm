@@ -51,9 +51,11 @@ export class LessonPlans implements OnInit {
     name: string;
     transmission_type: string;
     description: string;
+    template_type: string;
     total_days: number;
     total_weeks: number;
     items: {
+      id?: string;
       day_number: number;
       week_number: number;
       title: string;
@@ -72,8 +74,9 @@ export class LessonPlans implements OnInit {
       training_category?: string;
       prerequisite_competencies?: string[];
       prerequisite_lesson_ids?: string[];
+      is_theory?: boolean;
     }[];
-  } = { name: '', transmission_type: 'manual', description: '', total_days: 20, total_weeks: 4, items: [] };
+  } = { name: '', transmission_type: 'manual', description: '', template_type: 'practical', total_days: 20, total_weeks: 4, items: [] };
 
   // Item picker dialog
   showPicker = signal(false);
@@ -113,12 +116,14 @@ export class LessonPlans implements OnInit {
     training_category: string;
     prerequisite_competencies: string[];
     prerequisite_lesson_ids: string[];
+    is_theory: boolean;
   } = {
     day_number: 1, week_number: 1, title: '', description: '', transmission_type: null,
     lesson_objectives: [''], practical_objectives: [''], competencies: [''],
     estimated_minutes: 30, estimated_distance_km: 3, difficulty: 'beginner',
     order: 1, lesson_library_id: null, preferred_location: '', enforce_prerequisites: true,
     training_category: 'driving', prerequisite_competencies: [''], prerequisite_lesson_ids: [],
+    is_theory: false,
   };
 
   difficulties = [
@@ -370,7 +375,7 @@ export class LessonPlans implements OnInit {
 
   openCreate() {
     this.editingTemplate.set(null);
-    this.form = { name: '', transmission_type: 'manual', description: '', total_days: 20, total_weeks: 4, items: [] };
+    this.form = { name: '', transmission_type: 'manual', description: '', template_type: 'practical', total_days: 20, total_weeks: 4, items: [] };
     this.showCreateDialog.set(true);
   }
 
@@ -382,7 +387,9 @@ export class LessonPlans implements OnInit {
       description: tpl.description || '',
       total_days: tpl.total_days,
       total_weeks: tpl.total_weeks,
+      template_type: tpl.template_type,
       items: [...tpl.lesson_items].sort((a, b) => a.order - b.order).map(i => ({
+        id: i.id,
         day_number: i.day_number,
         week_number: i.week_number,
         title: i.title,
@@ -401,6 +408,7 @@ export class LessonPlans implements OnInit {
         training_category: (i as any).training_category ?? 'driving',
         prerequisite_competencies: (i as any).prerequisite_competencies?.length ? [...(i as any).prerequisite_competencies] : [''],
         prerequisite_lesson_ids: (i as any).prerequisite_lesson_ids ?? [],
+        is_theory: (i as any).is_theory ?? false,
       })),
     };
     this.showCreateDialog.set(true);
@@ -440,6 +448,7 @@ export class LessonPlans implements OnInit {
       training_category: item.training_category ?? 'driving',
       prerequisite_competencies: item.prerequisite_competencies?.length ? [...item.prerequisite_competencies] : [''],
       prerequisite_lesson_ids: item.prerequisite_lesson_ids ?? [],
+      is_theory: item.is_theory ?? false,
     };
     this.pickerMode = 'create';
     this.showPicker.set(true);
@@ -459,6 +468,7 @@ export class LessonPlans implements OnInit {
       order: this.form.items.length + 1, lesson_library_id: null,
       preferred_location: '', enforce_prerequisites: true,
       training_category: 'driving', prerequisite_competencies: [''], prerequisite_lesson_ids: [],
+      is_theory: false,
     };
     this.currentItemVideos.set([]);
   }
@@ -483,6 +493,7 @@ export class LessonPlans implements OnInit {
       training_category: lesson.training_category || 'driving',
       prerequisite_competencies: lesson.prerequisite_competencies?.length ? [...lesson.prerequisite_competencies] : [''],
       prerequisite_lesson_ids: lesson.prerequisite_lessons?.map(p => p.id) || [],
+      is_theory: lesson.is_theory || false,
     };
     this.pickerMode = 'create';
     this.currentItemVideos.set(lesson.videos || []);
@@ -528,6 +539,7 @@ export class LessonPlans implements OnInit {
       training_category: this.itemForm.training_category,
       prerequisite_competencies: this.itemForm.prerequisite_competencies.filter(s => s.trim()),
       prerequisite_lesson_ids: this.itemForm.prerequisite_lesson_ids,
+      is_theory: this.itemForm.is_theory ?? false,
     };
     const idx = this.editingItemIndex();
     if (idx >= 0) {
@@ -552,6 +564,29 @@ export class LessonPlans implements OnInit {
           description: this.form.description || undefined,
           total_days: this.form.total_days,
           total_weeks: this.form.total_weeks,
+          template_type: this.form.template_type,
+          items: this.form.items.map((i: any) => ({
+            id: i.id || undefined,
+            day_number: i.day_number,
+            week_number: i.week_number,
+            title: i.title,
+            description: i.description || undefined,
+            transmission_type: i.transmission_type || undefined,
+            lesson_objectives: i.lesson_objectives?.filter((s: string) => s.trim()) || undefined,
+            practical_objectives: i.practical_objectives?.filter((s: string) => s.trim()) || undefined,
+            competencies: i.competencies?.filter((s: string) => s.trim()) || undefined,
+            estimated_minutes: i.estimated_minutes,
+            estimated_distance_km: i.estimated_distance_km,
+            difficulty: i.difficulty || 'beginner',
+            order: i.order,
+            lesson_library_id: i.lesson_library_id || undefined,
+            preferred_location: i.preferred_location || undefined,
+            enforce_prerequisites: i.enforce_prerequisites,
+            training_category: i.training_category || 'driving',
+            prerequisite_competencies: i.prerequisite_competencies?.filter((s: string) => s.trim()) || undefined,
+            prerequisite_lesson_ids: i.prerequisite_lesson_ids || undefined,
+            is_theory: i.is_theory || false,
+          })),
         }).toPromise();
         this.messageService.add({ severity: 'success', summary: 'Updated', detail: 'Template updated' });
       } else {
@@ -561,6 +596,7 @@ export class LessonPlans implements OnInit {
           description: this.form.description || undefined,
           total_days: this.form.total_days,
           total_weeks: this.form.total_weeks,
+          template_type: this.form.template_type,
           items: this.form.items.map((i: any) => ({
             day_number: i.day_number,
             week_number: i.week_number,
@@ -580,6 +616,7 @@ export class LessonPlans implements OnInit {
             training_category: i.training_category || 'driving',
             prerequisite_competencies: i.prerequisite_competencies?.filter((s: string) => s.trim()) || undefined,
             prerequisite_lesson_ids: i.prerequisite_lesson_ids || undefined,
+            is_theory: i.is_theory || false,
           })),
         }).toPromise();
         this.messageService.add({ severity: 'success', summary: 'Created', detail: 'Template created' });

@@ -1,19 +1,22 @@
 import { DecimalPipe, CurrencyPipe, DatePipe } from '@angular/common';
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { SelectModule } from 'primeng/select';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { DatePickerModule } from 'primeng/datepicker';
 import { TableModule } from 'primeng/table';
 import { TooltipModule } from 'primeng/tooltip';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { CheckboxModule } from 'primeng/checkbox';
 import { InputNumberModule } from 'primeng/inputnumber';
+import { ProgressBarModule } from 'primeng/progressbar';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { ConsultationService, Consultation, FollowUp } from '../../core/services/consultation.service';
 import { CartItemService, CartItemRead, CartItemCreate } from '../../core/services/cart.service';
@@ -23,6 +26,12 @@ import { TrainingService, TrainingSession, TrainingSummary, Skill, SkillCreate }
 import { PermitProgressService, PermitProgress } from '../../core/services/permit-progress.service';
 import { OrderListModule } from 'primeng/orderlist';
 import { LessonPlanService, LessonPlanTemplate, ClientLessonPlan, ClientLesson, ClientLessonUpdate } from '../../core/services/lesson-plan.service';
+import { LessonLibraryService } from '../../core/services/lesson-library.service';
+import { VideoLibraryService } from '../../core/services/video-library.service';
+import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
+import { UserService, User } from '../../core/services/user.service';
+import { SchedulingService, ClientAvailability, FindAndLockResult } from '../../core/services/scheduling.service';
+import { VehicleScheduleService } from '../../core/services/vehicle-schedule.service';
 import { APP_CONFIG } from '../../core/config';
 
 @Component({
@@ -39,12 +48,14 @@ import { APP_CONFIG } from '../../core/config';
     TagModule,
     ToastModule,
     SelectModule,
+    MultiSelectModule,
     DatePickerModule,
     TooltipModule,
     ConfirmDialogModule,
     TableModule,
     CheckboxModule,
     InputNumberModule,
+    ProgressBarModule,
     OrderListModule,
   ],
   providers: [MessageService, ConfirmationService],
@@ -117,6 +128,73 @@ export class ClientProfile implements OnInit {
   showGuide = signal(false);
   guideContent = signal('');
 
+  viewMode = signal<'detailed' | 'tabbed'>('tabbed');
+  selectedTabIndex = signal(0);
+  tabLabels = ['Products', 'Follow-ups', 'Payments', 'Training', 'Permit', 'Lesson Plans'];
+  isMobile = signal(window.innerWidth < 640);
+  today = new Date();
+
+  showPrintPreview = signal(false);
+  printPreviewData = signal<{ ci: CartItemRead | null; plan: ClientLessonPlan | null }>({ ci: null, plan: null });
+  printShowObjectives = signal(true);
+  printShowPractical = signal(true);
+  printPreviewHtml = signal('');
+  private _printPreviewObjectUrl: string | null = null;
+
+  // Lesson Execution
+  showExecutionDialog = signal(false);
+  showNotificationsPanel = signal(false);
+
+  notificationLessons = computed(() => {
+    const all: { label: string; lesson: ClientLesson }[] = [];
+    const plansMap = this.clientLessonPlans();
+    for (const [, plans] of plansMap) {
+      for (const plan of plans) {
+        for (const lesson of plan.lessons || []) {
+          if (lesson.status === 'started' || lesson.status === 'in_progress') {
+            all.push({ label: 'Ongoing', lesson });
+          } else if (lesson.status === 'pending') {
+            all.push({ label: 'Upcoming', lesson });
+          }
+        }
+      }
+    }
+    return all;
+  });
+
+  notificationCount = computed(() => {
+    return this.notificationLessons().length;
+  });
+  executingLesson = signal<ClientLesson | null>(null);
+  executionTimerDisplay = signal('00:00');
+  executionProgress = signal(0);
+  executionTotalSeconds = signal(1800);
+  executionElapsedSeconds = signal(0);
+  executionNotes = signal('');
+  executionVideoUrl = signal<SafeResourceUrl | null>(null);
+  executionVideoSource = signal<string | null>(null);
+  executionUpcomingClients = signal<{ name: string; product: string; transmission: string }[]>([]);
+  executionIsRunning = signal(false);
+  executionTimeoutWarned = signal(false);
+  executionIsPaused = signal(false);
+  executionCheckedObjectives = signal<boolean[]>([]);
+  executionCheckedPractical = signal<boolean[]>([]);
+  private _executionTimerInterval: any = null;
+
+  getPrintPreviewSafeUrl() {
+    const url = this.printPreviewHtml();
+    return url ? this.sanitizer.bypassSecurityTrustResourceUrl(url) : null;
+  }
+
+  closePrintPreview() {
+    if (this._printPreviewObjectUrl) {
+      URL.revokeObjectURL(this._printPreviewObjectUrl);
+      this._printPreviewObjectUrl = null;
+    }
+    this.printPreviewHtml.set('');
+    this.showPrintPreview.set(false);
+  }
+
   receiptChecking = signal(false);
   receiptAvailable = signal<boolean | null>(null);
 
@@ -162,17 +240,25 @@ export class ClientProfile implements OnInit {
     private paymentService: PaymentService,
     private trainingService: TrainingService,
     private lessonPlanService: LessonPlanService,
+    private lessonLibraryService: LessonLibraryService,
+    private videoLibraryService: VideoLibraryService,
+    private vehicleService: VehicleService,
+    private userService: UserService,
+    private schedulingService: SchedulingService,
+    private vehicleScheduleService: VehicleScheduleService,
     private permitProgressService: PermitProgressService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
+    private sanitizer: DomSanitizer,
   ) {}
 
-  ngOnInit() {
+  async ngOnInit() {
+    window.addEventListener('resize', () => this.isMobile.set(window.innerWidth < 640));
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.loading.set(true);
-      this.loadConsultation(id);
-      this.loadProducts();
+      await this.loadProducts();
+      await this.loadConsultation(id);
     }
   }
 
@@ -184,6 +270,9 @@ export class ClientProfile implements OnInit {
         this.consultation.set(c);
         this.loadPayments();
         this.loadTrainingData();
+        this.loadPermitProgress();
+        this.loadLessonPlans();
+        this.loadVehiclesAndInstructors();
       }
     } catch {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load consultation' });
@@ -196,10 +285,6 @@ export class ClientProfile implements OnInit {
     try {
       const res = await this.productService.listProducts({ status: 'active', page_size: 100 }).toPromise();
       if (res) this.products.set(res.products);
-      if (this.consultation()) {
-        this.loadPermitProgress();
-        this.loadLessonPlans();
-      }
     } catch {
       /* products are non-critical for profile view */
     }
@@ -270,13 +355,24 @@ export class ClientProfile implements OnInit {
   trainableCartItems(): CartItemRead[] {
     const items = this.consultation()?.cart_items || [];
     return items.filter(ci =>
-      ci.status === 'converted_paid' || ci.status === 'converted_paying'
+      ci.status === 'converted' || ci.status === 'converted_paid' || ci.status === 'converted_paying'
     );
+  }
+
+  cartItemHasTraining(ci: CartItemRead): boolean {
+    // Resolve training flags from Package at runtime if possible
+    if (ci.requires_driving_training || ci.requires_theory_training) return true;
+    if (!ci.package_id) return false;
+    for (const p of this.products()) {
+      const pkg = p.packages.find(pk => pk.id === ci.package_id);
+      if (pkg) return pkg.requires_driving_training || pkg.requires_theory_training;
+    }
+    return false;
   }
 
   async loadTrainingData() {
     const items = this.trainableCartItems().filter(
-      ci => ci.requires_driving_training || ci.requires_theory_training
+      ci => this.cartItemHasTraining(ci)
     );
     const allSessions: TrainingSession[] = [];
     const summaries = new Map<string, TrainingSummary>();
@@ -388,6 +484,10 @@ export class ClientProfile implements OnInit {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  formatTime(t: string): string {
+    return t ? t.substring(0, 5) : '';
   }
 
   // ── Open / Edit Session ──
@@ -538,8 +638,8 @@ export class ClientProfile implements OnInit {
   showCreateLessonPlanDialog = signal(false);
   showLessonDetailDialog = signal(false);
   createPlanCartItemId = signal<string | null>(null);
-  lessonPlanForm: { template_id: string; transmission_type: string; start_date: string | null } = {
-    template_id: '', transmission_type: 'manual', start_date: null,
+  lessonPlanForm: { template_id: string; theory_template_id: string; transmission_type: string; start_date: string | null; manual_days: number } = {
+    template_id: '', theory_template_id: '', transmission_type: 'manual', start_date: null, manual_days: 5,
   };
   editingLesson = signal<ClientLesson | null>(null);
   lessonEditForm: ClientLessonUpdate = {};
@@ -613,7 +713,7 @@ export class ClientProfile implements OnInit {
 
   async loadLessonPlans() {
     const items = this.trainableCartItems().filter(
-      ci => ci.requires_driving_training || ci.requires_theory_training
+      ci => this.cartItemHasTraining(ci)
     );
     const plans = new Map<string, ClientLessonPlan[]>();
     for (const ci of items) {
@@ -627,7 +727,7 @@ export class ClientProfile implements OnInit {
 
   async openCreateLessonPlan(cartItemId: string) {
     this.createPlanCartItemId.set(cartItemId);
-    this.lessonPlanForm = { template_id: '', transmission_type: 'manual', start_date: null };
+    this.lessonPlanForm = { template_id: '', theory_template_id: '', transmission_type: 'manual', start_date: null, manual_days: 5 };
     this.loading.set(true);
     try {
       const res = await this.lessonPlanService.listTemplates().toPromise();
@@ -640,16 +740,28 @@ export class ClientProfile implements OnInit {
     }
   }
 
+  practicalTemplates = computed(() =>
+    this.templates().filter(t => t.template_type !== 'theory')
+  );
+  theoryTemplates = computed(() =>
+    this.templates().filter(t => t.template_type === 'theory')
+  );
+
   async createLessonPlan() {
     const cartItemId = this.createPlanCartItemId();
     if (!cartItemId) return;
     this.loading.set(true);
     try {
-      await this.lessonPlanService.createClientPlan(cartItemId, {
-        template_id: this.lessonPlanForm.template_id || undefined,
-        transmission_type: this.lessonPlanForm.transmission_type,
-        start_date: this.lessonPlanForm.start_date || undefined,
-      }).toPromise();
+      const form = this.lessonPlanForm;
+      if (form.template_id || form.theory_template_id) {
+        await this.lessonPlanService.createClientPlan(cartItemId, {
+          template_id: form.template_id || undefined,
+          theory_template_id: form.theory_template_id || undefined,
+          transmission_type: form.transmission_type,
+          start_date: form.start_date || undefined,
+          manual_days: form.manual_days,
+        }).toPromise();
+      }
       this.showCreateLessonPlanDialog.set(false);
       await this.loadLessonPlans();
       this.messageService.add({ severity: 'success', summary: 'Created', detail: 'Lesson plan created' });
@@ -658,6 +770,77 @@ export class ClientProfile implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  async deleteClientPlan(planId: string) {
+    // Check if plan has started/completed lessons
+    const plans = this.clientLessonPlans();
+    let plan: ClientLessonPlan | undefined;
+    for (const [, pList] of plans) {
+      plan = pList.find(p => p.id === planId);
+      if (plan) break;
+    }
+    if (!plan) return;
+
+    const hasStarted = plan.lessons.some(l => l.status === 'in_progress');
+    const hasCompleted = plan.lessons.some(l => l.status === 'completed');
+
+    if (!hasStarted && !hasCompleted) {
+      // No started or completed — simple confirmation
+      this.confirmationService.confirm({
+        message: 'Delete this lesson plan and all its lessons?',
+        header: 'Delete Lesson Plan',
+        icon: 'pi pi-exclamation-triangle',
+        acceptLabel: 'Delete All',
+        rejectLabel: 'Cancel',
+        accept: async () => {
+          this.loading.set(true);
+          try {
+            await this.lessonPlanService.deleteClientPlan(planId, 'all').toPromise();
+            this.removePlanFromList(planId);
+            this.messageService.add({ severity: 'success', summary: 'Deleted', detail: 'Lesson plan deleted' });
+          } catch {
+            this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete lesson plan' });
+          } finally {
+            this.loading.set(false);
+          }
+        }
+      });
+    } else {
+      // Has started/completed — offer options sequentially
+      const doDelete = async (mode: string, label: string) => {
+        this.loading.set(true);
+        try {
+          await this.lessonPlanService.deleteClientPlan(planId, mode).toPromise();
+          await this.loadLessonPlans();
+          this.messageService.add({ severity: 'info', summary: 'Deleted', detail: `${label} removed` });
+        } catch {
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete lessons' });
+        } finally {
+          this.loading.set(false);
+        }
+      };
+
+      this.confirmationService.confirm({
+        message: 'This plan has lessons that are in progress or completed.',
+        header: 'Delete Lesson Plan',
+        icon: 'pi pi-exclamation-triangle',
+        acceptLabel: 'Delete Unstarted Only',
+        rejectLabel: 'Cancel',
+        accept: () => doDelete('unstarted', 'Unstarted lessons'),
+      });
+    }
+  }
+
+  private removePlanFromList(planId: string) {
+    this.clientLessonPlans.update(map => {
+      const next = new Map(map);
+      for (const [key, plans] of next) {
+        const filtered = plans.filter(p => p.id !== planId);
+        if (filtered.length !== plans.length) next.set(key, filtered);
+      }
+      return next;
+    });
   }
 
   getTemplateLessonsNotInPlan(plan: ClientLessonPlan): ClientLesson[] {
@@ -682,21 +865,287 @@ export class ClientProfile implements OnInit {
         is_locked: false,
         status: 'pending',
         difficulty: null,
+        vehicle_inspection_minutes: null,
+        cockpit_drill_minutes: null,
+        video_illustration_minutes: null,
+        practical_driving_minutes: null,
+        assessment_minutes: null,
         driving_minutes: null,
         theory_minutes: null,
         mileage_km: null,
+        is_theory: item.is_theory ?? false,
         combined_with_next: false,
         skills_achieved: null,
         outcome: null,
         instructor_id: null,
         vehicle_id: null,
         completed_at: null,
+        scheduled_date: null,
+        scheduled_start_time: null,
+        scheduled_end_time: null,
+        duration_minutes: 30,
+        plan_locked_time: null,
         notes: null,
         preferred_location: item.preferred_location ?? null,
         enforce_prerequisites: item.enforce_prerequisites ?? true,
         created_at: '',
         updated_at: '',
       }));
+  }
+
+  // ── Scheduling ──
+
+  showScheduleDialog = signal(false);
+  schedulingPlan = signal<ClientLessonPlan | null>(null);
+  scheduleDate = signal<Date | null>(null);
+  scheduleInstructorId = signal<string>('');
+  scheduleVehicleId = signal<string>('');
+  scheduleInstructorIdAuto = signal<string>('');
+  scheduleVehicleIdAuto = signal<string>('');
+  scheduleManualDays = signal<number>(5);
+  schedulePreferredTimes = signal<string>('17:00,18:00');
+  scheduleResult = signal<FindAndLockResult | null>(null);
+  scheduleLoading = signal(false);
+  availableInstructors = signal<User[]>([]);
+  availableVehicles = signal<Vehicle[]>([]);
+  scheduleAvailabilities = signal<ClientAvailability[]>([]);
+  newAvailabilityDay = signal<number>(0);
+  newAvailabilityTimes = signal<string[]>([]);
+  manualVehicles = computed(() => this.availableVehicles().filter(v => v.transmission === 'manual'));
+  autoVehicles = computed(() => this.availableVehicles().filter(v => v.transmission === 'automatic'));
+
+  timeOptions = Array.from({length: 26}, (_, i) => {
+    const h = Math.floor((i * 30) / 60) + 6;
+    const m = (i * 30) % 60;
+    const label = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    return { label, value: label };
+  });
+
+  async openScheduleDialog(plan: ClientLessonPlan) {
+    this.schedulingPlan.set(plan);
+    this.scheduleDate.set(null);
+    this.scheduleInstructorId.set('');
+    this.scheduleVehicleId.set('');
+    this.scheduleInstructorIdAuto.set('');
+    this.scheduleVehicleIdAuto.set('');
+    this.scheduleManualDays.set(plan.manual_days ?? 5);
+    this.schedulePreferredTimes.set('');
+    this.scheduleResult.set(null);
+    this.scheduleLoading.set(true);
+    this.showScheduleDialog.set(true);
+    try {
+      const [instructors, vehicles, avails] = await Promise.all([
+        this.userService.list({ role: 'instructor', status: 'active', page_size: 100 }).toPromise(),
+        this.vehicleService.list({ status: 'available' }).toPromise(),
+        this.schedulingService.listAvailabilities(plan.cart_item_id).toPromise(),
+      ]);
+      this.availableInstructors.set(instructors?.users?.filter(u => u.role === 'instructor') || []);
+      this.availableVehicles.set(vehicles || []);
+      this.scheduleAvailabilities.set(avails || []);
+      if (avails?.length) {
+        this.schedulePreferredTimes.set(avails.map(a => a.start_time.substring(0, 5)).join(','));
+      }
+      if (plan.start_date) {
+        this.scheduleDate.set(new Date(plan.start_date));
+      }
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load scheduling data' });
+    } finally {
+      this.scheduleLoading.set(false);
+    }
+  }
+
+  async addAvailability() {
+    const plan = this.schedulingPlan();
+    const times = this.newAvailabilityTimes();
+    if (!plan || !times.length) return;
+    try {
+      const results = await Promise.all(
+        times.map(t => this.schedulingService.createAvailability({
+          cart_item_id: plan.cart_item_id,
+          day_of_week: this.newAvailabilityDay(),
+          start_time: t,
+        }).toPromise())
+      );
+      const added = results.filter(Boolean) as ClientAvailability[];
+      if (added.length) {
+        this.scheduleAvailabilities.update(list => [...list, ...added]);
+        this.schedulePreferredTimes.set(
+          [...this.scheduleAvailabilities(), ...added].map(a => this.formatTime(a.start_time)).join(',')
+        );
+        this.newAvailabilityTimes.set([]);
+      }
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to add availability' });
+    }
+  }
+
+  async removeAvailability(availId: string) {
+    try {
+      await this.schedulingService.deleteAvailability(availId).toPromise();
+      this.scheduleAvailabilities.update(list => list.filter(a => a.id !== availId));
+      this.schedulePreferredTimes.set(
+        this.scheduleAvailabilities().filter(a => a.id !== availId).map(a => this.formatTime(a.start_time)).join(',')
+      );
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to remove availability' });
+    }
+  }
+
+  async findAndLock() {
+    const plan = this.schedulingPlan();
+    if (!plan || !this.scheduleDate()) return;
+    // Auto-resolve instructor from vehicle if not set
+    if (!this.scheduleInstructorId() && this.scheduleVehicleId()) {
+      await this.onScheduleVehicleChange();
+    }
+    // If no instructor found, fall back to manual lock (skip availability check)
+    if (!this.scheduleInstructorId()) {
+      this.messageService.add({ severity: 'info', summary: 'No instructor', detail: 'No instructor in schedule — locking directly' });
+      await this.lockManually();
+      return;
+    }
+    this.scheduleLoading.set(true);
+    this.scheduleResult.set(null);
+    try {
+      const times = this.schedulePreferredTimes()
+        .split(',')
+        .map(t => t.trim())
+        .filter(t => t.length > 0);
+      const result = await this.schedulingService.findAndLock(plan.id, {
+        instructor_id: this.scheduleInstructorId(),
+        vehicle_id: this.scheduleVehicleId() || undefined,
+        instructor_id_auto: this.scheduleInstructorIdAuto() || undefined,
+        vehicle_id_auto: this.scheduleVehicleIdAuto() || undefined,
+        start_date: this.scheduleDate()!.toISOString().split('T')[0],
+        preferred_times: times.length > 0 ? times : ['17:00'],
+        manual_days: this.scheduleManualDays(),
+      }).toPromise();
+      this.scheduleResult.set(result ?? null);
+      if (result?.locked) {
+        await this.loadLessonPlans();
+        this.messageService.add({ severity: 'success', summary: 'Locked', detail: `Schedule locked at ${result.start_time}` });
+      }
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to find available slot' });
+    } finally {
+      this.scheduleLoading.set(false);
+    }
+  }
+
+  async lockManually() {
+    const plan = this.schedulingPlan();
+    if (!plan || !this.scheduleDate()) return;
+    if (this.scheduleManualDays() > 0 && !this.scheduleVehicleId()) {
+      this.messageService.add({ severity: 'warn', summary: 'Missing', detail: 'Select a manual-phase vehicle first' });
+      return;
+    }
+    // Try to resolve instructor from schedule as a convenience (optional)
+    if (!this.scheduleInstructorId()) {
+      await this.onScheduleVehicleChange();
+    }
+    this.scheduleLoading.set(true);
+    try {
+      const result = await this.schedulingService.lockSchedule(plan.id, {
+        start_time: this.schedulePreferredTimes().split(',')[0]?.trim() || '17:00',
+        instructor_id: this.scheduleInstructorId() || undefined,
+        vehicle_id: this.scheduleVehicleId() || undefined,
+        instructor_id_auto: this.scheduleInstructorIdAuto() || undefined,
+        vehicle_id_auto: this.scheduleVehicleIdAuto() || undefined,
+        start_date: this.scheduleDate()!.toISOString().split('T')[0],
+        manual_days: this.scheduleManualDays(),
+      }).toPromise();
+      await this.loadLessonPlans();
+      this.messageService.add({ severity: 'success', summary: 'Locked', detail: `Schedule locked: ${result?.message}` });
+      this.showScheduleDialog.set(false);
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to lock schedule' });
+    } finally {
+      this.scheduleLoading.set(false);
+    }
+  }
+
+  planIsLocked(plan: ClientLessonPlan): boolean {
+    return plan.lessons.some(l => l.plan_locked_time != null);
+  }
+
+  async onScheduleVehicleChange() {
+    const vid = this.scheduleVehicleId();
+    const date = this.scheduleDate();
+    if (!vid || !date) return;
+    const times = this.schedulePreferredTimes().split(',').map(t => t.trim()).filter(t => t.length > 0);
+    const firstTime = times[0] || '17:00';
+    try {
+      const dayOfWeek = date.getDay() === 0 ? 6 : date.getDay() - 1; // JS Sun=0 → Mon=0
+      if (dayOfWeek > 4) return; // weekend
+      const res = await this.vehicleScheduleService.resolveInstructor(vid, dayOfWeek, firstTime).toPromise();
+      if (res?.instructor_id) {
+        this.scheduleInstructorId.set(res.instructor_id);
+      }
+    } catch {
+      // No instructor assigned for this time slot — leave as-is
+    }
+  }
+
+  async onScheduleVehicleAutoChange() {
+    const vid = this.scheduleVehicleIdAuto();
+    const date = this.scheduleDate();
+    if (!vid || !date) return;
+    const times = this.schedulePreferredTimes().split(',').map(t => t.trim()).filter(t => t.length > 0);
+    const firstTime = times[0] || '17:00';
+    try {
+      const dayOfWeek = date.getDay() === 0 ? 6 : date.getDay() - 1;
+      if (dayOfWeek > 4) return;
+      const res = await this.vehicleScheduleService.resolveInstructor(vid, dayOfWeek, firstTime).toPromise();
+      if (res?.instructor_id) {
+        this.scheduleInstructorIdAuto.set(res.instructor_id);
+      }
+    } catch {
+      // No instructor assigned for this time slot — leave as-is
+    }
+  }
+
+  planLockedTime(plan: ClientLessonPlan): string | null {
+    const locked = plan.lessons.find(l => l.plan_locked_time != null);
+    return locked?.plan_locked_time || null;
+  }
+
+  planScheduledDate(plan: ClientLessonPlan): string | null {
+    const scheduled = plan.lessons.find(l => l.scheduled_date != null);
+    return scheduled?.scheduled_date || null;
+  }
+
+  planInstructor(plan: ClientLessonPlan): string | null {
+    const instructor = plan.lessons.find(l => l.instructor_id != null);
+    return instructor?.instructor_id || null;
+  }
+
+  planVehicle(plan: ClientLessonPlan): string | null {
+    const vehicle = plan.lessons.find(l => l.vehicle_id != null);
+    return vehicle?.vehicle_id || null;
+  }
+
+  instructorName(phone: string | null): string {
+    if (!phone) return '—';
+    const user = this.availableInstructors().find(u => u.phone === phone);
+    return user ? user.name : phone;
+  }
+
+  vehicleName(id: string | null): string {
+    if (!id) return '—';
+    const v = this.availableVehicles().find(v => v.id === id);
+    return v ? `${v.name} (${v.plate_number})` : id;
+  }
+
+  async loadVehiclesAndInstructors() {
+    try {
+      const [instructors, vehicles] = await Promise.all([
+        this.userService.list({ role: 'instructor', status: 'active', page_size: 100 }).toPromise(),
+        this.vehicleService.list({ status: 'available' }).toPromise(),
+      ]);
+      this.availableInstructors.set(instructors?.users?.filter(u => u.role === 'instructor') || []);
+      this.availableVehicles.set(vehicles || []);
+    } catch { /* silent */ }
   }
 
   async addTemplateLessonToPlan(plan: ClientLessonPlan, templateItem: ClientLesson) {
@@ -727,16 +1176,25 @@ export class ClientProfile implements OnInit {
   }
 
   async removeLessonFromPlan(lesson: ClientLesson) {
-    this.loading.set(true);
-    try {
-      await this.lessonPlanService.updateClientLesson(lesson.id, { is_active: false }).toPromise();
-      this.updateLessonInList({ ...lesson, is_active: false });
-      this.messageService.add({ severity: 'info', summary: 'Removed', detail: 'Lesson removed from plan' });
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to remove lesson' });
-    } finally {
-      this.loading.set(false);
-    }
+    this.confirmationService.confirm({
+      message: `Remove "${lesson.title}" from the plan?`,
+      header: 'Remove Lesson',
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Remove',
+      rejectLabel: 'Cancel',
+      accept: async () => {
+        this.loading.set(true);
+        try {
+          await this.lessonPlanService.updateClientLesson(lesson.id, { is_active: false }).toPromise();
+          this.updateLessonInList({ ...lesson, is_active: false });
+          this.messageService.add({ severity: 'info', summary: 'Removed', detail: 'Lesson removed from plan' });
+        } catch {
+          this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to remove lesson' });
+        } finally {
+          this.loading.set(false);
+        }
+      }
+    });
   }
 
   async updateLessonStatus(lesson: ClientLesson, status: string) {
@@ -750,6 +1208,282 @@ export class ClientProfile implements OnInit {
     }
   }
 
+  // ── Lesson Execution ──
+
+  async openExecutionDialog(lesson: ClientLesson) {
+    try {
+      const updated = await this.lessonPlanService.startLesson(lesson.id).toPromise();
+      if (!updated) { throw new Error('Failed to start lesson'); }
+      this.updateLessonInList(updated);
+      const timer = await this.lessonPlanService.startLessonTimer(lesson.id).toPromise();
+      if (!timer) { throw new Error('Failed to start timer'); }
+      this.executingLesson.set(updated);
+      this.executionNotes.set('');
+      this.executionTimeoutWarned.set(false);
+      this.executionCheckedObjectives.set((updated.lesson_objectives || []).map(() => false));
+      this.executionCheckedPractical.set((updated.practical_objectives || []).map(() => false));
+      // Restore checked state from saved outcome if exists
+      if (updated.outcome) {
+        try {
+          const saved = JSON.parse(updated.outcome);
+          if (saved.objectives_checked?.length === (updated.lesson_objectives || []).length) {
+            this.executionCheckedObjectives.set(saved.objectives_checked);
+          }
+          if (saved.practical_checked?.length === (updated.practical_objectives || []).length) {
+            this.executionCheckedPractical.set(saved.practical_checked);
+          }
+        } catch {}
+      }
+      // Persist initial unchecked state
+      this.syncCheckedObjectives();
+      const totalSec = this._calcLessonTotalSeconds(updated);
+      this.executionTotalSeconds.set(totalSec);
+      this.executionElapsedSeconds.set(0);
+      this.loadExecutionVideo(updated);
+      this.loadUpcomingClients();
+      this._startExecutionTimer();
+      this.showExecutionDialog.set(true);
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to start lesson' });
+    }
+  }
+
+  async restoreExecutionDialog(lesson: ClientLesson) {
+    try {
+      const timer = await this.lessonPlanService.getLessonTimer(lesson.id).toPromise();
+      if (!timer || !timer.started_at) { throw new Error('No saved timer'); }
+      this.executingLesson.set(lesson);
+      this.executionNotes.set(lesson.notes || '');
+      this.executionTimeoutWarned.set(false);
+      this.executionCheckedObjectives.set((lesson.lesson_objectives || []).map(() => false));
+      this.executionCheckedPractical.set((lesson.practical_objectives || []).map(() => false));
+      // Restore checked state from saved outcome
+      if (lesson.outcome) {
+        try {
+          const saved = JSON.parse(lesson.outcome);
+          if (saved.objectives_checked?.length === (lesson.lesson_objectives || []).length) {
+            this.executionCheckedObjectives.set(saved.objectives_checked);
+          }
+          if (saved.practical_checked?.length === (lesson.practical_objectives || []).length) {
+            this.executionCheckedPractical.set(saved.practical_checked);
+          }
+        } catch {}
+      }
+      const totalSec = this._calcLessonTotalSeconds(lesson);
+      this.executionTotalSeconds.set(totalSec);
+      const isPaused = !!timer.paused_at;
+      this.executionIsPaused.set(isPaused);
+      if (isPaused) {
+        this.executionElapsedSeconds.set((timer.elapsed_minutes || 0) * 60);
+        const total = this.executionTotalSeconds();
+        const elapsed = this.executionElapsedSeconds();
+        const remaining = Math.max(0, total - elapsed);
+        const mins = Math.floor(remaining / 60);
+        const secs = remaining % 60;
+        this.executionTimerDisplay.set(`${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
+        this.executionProgress.set(total > 0 ? Math.min(100, Math.round((elapsed / total) * 100)) : 0);
+      } else {
+        const startedAt = new Date(timer.started_at).getTime();
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        this.executionElapsedSeconds.set(elapsed);
+      }
+      this.loadExecutionVideo(lesson);
+      this.loadUpcomingClients();
+      if (!isPaused) {
+        this._startExecutionTimer();
+      }
+      this.showExecutionDialog.set(true);
+    } catch {
+      this.openExecutionDialog(lesson);
+    }
+  }
+
+  private _calcLessonTotalSeconds(lesson: ClientLesson): number {
+    const total = (lesson.vehicle_inspection_minutes || 0)
+      + (lesson.cockpit_drill_minutes || 0)
+      + (lesson.video_illustration_minutes || 0)
+      + (lesson.practical_driving_minutes || 0)
+      + (lesson.assessment_minutes || 0);
+    return (total > 0 ? total : 30) * 60;
+  }
+
+  private _startExecutionTimer() {
+    this.executionIsRunning.set(true);
+    this.executionIsPaused.set(false);
+    if (this._executionTimerInterval) clearInterval(this._executionTimerInterval);
+    this._executionTimerInterval = setInterval(() => {
+      const elapsed = this.executionElapsedSeconds() + 1;
+      this.executionElapsedSeconds.set(elapsed);
+      const total = this.executionTotalSeconds();
+      const remaining = Math.max(0, total - elapsed);
+      const mins = Math.floor(remaining / 60);
+      const secs = remaining % 60;
+      this.executionTimerDisplay.set(`${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
+      this.executionProgress.set(total > 0 ? Math.min(100, Math.round((elapsed / total) * 100)) : 0);
+      if (remaining <= 300 && remaining > 0 && !this.executionTimeoutWarned()) {
+        this.executionTimeoutWarned.set(true);
+        this.messageService.add({ severity: 'warn', summary: 'Time', detail: '5 minutes remaining!' });
+      }
+      if (remaining <= 60 && remaining > 0) {
+        this.messageService.add({ severity: 'warn', summary: 'Time', detail: '1 minute remaining!' });
+      }
+      if (remaining <= 0) {
+        if (this.executionIsRunning()) {
+          this.stopExecutionTimer();
+          this.executionTimeoutWarned.set(true);
+          this.messageService.add({ severity: 'warn', summary: 'Time Up', detail: 'Lesson time has expired. Enter notes and click End Lesson.' });
+        }
+        return;
+      }
+      if (elapsed % 15 === 0) {
+        const execLesson = this.executingLesson();
+        if (execLesson) {
+          this.lessonPlanService.syncLessonTimer(execLesson.id, elapsed).subscribe({ error: () => {} });
+        }
+      }
+    }, 1000);
+  }
+
+  stopExecutionTimer() {
+    if (this._executionTimerInterval) {
+      clearInterval(this._executionTimerInterval);
+      this._executionTimerInterval = null;
+    }
+    this.executionIsRunning.set(false);
+    this.executionIsPaused.set(false);
+  }
+
+  toggleObjectiveChecked(index: number) {
+    this.executionCheckedObjectives.update(arr => {
+      const a = [...arr];
+      a[index] = !a[index];
+      return a;
+    });
+    this.syncCheckedObjectives();
+  }
+
+  togglePracticalChecked(index: number) {
+    this.executionCheckedPractical.update(arr => {
+      const a = [...arr];
+      a[index] = !a[index];
+      return a;
+    });
+    this.syncCheckedObjectives();
+  }
+
+  private async syncCheckedObjectives() {
+    const lesson = this.executingLesson();
+    if (!lesson) return;
+    const outcome = JSON.stringify({
+      objectives_checked: this.executionCheckedObjectives(),
+      practical_checked: this.executionCheckedPractical(),
+    });
+    try {
+      const updated = await this.lessonPlanService.updateClientLesson(lesson.id, { outcome } as ClientLessonUpdate).toPromise();
+      if (updated) this.updateLessonInList(updated);
+    } catch {}
+  }
+
+  async pauseExecutionLesson() {
+    await this.syncCheckedObjectives();
+    this.stopExecutionTimer();
+    this.executionIsPaused.set(true);
+    const lesson = this.executingLesson();
+    if (!lesson) return;
+    try {
+      await this.lessonPlanService.pauseLessonTimer(lesson.id).toPromise();
+      this.messageService.add({ severity: 'info', summary: 'Paused', detail: 'Lesson timer paused' });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to pause timer' });
+    }
+  }
+
+  async resumeExecutionLesson() {
+    const lesson = this.executingLesson();
+    if (!lesson) return;
+    try {
+      await this.lessonPlanService.resumeLessonTimer(lesson.id).toPromise();
+      this._startExecutionTimer();
+      this.messageService.add({ severity: 'info', summary: 'Resumed', detail: 'Lesson timer resumed' });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to resume timer' });
+    }
+  }
+
+  async endExecutionLesson() {
+    this.stopExecutionTimer();
+    const lesson = this.executingLesson();
+    if (!lesson) return;
+    // Auto-check any unchecked objectives
+    const allChecked = this.executionCheckedObjectives().map(() => true);
+    const allCheckedPractical = this.executionCheckedPractical().map(() => true);
+    this.executionCheckedObjectives.set(allChecked);
+    this.executionCheckedPractical.set(allCheckedPractical);
+    const outcome = JSON.stringify({
+      objectives_checked: allChecked,
+      practical_checked: allCheckedPractical,
+    });
+    try {
+      const updated = await this.lessonPlanService.completeLesson(lesson.id, outcome, this.executionNotes() || undefined).toPromise();
+      if (updated) this.updateLessonInList(updated);
+      this.messageService.add({ severity: 'success', summary: 'Completed', detail: 'Lesson completed' });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to complete lesson' });
+    }
+    this.closeExecutionDialog();
+  }
+
+  closeExecutionDialog() {
+    this.stopExecutionTimer();
+    this.showExecutionDialog.set(false);
+    this.executingLesson.set(null);
+    this.executionVideoUrl.set(null);
+    this.executionVideoSource.set(null);
+    this.showNotificationsPanel.set(false);
+  }
+
+  focusLesson(lesson: ClientLesson) {
+    if (lesson.status === 'started') {
+      this.restoreExecutionDialog(lesson);
+    } else {
+      this.openLessonDetail(lesson);
+    }
+  }
+
+  async loadExecutionVideo(lesson: ClientLesson) {
+    if (!lesson.lesson_library_id) return;
+    try {
+      const lib = await this.lessonLibraryService.get(lesson.lesson_library_id).toPromise();
+      if (lib && lib.videos?.length) {
+        const v = lib.videos[0];
+        if (v.source === 'youtube' || v.source === 'vimeo') {
+          this.executionVideoUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(v.url!));
+          this.executionVideoSource.set(v.source);
+        } else if (v.source === 'upload') {
+          this.executionVideoUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(this.videoLibraryService.getStreamUrl(v.id)));
+          this.executionVideoSource.set('upload');
+        }
+      }
+    } catch { /* no video */ }
+  }
+
+  async loadUpcomingClients() {
+    const current = this.consultation();
+    if (!current) return;
+    try {
+      const res = await this.consultationService.list({ stage: 'active', page_size: 5 }).toPromise();
+      const others = (res?.consultations || [])
+        .filter(c => c.id !== current.id && c.cart_items?.some(ci => ci.requires_driving_training || ci.requires_theory_training))
+        .slice(0, 2)
+        .map(c => ({
+          name: this.fullName(c),
+          product: 'Training',
+          transmission: '—',
+        }));
+      this.executionUpcomingClients.set(others);
+    } catch { this.executionUpcomingClients.set([]); }
+  }
+
   openLessonDetail(lesson: ClientLesson) {
     this.editingLesson.set(lesson);
     this.lessonEditForm = {
@@ -760,14 +1494,31 @@ export class ClientProfile implements OnInit {
       practical_objectives: lesson.practical_objectives,
       is_active: lesson.is_active,
       status: lesson.status,
+      vehicle_inspection_minutes: lesson.vehicle_inspection_minutes,
+      cockpit_drill_minutes: lesson.cockpit_drill_minutes,
+      video_illustration_minutes: lesson.video_illustration_minutes,
+      practical_driving_minutes: lesson.practical_driving_minutes,
+      assessment_minutes: lesson.assessment_minutes,
       driving_minutes: lesson.driving_minutes,
       theory_minutes: lesson.theory_minutes,
       mileage_km: lesson.mileage_km,
+      is_theory: lesson.is_theory,
       combined_with_next: lesson.combined_with_next,
       skills_achieved: lesson.skills_achieved || [],
       notes: lesson.notes,
     };
     this.showLessonDetailDialog.set(true);
+  }
+
+  onLessonTheoryToggle() {
+    // Reset session structure when toggling to theory
+    if (this.lessonEditForm.is_theory) {
+      this.lessonEditForm.vehicle_inspection_minutes = null;
+      this.lessonEditForm.cockpit_drill_minutes = null;
+      this.lessonEditForm.video_illustration_minutes = null;
+      this.lessonEditForm.practical_driving_minutes = null;
+      this.lessonEditForm.assessment_minutes = null;
+    }
   }
 
   async saveLessonDetail() {
@@ -1410,8 +2161,47 @@ export class ClientProfile implements OnInit {
   }
 
   printLessonPlan(ci: CartItemRead, plan: ClientLessonPlan) {
+    this.printPreviewData.set({ ci, plan });
+    this.printShowObjectives.set(true);
+    this.printShowPractical.set(true);
+    this.showPrintPreview.set(true);
+    this.updatePrintPreviewUrl();
+  }
+
+  togglePrintOption(field: 'objectives' | 'practical') {
+    if (field === 'objectives') this.printShowObjectives.update(v => !v);
+    else this.printShowPractical.update(v => !v);
+    this.updatePrintPreviewUrl();
+  }
+
+  private updatePrintPreviewUrl() {
+    if (this._printPreviewObjectUrl) {
+      URL.revokeObjectURL(this._printPreviewObjectUrl);
+      this._printPreviewObjectUrl = null;
+    }
+    const html = this._buildFullPrintHtml();
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    this._printPreviewObjectUrl = url;
+    this.printPreviewHtml.set(url);
+  }
+
+  doPrint() {
+    const html = this._buildFullPrintHtml();
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+  }
+
+  private _buildFullPrintHtml(): string {
+    const data = this.printPreviewData();
+    const ci = data.ci;
+    const plan = data.plan;
+    if (!ci || !plan) return '';
     const consultation = this.consultation();
-    if (!consultation) return;
+    if (!consultation) return '';
     const studentName = this.fullName(consultation);
     const prodName = this.productName(ci);
     const pkgName = this.packageName(ci);
@@ -1430,69 +2220,79 @@ export class ClientProfile implements OnInit {
         case 'makeup': return 'Makeup';
         case 'excused': return 'Excused';
         case 'partially_completed': return 'Partial';
-        case 'ready': return 'Ready';
-        case 'started': return 'Started';
         default: return 'Pending';
       }
     };
 
-    const rows = activeLessons.map(l => `
-      <tr>
-        <td>${l.day_number}</td>
-        <td>${l.week_number}</td>
-        <td>${l.title}</td>
-        <td>${l.lesson_objectives?.join('; ') || ''}</td>
-        <td>${l.practical_objectives?.join('; ') || ''}</td>
-        <td>${statusLabel(l.status)}</td>
-      </tr>
-    `).join('');
+    const showObjectives = this.printShowObjectives();
+    const showPractical = this.printShowPractical();
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html><head><title>Lesson Plan — ${studentName}</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 30px; font-size: 12px; color: #333; }
-        h1 { font-size: 18px; margin: 0 0 4px; }
-        h2 { font-size: 14px; margin: 0 0 4px; color: #555; }
-        .header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #333; padding-bottom: 12px; }
-        .header h1 { font-size: 20px; }
-        .info-grid { display: flex; gap: 24px; margin-bottom: 20px; }
-        .info-grid div { flex: 1; }
-        .info-grid label { font-weight: bold; font-size: 11px; color: #777; text-transform: uppercase; display: block; margin-bottom: 2px; }
-        .info-grid span { font-size: 13px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        th { background: #f5f5f5; text-align: left; padding: 6px 8px; font-size: 11px; text-transform: uppercase; color: #555; border-bottom: 2px solid #ddd; }
-        td { padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 12px; }
-        .status { font-weight: bold; }
-        .status-completed { color: #2e7d32; }
-        .status-in_progress { color: #1565c0; }
-        .status-pending { color: #888; }
-        .status-skipped { color: #e65100; }
-        .footer { margin-top: 24px; font-size: 10px; color: #aaa; text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
-      </style></head><body>
-      <div class="header">
-        <h1>Lesson Plan</h1>
-      </div>
-      <div class="info-grid">
-        <div><label>Student</label><span>${studentName}</span></div>
-        <div><label>Product</label><span>${prodName}${pkgName ? ' — ' + pkgName : ''}</span></div>
-        <div><label>Transmission</label><span>${transmission}</span></div>
-        <div><label>Start Date</label><span>${startDate}</span></div>
-      </div>
-      <table>
-        <thead>
-          <tr><th>Day</th><th>Week</th><th>Lesson</th><th>Lesson Objectives</th><th>Practical Objectives</th><th>Status</th></tr>
-        </thead>
-        <tbody>
-          ${rows || '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:20px;">No active lessons.</td></tr>'}
-        </tbody>
-      </table>
-      <div class="footer">Generated on ${new Date().toLocaleDateString()} — Driving School CRM</div>
-      </body></html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
+    const rows = activeLessons.map(l => {
+      let extra = '';
+      if ((showObjectives && l.lesson_objectives?.length) || (showPractical && l.practical_objectives?.length)) {
+        extra += '<div style="margin-top:4px;font-size:11px;color:#555;">';
+        if (showObjectives && l.lesson_objectives?.length) {
+          extra += '<div><strong>Objectives:</strong> ' + l.lesson_objectives.join(', ') + '</div>';
+        }
+        if (showPractical && l.practical_objectives?.length) {
+          extra += '<div><strong>Practical:</strong> ' + l.practical_objectives.join(', ') + '</div>';
+        }
+        extra += '</div>';
+      }
+      return `
+      <tr>
+        <td style="padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 12px; vertical-align: top;">${l.day_number}</td>
+        <td style="padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 12px; vertical-align: top;">${l.week_number}</td>
+        <td style="padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 12px; vertical-align: top;">${l.title}${l.difficulty ? ' <span style="color:#888;font-size:11px;">(' + l.difficulty + ')</span>' : ''}${l.is_theory ? ' <span style="color:#2563eb;font-size:11px;">[Theory]</span>' : ''}</td>
+        <td style="padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 12px; vertical-align: top;">${statusLabel(l.status)}</td>
+      </tr>
+      ${extra ? `<tr><td colspan="4" style="padding:0 8px 6px; border-bottom: 1px solid #eee;">${extra}</td></tr>` : ''}`;
+    }).join('');
+
+    return `<!DOCTYPE html>
+<html><head><title>Lesson Plan — ${studentName}</title>
+<style>
+  @page { size: A4 portrait; margin: 20mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; padding: 0; font-size: 12px; color: #333; margin: 0; }
+  @media screen {
+    body { max-width: 210mm; margin: 20mm auto; background: #fff; min-height: 297mm; padding: 0 20mm; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+  }
+  .header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #333; padding-bottom: 12px; }
+  .header h1 { font-size: 20px; margin: 0; }
+  .header h2 { font-size: 14px; margin: 4px 0 0; color: #555; font-weight: normal; }
+  .info-row { margin-bottom: 20px; }
+  .info-row table { width: 100%; border-collapse: collapse; }
+  .info-row td { padding: 4px 16px 4px 0; vertical-align: top; }
+  .info-row label { font-weight: bold; font-size: 10px; color: #777; text-transform: uppercase; display: block; margin-bottom: 1px; letter-spacing: 0.5px; }
+  .info-row span { font-size: 13px; }
+  table.lessons { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  table.lessons th { background: #f5f5f5; text-align: left; padding: 6px 8px; font-size: 10px; text-transform: uppercase; color: #555; border-bottom: 2px solid #ddd; letter-spacing: 0.5px; }
+  table.lessons td { padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 12px; vertical-align: top; }
+  .footer { margin-top: 24px; font-size: 9px; color: #aaa; text-align: center; border-top: 1px solid #ddd; padding-top: 6px; }
+</style></head><body>
+  <div class="header">
+    <h1>Lesson Plan</h1>
+    <h2>${studentName}</h2>
+  </div>
+  <div class="info-row">
+    <table><tr>
+      <td><label>Product</label><span>${prodName}${pkgName ? ' — ' + pkgName : ''}</span></td>
+      <td><label>Transmission</label><span>${transmission}</span></td>
+      <td><label>Start Date</label><span>${startDate}</span></td>
+      <td><label>Plan Status</label><span>${plan.status === 'completed' ? 'Completed' : 'Active'}${plan.is_extension ? ' (Extension)' : ''}</span></td>
+    </tr></table>
+  </div>
+  <table class="lessons">
+    <thead>
+      <tr><th style="width:10%">Day</th><th style="width:10%">Week</th><th>Lesson</th><th style="width:14%">Status</th></tr>
+    </thead>
+    <tbody>
+      ${rows || '<tr><td colspan="4" style="text-align:center;color:#aaa;padding:20px;">No active lessons.</td></tr>'}
+    </tbody>
+  </table>
+  <div class="footer">Generated on ${new Date().toLocaleDateString()} — Driving School CRM</div>
+</body></html>`;
   }
 
   closeAddReceipt() {

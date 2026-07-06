@@ -58,6 +58,7 @@ async def create_lesson(
         training_category=data.training_category,
         prerequisite_competencies=data.prerequisite_competencies,
         prerequisite_lesson_ids=data.prerequisite_lesson_ids,
+        is_theory=data.is_theory,
     )
     return LessonLibraryRead.model_validate(lesson)
 
@@ -113,6 +114,7 @@ async def update_lesson(
         training_category=data.training_category,
         prerequisite_competencies=data.prerequisite_competencies,
         prerequisite_lesson_ids=data.prerequisite_lesson_ids,
+        is_theory=data.is_theory,
     )
     return LessonLibraryRead.model_validate(updated)
 

@@ -81,6 +81,7 @@
           <th>Phone</th>
           <th>Name</th>
           <th>Role</th>
+          <th>Company</th>
           <th>Status</th>
           <th>Created</th>
           <th>Actions</th>
@@ -92,6 +93,12 @@
           <td class="font-medium">{{ user.name }}</td>
           <td>
             <p-tag [value]="roleLabel(user.role)" [severity]="user.role === 'super_user' ? 'info' : 'secondary'" />
+          </td>
+          <td class="text-xs text-gray-500">
+            @if (user.is_company_admin) {
+              <p-tag value="Admin" severity="info" styleClass="mr-1" />
+            }
+            {{ companyName(user.company_id) }}
           </td>
           <td>
             <p-tag
@@ -236,7 +243,25 @@
           optionValue="value"
           placeholder="Select role"
           styleClass="w-full"
+          appendTo="body"
         />
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Company</label>
+        <p-select
+          [(ngModel)]="newUser.company_id"
+          [options]="companies()"
+          optionLabel="name"
+          optionValue="id"
+          placeholder="Assign to company"
+          styleClass="w-full"
+          appendTo="body"
+          [showClear]="true"
+        />
+      </div>
+      <div class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="newUser.is_company_admin" [binary]="true" inputId="create_admin" />
+        <label for="create_admin" class="text-sm">Company Admin</label>
       </div>
       <p-button
         label="Create User"
@@ -268,13 +293,31 @@
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">Role</label>
           <p-select
-            [(ngModel)]="editData.role"
-            [options]="roles"
-            optionLabel="label"
-            optionValue="value"
-            placeholder="Select role"
+          [(ngModel)]="editData.role"
+          [options]="roles"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Select role"
+          styleClass="w-full"
+          appendTo="body"
+        />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Company</label>
+          <p-select
+            [(ngModel)]="editData.company_id"
+            [options]="companies()"
+            optionLabel="name"
+            optionValue="id"
+            placeholder="Assign to company"
             styleClass="w-full"
+            appendTo="body"
+            [showClear]="true"
           />
+        </div>
+        <div class="flex items-center gap-2">
+          <p-checkbox [(ngModel)]="editData.is_company_admin" [binary]="true" inputId="edit_admin" />
+          <label for="edit_admin" class="text-sm">Company Admin</label>
         </div>
         <p-button
           label="Save Changes"

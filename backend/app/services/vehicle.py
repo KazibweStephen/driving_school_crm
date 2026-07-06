@@ -1,9 +1,24 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.company import VehicleBranchAssignment
 from app.models.lesson_plan import TransmissionType, Vehicle, VehicleStatus
+
+
+async def _sync_branch_assignments(
+    db: AsyncSession,
+    vehicle_id: uuid.UUID,
+    branch_ids: list[uuid.UUID],
+) -> None:
+    """Replace all branch assignments for a vehicle with the given list."""
+    await db.execute(
+        delete(VehicleBranchAssignment).where(VehicleBranchAssignment.vehicle_id == vehicle_id)
+    )
+    for bid in branch_ids:
+        db.add(VehicleBranchAssignment(vehicle_id=vehicle_id, branch_id=bid))
+    await db.flush()
 
 
 async def create_vehicle(
@@ -12,6 +27,7 @@ async def create_vehicle(
     plate_number: str,
     transmission: str,
     notes: str | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
 ) -> Vehicle:
     vehicle = Vehicle(
         name=name,
@@ -21,6 +37,12 @@ async def create_vehicle(
     )
     db.add(vehicle)
     await db.flush()
+
+    if branch_ids:
+        for bid in branch_ids:
+            db.add(VehicleBranchAssignment(vehicle_id=vehicle.id, branch_id=bid))
+        await db.flush()
+
     await db.refresh(vehicle)
     return vehicle
 
@@ -28,6 +50,13 @@ async def create_vehicle(
 async def get_vehicle_by_id(db: AsyncSession, vehicle_id: uuid.UUID) -> Vehicle | None:
     result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
     return result.scalar_one_or_none()
+
+
+async def _get_branch_ids(db: AsyncSession, vehicle_id: uuid.UUID) -> list[uuid.UUID]:
+    result = await db.execute(
+        select(VehicleBranchAssignment).where(VehicleBranchAssignment.vehicle_id == vehicle_id)
+    )
+    return [a.branch_id for a in result.scalars().all()]
 
 
 async def list_vehicles(
@@ -52,6 +81,7 @@ async def update_vehicle(
     transmission: str | None = None,
     status: str | None = None,
     notes: str | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
 ) -> Vehicle:
     if name is not None:
         vehicle.name = name
@@ -63,6 +93,8 @@ async def update_vehicle(
         vehicle.status = VehicleStatus(status)
     if notes is not None:
         vehicle.notes = notes
+    if branch_ids is not None:
+        await _sync_branch_assignments(db, vehicle.id, branch_ids)
     await db.flush()
     await db.refresh(vehicle)
     return vehicle

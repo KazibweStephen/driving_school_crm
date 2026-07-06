@@ -18,6 +18,8 @@ class PackageCreate(BaseModel):
     driving_training_duration_days: int | None = None
     theory_training_hours: int | None = None
     permit_processing_duration_days: int | None = None
+    is_extension: bool = False
+    extension_days: int | None = None
 
 
 class PackageUpdate(BaseModel):
@@ -31,6 +33,8 @@ class PackageUpdate(BaseModel):
     driving_training_duration_days: int | None = None
     theory_training_hours: int | None = None
     permit_processing_duration_days: int | None = None
+    is_extension: bool | None = None
+    extension_days: int | None = None
 
 
 class PackageRead(BaseModel):
@@ -45,6 +49,8 @@ class PackageRead(BaseModel):
     driving_training_duration_days: int | None
     theory_training_hours: int | None
     permit_processing_duration_days: int | None
+    is_extension: bool
+    extension_days: int | None
     status: EntityStatus
     created_by_phone: str | None
     created_at: datetime
@@ -57,6 +63,8 @@ class ProductCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     duration_label: str | None = None
     description: str | None = None
+    is_extension: bool = False
+    company_id: uuid.UUID | None = None
 
 
 class ProductUpdate(BaseModel):
@@ -64,6 +72,8 @@ class ProductUpdate(BaseModel):
     duration_label: str | None = None
     description: str | None = None
     status: EntityStatus | None = None
+    is_extension: bool | None = None
+    company_id: uuid.UUID | None = None
 
 
 class ProductRead(BaseModel):
@@ -71,7 +81,9 @@ class ProductRead(BaseModel):
     name: str
     duration_label: str | None
     description: str | None
+    is_extension: bool
     status: EntityStatus
+    company_id: uuid.UUID | None = None
     created_by_phone: str | None
     created_at: datetime
     updated_at: datetime

@@ -1,8 +1,8 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text, Time, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -104,6 +104,9 @@ class VideoLibrary(Base):
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     thumbnail_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     qr_code_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     created_by_phone: Mapped[str | None] = mapped_column(
         ForeignKey("users.phone"), nullable=True
     )
@@ -140,6 +143,10 @@ class LessonPlanTemplate(Base):
     )
 
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    template_type: Mapped[str] = mapped_column(String(20), default="practical", nullable=False)
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     created_by_phone: Mapped[str | None] = mapped_column(
         ForeignKey("users.phone"), nullable=True
     )
@@ -179,6 +186,7 @@ class LessonTemplateItem(Base):
     )
     preferred_location: Mapped[str | None] = mapped_column(String(300), nullable=True)
     enforce_prerequisites: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_theory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -213,7 +221,14 @@ class ClientLessonPlan(Base):
     )
     purchased_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     auto_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_extension: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    extension_of_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("client_lesson_plans.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    extension_days_added: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    template_type: Mapped[str] = mapped_column(String(20), default="practical", nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    manual_days: Mapped[int | None] = mapped_column(Integer, default=5, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -260,10 +275,17 @@ class ClientLesson(Base):
     difficulty: Mapped[LessonDifficulty | None] = mapped_column(
         Enum(LessonDifficulty, values_callable=_values_callable), nullable=True
     )
-    # Actual session tracking
+    # Session structure (Daily Practical Session)
+    vehicle_inspection_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cockpit_drill_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    video_illustration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    practical_driving_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    assessment_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Legacy session tracking (kept for backward compat)
     driving_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     theory_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     mileage_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_theory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     combined_with_next: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     skills_achieved: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=list)
     outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -272,6 +294,12 @@ class ClientLesson(Base):
         ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Scheduling fields
+    scheduled_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    scheduled_start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    scheduled_end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    duration_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    plan_locked_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     preferred_location: Mapped[str | None] = mapped_column(String(300), nullable=True)
     enforce_prerequisites: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -296,6 +324,32 @@ class ClientLesson(Base):
         "LessonHistory", back_populates="lesson", cascade="all, delete-orphan"
     )
     vehicle: Mapped["Vehicle | None"] = relationship("Vehicle")
+
+
+# ── Client Availability ──
+
+
+class ClientAvailability(Base):
+    __tablename__ = "client_availabilities"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    cart_item_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cart_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)  # 0=Monday..4=Friday
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    cart_item: Mapped["CartItem"] = relationship("CartItem")
+    branch: Mapped["Branch | None"] = relationship("Branch", back_populates="client_availabilities")
 
 
 # ── Master Lesson Library ──
@@ -331,6 +385,10 @@ class LessonLibrary(Base):
     preferred_location: Mapped[str | None] = mapped_column(String(300), nullable=True)
     training_category: Mapped[str] = mapped_column(String(50), default="driving", nullable=False)
     prerequisite_competencies: Mapped[list | None] = mapped_column(JSONB, nullable=True, default=list)
+    is_theory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     created_by_phone: Mapped[str | None] = mapped_column(
         ForeignKey("users.phone"), nullable=True
     )
@@ -592,10 +650,66 @@ class Vehicle(Base):
         Enum(VehicleStatus, values_callable=_values_callable),
         default=VehicleStatus.AVAILABLE, nullable=False
     )
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    assignments: Mapped[list["VehicleAssignment"]] = relationship(
+        "VehicleAssignment", back_populates="vehicle", cascade="all, delete-orphan",
+        order_by="VehicleAssignment.assigned_from"
+    )
+    branch_assignments: Mapped[list["VehicleBranchAssignment"]] = relationship(
+        "VehicleBranchAssignment", back_populates="vehicle", cascade="all, delete-orphan"
+    )
+
+
+class VehicleAssignment(Base):
+    __tablename__ = "vehicle_assignments"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    vehicle_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    instructor_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    assigned_from: Mapped[date] = mapped_column(Date, nullable=False)
+    assigned_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    vehicle: Mapped["Vehicle"] = relationship("Vehicle", back_populates="assignments")
+
+
+class VehicleScheduleSlot(Base):
+    """Recurring weekly instructor assignment for a vehicle (Mon-Fri, 30-min slots)."""
+    __tablename__ = "vehicle_schedule_slots"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    vehicle_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    instructor_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)  # 0=Monday..4=Friday
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    vehicle: Mapped["Vehicle"] = relationship("Vehicle")
+    __table_args__ = (
+        Index("ix_vss_vehicle_day_time", "vehicle_id", "day_of_week", "start_time"),
     )

@@ -1,7 +1,9 @@
 import enum
+import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, func
+from sqlalchemy.dialects.postgresql import UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -34,6 +36,10 @@ class User(Base):
     status: Mapped[UserStatus] = mapped_column(
         Enum(UserStatus), default=UserStatus.ACTIVE, nullable=False
     )
+    is_company_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_by_phone: Mapped[str | None] = mapped_column(
         ForeignKey("users.phone"), nullable=True
     )
@@ -51,4 +57,7 @@ class User(Base):
 
     created_by: Mapped["User | None"] = relationship(
         "User", remote_side="User.phone", backref="created_users"
+    )
+    branch_assignments: Mapped[list["UserBranchAssignment"]] = relationship(
+        "UserBranchAssignment", back_populates="user", cascade="all, delete-orphan"
     )

@@ -37,6 +37,7 @@ export interface LessonLibrary {
   preferred_location: string | null;
   training_category: string;
   prerequisite_competencies: string[];
+  is_theory: boolean;
   prerequisite_lessons: { id: string; title: string; lesson_number: number }[];
   videos: VideoLibrary[];
   created_by_phone: string | null;
@@ -64,7 +65,9 @@ export interface LessonLibraryCreate {
   prerequisite_competencies?: string[];
   prerequisite_lesson_ids?: string[];
   video_ids?: string[];
+  is_theory?: boolean;
 }
+
 
 export interface LessonLibraryUpdate {
   title?: string;
@@ -86,6 +89,7 @@ export interface LessonLibraryUpdate {
   training_category?: string;
   prerequisite_competencies?: string[];
   prerequisite_lesson_ids?: string[];
+  is_theory?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })

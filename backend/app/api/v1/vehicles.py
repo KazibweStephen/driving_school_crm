@@ -20,7 +20,12 @@ async def list_vehicles(
     current_user: User = Depends(get_current_user),
 ):
     vehicles = await vehicle_service.list_vehicles(db, status, transmission)
-    return [VehicleRead.model_validate(v) for v in vehicles]
+    result = []
+    for v in vehicles:
+        item = VehicleRead.model_validate(v)
+        item.branch_ids = await vehicle_service._get_branch_ids(db, v.id)
+        result.append(item)
+    return result
 
 
 @router.post("/api/v1/vehicles", response_model=VehicleRead, status_code=201)
@@ -35,8 +40,11 @@ async def create_vehicle(
         plate_number=data.plate_number,
         transmission=data.transmission,
         notes=data.notes,
+        branch_ids=data.branch_ids,
     )
-    return VehicleRead.model_validate(vehicle)
+    v = VehicleRead.model_validate(vehicle)
+    v.branch_ids = await vehicle_service._get_branch_ids(db, vehicle.id)
+    return v
 
 
 @router.get("/api/v1/vehicles/{vehicle_id}", response_model=VehicleRead)
@@ -52,7 +60,9 @@ async def get_vehicle(
     vehicle = await vehicle_service.get_vehicle_by_id(db, vid)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
-    return VehicleRead.model_validate(vehicle)
+    v = VehicleRead.model_validate(vehicle)
+    v.branch_ids = await vehicle_service._get_branch_ids(db, vehicle.id)
+    return v
 
 
 @router.patch("/api/v1/vehicles/{vehicle_id}", response_model=VehicleRead)
@@ -76,8 +86,11 @@ async def update_vehicle(
         transmission=data.transmission,
         status=data.status,
         notes=data.notes,
+        branch_ids=data.branch_ids,
     )
-    return VehicleRead.model_validate(updated)
+    v = VehicleRead.model_validate(updated)
+    v.branch_ids = await vehicle_service._get_branch_ids(db, vehicle.id)
+    return v
 
 
 @router.delete("/api/v1/vehicles/{vehicle_id}", status_code=204)

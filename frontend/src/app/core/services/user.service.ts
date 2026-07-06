@@ -6,6 +6,8 @@ export interface User {
   name: string;
   role: string;
   status: string;
+  is_company_admin: boolean;
+  company_id: string | null;
   created_by_phone: string | null;
   created_at: string;
   updated_at: string;
@@ -15,12 +17,16 @@ export interface UserCreate {
   phone: string;
   name: string;
   role: string;
+  company_id?: string | null;
+  is_company_admin?: boolean;
 }
 
 export interface UserUpdate {
   name?: string;
   role?: string;
   status?: string;
+  company_id?: string | null;
+  is_company_admin?: boolean;
 }
 
 export interface PinChange {

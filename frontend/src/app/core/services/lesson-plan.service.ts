@@ -19,6 +19,7 @@ export interface LessonTemplateItem {
   lesson_library_id: string | null;
   preferred_location: string | null;
   enforce_prerequisites: boolean;
+  is_theory: boolean;
   training_category: string;
   prerequisite_competencies: any;
   prerequisite_lesson_ids: string[];
@@ -33,6 +34,7 @@ export interface LessonPlanTemplate {
   description: string | null;
   total_days: number;
   total_weeks: number;
+  template_type: string;
   lesson_items: LessonTemplateItem[];
   created_by_phone: string | null;
   created_at: string;
@@ -40,6 +42,7 @@ export interface LessonPlanTemplate {
 }
 
 export interface LessonTemplateItemCreate {
+  id?: string;
   day_number: number;
   week_number: number;
   title: string;
@@ -58,6 +61,7 @@ export interface LessonTemplateItemCreate {
   training_category?: string;
   prerequisite_competencies?: string[];
   prerequisite_lesson_ids?: string[];
+  is_theory?: boolean;
 }
 
 export interface LessonTemplateItemUpdate {
@@ -79,6 +83,7 @@ export interface LessonTemplateItemUpdate {
   training_category?: string;
   prerequisite_competencies?: string[];
   prerequisite_lesson_ids?: string[];
+  is_theory?: boolean;
 }
 
 export interface LessonPlanTemplateCreate {
@@ -87,6 +92,7 @@ export interface LessonPlanTemplateCreate {
   description?: string;
   total_days?: number;
   total_weeks?: number;
+  template_type?: string;
   items: LessonTemplateItemCreate[];
 }
 
@@ -95,6 +101,8 @@ export interface LessonPlanTemplateUpdate {
   description?: string;
   total_days?: number;
   total_weeks?: number;
+  template_type?: string;
+  items?: LessonTemplateItemCreate[];
 }
 
 export interface ClientLesson {
@@ -112,9 +120,15 @@ export interface ClientLesson {
   is_locked: boolean;
   status: string;
   difficulty: string | null;
+  vehicle_inspection_minutes: number | null;
+  cockpit_drill_minutes: number | null;
+  video_illustration_minutes: number | null;
+  practical_driving_minutes: number | null;
+  assessment_minutes: number | null;
   driving_minutes: number | null;
   theory_minutes: number | null;
   mileage_km: number | null;
+  is_theory: boolean;
   combined_with_next: boolean;
   skills_achieved: any[] | null;
   outcome: string | null;
@@ -123,6 +137,12 @@ export interface ClientLesson {
   preferred_location: string | null;
   enforce_prerequisites: boolean;
   completed_at: string | null;
+  // Scheduling fields
+  scheduled_date: string | null;
+  scheduled_start_time: string | null;
+  scheduled_end_time: string | null;
+  duration_minutes: number;
+  plan_locked_time: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -137,7 +157,12 @@ export interface ClientLessonPlan {
   status: string;
   purchased_days: number | null;
   auto_generated: boolean;
+  is_extension: boolean;
+  extension_of_plan_id: string | null;
+  extension_days_added: number | null;
+  template_type: string;
   notes: string | null;
+  manual_days: number | null;
   lessons: ClientLesson[];
   created_at: string;
   updated_at: string;
@@ -145,17 +170,26 @@ export interface ClientLessonPlan {
 
 export interface ClientLessonPlanCreate {
   template_id?: string;
+  theory_template_id?: string;
   transmission_type: string;
   start_date?: string;
+  is_extension?: boolean;
+  extension_of_plan_id?: string;
+  extension_days_added?: number;
   notes?: string;
-  lessons?: { day_number: number; week_number: number; title: string; lesson_objectives?: string[]; practical_objectives?: string[]; order?: number; is_active?: boolean; preferred_location?: string; enforce_prerequisites?: boolean }[];
+  manual_days?: number;
+  lessons?: { day_number: number; week_number: number; title: string; lesson_objectives?: string[]; practical_objectives?: string[]; order?: number; is_active?: boolean; is_theory?: boolean; preferred_location?: string; enforce_prerequisites?: boolean }[];
 }
 
 export interface ClientLessonPlanUpdate {
   start_date?: string;
   status?: string;
   purchased_days?: number;
+  is_extension?: boolean;
+  extension_of_plan_id?: string;
+  extension_days_added?: number;
   notes?: string;
+  manual_days?: number;
 }
 
 export interface ClientLessonUpdate {
@@ -169,9 +203,15 @@ export interface ClientLessonUpdate {
   is_locked?: boolean;
   status?: string;
   difficulty?: string;
+  vehicle_inspection_minutes?: number | null;
+  cockpit_drill_minutes?: number | null;
+  video_illustration_minutes?: number | null;
+  practical_driving_minutes?: number | null;
+  assessment_minutes?: number | null;
   driving_minutes?: number | null;
   theory_minutes?: number | null;
   mileage_km?: number | null;
+  is_theory?: boolean;
   combined_with_next?: boolean;
   skills_achieved?: any[];
   outcome?: string;
@@ -249,8 +289,8 @@ export class LessonPlanService {
     return this.http.patch<ClientLessonPlan>(`/api/v1/lesson-plans/${planId}`, data);
   }
 
-  deleteClientPlan(planId: string) {
-    return this.http.delete(`/api/v1/lesson-plans/${planId}`);
+  deleteClientPlan(planId: string, deleteMode: string = 'all') {
+    return this.http.delete(`/api/v1/lesson-plans/${planId}?delete_mode=${deleteMode}`);
   }
 
   // ── Client Lessons ──
@@ -316,5 +356,30 @@ export class LessonPlanService {
 
   getLessonHistory(lessonId: string) {
     return this.http.get<any[]>(`/api/v1/lesson-plans/lessons/${lessonId}/history`);
+  }
+
+  // ── Lesson Timer ──
+
+  getLessonTimer(lessonId: string) {
+    return this.http.get<any>(`/api/v1/lessons/${lessonId}/timer`);
+  }
+
+  startLessonTimer(lessonId: string) {
+    return this.http.post<any>(`/api/v1/lessons/${lessonId}/timer/start`, {});
+  }
+
+  syncLessonTimer(lessonId: string, totalSeconds: number, distanceKm?: number) {
+    return this.http.put<any>(`/api/v1/lessons/${lessonId}/timer/sync`, {
+      total_seconds: totalSeconds,
+      distance_km: distanceKm,
+    });
+  }
+
+  pauseLessonTimer(lessonId: string) {
+    return this.http.post<any>(`/api/v1/lessons/${lessonId}/timer/pause`, {});
+  }
+
+  resumeLessonTimer(lessonId: string) {
+    return this.http.post<any>(`/api/v1/lessons/${lessonId}/timer/resume`, {});
   }
 }

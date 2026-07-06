@@ -8,6 +8,7 @@ export interface Vehicle {
   transmission: string;
   status: string;
   notes: string | null;
+  branch_ids: string[];
   created_at: string;
   updated_at: string;
 }
@@ -17,6 +18,7 @@ export interface VehicleCreate {
   plate_number: string;
   transmission: string;
   notes?: string;
+  branch_ids?: string[];
 }
 
 export interface VehicleUpdate {
@@ -25,6 +27,7 @@ export interface VehicleUpdate {
   transmission?: string;
   status?: string;
   notes?: string;
+  branch_ids?: string[];
 }
 
 @Injectable({ providedIn: 'root' })

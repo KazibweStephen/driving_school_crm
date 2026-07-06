@@ -2,6 +2,7 @@ import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
+import { CheckboxModule } from 'primeng/checkbox';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { DialogModule } from 'primeng/dialog';
@@ -14,6 +15,7 @@ import { ToastModule } from 'primeng/toast';
 import { TooltipModule } from 'primeng/tooltip';
 import { UserService, User } from '../../../core/services/user.service';
 import { AuthService } from '../../../core/auth/auth.service';
+import { CompanyService, Company } from '../../../core/services/company.service';
 
 @Component({
   selector: 'app-users',
@@ -21,6 +23,7 @@ import { AuthService } from '../../../core/auth/auth.service';
     FormsModule,
     DatePipe,
     ButtonModule,
+    CheckboxModule,
     ConfirmDialogModule,
     DialogModule,
     InputTextModule,
@@ -52,8 +55,9 @@ export class Users implements OnInit {
 
   editingUser = signal<User | null>(null);
 
-  newUser = { phone: '', name: '', role: 'office_admin' };
-  editData = { name: '', role: '' };
+  companies = signal<Company[]>([]);
+  newUser: { phone: string; name: string; role: string; company_id: string | null; is_company_admin: boolean } = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false };
+  editData: { name: string; role: string; company_id: string | null; is_company_admin: boolean } = { name: '', role: '', company_id: null, is_company_admin: false };
   resetPinResult = signal<string | null>(null);
   changePinData = { old_pin: '', new_pin: '' };
 
@@ -62,7 +66,14 @@ export class Users implements OnInit {
     { label: 'Branch Supervisor', value: 'branch_supervisor' },
     { label: 'Office Admin', value: 'office_admin' },
     { label: 'Instructor', value: 'instructor' },
+    { label: 'Manager', value: 'manager' },
+    { label: 'Reception', value: 'reception' },
   ];
+
+  companyName(id: string | null): string {
+    if (!id) return '-';
+    return this.companies().find(c => c.id === id)?.name || id.substring(0, 8);
+  }
 
   statuses = [
     { label: 'Active', value: 'active' },
@@ -73,12 +84,21 @@ export class Users implements OnInit {
   constructor(
     private userService: UserService,
     private auth: AuthService,
+    private companyService: CompanyService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
   ) {}
 
   ngOnInit() {
     this.loadUsers();
+    this.loadCompanies();
+  }
+
+  async loadCompanies() {
+    try {
+      const res = await this.companyService.list().toPromise();
+      this.companies.set(res || []);
+    } catch {}
   }
 
   async loadUsers() {
@@ -132,7 +152,7 @@ export class Users implements OnInit {
     try {
       await this.userService.create(this.newUser).toPromise();
       this.showCreateDialog.set(false);
-      this.newUser = { phone: '', name: '', role: 'office_admin' };
+      this.newUser = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false };
       await this.loadUsers();
       this.messageService.add({
         severity: 'success',
@@ -152,7 +172,7 @@ export class Users implements OnInit {
 
   openEdit(user: User) {
     this.editingUser.set(user);
-    this.editData = { name: user.name, role: user.role };
+    this.editData = { name: user.name, role: user.role, company_id: user.company_id, is_company_admin: user.is_company_admin };
     this.showEditDialog.set(true);
   }
 
@@ -165,6 +185,8 @@ export class Users implements OnInit {
         .update(user.phone, {
           name: this.editData.name,
           role: this.editData.role,
+          company_id: this.editData.company_id,
+          is_company_admin: this.editData.is_company_admin,
         })
         .toPromise();
       this.showEditDialog.set(false);

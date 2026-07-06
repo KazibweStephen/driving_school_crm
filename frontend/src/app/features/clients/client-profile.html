@@ -1,7 +1,18 @@
 <div class="p-4 sm:p-6">
-  <a [routerLink]="['/consultations']" class="mb-4 inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800">
-    <span class="pi pi-arrow-left"></span> Back to Consultations
-  </a>
+  <div class="mb-4 flex items-center justify-between">
+    <a [routerLink]="['/consultations']" class="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800">
+      <span class="pi pi-arrow-left"></span> Back to Consultations
+    </a>
+    <button (click)="viewMode.set(viewMode() === 'tabbed' ? 'detailed' : 'tabbed')"
+            class="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+            pTooltip="{{ viewMode() === 'tabbed' ? 'Switch to Detailed' : 'Switch to Tabbed' }}" tooltipPosition="left">
+      @if (viewMode() === 'tabbed') {
+        <span class="pi pi-list"></span> Detailed
+      } @else {
+        <span class="pi pi-th-large"></span> Tabbed
+      }
+    </button>
+  </div>
 
   @if (consultation(); as c) {
     <!-- Person Info Card -->
@@ -25,27 +36,8 @@
       </div>
     </div>
 
-    <!-- Workflow Section -->
-    <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
-      <h2 class="mb-4 text-lg font-bold text-gray-900">Workflow</h2>
-      <div class="flex flex-wrap items-center gap-2">
-        @for (t of transitions(); track t.status) {
-          <p-button
-            [label]="t.label"
-            [icon]="t.icon"
-            (onClick)="transitionTo(t.status)"
-            [loading]="loading()"
-            size="small"
-            [styleClass]="t.btnClass"
-          />
-        }
-        @if (transitions().length === 0) {
-          <p class="text-sm text-gray-500">This consultation is in its final state.</p>
-        }
-      </div>
-    </div>
-    
-    <!-- Products Section -->
+    @if (viewMode() === 'detailed') {
+      <!-- Products Section -->
     <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
       <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-lg font-bold text-gray-900">Products</h2>
@@ -423,7 +415,7 @@
         </div>
       </div>
 
-      @let trainingItems = trainableCartItems().filter(ci => ci.requires_driving_training || ci.requires_theory_training);
+      @let trainingItems = trainableCartItems().filter(ci => cartItemHasTraining(ci));
       @if (trainingItems.length === 0) {
         <p class="py-4 text-center text-sm text-gray-400">
           <span class="pi pi-info-circle mr-2"></span> Complete a sale to start tracking training sessions.
@@ -557,7 +549,7 @@
         @if (ci.requires_permit_processing) {
           @let pp = permitForCartItem(ci.id);
           @if (pp) {
-          <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
+        <div class="mb-6 rounded-xl border bg-white p-3 shadow-sm sm:p-6">
             <h2 class="mb-3 text-lg font-bold text-gray-900">Permit Processing — {{ productName(ci) }}{{ packageName(ci) ? ' (' + packageName(ci) + ')' : '' }}</h2>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
@@ -615,14 +607,33 @@
     }
 
     <!-- Lesson Plans -->
-    @if (trainableCartItems().filter(ci => ci.requires_driving_training || ci.requires_theory_training).length) {
-      @for (ci of trainableCartItems().filter(ci => ci.requires_driving_training || ci.requires_theory_training); track ci.id) {
+    @if (trainableCartItems().filter(ci => cartItemHasTraining(ci)).length) {
+      @for (ci of trainableCartItems().filter(ci => cartItemHasTraining(ci)); track ci.id) {
         @let plans = lessonPlansForCartItem(ci.id);
         <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
           <div class="mb-3 flex items-center justify-between">
             <h2 class="text-lg font-bold text-gray-900">Lesson Plan — {{ productName(ci) }}{{ packageName(ci) ? ' (' + packageName(ci) + ')' : '' }}</h2>
-            <p-button label="Create Plan" icon="pi pi-plus" size="small" severity="secondary"
-                      (onClick)="openCreateLessonPlan(ci.id)" />
+            <div class="flex items-center gap-2">
+              <div class="relative">
+                <p-button icon="pi pi-bell" severity="secondary" size="small" styleClass="p-button-rounded p-button-text" (onClick)="showNotificationsPanel.set(!showNotificationsPanel())" pTooltip="Notifications" tooltipPosition="top" [badge]="notificationCount() > 0 ? notificationCount().toString() : undefined" />
+                @if (showNotificationsPanel() && notificationLessons().length > 0) {
+                  <div class="absolute right-0 top-full z-50 mt-1 w-80 rounded-lg border bg-white shadow-lg">
+                    <div class="max-h-72 overflow-y-auto p-2">
+                      @for (item of notificationLessons(); track item.lesson.id) {
+                        <div class="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-gray-50 cursor-pointer" (click)="showNotificationsPanel.set(false); focusLesson(item.lesson)">
+                          <span class="h-2 w-2 shrink-0 rounded-full" [class.bg-blue-500]="item.label === 'Ongoing'" [class.bg-gray-400]="item.label === 'Upcoming'"></span>
+                          <span class="text-xs font-medium text-gray-500 w-16 shrink-0">{{ item.label }}</span>
+                          <span class="truncate">{{ item.lesson.title }}</span>
+                          <span class="shrink-0 text-xs text-gray-400">Day {{ item.lesson.day_number }}</span>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+              <p-button label="Create Plan" icon="pi pi-plus" size="small" severity="secondary"
+                        (onClick)="openCreateLessonPlan(ci.id)" />
+            </div>
           </div>
 
           @if (plans.length === 0) {
@@ -631,27 +642,51 @@
             @for (plan of plans; track plan.id) {
               @let activeLessons = plan.lessons.filter(l => l.is_active);
               @let templateLessons = getTemplateLessonsNotInPlan(plan);
-              <div class="mb-3 rounded-lg border bg-gray-50 p-3">
-                <div class="mb-2 flex items-center justify-between">
-                  <div>
-                    <p class="text-sm font-semibold text-gray-700">
-                      {{ plan.transmission_type === 'manual' ? 'Manual' : plan.transmission_type === 'automatic' ? 'Automatic' : 'Manual/Automatic' }}
-                      @if (plan.status === 'completed') {
-                        <span class="ml-2 text-xs text-green-600">(Completed)</span>
+              <div class="mb-2 rounded-lg border bg-gray-50 p-2 sm:p-3">
+                  <div class="mb-2 flex items-start">
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-semibold text-gray-700">
+                        {{ plan.transmission_type === 'manual' ? 'Manual' : plan.transmission_type === 'automatic' ? 'Automatic' : 'Manual/Automatic' }}
+                        @if ((plan.manual_days ?? 5) > 0) {
+                          <span class="ml-1 text-xs text-blue-600">· {{ plan.manual_days ?? 5 }} manual days</span>
+                        }
+                        @if (plan.status === 'completed') {
+                          <span class="ml-2 text-xs text-green-600">(Completed)</span>
+                        }
+                        @if (plan.template_type === 'theory') {
+                          <span class="ml-2 text-xs text-blue-600">(Theory)</span>
+                        }
+                      </p>
+                      @if (plan.start_date) {
+                        <p class="text-xs text-gray-500">Start: {{ plan.start_date | date:'dd/MM/yy' }}</p>
                       }
-                    </p>
-                    @if (plan.start_date) {
-                      <p class="text-xs text-gray-500">Start: {{ plan.start_date | date:'dd/MM/yy' }}</p>
-                    }
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0 ml-auto">
+                      @if (templateLessons.length > 0) {
+                        <p-button icon="pi pi-plus" severity="secondary" (onClick)="showAddFromTemplateLessonDialog.set(true); selectedPlanForTemplateLessons.set(plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Add from template" tooltipPosition="top" />
+                      }
+                      <p-button icon="pi pi-print" severity="secondary" (onClick)="printLessonPlan(ci, plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Print PDF" tooltipPosition="top" />
+                      <p-button icon="pi pi-trash" severity="danger" (click)="deleteClientPlan(plan.id)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Delete plan" tooltipPosition="top" />
+                      <span class="text-xs text-gray-400">{{ activeLessons.length }} active</span>
+                    </div>
                   </div>
-                  <div class="flex items-center gap-1">
-                    @if (templateLessons.length > 0) {
-                      <p-button icon="pi pi-plus" severity="secondary" (onClick)="showAddFromTemplateLessonDialog.set(true); selectedPlanForTemplateLessons.set(plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Add from template" tooltipPosition="top" />
-                    }
-                    <p-button icon="pi pi-print" severity="secondary" (onClick)="printLessonPlan(ci, plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Print PDF" tooltipPosition="top" />
-                    <span class="text-xs text-gray-400">{{ activeLessons.length }} active</span>
-                  </div>
-                </div>
+
+                  @if (planIsLocked(plan)) {
+                    <div class="mb-2 flex flex-wrap items-center gap-2 rounded bg-green-50 px-3 py-2 text-xs text-green-700">
+                      <span class="pi pi-calendar-clock mr-1 text-green-600"></span>
+                      <span>Locked at <strong>{{ planLockedTime(plan) }}</strong></span>
+                      @if (planScheduledDate(plan); as date) {
+                        <span>· from <strong>{{ date | date:'dd/MM/yy' }}</strong></span>
+                      }
+                      @if (planInstructor(plan); as inst) {
+                        <span>· Instructor: <strong>{{ instructorName(inst) }}</strong></span>
+                      }
+                      @if (planVehicle(plan); as veh) {
+                        <span>· Vehicle: <strong>{{ vehicleName(veh) }}</strong></span>
+                      }
+                      <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openScheduleDialog(plan)" styleClass="p-button-sm p-button-rounded p-button-text p-button-plain" pTooltip="Change schedule" tooltipPosition="top" />
+                    </div>
+                  }
 
                 <!-- Drag-and-drop reorder list -->
                 @if (activeLessons.length > 0) {
@@ -659,30 +694,30 @@
                     [value]="activeLessons"
                     (onReorder)="onPlanLessonsReorder(plan.id, $event)"
                     [listStyle]="{ 'max-height': '500px', 'border': 'none' }"
-                    dragdrop
+                    [dragdrop]="!isMobile()"
                     styleClass="w-full"
                   >
                     <ng-template pTemplate="item" let-lesson>
-                      <div class="flex items-center gap-3 px-2 py-2" [class.opacity-50]="!lesson.is_active">
-                        <span class="pi pi-bars cursor-grab text-gray-400"></span>
+                            <div class="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1 px-2 py-2 rounded" [class.opacity-50]="!lesson.is_active" [class.bg-blue-50]="lesson.status === 'started' || lesson.status === 'in_progress'" [class.ring-1]="lesson.status === 'started' || lesson.status === 'in_progress'" [class.ring-blue-200]="lesson.status === 'started' || lesson.status === 'in_progress'">
+                        <span class="pi pi-bars cursor-grab text-gray-400 hidden sm:inline"></span>
                         <div class="min-w-0 flex-1">
                           <p class="text-sm font-medium truncate">{{ lesson.title }}</p>
                           <p class="text-xs text-gray-500">Day {{ lesson.day_number }} · Week {{ lesson.week_number }}</p>
                         </div>
-                        <p-tag
-                          [value]="lesson.status === 'in_progress' ? 'In Progress' : lesson.status === 'completed' ? 'Done' : lesson.status === 'skipped' ? 'Skipped' : 'Pending'"
-                          [severity]="lesson.status === 'completed' ? 'success' : lesson.status === 'in_progress' ? 'info' : lesson.status === 'skipped' ? 'warn' : 'contrast'"
-                          styleClass="text-xs"
-                        />
-                        <div class="flex">
+                        <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto sm:ml-auto justify-end">
+                          <p-tag
+                            [value]="lesson.status === 'started' || lesson.status === 'in_progress' ? 'Ongoing' : lesson.status === 'completed' ? 'Done' : lesson.status === 'skipped' ? 'Skipped' : lesson.status === 'cancelled' ? 'Cancelled' : 'Pending'"
+                            [severity]="lesson.status === 'completed' ? 'success' : lesson.status === 'started' || lesson.status === 'in_progress' ? 'info' : lesson.status === 'skipped' ? 'warn' : 'contrast'"
+                            styleClass="text-xs"
+                          />
                           <p-button icon="pi pi-eye" severity="secondary" (onClick)="openLessonDetail(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Details" tooltipPosition="top" />
                           @if (lesson.status === 'pending') {
-                            <p-button icon="pi pi-play" severity="info" (onClick)="updateLessonStatus(lesson, 'in_progress')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Start" tooltipPosition="top" />
+                            <p-button icon="pi pi-play" severity="info" (onClick)="openExecutionDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Start Lesson" tooltipPosition="top" />
                           }
-                          @if (lesson.status === 'in_progress') {
-                            <p-button icon="pi pi-check" severity="success" (onClick)="updateLessonStatus(lesson, 'completed')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Complete" tooltipPosition="top" />
+                          @if (lesson.status === 'started') {
+                            <p-button icon="pi pi-play" severity="info" (onClick)="restoreExecutionDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Resume Lesson" tooltipPosition="top" />
                           }
-                          @if (lesson.status === 'pending' || lesson.status === 'in_progress') {
+                          @if (lesson.status === 'pending') {
                             <p-button icon="pi pi-ban" severity="danger" (onClick)="updateLessonStatus(lesson, 'skipped')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Skip" tooltipPosition="top" />
                           }
                           <p-button icon="pi pi-trash" severity="danger" (click)="removeLessonFromPlan(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" tooltipPosition="top" />
@@ -699,11 +734,861 @@
         </div>
       }
     }
+    } @else {
+      <!-- Tabbed View -->
+      <div class="mb-6 rounded-xl border bg-white shadow-sm">
+        <!-- Tab Navigation -->
+        <div class="flex border-b border-gray-200 overflow-x-auto">
+          @for (label of tabLabels; track $index) {
+            <button (click)="selectedTabIndex.set($index)"
+                    class="whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors"
+                    [class.text-blue-600]="selectedTabIndex() === $index"
+                    [class.text-gray-500]="selectedTabIndex() !== $index"
+                    [class.border-b-2]="selectedTabIndex() === $index"
+                    [class.border-blue-600]="selectedTabIndex() === $index"
+                    [class.hover:text-gray-700]="selectedTabIndex() !== $index">
+              {{ label }}
+            </button>
+          }
+        </div>
+        <!-- Tab Content -->
+        <div class="p-4 sm:p-6">
+          @if (selectedTabIndex() === 0) {
+          <!-- Products Tab Header -->
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div></div>
+            <div class="flex items-center gap-2">
+              <p-button icon="pi pi-question-circle" (onClick)="openGuide('products')" styleClass="p-button-sm p-button-rounded p-button-text p-button-secondary" pTooltip="Guide" />
+              @if (followUpCheckIds().length) {
+                <p-button label="Follow Up" icon="pi pi-calendar" size="small" severity="warn" (onClick)="openBulkFollowUp()" />
+              }
+              @if (c.status !== 'lost') {
+                <p-button label="Add to Cart" icon="pi pi-plus" size="small" (onClick)="openAddProduct()" [disabled]="followUpCheckIds().length > 0" />
+              }
+            </div>
+          </div>
+          <!-- Products Section Content -->
+          @if (c.cart_items?.length) {
+            <div class="hidden sm:block">
+              <p-table [value]="sortedCartItems()" dataKey="id" styleClass="p-datatable-sm">
+                <ng-template pTemplate="header">
+                  <tr>
+                    <th style="width:2rem"><p-checkbox [binary]="true" (onChange)="sortedCartItems().length && (followUpCheckIds().length === sortedCartItems().length ? followUpCheckIds.set([]) : followUpCheckIds.set(sortedCartItems().filter(ci => ci.status !== 'converted' && ci.status !== 'lost').map(ci => ci.id)))" /></th>
+                    <th>Product</th>
+                    <th>Package</th>
+                    <th>Price</th>
+                    <th>Duration</th>
+                    <th>Note</th>
+                    <th>Date Added</th>
+                    <th>Status</th>
+                    <th>Follow-ups</th>
+                    <th>Actions</th>
+                  </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-ci>
+                  <tr>
+                    <td>
+                      @if (ci.status !== 'converted' && ci.status !== 'lost') {
+                        <p-checkbox [binary]="true" [ngModel]="isFollowUpChecked(ci.id)" (onChange)="toggleFollowUpCheck(ci.id)" />
+                      }
+                    </td>
+                    <td class="text-sm font-medium text-gray-700">{{ productName(ci) }}</td>
+                    <td class="text-sm text-gray-600">{{ packageName(ci) || '—' }}</td>
+                    <td class="text-sm text-gray-600">{{ packagePrice(ci) }}</td>
+                    <td class="text-sm text-gray-600">{{ packageDuration(ci) }}</td>
+                    <td class="text-sm text-gray-600">
+                      @if (ci.notes) {
+                        <span class="inline-flex items-center gap-1">
+                          @if (ci.is_important) { <span class="pi pi-star-fill text-amber-500 text-xs"></span> }
+                          {{ ci.notes }}
+                        </span>
+                      } @else {
+                        <span class="text-gray-400">—</span>
+                      }
+                    </td>
+                    <td class="text-sm text-gray-500 whitespace-nowrap">{{ timeAgo(ci.created_at) }}</td>
+                    <td>
+                      <div class="flex items-center gap-1">
+                        <p-tag [value]="ci.status" [severity]="cartItemSeverity(ci.status)" />
+                        @if (ci.recovery_reason) {
+                          <span class="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-700" pTooltip="{{ ci.recovery_reason }}">
+                            <span class="pi pi-refresh"></span> Recovered
+                          </span>
+                        }
+                      </div>
+                    </td>
+                    <td>
+                      @if (cartItemFollowUpCount(ci); as count) {
+                        <button type="button" class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 cursor-pointer" (click)="openCartItemFollowUpsDialog(ci)">
+                          <span class="pi pi-calendar"></span>
+                          {{ cartItemCompletedCount(ci) }}/{{ count }}
+                        </button>
+                      } @else {
+                        <span class="text-xs text-gray-400">0</span>
+                      }
+                    </td>
+                    <td>
+                      <div class="flex items-center gap-1">
+                        <p-button icon="pi pi-calendar" severity="warn" (onClick)="openPerItemFollowUp(ci)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Follow up" [disabled]="ci.status === 'converted' || ci.status === 'lost'" />
+                        @for (a of cartItemActions(ci); track a.status) {
+                          <p-button
+                            [icon]="a.icon"
+                            [severity]="a.severity"
+                            (onClick)="updateCartItemStatus(ci, a.status)"
+                            styleClass="p-button-sm p-button-rounded p-button-text"
+                            [pTooltip]="a.label"
+                          />
+                        }
+                        <p-button icon="pi pi-trash" severity="danger" (onClick)="removeCartItem(ci)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" [disabled]="ci.status === 'converted'" />
+                      </div>
+                    </td>
+                  </tr>
+                </ng-template>
+              </p-table>
+            </div>
+            <div class="sm:hidden">
+            @for (ci of sortedCartItems(); track ci.id) {
+              <div class="mb-2 rounded-lg border bg-gray-50 p-3">
+                <div class="mb-1 flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    @if (ci.status !== 'converted' && ci.status !== 'lost') {
+                      <p-checkbox [binary]="true" [ngModel]="isFollowUpChecked(ci.id)" (onChange)="toggleFollowUpCheck(ci.id)" />
+                    }
+                    <span class="text-sm font-medium">{{ productName(ci) }}</span>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <p-tag [value]="ci.status" [severity]="cartItemSeverity(ci.status)" />
+                    @if (ci.recovery_reason) {
+                      <span class="inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-700" pTooltip="{{ ci.recovery_reason }}">
+                        <span class="pi pi-refresh"></span> Recovered
+                      </span>
+                    }
+                  </div>
+                </div>
+                <p class="text-xs text-gray-500">{{ packageName(ci) || '—' }}</p>
+                <p class="text-xs text-gray-500">
+                  {{ packagePrice(ci) }}{{ packagePrice(ci) !== '—' ? ' · ' : '' }}{{ packageDuration(ci) }}
+                </p>
+                <p class="text-xs text-gray-400 mt-1">{{ timeAgo(ci.created_at) }}</p>
+                @if (ci.notes) {
+                  <p class="mt-1 text-xs text-gray-600 inline-flex items-center gap-1">
+                    @if (ci.is_important) { <span class="pi pi-star-fill text-amber-500 text-xs"></span> }
+                    {{ ci.notes }}
+                  </p>
+                }
+                @if (cartItemFollowUpCount(ci); as count) {
+                  <button type="button" class="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-100 cursor-pointer" (click)="openCartItemFollowUpsDialog(ci)">
+                    <span class="pi pi-calendar"></span>
+                    {{ cartItemCompletedCount(ci) }}/{{ count }} follow-ups
+                  </button>
+                }
+                <div class="mt-2 flex flex-wrap gap-1">
+                  <p-button icon="pi pi-calendar" severity="warn" (onClick)="openPerItemFollowUp(ci)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Follow up" [disabled]="ci.status === 'converted' || ci.status === 'lost'" />
+                  @for (a of cartItemActions(ci); track a.status) {
+                    <p-button
+                      [icon]="a.icon"
+                      [severity]="a.severity"
+                      (onClick)="updateCartItemStatus(ci, a.status)"
+                      styleClass="p-button-sm p-button-rounded p-button-text"
+                    />
+                  }
+                  <p-button icon="pi pi-trash" severity="danger" (onClick)="removeCartItem(ci)" styleClass="p-button-sm p-button-rounded p-button-text" [disabled]="ci.status === 'converted'" />
+                </div>
+              </div>
+            }
+          </div>
+          } @else {
+            <div class="py-4 text-center text-sm text-gray-400">
+              No products in cart yet.
+              <p-button label="Add to Cart" icon="pi pi-plus" (onClick)="openAddProduct()" styleClass="p-button-sm ml-2" />
+          </div>
+        }
+          }
+          @if (selectedTabIndex() === 1) {
+          <!-- Follow-ups Tab Header -->
+          <div class="mb-3 flex items-center justify-between">
+            <div></div>
+            <div class="flex items-center gap-2">
+              <p-button icon="pi pi-question-circle" (onClick)="openGuide('followups')" styleClass="p-button-sm p-button-rounded p-button-text p-button-secondary" pTooltip="Guide" />
+              @if (c.status !== 'lost' && c.status !== 'converted_completed') {
+                <p-button label="Schedule Follow-up" icon="pi pi-calendar" (onClick)="openAddFollowUp()" size="small" />
+              }
+            </div>
+          </div>
+          <!-- Follow-ups Section Content -->
+          <div class="hidden sm:block">
+            <p-table [value]="sortedFollowUps()" dataKey="id" styleClass="p-datatable-sm">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Products</th>
+                  <th>Note</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-fu>
+                <tr>
+                  <td class="text-sm text-gray-700">{{ fu.follow_up_date }}</td>
+                  <td><p-tag [value]="fu.type" severity="info" /></td>
+                  <td>
+                    <div class="flex flex-wrap gap-1">
+                      @for (ci of followUpCartItems(fu); track ci.id) {
+                        <span class="inline-flex items-center gap-1 rounded-md border bg-gray-50 px-2 py-0.5 text-xs text-gray-700">
+                          <span class="font-medium">{{ productName(ci) }}</span>
+                          @if (packageName(ci)) {
+                            <span class="text-gray-400">·</span>
+                            <span>{{ packageName(ci) }}</span>
+                          }
+                          @if (packagePrice(ci) !== '—') {
+                            <span class="text-gray-400">·</span>
+                            <span>{{ packagePrice(ci) }}</span>
+                          }
+                          @if (packageDuration(ci) !== '—') {
+                            <span class="text-gray-400">·</span>
+                            <span>{{ packageDuration(ci) }}</span>
+                          }
+                        </span>
+                      }
+                      @if (!fu.cart_item_ids?.length) {
+                        <span class="text-sm text-gray-400">—</span>
+                      }
+                    </div>
+                  </td>
+                  <td class="text-sm text-gray-600">
+                    @if (followUpDurationLabel(fu); as dLabel) {
+                      <p class="text-xs text-amber-600 font-medium mb-0.5">{{ dLabel }}</p>
+                    }
+                    {{ fu.note || '—' }}
+                  </td>
+                  <td><p-tag [value]="fu.status" [severity]="followUpStatusSeverity(fu.status)" /></td>
+                  <td>
+                    @if (fu.status === 'pending') {
+                      <p-button icon="pi pi-check" (onClick)="openCompleteFollowUp(fu)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Complete" />
+                    }
+                  </td>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="emptydata">
+                <tr>
+                  <td colspan="6" class="py-8 text-center text-gray-400">No follow-ups scheduled</td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </div>
+          <div class="sm:hidden">
+            @for (fu of sortedFollowUps(); track fu.id) {
+              <div class="mb-3 rounded-lg border bg-white p-3 shadow-sm">
+                <div class="mb-2 flex items-center justify-between">
+                  <span class="text-sm font-medium">{{ fu.follow_up_date }}</span>
+                  <p-tag [value]="fu.type" severity="info" />
+                </div>
+                @if (followUpDurationLabel(fu); as dLabel) {
+                  <p class="mb-1 text-xs text-amber-600 font-medium">{{ dLabel }}</p>
+                }
+                @if (fu.note) { <p class="mb-2 text-sm text-gray-600">{{ fu.note }}</p> }
+                @if (fu.cart_item_ids.length) {
+                  <div class="mb-2 flex flex-wrap gap-1">
+                    @for (ci of followUpCartItems(fu); track ci.id) {
+                      <span class="inline-flex items-center gap-1 rounded-md border bg-gray-50 px-2 py-0.5 text-xs text-gray-700">
+                        <span class="font-medium">{{ productName(ci) }}</span>
+                        @if (packageName(ci)) {
+                          <span class="text-gray-400">·</span>
+                          <span>{{ packageName(ci) }}</span>
+                        }
+                        @if (packagePrice(ci) !== '—') {
+                          <span class="text-gray-400">·</span>
+                          <span>{{ packagePrice(ci) }}</span>
+                        }
+                        @if (packageDuration(ci) !== '—') {
+                          <span class="text-gray-400">·</span>
+                          <span>{{ packageDuration(ci) }}</span>
+                        }
+                      </span>
+                    }
+                  </div>
+                }
+                <div class="flex items-center justify-between">
+                  <p-tag [value]="fu.status" [severity]="followUpStatusSeverity(fu.status)" />
+                  @if (fu.status === 'pending') {
+                    <p-button label="Complete" icon="pi pi-check" size="small" (onClick)="openCompleteFollowUp(fu)" />
+                  }
+                </div>
+              </div>
+            } @empty {
+              <div class="py-8 text-center text-gray-400">No follow-ups scheduled</div>
+            }
+          </div>
+          }
+          @if (selectedTabIndex() === 2) {
+          <!-- Payment Summary -->
+          @if (paidCartItems().length) {
+            <div class="mb-3">
+              <h3 class="text-md font-bold text-gray-900 mb-2">Payments &amp; Balances</h3>
+              <div class="hidden sm:block">
+                <p-table [value]="paidCartItems()" dataKey="id" styleClass="p-datatable-sm">
+                  <ng-template pTemplate="header">
+                    <tr>
+                      <th>Product</th>
+                      <th>Package</th>
+                      <th>Status</th>
+                      <th>Amount Paid</th>
+                      <th>Balance</th>
+                    </tr>
+                  </ng-template>
+                  <ng-template pTemplate="body" let-ci>
+                    <tr>
+                      <td class="text-sm font-medium text-gray-700">{{ productName(ci) }}</td>
+                      <td class="text-sm text-gray-600">{{ packageName(ci) || '—' }}</td>
+                      <td>
+                        <p-tag [value]="ci.status === 'converted_paid' ? 'Paid' : 'Paying'" [severity]="ci.status === 'converted_paid' ? 'success' : 'warn'" />
+                      </td>
+                      <td class="text-sm text-green-600 font-medium">{{ paidForProduct(ci) | number:'1.0-0' }}</td>
+                      <td class="text-sm" [class.text-green-600]="balanceForProduct(ci) === 0" [class.text-amber-600]="balanceForProduct(ci) > 0">
+                        {{ balanceForProduct(ci) | number:'1.0-0' }}
+                      </td>
+                    </tr>
+                  </ng-template>
+                </p-table>
+              </div>
+              <div class="sm:hidden">
+                @for (ci of paidCartItems(); track ci.id) {
+                  <div class="mb-3 rounded-lg border p-4" [class.bg-green-50]="ci.status === 'converted_paid'" [class.bg-amber-50]="ci.status === 'converted_paying'">
+                    <div class="flex items-start justify-between">
+                      <div>
+                        <span class="text-sm font-medium">{{ productName(ci) }}</span>
+                        @if (packageName(ci)) { <p class="text-xs text-gray-500">{{ packageName(ci) }}</p> }
+                      </div>
+                      <p-tag [value]="ci.status === 'converted_paid' ? 'Paid' : 'Paying'" [severity]="ci.status === 'converted_paid' ? 'success' : 'warn'" />
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+                      <span>Paid: <strong class="text-green-600">{{ paidForProduct(ci) | number:'1.0-0' }}</strong></span>
+                      <span>Balance: <strong [class.text-green-600]="balanceForProduct(ci) === 0" [class.text-amber-600]="balanceForProduct(ci) > 0">{{ balanceForProduct(ci) | number:'1.0-0' }}</strong></span>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+          <!-- Payment History -->
+          @if (sortedPayments().length) {
+            <div>
+              <h3 class="text-md font-bold text-gray-900 mb-2">Payment History</h3>
+              <div class="hidden sm:block">
+                <p-table [value]="sortedPayments()" dataKey="id" styleClass="p-datatable-sm">
+                  <ng-template pTemplate="header">
+                    <tr>
+                      <th>Product</th>
+                      <th>Paid</th>
+                      <th>Balance</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                      <th>Installments</th>
+                    </tr>
+                  </ng-template>
+                  <ng-template pTemplate="body" let-pay>
+                    <tr>
+                      <td class="text-sm font-medium text-gray-700">{{ paymentProductName(pay) }}</td>
+                      <td class="text-sm text-green-600 font-medium">{{ paymentPaidAmount(pay) | number:'1.0-0' }}</td>
+                      <td class="text-sm" [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</td>
+                      <td><p-tag [value]="paymentStatus(pay)" [severity]="paymentSeverity(paymentStatus(pay))" /></td>
+                      <td class="text-sm text-gray-500">{{ pay.created_at | date:'shortDate' }}</td>
+                      <td class="text-sm text-gray-500">{{ pay.installments.length }}</td>
+                    </tr>
+                  </ng-template>
+                </p-table>
+              </div>
+              <div class="sm:hidden">
+                @for (pay of sortedPayments(); track pay.id) {
+                  <div class="mb-3 rounded-lg border bg-gray-50 p-3">
+                    <div class="mb-1 flex items-center justify-between">
+                      <span class="text-sm font-medium">{{ paymentProductName(pay) }}</span>
+                      <p-tag [value]="paymentStatus(pay)" [severity]="paymentSeverity(paymentStatus(pay))" />
+                    </div>
+                    <div class="space-y-1 text-xs text-gray-500">
+                      <p>Paid: <span class="text-green-600 font-medium">{{ paymentPaidAmount(pay) | number:'1.0-0' }}</span> | Balance: <span [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</span></p>
+                      <p>{{ pay.created_at | date:'shortDate' }}</p>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+          @if (!paidCartItems().length && !sortedPayments().length) {
+            <div class="py-8 text-center text-gray-400">No payment records yet.</div>
+          }
+          }
+          @if (selectedTabIndex() === 3) {
+          <!-- Training Tab Header -->
+          <div class="mb-3 flex items-center justify-between">
+            <div></div>
+            <div class="flex gap-2">
+              @if (trainableCartItems().length) {
+                <p-button label="Add Session" icon="pi pi-plus" size="small" (onClick)="openAddTrainingSession()" />
+              }
+            </div>
+          </div>
+          <!-- Training Sessions Content -->
+          @let trainingItems = trainableCartItems().filter(ci => cartItemHasTraining(ci));
+          @if (trainingItems.length === 0) {
+            <p class="py-4 text-center text-sm text-gray-400">
+              <span class="pi pi-info-circle mr-2"></span> Complete a sale to start tracking training sessions.
+            </p>
+          } @else {
+            @for (ci of trainingItems; track ci.id) {
+              @let summary = trainingSummaryFor(ci.id);
+              @let sessions = sessionsForCartItem(ci.id);
+              <div class="mb-4 rounded-lg border bg-gray-50 p-3">
+                <div class="mb-2 flex items-start justify-between">
+                  <div>
+                    <p class="text-sm font-medium text-gray-900">{{ productName(ci) }}{{ packageName(ci) ? ' — ' + packageName(ci) : '' }}</p>
+                    @if (summary) {
+                      <div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
+                        @if (summary.expected_driving_minutes !== null) {
+                          <span>Driving: {{ summary.total_driving_minutes }}/{{ summary.expected_driving_minutes }}min</span>
+                        }
+                        @if (summary.expected_theory_minutes !== null) {
+                          <span>Theory: {{ summary.total_theory_minutes }}/{{ summary.expected_theory_minutes }}min</span>
+                        }
+                        <span>Sessions: {{ summary.sessions_count }}</span>
+                      </div>
+                    }
+                  </div>
+                  <div class="flex gap-1">
+                    @if (!sessions.length) {
+                      <p-button label="Generate" icon="pi pi-calendar" size="small" severity="secondary" (onClick)="openGenerateSessions(ci)" />
+                    }
+                  </div>
+                </div>
+                @if (sessions.length === 0) {
+                  <p class="py-2 text-xs text-gray-400">No sessions recorded yet. Click Generate to auto-create from package duration, or click Add Session to create manually.</p>
+                } @else {
+                  <div class="hidden sm:block overflow-x-auto">
+                    <p-table [value]="sessions" dataKey="id" styleClass="p-datatable-sm">
+                      <ng-template pTemplate="header">
+                        <tr>
+                          <th>Date</th>
+                          <th>Duration</th>
+                          <th>Theory</th>
+                          <th>Driving</th>
+                          <th>Video</th>
+                          <th>Timer</th>
+                          <th>Skills</th>
+                          <th>Notes</th>
+                          <th>Actions</th>
+                        </tr>
+                      </ng-template>
+                      <ng-template pTemplate="body" let-s>
+                        <tr>
+                          <td class="text-sm whitespace-nowrap">{{ s.session_date | date:'shortDate' }}</td>
+                          <td class="text-sm">{{ s.duration_minutes }}min</td>
+                          <td class="text-sm text-blue-600">{{ s.theory_minutes || '—' }}</td>
+                          <td class="text-sm text-green-600">{{ s.driving_minutes || '—' }}</td>
+                          <td>
+                            @if (s.video_url) {
+                              <div class="flex gap-1 items-center">
+                                <i class="pi pi-video" [class.text-green-500]="s.video_cached" [class.text-gray-400]="!s.video_cached"></i>
+                                @if (!s.video_cached && !s.video_invalidated) {
+                                  <p-button icon="pi pi-download" severity="secondary" pTooltip="Cache video" (onClick)="cacheVideo(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                                }
+                                @if (s.video_cached && !s.video_invalidated) {
+                                  <p-button icon="pi pi-refresh" severity="warn" pTooltip="Invalidate cache" (onClick)="invalidateVideo(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                                }
+                                @if (s.video_invalidated) {
+                                  <span class="text-xs text-red-500">Invalidated</span>
+                                }
+                              </div>
+                            } @else {
+                              <span class="text-xs text-gray-400">—</span>
+                            }
+                          </td>
+                          <td>
+                            @if (s.started_at) {
+                              <span class="text-xs font-mono">{{ formatTimer(s.timer_seconds) }}</span>
+                            } @else {
+                              <p-button icon="pi pi-play" severity="success" pTooltip="Start session" (onClick)="startSession(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                            }
+                          </td>
+                          <td>
+                            <p-button label="{{ s.skills.length }}" icon="pi pi-list" severity="secondary" pTooltip="Manage skills" (onClick)="openSkillsDialog(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                          </td>
+                          <td class="text-sm text-gray-500 max-w-32 truncate">{{ s.notes || '—' }}</td>
+                          <td>
+                            <div class="flex gap-1">
+                              <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openEditTrainingSession(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                              <p-button icon="pi pi-trash" severity="danger" (onClick)="deleteTrainingSession(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                            </div>
+                          </td>
+                        </tr>
+                      </ng-template>
+                    </p-table>
+                  </div>
+                  <div class="sm:hidden space-y-2">
+                    @for (s of sessions; track s.id) {
+                      <div class="rounded border bg-white p-2 text-xs">
+                        <div class="flex items-center justify-between">
+                          <span class="font-medium">{{ s.session_date | date:'shortDate' }}</span>
+                          <div class="flex gap-1">
+                            <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openEditTrainingSession(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                            <p-button icon="pi pi-trash" severity="danger" (onClick)="deleteTrainingSession(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                          </div>
+                        </div>
+                        <p class="text-gray-500">{{ s.duration_minutes }}min | Theory: {{ s.theory_minutes || '—' }} | Driving: {{ s.driving_minutes || '—' }}</p>
+                        <div class="mt-1 flex flex-wrap gap-2">
+                          @if (s.video_url) {
+                            <span class="inline-flex items-center gap-1">
+                              <i class="pi pi-video" [class.text-green-500]="s.video_cached" [class.text-gray-400]="!s.video_cached"></i>
+                              @if (!s.video_cached && !s.video_invalidated) { <p-button icon="pi pi-download" severity="secondary" (onClick)="cacheVideo(s)" styleClass="p-button-sm p-button-rounded p-button-text" /> }
+                            </span>
+                          }
+                          @if (s.started_at) {
+                            <span class="text-xs font-mono">{{ formatTimer(s.timer_seconds) }}</span>
+                          }
+                          <p-button label="Skills: {{ s.skills.length }}" severity="secondary" (onClick)="openSkillsDialog(s)" styleClass="p-button-sm p-button-rounded p-button-text" />
+                        </div>
+                        @if (s.notes) { <p class="text-gray-400 italic">{{ s.notes }}</p> }
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          }
+          }
+          @if (selectedTabIndex() === 4) {
+          <!-- Permit Progress Content -->
+          @if (trainableCartItems().length) {
+            @for (ci of trainableCartItems(); track ci.id) {
+              @if (ci.requires_permit_processing) {
+                @let pp = permitForCartItem(ci.id);
+                @if (pp) {
+                <div class="rounded-lg border bg-gray-50 p-3 mb-4">
+                  <h3 class="text-md font-bold text-gray-900 mb-3">Permit Processing — {{ productName(ci) }}{{ packageName(ci) ? ' (' + packageName(ci) + ')' : '' }}</h3>
+                  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Start Date</label>
+                      <p-datepicker [(ngModel)]="pp!.start_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Got Learners Permit</label>
+                      <p-datepicker [(ngModel)]="pp!.got_learners_permit_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                      @if (pp?.got_learners_permit_date) {
+                        <p class="mt-0.5 text-xs text-gray-400">{{ permitDaysRemaining(pp!.got_learners_permit_date) }}</p>
+                      }
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Learners Due For Test</label>
+                      <p-datepicker [(ngModel)]="pp!.learners_due_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                      @if (pp?.learners_due_date) {
+                        <p class="mt-0.5 text-xs" [class.text-red-500]="permitDaysRemaining(pp!.learners_due_date).includes('overdue')" [class.text-amber-500]="!permitDaysRemaining(pp!.learners_due_date).includes('overdue')">{{ permitDaysRemaining(pp!.learners_due_date) }}</p>
+                      }
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Learners Expiring</label>
+                      <p-datepicker [(ngModel)]="pp!.learners_expiry_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                      @if (pp?.learners_expiry_date) {
+                        <p class="mt-0.5 text-xs text-gray-400">{{ permitDaysRemaining(pp!.learners_expiry_date) }}</p>
+                      }
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Tested On</label>
+                      <p-datepicker [(ngModel)]="pp!.tested_on_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Expecting Permit On</label>
+                      <p-datepicker [(ngModel)]="pp!.expecting_permit_on_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                      @if (pp?.expecting_permit_on_date) {
+                        <p class="mt-0.5 text-xs text-gray-400">{{ permitDaysRemaining(pp!.expecting_permit_on_date) }}</p>
+                      }
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Delayed (Days)</label>
+                      <p-inputNumber [(ngModel)]="pp!.delayed_days" [min]="0" styleClass="w-full" />
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-gray-600">Notes</label>
+                      <textarea [(ngModel)]="pp!.notes" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="2" placeholder="Optional notes..."></textarea>
+                    </div>
+                  </div>
+                  <div class="mt-3">
+                    <p-button label="Save Permit Progress" icon="pi pi-check" size="small" (onClick)="savePermitProgress(ci.id)" [loading]="loading()" />
+                  </div>
+                </div>
+                }
+              }
+            }
+          } @else {
+            <div class="py-8 text-center text-gray-400">No permit processing yet.</div>
+          }
+          }
+          @if (selectedTabIndex() === 5) {
+          <!-- Lesson Plans Content -->
+          @if (trainableCartItems().filter(ci => cartItemHasTraining(ci)).length) {
+            @for (ci of trainableCartItems().filter(ci => cartItemHasTraining(ci)); track ci.id) {
+              @let plans = lessonPlansForCartItem(ci.id);
+              <div class="mb-4 rounded-lg border bg-gray-50 p-3">
+                <div class="mb-3 flex items-center justify-between">
+                  <h3 class="text-md font-bold text-gray-900">{{ productName(ci) }}{{ packageName(ci) ? ' (' + packageName(ci) + ')' : '' }}</h3>
+                  <p-button label="Create Plan" icon="pi pi-plus" size="small" severity="secondary"
+                            (onClick)="openCreateLessonPlan(ci.id)" />
+                </div>
+                @if (plans.length === 0) {
+                  <p class="py-4 text-center text-sm text-gray-400">No lesson plans yet. Click "Create Plan" to get started.</p>
+                } @else {
+                  @for (plan of plans; track plan.id) {
+                    @let activeLessons = plan.lessons.filter(l => l.is_active);
+                    @let templateLessons = getTemplateLessonsNotInPlan(plan);
+                    <div class="mb-2 rounded-lg border bg-white p-2 sm:p-3">
+                       <div class="mb-2 flex items-start">
+                        <div class="flex-1 min-w-0">
+                           <p class="text-sm font-semibold text-gray-700">
+                             {{ plan.transmission_type === 'manual' ? 'Manual' : plan.transmission_type === 'automatic' ? 'Automatic' : 'Manual/Automatic' }}
+                             @if ((plan.manual_days ?? 5) > 0) {
+                               <span class="ml-1 text-xs text-blue-600">· {{ plan.manual_days ?? 5 }} manual days</span>
+                             }
+                             @if (plan.status === 'completed') {
+                               <span class="ml-2 text-xs text-green-600">(Completed)</span>
+                             }
+                             @if (plan.template_type === 'theory') {
+                               <span class="ml-2 text-xs text-blue-600">(Theory)</span>
+                             }
+                           </p>
+                           @if (plan.start_date) {
+                             <p class="text-xs text-gray-500">Start: {{ plan.start_date | date:'dd/MM/yy' }}</p>
+                           }
+                        </div>
+                    <div class="flex items-center gap-2 shrink-0 ml-auto">
+                      @if (!planIsLocked(plan)) {
+                        <p-button icon="pi pi-calendar-clock" severity="secondary" (onClick)="openScheduleDialog(plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Schedule" tooltipPosition="top" />
+                      }
+                           @if (templateLessons.length > 0) {
+                             <p-button icon="pi pi-plus" severity="secondary" (onClick)="showAddFromTemplateLessonDialog.set(true); selectedPlanForTemplateLessons.set(plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Add from template" tooltipPosition="top" />
+                           }
+                           <p-button icon="pi pi-print" severity="secondary" (onClick)="printLessonPlan(ci, plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Print PDF" tooltipPosition="top" />
+                           <p-button icon="pi pi-trash" severity="danger" (click)="deleteClientPlan(plan.id)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Delete plan" tooltipPosition="top" />
+                           <span class="text-xs text-gray-400">{{ activeLessons.length }} active</span>
+                        </div>
+                      </div>
 
-    <!-- Generate Training Sessions Dialog -->
-    <p-dialog header="Generate Training Sessions" [(visible)]="showGenerateTrainingDialog" [modal]="true"
-              [style]="{ width: '90vw', maxWidth: '480px' }" [draggable]="false" [resizable]="false"
-              [closable]="!loading()">
+                      @if (planIsLocked(plan)) {
+                        <div class="mb-2 flex flex-wrap items-center gap-2 rounded bg-green-50 px-3 py-2 text-xs text-green-700">
+                          <span class="pi pi-calendar-clock mr-1 text-green-600"></span>
+                          <span>Locked at <strong>{{ planLockedTime(plan) }}</strong></span>
+                          @if (planScheduledDate(plan); as date) {
+                            <span>· from <strong>{{ date | date:'dd/MM/yy' }}</strong></span>
+                          }
+                          @if (planInstructor(plan); as inst) {
+                            <span>· Instructor: <strong>{{ instructorName(inst) }}</strong></span>
+                          }
+                          @if (planVehicle(plan); as veh) {
+                            <span>· Vehicle: <strong>{{ vehicleName(veh) }}</strong></span>
+                          }
+                          <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openScheduleDialog(plan)" styleClass="p-button-sm p-button-rounded p-button-text p-button-plain" pTooltip="Change schedule" tooltipPosition="top" />
+                        </div>
+                      }
+
+                      @if (activeLessons.length > 0) {
+                         <p-orderList
+                           [value]="activeLessons"
+                           (onReorder)="onPlanLessonsReorder(plan.id, $event)"
+                           [listStyle]="{ 'max-height': '500px', 'border': 'none' }"
+                           [dragdrop]="!isMobile()"
+                           styleClass="w-full"
+                         >
+                           <ng-template pTemplate="item" let-lesson>
+                        <div class="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1 px-2 py-2 rounded" [class.opacity-50]="!lesson.is_active" [class.bg-blue-50]="lesson.status === 'started' || lesson.status === 'in_progress'" [class.ring-1]="lesson.status === 'started' || lesson.status === 'in_progress'" [class.ring-blue-200]="lesson.status === 'started' || lesson.status === 'in_progress'">
+                                <span class="pi pi-bars cursor-grab text-gray-400 hidden sm:inline"></span>
+                               <div class="min-w-0 flex-1">
+                                 <p class="text-sm font-medium truncate">{{ lesson.title }}</p>
+                                 <p class="text-xs text-gray-500">Day {{ lesson.day_number }} · Week {{ lesson.week_number }}</p>
+                               </div>
+                               <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto sm:ml-auto justify-end">
+                                 <p-tag
+                                   [value]="lesson.status === 'started' || lesson.status === 'in_progress' ? 'Ongoing' : lesson.status === 'completed' ? 'Done' : lesson.status === 'skipped' ? 'Skipped' : lesson.status === 'cancelled' ? 'Cancelled' : 'Pending'"
+                                   [severity]="lesson.status === 'completed' ? 'success' : lesson.status === 'started' || lesson.status === 'in_progress' ? 'info' : lesson.status === 'skipped' ? 'warn' : 'contrast'"
+                                   styleClass="text-xs"
+                                 />
+                                 <p-button icon="pi pi-eye" severity="secondary" (onClick)="openLessonDetail(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Details" tooltipPosition="top" />
+                                  @if (lesson.status === 'pending') {
+                                    <p-button icon="pi pi-play" severity="info" (onClick)="openExecutionDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Start Lesson" tooltipPosition="top" />
+                                  }
+                                  @if (lesson.status === 'started') {
+                                    <p-button icon="pi pi-play" severity="info" (onClick)="restoreExecutionDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Resume Lesson" tooltipPosition="top" />
+                                  }
+                                  @if (lesson.status === 'pending') {
+                                    <p-button icon="pi pi-ban" severity="danger" (onClick)="updateLessonStatus(lesson, 'skipped')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Skip" tooltipPosition="top" />
+                                  }
+                                  <p-button icon="pi pi-trash" severity="danger" (click)="removeLessonFromPlan(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" tooltipPosition="top" />
+                                </div>
+                              </div>
+                            </ng-template>
+                          </p-orderList>
+                        } @else {
+                          <p class="py-4 text-center text-sm text-gray-400">No active lessons. Add lessons from the template to get started.</p>
+                        }
+                      </div>
+                    }
+                  }
+                </div>
+              }
+            } @else {
+              <div class="py-8 text-center text-gray-400">No lesson plans yet.</div>
+           }
+           }
+          </div>
+        </div>
+      }
+      <!-- Lesson Execution Dialog -->
+      <p-dialog header="Lesson Execution" [(visible)]="showExecutionDialog" [modal]="true"
+                [style]="{ width: '95vw', maxWidth: '680px' }" [draggable]="false" [resizable]="false"
+                [closable]="true" (onHide)="closeExecutionDialog()">
+        @let lesson = executingLesson();
+        @if (lesson) {
+          <div class="flex flex-col gap-4">
+            <!-- Header with timer -->
+            <div class="flex items-center justify-between rounded-lg bg-gray-50 p-3">
+              <div class="min-w-0 flex-1">
+                <h3 class="text-base font-bold text-gray-900 truncate">{{ lesson.title }}</h3>
+                <p class="text-xs text-gray-500">Day {{ lesson.day_number }} · Week {{ lesson.week_number }}{{ lesson.difficulty ? ' · ' + lesson.difficulty : '' }}</p>
+              </div>
+              <div class="shrink-0 ml-4 text-right">
+                <div class="text-2xl font-mono font-bold" [class.text-red-500]="executionProgress() >= 90" [class.text-orange-400]="executionProgress() >= 80 && executionProgress() < 90" [class.text-gray-400]="executionIsPaused()">
+                  {{ executionTimerDisplay() }}
+                </div>
+                <p-tag [value]="executionIsPaused() ? 'Paused' : executionProgress() >= 100 ? 'Time Up' : executionProgress() >= 80 ? 'Ending Soon' : 'In Progress'" [severity]="executionIsPaused() ? 'warn' : executionProgress() >= 100 ? 'danger' : executionProgress() >= 80 ? 'warn' : 'info'" styleClass="text-xs" />
+              </div>
+            </div>
+
+            <!-- Objectives (checkable) -->
+            @if (lesson.lesson_objectives?.length || lesson.practical_objectives?.length) {
+              <div class="rounded-lg border bg-white p-3">
+                @if (lesson.lesson_objectives?.length) {
+                  <div class="mb-2">
+                    <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Objectives</p>
+                    <div class="space-y-1">
+                      @for (obj of lesson.lesson_objectives; track $index) {
+                        <label class="flex items-start gap-2 text-sm cursor-pointer">
+                          <p-checkbox [binary]="true" [ngModel]="executionCheckedObjectives()[$index]" (onChange)="toggleObjectiveChecked($index)" />
+                          <span class="pt-0.5">{{ obj }}</span>
+                        </label>
+                      }
+                    </div>
+                  </div>
+                }
+                @if (lesson.practical_objectives?.length) {
+                  <div>
+                    <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Practical</p>
+                    <div class="space-y-1">
+                      @for (obj of lesson.practical_objectives; track $index) {
+                        <label class="flex items-start gap-2 text-sm cursor-pointer">
+                          <p-checkbox [binary]="true" [ngModel]="executionCheckedPractical()[$index]" (onChange)="togglePracticalChecked($index)" />
+                          <span class="pt-0.5">{{ obj }}</span>
+                        </label>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+
+            <!-- Video -->
+            <div class="rounded-lg border bg-white overflow-hidden">
+              <p class="px-3 pt-2 text-xs font-semibold text-gray-500 uppercase">Lesson Video</p>
+              @if (executionVideoUrl(); as videoUrl) {
+                @if (executionVideoSource() === 'youtube' || executionVideoSource() === 'vimeo') {
+                  <div class="aspect-video">
+                    <iframe [src]="videoUrl" class="w-full h-full border-0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                  </div>
+                } @else if (executionVideoSource() === 'upload') {
+                  <video controls class="w-full" [src]="videoUrl">
+                    Your browser does not support the video tag.
+                  </video>
+                }
+              } @else {
+                <div class="flex items-center gap-2 px-3 py-4 text-gray-300">
+                  <i class="pi pi-video text-lg"></i>
+                  <span class="text-sm">No video attached to this lesson</span>
+                </div>
+              }
+            </div>
+
+            <!-- Timer Progress -->
+            <div class="rounded-lg border bg-white p-3">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold text-gray-500 uppercase">Progress</span>
+                <span class="text-sm font-mono font-bold">{{ executionTimerDisplay() }} remaining</span>
+              </div>
+              <p-progressBar [value]="executionProgress()" styleClass="h-3" />
+            </div>
+
+            <!-- Upcoming Clients -->
+            @if (executionUpcomingClients().length) {
+              <div class="rounded-lg border bg-white p-3">
+                <p class="text-xs font-semibold text-gray-500 uppercase mb-2">Upcoming Clients</p>
+                <div class="space-y-2">
+                  @for (client of executionUpcomingClients(); track $index) {
+                    <div class="flex items-center gap-2 text-sm">
+                      <i class="pi pi-user text-gray-400"></i>
+                      <span class="font-medium">{{ client.name }}</span>
+                      <span class="text-gray-400">—</span>
+                      <span class="text-gray-500 text-xs">{{ client.product }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            <!-- Notes & End -->
+            <div class="rounded-lg border bg-white p-3">
+              <label class="mb-1 block text-xs font-semibold text-gray-500 uppercase">Instructor Notes</label>
+              <textarea pInputTextarea [(ngModel)]="executionNotes" rows="3" class="w-full" placeholder="Enter lesson notes, observations, or feedback..." [disabled]="executionIsPaused()"></textarea>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              @if (!executionIsPaused()) {
+                <p-button label="Pause" icon="pi pi-pause" severity="warn" (onClick)="pauseExecutionLesson()" />
+              } @else {
+                <p-button label="Resume" icon="pi pi-play" severity="info" (onClick)="resumeExecutionLesson()" />
+              }
+              <p-button label="Cancel" severity="secondary" (onClick)="closeExecutionDialog()" />
+              <p-button label="End Lesson" icon="pi pi-check" severity="danger" (onClick)="endExecutionLesson()" />
+            </div>
+          </div>
+        }
+      </p-dialog>
+      <!-- Print Preview Dialog -->
+      <p-dialog header="Print Preview" [(visible)]="showPrintPreview" [modal]="true"
+                [style]="{ width: '95vw', maxWidth: '820px' }" [draggable]="false" [resizable]="false"
+                [closable]="true" (onHide)="closePrintPreview()">
+        <div class="flex flex-col gap-3">
+          <div class="flex flex-wrap items-center gap-4">
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <p-checkbox [binary]="true" [ngModel]="printShowObjectives()" (onChange)="togglePrintOption('objectives')" inputId="print_obj" />
+              Lesson Objectives
+            </label>
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <p-checkbox [binary]="true" [ngModel]="printShowPractical()" (onChange)="togglePrintOption('practical')" inputId="print_prac" />
+              Practical Objectives
+            </label>
+          </div>
+          <div class="overflow-auto border rounded-lg bg-white" style="max-height: 70vh;">
+            <iframe
+              [src]="getPrintPreviewSafeUrl()"
+              class="w-full border-0"
+              style="min-height: 80vh;"
+              title="Print Preview"
+            ></iframe>
+          </div>
+          <div class="flex justify-end gap-2">
+            <p-button label="Cancel" severity="secondary" (onClick)="closePrintPreview()" />
+            <p-button label="Print" icon="pi pi-print" (onClick)="doPrint()" />
+          </div>
+        </div>
+      </p-dialog>
+      <p-dialog header="Generate Training Sessions" [(visible)]="showGenerateTrainingDialog" [modal]="true"
+               [style]="{ width: '90vw', maxWidth: '480px' }" [draggable]="false" [resizable]="false"
+               [closable]="!loading()">
       <div class="flex flex-col gap-4 pt-2">
         <p class="text-sm text-gray-600">Enter a start date to auto-generate training sessions based on the package training durations.</p>
         <div>
@@ -1308,7 +2193,7 @@
     }
 
     <!-- Create Lesson Plan Dialog -->
-    <p-dialog header="Create Lesson Plan" [(visible)]="showCreateLessonPlanDialog" [modal]="true"
+    <p-dialog header="Create Lesson Plan(s)" [(visible)]="showCreateLessonPlanDialog" [modal]="true"
               [style]="{ width: '90vw', maxWidth: '500px' }" [draggable]="false" [resizable]="false"
               [closable]="!loading()">
       <div class="flex flex-col gap-4 pt-2">
@@ -1319,11 +2204,24 @@
                     optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
         </div>
         <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700">Template (optional)</label>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Manual Days <span class="text-xs text-gray-400">(first N days on manual, rest on auto)</span></label>
+          <p-inputNumber [(ngModel)]="lessonPlanForm.manual_days" [min]="0" [max]="30" styleClass="w-full" inputId="integeronly" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Practical Template (optional)</label>
           <p-select [(ngModel)]="lessonPlanForm.template_id"
-                    [options]="templates()" optionLabel="name" optionValue="id"
-                    placeholder="Select a template..." styleClass="w-full" [showClear]="true" appendTo="body" />
+                    [options]="practicalTemplates()" optionLabel="name" optionValue="id"
+                    placeholder="Select a practical template..." styleClass="w-full" [showClear]="true" appendTo="body" />
           @if (selectedTemplateTpl(); as tpl) {
+            <p class="mt-1 text-xs text-gray-500">{{ tpl.total_days }} days · {{ tpl.total_weeks }} weeks · {{ tpl.lesson_items.length }} lessons</p>
+          }
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Theory Template (optional)</label>
+          <p-select [(ngModel)]="lessonPlanForm.theory_template_id"
+                    [options]="theoryTemplates()" optionLabel="name" optionValue="id"
+                    placeholder="Select a theory template..." styleClass="w-full" [showClear]="true" appendTo="body" />
+          @if (theoryTemplates().find(t => t.id === lessonPlanForm.theory_template_id); as tpl) {
             <p class="mt-1 text-xs text-gray-500">{{ tpl.total_days }} days · {{ tpl.total_weeks }} weeks · {{ tpl.lesson_items.length }} lessons</p>
           }
         </div>
@@ -1332,6 +2230,7 @@
           <p-datepicker [(ngModel)]="lessonPlanForm.start_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
         </div>
         <p-button label="Create Plan" [loading]="loading()" (onClick)="createLessonPlan()" styleClass="w-full justify-center" />
+        <p class="text-xs text-gray-400 text-center">Lessons will be merged into one plan with theory on Saturdays.</p>
       </div>
     </p-dialog>
 
@@ -1356,6 +2255,138 @@
                 </div>
                 <p-button icon="pi pi-plus" severity="success" (onClick)="addTemplateLessonToPlan(plan, item); showAddFromTemplateLessonDialog.set(false)"
                           styleClass="p-button-sm p-button-rounded" pTooltip="Add to plan" tooltipPosition="top" />
+              </div>
+            }
+          }
+        </div>
+      }
+    </p-dialog>
+
+    <!-- Schedule Dialog -->
+    <p-dialog header="Schedule Lesson Plan" [(visible)]="showScheduleDialog" [modal]="true"
+              [style]="{ width: '95vw', maxWidth: '650px' }" [draggable]="false" [resizable]="false"
+              [closable]="!scheduleLoading()">
+      @let plan = schedulingPlan();
+      @if (plan) {
+        <div class="flex flex-col gap-4 pt-2">
+          <!-- Preferred Start Times -->
+          <div>
+            <label class="mb-1 block text-sm font-semibold text-gray-700">Preferred Start Times</label>
+            <p class="mb-2 text-xs text-gray-500">Select preferred start times (30-min slots from 6:00 AM to 7:00 PM).</p>
+            <div class="flex items-start gap-2 mb-2">
+              <p-select [(ngModel)]="newAvailabilityDay"
+                [options]="[{label:'Monday',value:0},{label:'Tuesday',value:1},{label:'Wednesday',value:2},{label:'Thursday',value:3},{label:'Friday',value:4}]"
+                optionLabel="label" optionValue="value" styleClass="w-40" appendTo="body" />
+              <p-multiSelect [(ngModel)]="newAvailabilityTimes" [options]="timeOptions" optionLabel="label" optionValue="value"
+                placeholder="Select times" styleClass="w-48" appendTo="body" [maxSelectedLabels]="4" />
+              <p-button label="Add" size="small" severity="secondary" [disabled]="!newAvailabilityTimes().length"
+                (onClick)="addAvailability()" />
+            </div>
+            @if (scheduleAvailabilities().length > 0) {
+              <div class="flex flex-wrap gap-2">
+                @for (avail of scheduleAvailabilities(); track avail.id) {
+                  <span class="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">
+                    {{ ['Mon','Tue','Wed','Thu','Fri'][avail.day_of_week] }} {{ formatTime(avail.start_time) }}
+                    <button class="pi pi-times ml-1 cursor-pointer text-blue-400 hover:text-red-500" (click)="removeAvailability(avail.id)"></button>
+                  </span>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- Start Date -->
+          <div>
+            <label class="mb-1 block text-sm font-semibold text-gray-700">Start Date</label>
+            <p-datepicker [(ngModel)]="scheduleDate" dateFormat="dd/mm/yy" [minDate]="today" styleClass="w-full" appendTo="body" />
+          </div>
+
+          <!-- Manual Days -->
+          <div>
+            <label class="mb-1 block text-sm font-semibold text-gray-700">Manual Days <span class="text-xs text-gray-400">(first N days on manual, rest on auto)</span></label>
+            <p-inputNumber [(ngModel)]="scheduleManualDays" [min]="0" [max]="30" styleClass="w-full" inputId="integeronly" />
+          </div>
+
+          <!-- Manual Phase Vehicle -->
+          @if (scheduleManualDays() > 0) {
+            <div class="rounded-lg border border-blue-200 bg-blue-50 p-3">
+              <p class="mb-2 text-sm font-semibold text-blue-800">
+                Manual Phase
+                <span class="text-xs font-normal">(Days 1 – {{ scheduleManualDays() }})</span>
+              </p>
+              <p-select [(ngModel)]="scheduleVehicleId"
+                        [options]="manualVehicles()"
+                        optionLabel="name" optionValue="id"
+                        placeholder="Select manual vehicle"
+                        styleClass="w-full" appendTo="body"
+                        (onChange)="onScheduleVehicleChange()" />
+            </div>
+          }
+
+          <!-- Auto Phase Vehicle -->
+          <div class="rounded-lg border border-green-200 bg-green-50 p-3">
+            <p class="mb-2 text-sm font-semibold text-green-800">
+              Auto Phase
+              <span class="text-xs font-normal">(Days {{ scheduleManualDays() + 1 }} – end)</span>
+            </p>
+            <p-select [(ngModel)]="scheduleVehicleIdAuto"
+                      [options]="autoVehicles()"
+                      optionLabel="name" optionValue="id"
+                      placeholder="Select auto vehicle"
+                      styleClass="w-full" appendTo="body"
+                      (onChange)="onScheduleVehicleAutoChange()" />
+          </div>
+
+          <!-- Actions -->
+          <div class="flex gap-2">
+            <p-button label="Find & Lock" icon="pi pi-search" [loading]="scheduleLoading()"
+                      (onClick)="findAndLock()" styleClass="flex-1 justify-center" severity="success" />
+            <p-button label="Manual Lock" icon="pi pi-lock" [loading]="scheduleLoading()"
+                      (onClick)="lockManually()" styleClass="flex-1 justify-center" severity="warn" />
+          </div>
+
+          <!-- Result -->
+          @if (scheduleResult(); as result) {
+            @if (result.locked) {
+              <div class="rounded-lg border border-green-200 bg-green-50 p-3">
+                <p class="text-sm font-medium text-green-800 flex items-center gap-2">
+                  <span class="pi pi-check-circle text-green-600"></span>
+                  Schedule locked at <strong>{{ result.start_time }}</strong>
+                  — {{ result.lessons_locked }} lessons scheduled
+                </p>
+              </div>
+            } @else {
+              <div class="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p class="mb-2 text-sm font-medium text-amber-800 flex items-center gap-2">
+                  <span class="pi pi-exclamation-triangle text-amber-600"></span>
+                  {{ result.message }}
+                </p>
+                @if (result.schedule) {
+                  <div class="max-h-48 overflow-y-auto rounded border bg-white p-2">
+                    @if (result.schedule.all_slots?.length) {
+                      <div class="grid grid-cols-3 gap-1 sm:grid-cols-4 md:grid-cols-6">
+                        @for (slot of result.schedule.all_slots; track slot.start_time) {
+                          <div class="rounded px-2 py-1 text-xs text-center"
+                               [class.bg-red-100]="slot.busy"
+                               [class.bg-green-100]="!slot.busy"
+                               [class.text-red-700]="slot.busy"
+                               [class.text-green-700]="!slot.busy">
+                            {{ slot.start_time }}
+                          </div>
+                        }
+                      </div>
+                    }
+                    @if (result.schedule.collisions?.length) {
+                      <div class="mt-2 border-t pt-2">
+                        <p class="text-xs font-semibold text-red-600 mb-1">Collisions:</p>
+                        @for (coll of result.schedule.collisions; track coll.time_slot) {
+                          <div class="mb-1 rounded bg-red-50 px-2 py-1 text-xs text-red-700">
+                            {{ coll.time_slot }} — {{ coll.count }} overlapping lessons
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
               </div>
             }
           }
@@ -1402,24 +2433,40 @@
             <textarea [(ngModel)]="lessonEditForm.practical_objectives" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="2"></textarea>
           </div>
           <div class="border-t pt-3">
-            <label class="mb-2 block text-sm font-semibold text-gray-700">Session Tracking</label>
-            <div class="flex flex-wrap gap-3 sm:flex-nowrap">
-              <div class="min-w-20 flex-1">
-                <label class="mb-1 block text-xs text-gray-500">Driving (min)</label>
-                <p-inputNumber [(ngModel)]="lessonEditForm.driving_minutes" [min]="0" styleClass="w-full" />
+            <label class="mb-2 block text-sm font-semibold text-gray-700">Daily Practical Session</label>
+            @if (!lessonEditForm.is_theory) {
+              <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <div>
+                  <label class="mb-1 block text-xs text-gray-500" pTooltip="Vehicle Safety Inspection (Tyres, lights, fluids, mirrors, walk-around)">Inspection (min)</label>
+                  <p-inputNumber [(ngModel)]="lessonEditForm.vehicle_inspection_minutes" [min]="0" [max]="30" styleClass="w-full" />
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs text-gray-500" pTooltip="Cockpit Drill — DSSSM (Door, Seat, Steering, Seatbelt, Mirrors)">Cockpit (min)</label>
+                  <p-inputNumber [(ngModel)]="lessonEditForm.cockpit_drill_minutes" [min]="0" [max]="30" styleClass="w-full" />
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs text-gray-500" pTooltip="Lesson Video Illustration — watch instructional video before driving">Video (min)</label>
+                  <p-inputNumber [(ngModel)]="lessonEditForm.video_illustration_minutes" [min]="0" [max]="30" styleClass="w-full" />
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs text-gray-500" pTooltip="Practical Driving — instructor demo + learner practice">Driving (min)</label>
+                  <p-inputNumber [(ngModel)]="lessonEditForm.practical_driving_minutes" [min]="0" [max]="30" styleClass="w-full" />
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs text-gray-500" pTooltip="Assessment & Feedback — checklist, competency rating, comments">Assess (min)</label>
+                  <p-inputNumber [(ngModel)]="lessonEditForm.assessment_minutes" [min]="0" [max]="30" styleClass="w-full" />
+                </div>
               </div>
-              <div class="min-w-20 flex-1">
-                <label class="mb-1 block text-xs text-gray-500">Theory (min)</label>
-                <p-inputNumber [(ngModel)]="lessonEditForm.theory_minutes" [min]="0" styleClass="w-full" />
+              @let total = (lessonEditForm.vehicle_inspection_minutes || 0) + (lessonEditForm.cockpit_drill_minutes || 0) + (lessonEditForm.video_illustration_minutes || 0) + (lessonEditForm.practical_driving_minutes || 0) + (lessonEditForm.assessment_minutes || 0);
+              <div class="mt-1 text-xs" [class.text-red-500]="total > 30" [class.text-green-600]="total > 0 && total <= 30">
+                Total: {{ total }} / 30 min @if (total > 30) { <span class="font-semibold">(exceeds 30 min limit!)</span> }
               </div>
-              <div class="min-w-20 flex-1">
-                <label class="mb-1 block text-xs text-gray-500">Mileage (km)</label>
-                <p-inputNumber [(ngModel)]="lessonEditForm.mileage_km" [min]="0" [minFractionDigits]="1" [maxFractionDigits]="1" styleClass="w-full" />
-              </div>
-            </div>
+            } @else {
+              <p class="text-xs text-gray-400 italic">Theory lesson — no practical session structure.</p>
+            }
             <div class="mt-2 flex items-center gap-2">
-              <p-checkbox [(ngModel)]="lessonEditForm.combined_with_next" [binary]="true" inputId="combined_next" />
-              <label for="combined_next" class="text-sm">Combined with next lesson</label>
+              <p-checkbox [(ngModel)]="lessonEditForm.is_theory" [binary]="true" inputId="lesson_is_theory" (onChange)="onLessonTheoryToggle()" />
+              <label for="lesson_is_theory" class="text-sm">Theory lesson</label>
             </div>
           </div>
           <div>

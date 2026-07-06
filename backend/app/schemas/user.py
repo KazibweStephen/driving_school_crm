@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -9,6 +10,8 @@ class UserCreate(BaseModel):
     phone: str = Field(..., pattern=r"^\d{7,15}$")
     name: str = Field(..., min_length=1, max_length=100)
     role: UserRole = UserRole.OFFICE_ADMIN
+    company_id: uuid.UUID | None = None
+    is_company_admin: bool = False
 
 
 class UserRead(BaseModel):
@@ -16,6 +19,8 @@ class UserRead(BaseModel):
     name: str
     role: UserRole
     status: UserStatus
+    is_company_admin: bool
+    company_id: uuid.UUID | None = None
     created_by_phone: str | None
     created_at: datetime
     updated_at: datetime
@@ -27,6 +32,8 @@ class UserUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=100)
     role: UserRole | None = None
     status: UserStatus | None = None
+    company_id: uuid.UUID | None = None
+    is_company_admin: bool | None = None
 
 
 class UserPinChange(BaseModel):

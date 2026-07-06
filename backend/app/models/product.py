@@ -25,6 +25,10 @@ class Product(Base):
     status: Mapped[EntityStatus] = mapped_column(
         Enum(EntityStatus), default=EntityStatus.ACTIVE, nullable=False
     )
+    is_extension: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     created_by_phone: Mapped[str | None] = mapped_column(
         ForeignKey("users.phone"), nullable=True
     )
@@ -56,6 +60,8 @@ class Package(Base):
     driving_training_duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     theory_training_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     permit_processing_duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_extension: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    extension_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[EntityStatus] = mapped_column(
         Enum(EntityStatus), default=EntityStatus.ACTIVE, nullable=False
     )

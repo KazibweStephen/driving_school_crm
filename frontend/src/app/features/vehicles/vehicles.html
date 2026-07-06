@@ -1,0 +1,89 @@
+<p-toast></p-toast>
+<p-confirmdialog></p-confirmdialog>
+
+<div class="p-4">
+  <div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold">Vehicles</h1>
+    <div class="flex gap-2">
+      <p-select [(ngModel)]="statusFilter" [options]="statusOptions" optionLabel="label" optionValue="value"
+        placeholder="Filter by status" class="w-48" appendTo="body" (onChange)="loadVehicles()"></p-select>
+      <button pButton label="Add Vehicle" icon="pi pi-plus" (click)="openCreate()"></button>
+    </div>
+  </div>
+
+  <p-table [value]="vehicles()" [loading]="loading()" [paginator]="true" [rows]="20"
+    [rowsPerPageOptions]="[10,20,50]" sortField="name" [sortOrder]="1"
+    [globalFilterFields]="['name','plate_number','transmission','status']">
+    <ng-template pTemplate="header">
+      <tr>
+        <th pSortableColumn="name">Name <p-sortIcon field="name"></p-sortIcon></th>
+        <th pSortableColumn="plate_number">Plate <p-sortIcon field="plate_number"></p-sortIcon></th>
+        <th pSortableColumn="transmission">Transmission <p-sortIcon field="transmission"></p-sortIcon></th>
+        <th pSortableColumn="status">Status <p-sortIcon field="status"></p-sortIcon></th>
+        <th>Branches</th>
+        <th>Notes</th>
+        <th>Actions</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-vehicle>
+      <tr>
+        <td class="font-medium">{{ vehicle.name }}</td>
+        <td>{{ vehicle.plate_number }}</td>
+        <td><p-tag [value]="vehicle.transmission" [severity]="vehicle.transmission === 'manual' ? 'info' : 'success'"></p-tag></td>
+        <td><p-tag [value]="vehicle.status" [severity]="statusColor(vehicle.status)"></p-tag></td>
+        <td class="text-sm text-gray-500 max-w-36 truncate">
+          {{ branchNames(vehicle.branch_ids) }}
+        </td>
+        <td class="text-sm text-gray-500 max-w-48 truncate">{{ vehicle.notes || '-' }}</td>
+        <td>
+          <div class="flex gap-1">
+            <button pButton icon="pi pi-pencil" class="p-button-sm p-button-text"
+              (click)="openEdit(vehicle)" pTooltip="Edit"></button>
+            <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger"
+              (click)="confirmDelete(vehicle)" pTooltip="Delete"></button>
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr><td colspan="7" class="text-center py-4 text-gray-400">No vehicles found.</td></tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<p-dialog [(visible)]="showDialog" [header]="editingVehicle() ? 'Edit Vehicle' : 'Add Vehicle'"
+  [modal]="true" [style]="{ width: '500px' }" appendTo="body">
+  <div class="flex flex-col gap-4">
+    <div>
+      <label class="block text-sm font-medium mb-1">Name *</label>
+      <input pInputText [(ngModel)]="form.name" class="w-full" required />
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Plate Number *</label>
+      <input pInputText [(ngModel)]="form.plate_number" class="w-full" required />
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Transmission *</label>
+      <p-select [(ngModel)]="form.transmission" [options]="transmissionOptions" optionLabel="label" optionValue="value" class="w-full" appendTo="body"></p-select>
+    </div>
+    @if (editingVehicle()) {
+      <div>
+        <label class="block text-sm font-medium mb-1">Status</label>
+        <p-select [(ngModel)]="form.status" [options]="statusOptions" optionLabel="label" optionValue="value" class="w-full" appendTo="body"></p-select>
+      </div>
+    }
+    <div>
+      <label class="block text-sm font-medium mb-1">Branches</label>
+      <p-multiSelect [(ngModel)]="form.branch_ids" [options]="branches()" optionLabel="name" optionValue="id"
+        placeholder="Select branches" styleClass="w-full" appendTo="body"></p-multiSelect>
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Notes</label>
+      <textarea [(ngModel)]="form.notes" class="w-full border rounded p-2 text-sm" rows="3"></textarea>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <button pButton label="Cancel" class="p-button-text" (click)="showDialog.set(false)"></button>
+    <button pButton [label]="editingVehicle() ? 'Update' : 'Create'" [disabled]="!form.name || !form.plate_number || !form.transmission" (click)="save()"></button>
+  </ng-template>
+</p-dialog>

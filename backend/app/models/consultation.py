@@ -59,6 +59,9 @@ class Consultation(Base):
     status: Mapped[ConsultationStatus] = mapped_column(
         Enum(ConsultationStatus, values_callable=_values_callable), default=ConsultationStatus.NEW, nullable=False
     )
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_by_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -67,6 +70,7 @@ class Consultation(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    branch: Mapped["Branch | None"] = relationship("Branch", back_populates="consultations")
     follow_ups: Mapped[list["FollowUp"]] = relationship(
         "FollowUp", back_populates="consultation", cascade="all, delete-orphan"
     )

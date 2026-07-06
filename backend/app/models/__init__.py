@@ -1,4 +1,12 @@
 from app.models.cart import CartItem, CartItemStatus, follow_up_cart_items
+from app.models.company import (
+    Branch,
+    Company,
+    Expense,
+    Sale,
+    UserBranchAssignment,
+    VehicleBranchAssignment,
+)
 from app.models.consultation import (
     Consultation,
     ConsultationStatus,
@@ -32,6 +40,8 @@ from app.models.lesson_plan import (
     TheorySessionStatus,
     TransmissionType,
     Vehicle,
+    VehicleAssignment,
+    VehicleScheduleSlot,
     VehicleStatus,
     VideoLibrary,
     VideoSource,
@@ -45,11 +55,14 @@ from app.models.payment import (
 )
 from app.models.permit import PermitProgress
 from app.models.product import Package, Product
+from app.models.schedule_break import ScheduleBreak
 from app.models.training import TrainingSession
 from app.models.user import User, UserRole, UserStatus
 
 __all__ = [
     "User", "UserRole", "UserStatus",
+    "Company", "Branch", "UserBranchAssignment", "VehicleBranchAssignment",
+    "Expense", "Sale",
     "EntityStatus", "Package", "Product",
     "Consultation", "ConsultationStatus", "FollowUp", "FollowUpStatus", "FollowUpType", "InterestLevel",
     "Payment", "Installment", "InstallmentStatus", "NotificationPreference", "NotificationChannel",
@@ -65,5 +78,6 @@ __all__ = [
     "LessonHistory",
     "ImportLog", "ImportStatus",
     "InstructorQualification",
-    "Vehicle", "VehicleStatus",
+    "ScheduleBreak",
+    "Vehicle", "VehicleAssignment", "VehicleScheduleSlot", "VehicleStatus",
 ]

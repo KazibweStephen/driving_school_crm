@@ -56,6 +56,7 @@ async def create_template(
         description=data.description,
         total_days=data.total_days,
         total_weeks=data.total_weeks,
+        template_type=data.template_type,
         items_data=items_data,
         created_by_phone=current_user.phone,
     )
@@ -98,8 +99,10 @@ async def update_template(
         description=data.description,
         total_days=data.total_days,
         total_weeks=data.total_weeks,
+        template_type=data.template_type,
         status=data.status,
         is_locked=data.is_locked,
+        items_data=[i.model_dump() for i in data.items] if data.items is not None else None,
     )
     return LessonPlanTemplateRead.model_validate(updated)
 
@@ -311,15 +314,39 @@ async def create_client_plan(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid cart item ID")
 
-    template_id = uuid.UUID(data.template_id) if data.template_id else None
+    practical_id = uuid.UUID(data.template_id) if data.template_id else None
+    theory_id = uuid.UUID(data.theory_template_id) if data.theory_template_id else None
 
-    if template_id:
+    # Merge case: both practical and theory templates provided
+    if practical_id and theory_id:
         try:
-            plan = await lesson_service.create_client_plan_from_template(
-                db, cid, template_id,
+            plan = await lesson_service.create_merged_client_plan(
+                db, cid, practical_id, theory_id,
                 transmission_type=data.transmission_type,
                 start_date=data.start_date,
                 notes=data.notes,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+    elif practical_id:
+        try:
+            plan = await lesson_service.create_client_plan_from_template(
+                db, cid, practical_id,
+                transmission_type=data.transmission_type,
+                start_date=data.start_date,
+                notes=data.notes,
+                manual_days=data.manual_days,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+    elif theory_id:
+        try:
+            plan = await lesson_service.create_client_plan_from_template(
+                db, cid, theory_id,
+                transmission_type=data.transmission_type,
+                start_date=data.start_date,
+                notes=data.notes,
+                manual_days=data.manual_days,
             )
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -330,8 +357,12 @@ async def create_client_plan(
             transmission_type=data.transmission_type,
             template_id=None,
             start_date=data.start_date,
+            is_extension=data.is_extension,
+            extension_of_plan_id=uuid.UUID(data.extension_of_plan_id) if data.extension_of_plan_id else None,
+            extension_days_added=data.extension_days_added,
             notes=data.notes,
             lessons_data=lessons_data,
+            manual_days=data.manual_days,
         )
     return ClientLessonPlanRead.model_validate(plan)
 
@@ -409,6 +440,7 @@ async def update_client_plan(
 @router.delete("/api/v1/lesson-plans/{plan_id}", status_code=204)
 async def delete_client_plan(
     plan_id: str,
+    delete_mode: str = Query("all", description="all | unstarted | uncompleted"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -419,7 +451,12 @@ async def delete_client_plan(
     plan = await lesson_service.get_client_plan_by_id(db, pid)
     if not plan:
         raise HTTPException(status_code=404, detail="Lesson plan not found")
-    await lesson_service.delete_client_plan(db, plan)
+    if delete_mode not in ("all", "unstarted", "uncompleted"):
+        raise HTTPException(status_code=400, detail="Invalid delete_mode")
+    try:
+        result = await lesson_service.delete_client_plan(db, plan, delete_mode)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/api/v1/lesson-plans/{plan_id}/upgrade", response_model=ClientLessonPlanRead)
@@ -474,9 +511,15 @@ async def update_client_lesson(
         is_locked=data.is_locked,
         status=data.status,
         difficulty=data.difficulty,
+        vehicle_inspection_minutes=data.vehicle_inspection_minutes,
+        cockpit_drill_minutes=data.cockpit_drill_minutes,
+        video_illustration_minutes=data.video_illustration_minutes,
+        practical_driving_minutes=data.practical_driving_minutes,
+        assessment_minutes=data.assessment_minutes,
         driving_minutes=data.driving_minutes,
         theory_minutes=data.theory_minutes,
         mileage_km=data.mileage_km,
+        is_theory=data.is_theory,
         combined_with_next=data.combined_with_next,
         skills_achieved=data.skills_achieved,
         outcome=data.outcome,

@@ -137,6 +137,10 @@
           <label class="mb-1 block text-sm font-medium text-gray-700">Total Weeks</label>
           <p-inputNumber [(ngModel)]="form.total_weeks" [min]="1" styleClass="w-full" />
         </div>
+        <div class="flex-1">
+          <label class="mb-1 block text-sm font-medium text-gray-700">Template Type</label>
+          <p-select [(ngModel)]="form.template_type" [options]="[{label:'Practical',value:'practical'},{label:'Theory',value:'theory'},{label:'Both',value:'both'}]" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+        </div>
       </div>
 
       <!-- Lesson Items summary -->
@@ -302,6 +306,10 @@
             <div class="flex items-center gap-2 self-end pb-2">
               <p-checkbox [(ngModel)]="itemForm.enforce_prerequisites" [binary]="true" inputId="enf_pre" />
               <label for="enf_pre" class="text-sm text-gray-700">Enforce prerequisites</label>
+            </div>
+            <div class="flex items-center gap-2 self-end pb-2">
+              <p-checkbox [(ngModel)]="itemForm.is_theory" [binary]="true" inputId="item_is_theory" />
+              <label for="item_is_theory" class="text-sm text-gray-700">Theory lesson</label>
             </div>
           </div>
           <div class="border-t pt-2 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">

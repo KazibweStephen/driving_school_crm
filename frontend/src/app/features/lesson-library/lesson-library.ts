@@ -10,6 +10,7 @@ import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { ToastModule } from 'primeng/toast';
 import { SelectModule } from 'primeng/select';
+import { CheckboxModule } from 'primeng/checkbox';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TableModule } from 'primeng/table';
@@ -22,7 +23,7 @@ import { VideoLibraryService, VideoLibraryItem } from '../../core/services/video
   imports: [
     CommonModule, FormsModule, ButtonModule, DialogModule,
     InputTextModule, InputNumberModule, TagModule, TooltipModule,
-    ToastModule, SelectModule, MultiSelectModule, ConfirmDialogModule, TableModule,
+    ToastModule, SelectModule, CheckboxModule, MultiSelectModule, ConfirmDialogModule, TableModule,
   ],
   providers: [ConfirmationService, MessageService],
   templateUrl: './lesson-library.html',
@@ -52,6 +53,7 @@ export class LessonLibraryCmp implements OnInit {
     training_category: 'driving',
     prerequisite_competencies: [''] as string[],
     prerequisite_lesson_ids: [] as string[],
+    is_theory: false,
   };
 
   difficulties = [
@@ -130,6 +132,7 @@ export class LessonLibraryCmp implements OnInit {
       training_category: lesson.training_category || 'driving',
       prerequisite_competencies: lesson.prerequisite_competencies?.length ? [...lesson.prerequisite_competencies] : [''],
       prerequisite_lesson_ids: lesson.prerequisite_lessons?.map(p => p.id) || [],
+      is_theory: lesson.is_theory,
     };
     this.currentVideos.set(lesson.videos || []);
     this.lessonIdForVideo = lesson.id;
@@ -144,6 +147,7 @@ export class LessonLibraryCmp implements OnInit {
       difficulty: 'beginner', day_number: null, week_number: null, order: null,
       preferred_location: '', training_category: 'driving',
       prerequisite_competencies: [''], prerequisite_lesson_ids: [],
+      is_theory: false,
     };
   }
 
@@ -175,6 +179,7 @@ export class LessonLibraryCmp implements OnInit {
         training_category: this.form.training_category || undefined,
         prerequisite_competencies: this.form.prerequisite_competencies.filter((s: string) => s.trim()),
         prerequisite_lesson_ids: this.form.prerequisite_lesson_ids || undefined,
+        is_theory: this.form.is_theory || false,
       };
       if (editing) {
         await this.lessonLibraryService.update(editing.id, data).toPromise();

@@ -12,3 +12,9 @@ html, body {
 button, a, input, select, textarea {
   min-height: 44px;
 }
+
+@media (max-width: 639px) {
+  .p-orderlist-controls {
+    display: none !important;
+  }
+}

@@ -6,6 +6,7 @@ export interface Product {
   name: string;
   duration_label: string | null;
   description: string | null;
+  is_extension: boolean;
   status: string;
   created_by_phone: string | null;
   created_at: string;
@@ -25,6 +26,8 @@ export interface Package {
   driving_training_duration_days: number | null;
   theory_training_hours: number | null;
   permit_processing_duration_days: number | null;
+  is_extension: boolean;
+  extension_days: number | null;
   status: string;
   created_by_phone: string | null;
   created_at: string;
@@ -35,6 +38,7 @@ export interface ProductCreate {
   name: string;
   duration_label?: string;
   description?: string;
+  is_extension?: boolean;
 }
 
 export interface ProductUpdate {
@@ -42,6 +46,7 @@ export interface ProductUpdate {
   duration_label?: string;
   description?: string;
   status?: string;
+  is_extension?: boolean;
 }
 
 export interface ProductListResponse {
@@ -63,6 +68,8 @@ export interface PackageCreate {
   driving_training_duration_days?: number | null;
   theory_training_hours?: number | null;
   permit_processing_duration_days?: number | null;
+  is_extension?: boolean;
+  extension_days?: number | null;
 }
 
 export interface PackageUpdate {
@@ -76,6 +83,8 @@ export interface PackageUpdate {
   driving_training_duration_days?: number | null;
   theory_training_hours?: number | null;
   permit_processing_duration_days?: number | null;
+  is_extension?: boolean;
+  extension_days?: number | null;
 }
 
 @Injectable({ providedIn: 'root' })

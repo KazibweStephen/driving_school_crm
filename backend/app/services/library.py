@@ -37,6 +37,7 @@ async def create_lesson(
     training_category: str = "driving",
     prerequisite_competencies: list[str] | None = None,
     prerequisite_lesson_ids: list[uuid.UUID] | None = None,
+    is_theory: bool = False,
 ) -> LessonLibrary:
     lesson = LessonLibrary(
         title=title,
@@ -57,6 +58,7 @@ async def create_lesson(
         preferred_location=preferred_location,
         training_category=training_category,
         prerequisite_competencies=prerequisite_competencies or [],
+        is_theory=is_theory,
     )
     db.add(lesson)
     await db.flush()
@@ -133,6 +135,7 @@ async def update_lesson(
     training_category: str | None = None,
     prerequisite_competencies: list[str] | None = None,
     prerequisite_lesson_ids: list[uuid.UUID] | None = None,
+    is_theory: bool | None = None,
 ) -> LessonLibrary:
     if title is not None:
         lesson.title = title
@@ -177,6 +180,8 @@ async def update_lesson(
         for prereq_id in prerequisite_lesson_ids:
             p = LessonPrerequisite(lesson_id=lesson.id, prerequisite_lesson_id=prereq_id)
             db.add(p)
+    if is_theory is not None:
+        lesson.is_theory = is_theory
     await db.flush()
     await db.refresh(lesson)
     return lesson

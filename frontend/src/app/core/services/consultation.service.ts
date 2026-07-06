@@ -64,6 +64,7 @@ export interface ConsultationCreate {
   interest_level?: string;
   start_date?: string;
   notes?: string;
+  branch_id?: string | null;
 }
 
 export interface FullConsultationItem {
@@ -86,6 +87,7 @@ export interface FullConsultationCreate {
   interest_level?: string;
   start_date?: string;
   notes?: string;
+  branch_id?: string | null;
   items: FullConsultationItem[];
   payment?: FullConsultationPayment;
 }
@@ -102,6 +104,7 @@ export interface ConsultationUpdate {
   start_date?: string | null;
   notes?: string | null;
   status?: string;
+  branch_id?: string | null;
 }
 
 export interface ConsultationListResponse {

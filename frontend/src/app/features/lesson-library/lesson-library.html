@@ -157,6 +157,10 @@
       }
       <button pButton icon="pi pi-plus" label="Add Prerequisite" class="p-button-sm p-button-outlined mt-1" (click)="addArrayItem('prerequisite_competencies')"></button>
     </div>
+    <div class="flex items-center gap-2">
+      <p-checkbox [(ngModel)]="form.is_theory" [binary]="true" inputId="lib_is_theory" />
+      <label for="lib_is_theory" class="text-sm">Theory lesson (free, Saturday sessions)</label>
+    </div>
     <div>
       <label class="block text-sm font-medium mb-1">Prerequisite Lessons</label>
       <p-multiSelect [(ngModel)]="form.prerequisite_lesson_ids" [options]="allLessons()" optionLabel="title" optionValue="id" styleClass="w-full" appendTo="body" placeholder="Select prerequisite lessons..." [maxSelectedLabels]="3"></p-multiSelect>

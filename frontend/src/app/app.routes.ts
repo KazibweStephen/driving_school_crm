@@ -44,6 +44,36 @@ export const routes: Routes = [
           import('./features/video-library/video-library').then((c) => c.VideoLibraryCmp),
       },
       {
+        path: 'companies',
+        loadComponent: () =>
+          import('./features/companies/companies').then((c) => c.CompaniesCmp),
+      },
+      {
+        path: 'branches',
+        loadComponent: () =>
+          import('./features/branches/branches').then((c) => c.BranchesCmp),
+      },
+      {
+        path: 'vehicles',
+        loadComponent: () =>
+          import('./features/vehicles/vehicles').then((c) => c.VehiclesCmp),
+      },
+      {
+        path: 'vehicle-schedule',
+        loadComponent: () =>
+          import('./features/vehicle-schedule/vehicle-schedule').then((c) => c.VehicleScheduleCmp),
+      },
+      {
+        path: 'weekly-schedule',
+        loadComponent: () =>
+          import('./features/weekly-schedule/weekly-schedule').then((c) => c.WeeklyScheduleCmp),
+      },
+      {
+        path: 'schedule-breaks',
+        loadComponent: () =>
+          import('./features/schedule-breaks/schedule-breaks').then((c) => c.ScheduleBreaksCmp),
+      },
+      {
         path: 'consultations',
         loadComponent: () =>
           import('./features/clients/clients').then((c) => c.Clients),

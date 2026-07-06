@@ -1,8 +1,14 @@
 # AGENTS.md — Driving School CRM Anchored Summary
 
-**Goal:** Build a production-ready driving school CRM with unified consultation/client lifecycle, per-product-package workflow via CartItems + installments, receipt-numbered payments, derived consultation status, multi-step creation, stage-based filtering, training/permit progress tracking per cart item, backend-stored computed payment totals, auto-generated training sessions from package durations, competence-based skills per session, **comprehensive Lesson Planning & Training Management** module — including LessonLibrary (reusable lesson templates with JSONB objectives/competencies), VideoLibrary (upload + embed streaming), Vehicle management, Instructor qualification tracking, student plan generation from templates (lesson-level state machine with 10 states, lock/unlock, difficulty), lesson execution (checklists, competencies, live GPS distance tracking, timer with 30min/3km/competencies logic), TheorySession auto-generation on Saturdays, and instructor/vehicle assignment per lesson.
+**Goal:** Build a production-ready driving school CRM with **multi-company + branch hierarchy**. Each Company is a tenant with its own Products, Vehicles, Lesson Plans, Lesson Libraries, Video Libraries. Each Company has multiple Branches; Consultations, Expenses, Sales, Client Availabilities are branch-scoped. Users belong to a Company (nullable for super_admin) and can be assigned to Branches via `UserBranchAssignment`. Vehicles belong to a Company and can be shared across Branches via `VehicleBranchAssignment`. Unified consultation/client lifecycle, per-product-package workflow via CartItems + installments, receipt-numbered payments, derived consultation status, multi-step creation, stage-based filtering, training/permit progress tracking per cart item, backend-stored computed payment totals, auto-generated training sessions from package durations, competence-based skills per session, **comprehensive Lesson Planning & Training Management** module — including LessonLibrary (reusable lesson templates with JSONB objectives/competencies), VideoLibrary (upload + embed streaming), Vehicle management, Instructor qualification tracking, student plan generation from templates (lesson-level state machine with 10 states, lock/unlock, difficulty), lesson execution (checklists, competencies, live GPS distance tracking, timer with 30min/3km/competencies logic), TheorySession auto-generation on Saturdays, and instructor/vehicle assignment per lesson.
 
 ## Constraints & Preferences
+- Lunch break 13:00-13:30 reserved in all vehicle schedules (max slots per vehicle per day = 6:00-19:00 30-min slots minus enforced breaks)
+- Lunch is the **only standard break** (`is_standard=True`); always enforced on all vehicles.
+- Non-standard breaks (`is_standard=False`) are **conditional**: they block scheduling for a vehicle only if that vehicle has all possible slots in that half-day (morning 6:00-13:00 or afternoon 13:30-19:00) already booked. If the vehicle has free slots in the half, the break is ignored.
+- Vehicles can be assigned to one or more branches on create/edit via `branch_ids` field
+- `lock_schedule` enforces only enforced breaks (ValueError) and vehicle capacity derived from available slots
+- `check_preferred_times` skips only enforced break slots; when no vehicle context, falls through to all-active-breaks conservative check
 - Phone + 4-digit PIN auth (no self-registration), JWT tokens, bcrypt hashing
 - PostgreSQL via Docker, async SQLAlchemy + Alembic
 - Angular 21 (standalone) + PrimeNG 21 + Tailwind CSS v4
@@ -107,19 +113,24 @@
 - Frontend VideoLibrary page (`/video-library`): upload with drag-drop area, YouTube/Vimeo embed links, preview dialog with video/iframe player, source tags
 - Frontend routes and sidebar updated with `/lesson-library` and `/video-library` entries
 
-### Next Steps
-1. Write Playwright tests for training sessions (create, list, summary, generate, start timer, skills)
-2. Write Playwright tests for permit progress (update, display)
-3. Write Playwright tests for consultation create with installments (partial payment + future installments)
-4. Seed the 20-day manual driving curriculum as a default `LessonPlanTemplate`
-5. Add Trainings and Documents models/API/sections if not yet completed
-6. Remove templates button from products page (superseded by dedicated `/lesson-plans` page)
-7. Create Vehicle management frontend page (CRUD for vehicles)
-8. Create Instructor Qualification page/section
-9. Update ClientProfile to use new LessonState, lock/unlock UI, competency dashboard
-10. Build lesson execution flow (checklists, competencies, GPS timer, 30min/3km/competencies logic)
-11. Build TheorySession auto-generation and display
-12. Run migration `c3d4e5f6a7b8` and test all new backend endpoints
+## Multi-Company Architecture
+- **Company** (`companies`): Top-level tenant with `id`, `name`, `code` (unique), `address`, `phone`, `email`, `is_active`
+- **Branch** (`branches`): Belongs to a Company (`company_id` FK); `name`, `code` (unique), `address`, `phone`, `email`, `is_active`
+- **User.company_id**: nullable FK — null for super_admin, set for company-scoped users
+- **User.is_company_admin**: boolean flag for company-level admin role
+- **UserBranchAssignment**: M2M between users and branches with optional `role` override
+- **VehicleBranchAssignment**: M2M between vehicles and branches (car sharing)
+- **Expense** (`expenses`): branch-scoped (`branch_id` FK)
+- **Sale** (`sales`): branch-scoped (`branch_id` FK)
+- **Scoped models** (have `company_id` FK): Product, Vehicle, LessonPlanTemplate, LessonLibrary, VideoLibrary
+- **Scoped models** (have `branch_id` FK): Consultation, ClientAvailability
+- Default Company (`00000000-0000-0000-0000-000000000001`) and Main Branch (`00000000-0000-0000-0000-000000000002`) are seeded; all existing records backfilled to them
+
+## Next Steps
+1. Add company-scoped filtering to existing API endpoints (products, vehicles, templates, libraries)
+2. Add branch-scoped filtering to consultation/scheduling APIs
+3. Build frontend Expense and Sale pages under branches
+4. Add `appendTo="body"` to all `p-select` and `p-datepicker` dropdowns for mobile
 
 ## Test Credentials
 Super Admin `256700000000`, pin=`1234`
@@ -135,9 +146,10 @@ Postgres `:5433` (external), backend `:8000`, frontend `:80`
 If migration files are missing from container: `docker cp backend/alembic/versions/<file> crm-backend:/app/alembic/versions/`
 
 ## Migration Head
-`6d6f3d2f0547` (fix entitystatus to lowercase); parent `c3d4e5f6a7b8` (comprehensive lesson v2); parent `b2c3d4e5f6a7` (lesson plan tables)
+`03340a0699ad` (add_is_standard_to_schedule_breaks); parent `73e70b370772` (add_schedule_breaks)
 
 ## Test Files
 - `e2e/login.spec.ts` (11 tests): login, sidebar, user CRUD/search/PIN
 - `e2e/consultations.spec.ts` (15 tests): list/search, stage filter, profile with products/payments/Add to Cart, API create+verify, products page, users page
 - `e2e/lesson-plans.spec.ts` (4 tests): sidebar load, API create+verify, dialog close, UI delete
+- `e2e/vehicle-scheduling.spec.ts` (1 test): full flow create template, manual/auto vehicles, instructor, product, package, consultation, client plan with manual_days=4, lock dual-phase, verify day 1–4 manual, day 5–10 auto, cleanup

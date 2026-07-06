@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time
 
 from pydantic import BaseModel
 
@@ -64,6 +64,7 @@ class LessonLibraryCreate(BaseModel):
     training_category: str = "driving"
     prerequisite_competencies: list[str] = []
     prerequisite_lesson_ids: list[uuid.UUID] = []
+    is_theory: bool = False
 
 
 class LessonLibraryUpdate(BaseModel):
@@ -86,6 +87,7 @@ class LessonLibraryUpdate(BaseModel):
     training_category: str | None = None
     prerequisite_competencies: list[str] | None = None
     prerequisite_lesson_ids: list[uuid.UUID] | None = None
+    is_theory: bool | None = None
 
 
 class LessonLibraryRead(BaseModel):
@@ -109,6 +111,7 @@ class LessonLibraryRead(BaseModel):
     preferred_location: str | None
     training_category: str
     prerequisite_competencies: list[str]
+    is_theory: bool
     prerequisite_lessons: list["LessonLibraryPrerequisiteRead"] = []
     created_by_phone: str | None
     created_at: datetime
@@ -139,6 +142,23 @@ class LessonTemplateItemCreate(BaseModel):
     lesson_library_id: uuid.UUID | None = None
     preferred_location: str | None = None
     enforce_prerequisites: bool = True
+    is_theory: bool = False
+
+
+class LessonTemplateItemCreateWithId(BaseModel):
+    id: uuid.UUID | None = None
+    day_number: int
+    week_number: int
+    title: str
+    lesson_objectives: list[str] = []
+    practical_objectives: list[str] = []
+    estimated_minutes: int = 30
+    estimated_distance_km: float = 3.0
+    order: int = 0
+    lesson_library_id: uuid.UUID | None = None
+    preferred_location: str | None = None
+    enforce_prerequisites: bool = True
+    is_theory: bool = False
 
 
 class LessonTemplateItemUpdate(BaseModel):
@@ -153,6 +173,7 @@ class LessonTemplateItemUpdate(BaseModel):
     lesson_library_id: uuid.UUID | None = None
     preferred_location: str | None = None
     enforce_prerequisites: bool | None = None
+    is_theory: bool | None = None
 
 
 class LessonTemplateItemRead(BaseModel):
@@ -169,6 +190,7 @@ class LessonTemplateItemRead(BaseModel):
     lesson_library_id: uuid.UUID | None = None
     preferred_location: str | None = None
     enforce_prerequisites: bool
+    is_theory: bool
     created_at: datetime
     updated_at: datetime
 
@@ -181,6 +203,7 @@ class LessonPlanTemplateCreate(BaseModel):
     description: str | None = None
     total_days: int = 20
     total_weeks: int = 4
+    template_type: str = "practical"
     items: list[LessonTemplateItemCreate] = []
 
 
@@ -189,8 +212,10 @@ class LessonPlanTemplateUpdate(BaseModel):
     description: str | None = None
     total_days: int | None = None
     total_weeks: int | None = None
+    template_type: str | None = None
     status: str | None = None
     is_locked: bool | None = None
+    items: list[LessonTemplateItemCreateWithId] | None = None
 
 
 class LessonPlanTemplateRead(BaseModel):
@@ -200,6 +225,7 @@ class LessonPlanTemplateRead(BaseModel):
     description: str | None
     total_days: int
     total_weeks: int
+    template_type: str
     status: str
     is_locked: bool
     lesson_items: list[LessonTemplateItemRead] = []
@@ -220,6 +246,7 @@ class ClientLessonCreate(BaseModel):
     practical_objectives: list[str] = []
     order: int = 0
     is_active: bool = True
+    is_theory: bool = False
     preferred_location: str | None = None
     enforce_prerequisites: bool = True
 
@@ -235,9 +262,15 @@ class ClientLessonUpdate(BaseModel):
     is_locked: bool | None = None
     status: str | None = None
     difficulty: str | None = None
+    vehicle_inspection_minutes: int | None = None
+    cockpit_drill_minutes: int | None = None
+    video_illustration_minutes: int | None = None
+    practical_driving_minutes: int | None = None
+    assessment_minutes: int | None = None
     driving_minutes: int | None = None
     theory_minutes: int | None = None
     mileage_km: float | None = None
+    is_theory: bool | None = None
     combined_with_next: bool | None = None
     skills_achieved: list | None = None
     outcome: str | None = None
@@ -246,6 +279,9 @@ class ClientLessonUpdate(BaseModel):
     notes: str | None = None
     preferred_location: str | None = None
     enforce_prerequisites: bool | None = None
+    scheduled_date: date | None = None
+    scheduled_start_time: str | None = None
+    duration_minutes: int | None = None
 
 
 class ClientLessonRead(BaseModel):
@@ -263,18 +299,29 @@ class ClientLessonRead(BaseModel):
     is_locked: bool
     status: str
     difficulty: str | None
+    vehicle_inspection_minutes: int | None
+    cockpit_drill_minutes: int | None
+    video_illustration_minutes: int | None
+    practical_driving_minutes: int | None
+    assessment_minutes: int | None
     driving_minutes: int | None
     theory_minutes: int | None
     mileage_km: float | None
+    is_theory: bool
     combined_with_next: bool
     skills_achieved: list | None
     outcome: str | None
     instructor_id: str | None
-    vehicle_id: str | None
+    vehicle_id: uuid.UUID | None
     completed_at: datetime | None
     notes: str | None
     preferred_location: str | None
     enforce_prerequisites: bool
+    scheduled_date: date | None
+    scheduled_start_time: time | None
+    scheduled_end_time: time | None
+    duration_minutes: int = 30
+    plan_locked_time: time | None
     created_at: datetime
     updated_at: datetime
 
@@ -283,9 +330,14 @@ class ClientLessonRead(BaseModel):
 
 class ClientLessonPlanCreate(BaseModel):
     template_id: str | None = None
+    theory_template_id: str | None = None
     transmission_type: str
     start_date: datetime | None = None
+    is_extension: bool = False
+    extension_of_plan_id: str | None = None
+    extension_days_added: int | None = None
     notes: str | None = None
+    manual_days: int | None = 5
     lessons: list[ClientLessonCreate] = []
 
 
@@ -293,7 +345,11 @@ class ClientLessonPlanUpdate(BaseModel):
     start_date: datetime | None = None
     status: str | None = None
     purchased_days: int | None = None
+    is_extension: bool | None = None
+    extension_of_plan_id: str | None = None
+    extension_days_added: int | None = None
     notes: str | None = None
+    manual_days: int | None = None
 
 
 class ClientLessonPlanRead(BaseModel):
@@ -305,7 +361,12 @@ class ClientLessonPlanRead(BaseModel):
     status: str
     purchased_days: int | None
     auto_generated: bool
+    is_extension: bool
+    extension_of_plan_id: str | None
+    extension_days_added: int | None
+    template_type: str = "practical"
     notes: str | None
+    manual_days: int | None
     lessons: list[ClientLessonRead] = []
     created_at: datetime
     updated_at: datetime
@@ -532,6 +593,7 @@ class VehicleCreate(BaseModel):
     plate_number: str
     transmission: str
     notes: str | None = None
+    branch_ids: list[uuid.UUID] = []
 
 
 class VehicleUpdate(BaseModel):
@@ -540,6 +602,7 @@ class VehicleUpdate(BaseModel):
     transmission: str | None = None
     status: str | None = None
     notes: str | None = None
+    branch_ids: list[uuid.UUID] | None = None
 
 
 class VehicleRead(BaseModel):
@@ -549,10 +612,163 @@ class VehicleRead(BaseModel):
     transmission: str
     status: str
     notes: str | None
+    branch_ids: list[uuid.UUID] = []
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── Vehicle Assignments ──
+
+
+class VehicleAssignmentCreate(BaseModel):
+    vehicle_id: str
+    instructor_id: str
+    assigned_from: date
+    assigned_until: date | None = None
+
+
+class VehicleAssignmentTransfer(BaseModel):
+    """Transfer a vehicle to a new instructor for an optional date range."""
+    instructor_id: str
+    transfer_date: date
+    end_date: date | None = None
+    update_future_lessons: bool = True
+
+
+class VehicleAssignmentRead(BaseModel):
+    id: uuid.UUID
+    vehicle_id: uuid.UUID
+    instructor_id: str
+    assigned_from: date
+    assigned_until: date | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Vehicle Schedule Slots ──
+
+
+class VehicleScheduleSlotCreate(BaseModel):
+    vehicle_id: str
+    instructor_id: str
+    day_of_week: int  # 0=Monday..4=Friday
+    start_time: str   # HH:MM
+    end_time: str     # HH:MM (exclusive, e.g. 17:30 for slot starting at 17:00)
+
+
+class VehicleScheduleSlotRead(BaseModel):
+    id: uuid.UUID
+    vehicle_id: uuid.UUID
+    instructor_id: str
+    day_of_week: int
+    start_time: time
+    end_time: time
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class VehicleScheduleSlotUpdate(BaseModel):
+    instructor_id: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+
+
+# ── Client Availability ──
+
+
+class ClientAvailabilityCreate(BaseModel):
+    cart_item_id: str
+    day_of_week: int
+    start_time: str  # preferred start time; system infers 30-min slot
+
+
+class ClientAvailabilityUpdate(BaseModel):
+    day_of_week: int | None = None
+    start_time: str | None = None  # HH:MM string for update input
+
+
+class ClientAvailabilityRead(BaseModel):
+    id: uuid.UUID
+    cart_item_id: uuid.UUID
+    day_of_week: int
+    start_time: time
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Schedule ──
+
+
+class ScheduleSlot(BaseModel):
+    lesson_id: uuid.UUID
+    client_name: str
+    title: str
+    scheduled_date: date | None
+    scheduled_start_time: time | None
+    scheduled_end_time: time | None
+    duration_minutes: int
+    instructor_id: str | None
+    vehicle_id: uuid.UUID | None
+    transmission: str | None
+    status: str
+
+
+class InstructorScheduleDay(BaseModel):
+    date: date
+    slots: list[ScheduleSlot]
+    collisions: list[dict] = []
+
+
+class LockScheduleRequest(BaseModel):
+    start_time: str
+    instructor_id: str | None = None
+    vehicle_id: str | None = None
+    start_date: date | None = None
+    instructor_id_auto: str | None = None
+    vehicle_id_auto: str | None = None
+    manual_days: int | None = None
+
+
+class WeeklyScheduleEntry(BaseModel):
+    lesson_id: uuid.UUID
+    client_name: str
+    title: str
+    scheduled_date: date | None
+    scheduled_start_time: time | None
+    scheduled_end_time: time | None
+    duration_minutes: int
+    instructor_id: str | None
+    instructor_name: str | None = None
+    vehicle_id: uuid.UUID | None
+    vehicle_name: str | None = None
+    vehicle_plate: str | None = None
+    transmission: str | None = None
+    status: str
+
+
+class WeeklyScheduleResponse(BaseModel):
+    start_date: date
+    days: list[date]
+    slots: list[WeeklyScheduleEntry]
+
+
+class FindAndLockRequest(BaseModel):
+    """Request to find an available slot from preferred start times and lock the schedule."""
+    instructor_id: str
+    vehicle_id: str | None = None
+    start_date: date  # first lesson date
+    preferred_times: list[str]  # ["17:00", "18:00", …] — system tries each
+    instructor_id_auto: str | None = None
+    vehicle_id_auto: str | None = None
+    manual_days: int | None = None
 
 
 # ── Lesson Plan Duplicate ──

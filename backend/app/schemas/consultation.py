@@ -70,6 +70,7 @@ class ConsultationCreate(BaseModel):
     interested_products: list[InterestedProduct] | None = None
     start_date: date | None = None
     notes: str | None = None
+    branch_id: uuid.UUID | None = None
 
 
 class ConsultationUpdate(BaseModel):
@@ -84,6 +85,7 @@ class ConsultationUpdate(BaseModel):
     start_date: date | None = None
     notes: str | None = None
     status: ConsultationStatus | None = None
+    branch_id: uuid.UUID | None = None
 
 
 class ConsultationRead(BaseModel):
@@ -99,6 +101,7 @@ class ConsultationRead(BaseModel):
     start_date: date | None
     notes: str | None
     status: ConsultationStatus
+    branch_id: uuid.UUID | None = None
     created_by_phone: str | None
     created_at: datetime
     updated_at: datetime
@@ -122,6 +125,7 @@ class ConsultationRead(BaseModel):
             start_date=c.start_date,
             notes=c.notes,
             status=c.status,
+            branch_id=c.branch_id,
             created_by_phone=c.created_by_phone,
             created_at=c.created_at,
             updated_at=c.updated_at,
@@ -178,5 +182,6 @@ class FullConsultationCreate(BaseModel):
     interest_level: InterestLevel | None = None
     start_date: date | None = None
     notes: str | None = None
+    branch_id: uuid.UUID | None = None
     items: list[FullConsultationItem] = []
     payment: FullConsultationPayment | None = None

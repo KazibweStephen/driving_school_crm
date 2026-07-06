@@ -32,6 +32,7 @@ async def create_template(
     description: str | None = None,
     total_days: int = 20,
     total_weeks: int = 4,
+    template_type: str = "practical",
     items_data: list[dict] | None = None,
     created_by_phone: str | None = None,
 ) -> LessonPlanTemplate:
@@ -41,6 +42,7 @@ async def create_template(
         description=description,
         total_days=total_days,
         total_weeks=total_weeks,
+        template_type=template_type,
         created_by_phone=created_by_phone,
     )
     db.add(template)
@@ -61,6 +63,7 @@ async def create_template(
                     estimated_minutes=item.get("estimated_minutes", 30),
                     estimated_distance_km=item.get("estimated_distance_km", 3.0),
                     difficulty=LessonDifficulty.BEGINNER,
+                    is_theory=item.get("is_theory", False),
                 )
                 db.add(lib)
                 await db.flush()
@@ -80,6 +83,7 @@ async def create_template(
                 lesson_library_id=lib_id,
                 preferred_location=item.get("preferred_location"),
                 enforce_prerequisites=item.get("enforce_prerequisites", True),
+                is_theory=item.get("is_theory", False),
             )
             db.add(template_item)
         await db.flush()
@@ -122,8 +126,10 @@ async def update_template(
     description: str | None = None,
     total_days: int | None = None,
     total_weeks: int | None = None,
+    template_type: str | None = None,
     status: str | None = None,
     is_locked: bool | None = None,
+    items_data: list[dict] | None = None,
 ) -> LessonPlanTemplate:
     if name is not None:
         template.name = name
@@ -133,11 +139,97 @@ async def update_template(
         template.total_days = total_days
     if total_weeks is not None:
         template.total_weeks = total_weeks
+    if template_type is not None:
+        template.template_type = template_type
     if status is not None:
         template.status = EntityStatus(status)
     if is_locked is not None:
         template.is_locked = is_locked
-    await db.flush()
+
+    if items_data is not None:
+        # Load existing items
+        result = await db.execute(
+            select(LessonTemplateItem).where(LessonTemplateItem.template_id == template.id)
+        )
+        existing_items = {item.id: item for item in result.scalars().all()}
+        incoming_ids = set()
+        # Process each incoming item
+        for item in items_data:
+            item_id = item.get("id")
+            if item_id:
+                if isinstance(item_id, str):
+                    item_id = uuid.UUID(item_id)
+                if item_id in existing_items:
+                    # Update existing item
+                    existing = existing_items[item_id]
+                    incoming_ids.add(item_id)
+                    if "day_number" in item:
+                        existing.day_number = item["day_number"]
+                    if "week_number" in item:
+                        existing.week_number = item["week_number"]
+                    if "title" in item:
+                        existing.title = item["title"]
+                    lo = item.get("lesson_objectives", [])
+                    if lo is not None:
+                        existing.lesson_objectives = lo if isinstance(lo, list) else [lo] if lo else []
+                    po = item.get("practical_objectives", [])
+                    if po is not None:
+                        existing.practical_objectives = po if isinstance(po, list) else [po] if po else []
+                    if "estimated_minutes" in item:
+                        existing.estimated_minutes = item["estimated_minutes"]
+                    if "estimated_distance_km" in item:
+                        existing.estimated_distance_km = item["estimated_distance_km"]
+                    if "order" in item:
+                        existing.order = item["order"]
+                    if "preferred_location" in item:
+                        existing.preferred_location = item.get("preferred_location")
+                    if "enforce_prerequisites" in item:
+                        existing.enforce_prerequisites = item["enforce_prerequisites"]
+                    if "is_theory" in item:
+                        existing.is_theory = item["is_theory"]
+            else:
+                # Create new item
+                lo = item.get("lesson_objectives", [])
+                po = item.get("practical_objectives", [])
+                lib_id = item.get("lesson_library_id")
+                if lib_id is None:
+                    lib = LessonLibrary(
+                        title=item["title"],
+                        lesson_objectives=lo if isinstance(lo, list) else [lo] if lo else [],
+                        practical_objectives=po if isinstance(po, list) else [po] if po else [],
+                        competencies=item.get("competencies", []),
+                        estimated_minutes=item.get("estimated_minutes", 30),
+                        estimated_distance_km=item.get("estimated_distance_km", 3.0),
+                        difficulty=LessonDifficulty.BEGINNER,
+                        is_theory=item.get("is_theory", False),
+                    )
+                    db.add(lib)
+                    await db.flush()
+                    lib_id = lib.id
+                elif isinstance(lib_id, str):
+                    lib_id = uuid.UUID(lib_id)
+                new_item = LessonTemplateItem(
+                    template_id=template.id,
+                    day_number=item["day_number"],
+                    week_number=item["week_number"],
+                    title=item["title"],
+                    lesson_objectives=lo if isinstance(lo, list) else [lo] if lo else [],
+                    practical_objectives=po if isinstance(po, list) else [po] if po else [],
+                    estimated_minutes=item.get("estimated_minutes", 30),
+                    estimated_distance_km=item.get("estimated_distance_km", 3.0),
+                    order=item.get("order", 0),
+                    lesson_library_id=lib_id,
+                    preferred_location=item.get("preferred_location"),
+                    enforce_prerequisites=item.get("enforce_prerequisites", True),
+                    is_theory=item.get("is_theory", False),
+                )
+                db.add(new_item)
+        # Delete items no longer present
+        for item_id, existing in existing_items.items():
+            if item_id not in incoming_ids:
+                await db.delete(existing)
+        await db.flush()
+
     result = await db.execute(
         select(LessonPlanTemplate)
         .where(LessonPlanTemplate.id == template.id)
@@ -315,17 +407,25 @@ async def create_client_plan(
     transmission_type: str,
     template_id: uuid.UUID | None = None,
     start_date: datetime | None = None,
+    is_extension: bool = False,
+    extension_of_plan_id: uuid.UUID | None = None,
+    extension_days_added: int | None = None,
     notes: str | None = None,
     lessons_data: list[dict] | None = None,
     purchased_days: int | None = None,
+    manual_days: int | None = 5,
 ) -> ClientLessonPlan:
     plan = ClientLessonPlan(
         cart_item_id=cart_item_id,
         template_id=template_id,
         transmission_type=TransmissionType(transmission_type),
         start_date=start_date,
+        is_extension=is_extension,
+        extension_of_plan_id=extension_of_plan_id,
+        extension_days_added=extension_days_added,
         notes=notes,
         purchased_days=purchased_days,
+        manual_days=manual_days,
     )
     db.add(plan)
     await db.flush()
@@ -343,6 +443,7 @@ async def create_client_plan(
                 practical_objectives=po if isinstance(po, list) else [po] if po else [],
                 order=lesson.get("order", 0),
                 is_active=lesson.get("is_active", True),
+                is_theory=lesson.get("is_theory", False),
                 preferred_location=lesson.get("preferred_location"),
                 enforce_prerequisites=lesson.get("enforce_prerequisites", True),
             )
@@ -365,6 +466,7 @@ async def create_client_plan_from_template(
     start_date: datetime | None = None,
     notes: str | None = None,
     purchased_days: int | None = None,
+    manual_days: int | None = 5,
 ) -> ClientLessonPlan:
     template_result = await db.execute(
         select(LessonPlanTemplate)
@@ -382,6 +484,8 @@ async def create_client_plan_from_template(
         start_date=start_date,
         notes=notes,
         purchased_days=purchased_days or template.total_days,
+        template_type=template.template_type,
+        manual_days=manual_days,
     )
     db.add(plan)
     await db.flush()
@@ -399,8 +503,122 @@ async def create_client_plan_from_template(
             order=item.order,
             is_active=True,
             is_locked=is_locked,
+            is_theory=item.is_theory,
             preferred_location=item.preferred_location,
             enforce_prerequisites=item.enforce_prerequisites,
+        )
+        db.add(client_lesson)
+    await db.flush()
+
+    result = await db.execute(
+        select(ClientLessonPlan)
+        .where(ClientLessonPlan.id == plan.id)
+        .options(selectinload(ClientLessonPlan.lessons))
+    )
+    return result.scalar_one()
+
+
+async def create_merged_client_plan(
+    db: AsyncSession,
+    cart_item_id: uuid.UUID,
+    practical_template_id: uuid.UUID,
+    theory_template_id: uuid.UUID,
+    transmission_type: str,
+    start_date: datetime | None = None,
+    notes: str | None = None,
+    purchased_days: int | None = None,
+) -> ClientLessonPlan:
+    """Merge a practical and theory template into one plan.
+    
+    Theory lessons are placed on days 6, 12, 18, 24 (Saturdays).
+    Practical lessons keep their relative order but are shifted to accommodate
+    theory day insertions.
+    """
+    # Fetch both templates
+    tpl_result = await db.execute(
+        select(LessonPlanTemplate)
+        .where(LessonPlanTemplate.id.in_([practical_template_id, theory_template_id]))
+        .options(selectinload(LessonPlanTemplate.lesson_items))
+    )
+    templates = tpl_result.scalars().all()
+    practical_tpl = next(t for t in templates if t.id == practical_template_id)
+    theory_tpl = next(t for t in templates if t.id == theory_template_id)
+
+    # Theory insertion days (Saturdays in a 4-week practical plan)
+    theory_days = [6, 12, 18, 24]
+    theory_items = list(theory_tpl.lesson_items)
+
+    # Build merged lesson items sorted by (day, order)
+    merged = []
+    for item in practical_tpl.lesson_items:
+        # Count how many theory days are inserted before this item's current day
+        shift = sum(1 for td in theory_days if td <= item.day_number)
+        new_day = item.day_number + shift
+        new_week = (new_day - 1) // 5 + 1
+        merged.append({
+            "template_item_id": item.id,
+            "day_number": new_day,
+            "week_number": new_week,
+            "title": item.title,
+            "lesson_objectives": item.lesson_objectives,
+            "practical_objectives": item.practical_objectives,
+            "order": item.order,
+            "is_theory": False,
+            "preferred_location": item.preferred_location,
+            "enforce_prerequisites": item.enforce_prerequisites,
+        })
+
+    # Insert theory items at their designated days
+    for idx, td in enumerate(theory_days):
+        if idx < len(theory_items):
+            item = theory_items[idx]
+            merged.append({
+                "template_item_id": item.id,
+                "day_number": td,
+                "week_number": (td - 1) // 5 + 1,
+                "title": item.title,
+                "lesson_objectives": item.lesson_objectives,
+                "practical_objectives": item.practical_objectives,
+                "order": item.order,
+                "is_theory": True,
+                "preferred_location": item.preferred_location,
+                "enforce_prerequisites": item.enforce_prerequisites,
+            })
+
+    # Sort by day_number then order
+    merged.sort(key=lambda x: (x["day_number"], x["order"]))
+
+    total_days = max(x["day_number"] for x in merged) if merged else 0
+
+    plan = ClientLessonPlan(
+        cart_item_id=cart_item_id,
+        template_id=practical_template_id,
+        transmission_type=TransmissionType(transmission_type),
+        start_date=start_date,
+        notes=notes,
+        purchased_days=purchased_days or total_days,
+        template_type="practical",
+        manual_days=5,
+    )
+    db.add(plan)
+    await db.flush()
+
+    for item in merged:
+        is_locked = purchased_days is not None and item["day_number"] > purchased_days
+        client_lesson = ClientLesson(
+            lesson_plan_id=plan.id,
+            template_item_id=item["template_item_id"],
+            day_number=item["day_number"],
+            week_number=item["week_number"],
+            title=item["title"],
+            lesson_objectives=item["lesson_objectives"],
+            practical_objectives=item["practical_objectives"],
+            order=item["order"],
+            is_active=True,
+            is_locked=is_locked,
+            is_theory=item["is_theory"],
+            preferred_location=item["preferred_location"],
+            enforce_prerequisites=item["enforce_prerequisites"],
         )
         db.add(client_lesson)
     await db.flush()
@@ -461,9 +679,47 @@ async def update_client_plan(
     return result.scalar_one()
 
 
-async def delete_client_plan(db: AsyncSession, plan: ClientLessonPlan) -> None:
-    await db.delete(plan)
+async def delete_client_plan(
+    db: AsyncSession, plan: ClientLessonPlan, delete_mode: str = "all"
+) -> dict:
+    """Delete a client lesson plan.
+    
+    delete_mode:
+      'all'        - delete entire plan (fails if any started lessons exist)
+      'unstarted'  - delete only lessons with 'pending' status
+      'uncompleted'- delete lessons with 'pending' or 'completed' status (keep in_progress)
+    """
+    if delete_mode == "all":
+        started = [l for l in plan.lessons if l.status not in (LessonState.PENDING,)]
+        if started:
+            raise ValueError(
+                "Cannot delete plan with started/completed lessons. "
+                "Use 'unstarted' to delete only pending lessons, "
+                "or 'uncompleted' to delete pending and completed lessons."
+            )
+        await db.delete(plan)
+        await db.flush()
+        return {"deleted": "all"}
+
+    if delete_mode == "unstarted":
+        to_remove = [l for l in plan.lessons if l.status == LessonState.PENDING]
+        for lesson in to_remove:
+            await db.delete(lesson)
+    elif delete_mode == "uncompleted":
+        to_remove = [l for l in plan.lessons if l.status in (LessonState.PENDING, LessonState.COMPLETED)]
+        for lesson in to_remove:
+            await db.delete(lesson)
+
     await db.flush()
+    # Check if all lessons are gone; if so delete the plan too
+    remaining = await db.execute(
+        select(ClientLesson).where(ClientLesson.lesson_plan_id == plan.id)
+    )
+    if not remaining.scalars().first():
+        await db.delete(plan)
+        await db.flush()
+        return {"deleted": "all"}
+    return {"deleted": delete_mode}
 
 
 async def upgrade_plan(
@@ -504,9 +760,15 @@ async def update_client_lesson(
     is_locked: bool | None = None,
     status: str | None = None,
     difficulty: str | None = None,
+    vehicle_inspection_minutes: int | None = None,
+    cockpit_drill_minutes: int | None = None,
+    video_illustration_minutes: int | None = None,
+    practical_driving_minutes: int | None = None,
+    assessment_minutes: int | None = None,
     driving_minutes: int | None = None,
     theory_minutes: int | None = None,
     mileage_km: float | None = None,
+    is_theory: bool | None = None,
     combined_with_next: bool | None = None,
     skills_achieved: list | None = None,
     outcome: str | None = None,
@@ -548,12 +810,24 @@ async def update_client_lesson(
     if difficulty is not None:
         from app.models.lesson_plan import LessonDifficulty
         lesson.difficulty = LessonDifficulty(difficulty)
+    if vehicle_inspection_minutes is not None:
+        lesson.vehicle_inspection_minutes = vehicle_inspection_minutes
+    if cockpit_drill_minutes is not None:
+        lesson.cockpit_drill_minutes = cockpit_drill_minutes
+    if video_illustration_minutes is not None:
+        lesson.video_illustration_minutes = video_illustration_minutes
+    if practical_driving_minutes is not None:
+        lesson.practical_driving_minutes = practical_driving_minutes
+    if assessment_minutes is not None:
+        lesson.assessment_minutes = assessment_minutes
     if driving_minutes is not None:
         lesson.driving_minutes = driving_minutes
     if theory_minutes is not None:
         lesson.theory_minutes = theory_minutes
     if mileage_km is not None:
         lesson.mileage_km = mileage_km
+    if is_theory is not None:
+        lesson.is_theory = is_theory
     if combined_with_next is not None:
         lesson.combined_with_next = combined_with_next
     if skills_achieved is not None:

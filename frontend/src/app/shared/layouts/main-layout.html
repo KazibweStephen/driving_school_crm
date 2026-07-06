@@ -41,7 +41,8 @@
   </div>
 
   <nav class="flex-1 overflow-y-auto p-3">
-    @for (item of navItems; track item.path) {
+    <!-- Top-level items -->
+    @for (item of topItems; track item.path) {
       <a
         [routerLink]="item.path"
         routerLinkActive="bg-blue-50 text-blue-700 font-medium"
@@ -51,6 +52,38 @@
         <span [class]="'pi ' + item.icon + ' text-lg'"></span>
         {{ item.label }}
       </a>
+    }
+
+    <!-- Grouped items -->
+    @for (group of navGroups; track group.label) {
+      <div class="mt-2">
+        <button
+          class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-500 hover:bg-gray-100"
+          (click)="toggleGroup(group)"
+        >
+          <span [class]="'pi ' + group.icon + ' text-lg'"></span>
+          <span class="font-semibold">{{ group.label }}</span>
+          <span class="ml-auto pi text-xs transition-transform"
+            [class.pi-chevron-down]="group.expanded"
+            [class.pi-chevron-right]="!group.expanded"></span>
+        </button>
+
+        @if (group.expanded) {
+          <div class="ml-2 mt-0.5 border-l pl-2">
+            @for (child of group.children; track child.path) {
+              <a
+                [routerLink]="child.path"
+                routerLinkActive="bg-blue-50 text-blue-700 font-medium"
+                class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                (click)="closeSidebar()"
+              >
+                <span [class]="'pi ' + child.icon + ' text-sm'"></span>
+                {{ child.label }}
+              </a>
+            }
+          </div>
+        }
+      </div>
     }
   </nav>
 

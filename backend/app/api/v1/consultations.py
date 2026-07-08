@@ -1,3 +1,4 @@
+import uuid
 from datetime import date
 from decimal import Decimal
 
@@ -189,11 +190,13 @@ async def list_consultations(
     stage: str | None = Query(None, pattern=r"^(consulting|active|completed|lost)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    branch_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     consultations, total = await consultation_service.search_consultations(
-        db, search=search, status=status, page=page, page_size=page_size, stage=stage
+        db, search=search, status=status, page=page, page_size=page_size, stage=stage,
+        branch_id=branch_id,
     )
     return ConsultationListResponse(
         consultations=[ConsultationRead.from_orm_with_cart(c) for c in consultations],
@@ -210,7 +213,7 @@ async def client_search(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Deduplicated search — returns one result per phone number."""
+    """Deduplicated search — returns one result per phone number across all branches."""
     clients = await consultation_service.client_search(db, search)
     result = []
     for c in clients:

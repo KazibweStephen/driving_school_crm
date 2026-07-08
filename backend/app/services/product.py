@@ -14,12 +14,14 @@ async def create_product(
     duration_label: str | None,
     description: str | None,
     created_by_phone: str,
+    company_id: uuid.UUID | None = None,
 ) -> Product:
     product = Product(
         name=name,
         duration_label=duration_label,
         description=description,
         created_by_phone=created_by_phone,
+        company_id=company_id,
     )
     db.add(product)
     await db.flush()
@@ -29,10 +31,11 @@ async def create_product(
     return result.scalar_one()
 
 
-async def get_product_by_id(db: AsyncSession, product_id: uuid.UUID) -> Product | None:
-    result = await db.execute(
-        select(Product).where(Product.id == product_id).options(selectinload(Product.packages))
-    )
+async def get_product_by_id(db: AsyncSession, product_id: uuid.UUID, company_id: uuid.UUID | None = None) -> Product | None:
+    query = select(Product).where(Product.id == product_id).options(selectinload(Product.packages))
+    if company_id:
+        query = query.where(Product.company_id == company_id)
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
@@ -42,9 +45,12 @@ async def list_products(
     status: EntityStatus | None = None,
     page: int = 1,
     page_size: int = 20,
+    company_id: uuid.UUID | None = None,
 ) -> tuple[list[Product], int]:
     query = select(Product).options(selectinload(Product.packages))
 
+    if company_id:
+        query = query.where(Product.company_id == company_id)
     if search:
         query = query.where(Product.name.ilike(f"%{search}%"))
     if status:

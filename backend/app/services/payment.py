@@ -76,7 +76,6 @@ async def create_payment(
     )
     payment = result.scalar_one()
     await _recompute_payment_totals(payment)
-    await db.flush()
 
     return payment
 

@@ -26,7 +26,7 @@ async def list_lessons(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    lessons = await library_service.list_lessons(db, transmission_type, difficulty, status, search)
+    lessons = await library_service.list_lessons(db, transmission_type, difficulty, status, search, company_id=current_user.company_id)
     return [LessonLibraryRead.model_validate(l) for l in lessons]
 
 
@@ -59,6 +59,7 @@ async def create_lesson(
         prerequisite_competencies=data.prerequisite_competencies,
         prerequisite_lesson_ids=data.prerequisite_lesson_ids,
         is_theory=data.is_theory,
+        company_id=current_user.company_id,
     )
     return LessonLibraryRead.model_validate(lesson)
 
@@ -73,7 +74,7 @@ async def get_lesson(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
-    lesson = await library_service.get_lesson_by_id(db, lid)
+    lesson = await library_service.get_lesson_by_id(db, lid, company_id=current_user.company_id)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
     return LessonLibraryRead.model_validate(lesson)
@@ -90,7 +91,7 @@ async def update_lesson(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
-    lesson = await library_service.get_lesson_by_id(db, lid)
+    lesson = await library_service.get_lesson_by_id(db, lid, company_id=current_user.company_id)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
     updated = await library_service.update_lesson(
@@ -129,7 +130,7 @@ async def delete_lesson(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
-    lesson = await library_service.get_lesson_by_id(db, lid)
+    lesson = await library_service.get_lesson_by_id(db, lid, company_id=current_user.company_id)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
     await library_service.delete_lesson(db, lesson)

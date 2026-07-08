@@ -28,12 +28,14 @@ async def create_vehicle(
     transmission: str,
     notes: str | None = None,
     branch_ids: list[uuid.UUID] | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> Vehicle:
     vehicle = Vehicle(
         name=name,
         plate_number=plate_number,
         transmission=TransmissionType(transmission),
         notes=notes,
+        company_id=company_id,
     )
     db.add(vehicle)
     await db.flush()
@@ -47,8 +49,11 @@ async def create_vehicle(
     return vehicle
 
 
-async def get_vehicle_by_id(db: AsyncSession, vehicle_id: uuid.UUID) -> Vehicle | None:
-    result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
+async def get_vehicle_by_id(db: AsyncSession, vehicle_id: uuid.UUID, company_id: uuid.UUID | None = None) -> Vehicle | None:
+    query = select(Vehicle).where(Vehicle.id == vehicle_id)
+    if company_id:
+        query = query.where(Vehicle.company_id == company_id)
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
@@ -63,8 +68,11 @@ async def list_vehicles(
     db: AsyncSession,
     status: str | None = None,
     transmission: str | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> list[Vehicle]:
     query = select(Vehicle).order_by(Vehicle.name.asc())
+    if company_id:
+        query = query.where(Vehicle.company_id == company_id)
     if status:
         query = query.where(Vehicle.status == VehicleStatus(status))
     if transmission:

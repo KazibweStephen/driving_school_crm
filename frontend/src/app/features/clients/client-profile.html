@@ -36,6 +36,40 @@
       </div>
     </div>
 
+    <!-- Payment Summary Quick View -->
+    @if (paidCartItems().length) {
+      <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-lg font-bold text-gray-900">Payment Summary</h2>
+          @if (pendingPayAllItems().length) {
+            <p-button label="Pay All Pending" icon="pi pi-dollar" size="small" severity="success" (onClick)="openPayAllDialog()" styleClass="p-button-sm whitespace-nowrap" />
+          }
+        </div>
+        <div class="space-y-3">
+          @for (ci of paidCartItems(); track ci.id) {
+            <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3" [class.bg-green-50]="ci.status === 'converted_paid'" [class.bg-amber-50]="ci.status === 'converted_paying'">
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-medium text-gray-900">{{ productName(ci) }}</div>
+                <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                  @if (packageName(ci)) { <span>{{ packageName(ci) }}</span> }
+                  <span>Total: <strong>{{ cartItemTotal(ci) | number:'1.0-0' }}</strong></span>
+                  <span>Paid: <strong class="text-green-600">{{ cartItemPaid(ci) | number:'1.0-0' }}</strong></span>
+                  <span>Bal: <strong [class.text-green-600]="cartItemBalance(ci) === 0" [class.text-amber-600]="cartItemBalance(ci) > 0">{{ cartItemBalance(ci) | number:'1.0-0' }}</strong></span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1">
+                @if (cartItemBalance(ci) > 0) {
+                  <p-button label="Pay" icon="pi pi-dollar" size="small" severity="success" (onClick)="openMakePaymentDialog(ci)" styleClass="p-button-sm whitespace-nowrap" />
+                } @else {
+                  <p-tag value="Paid" severity="success" />
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
     @if (viewMode() === 'detailed') {
       <!-- Products Section -->
     <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
@@ -60,6 +94,8 @@
                 <th>Product</th>
                 <th>Package</th>
                 <th>Price</th>
+                <th>Paid</th>
+                <th>Bal</th>
                 <th>Duration</th>
                 <th>Note</th>
                 <th>Date Added</th>
@@ -78,6 +114,8 @@
                 <td class="text-sm font-medium text-gray-700">{{ productName(ci) }}</td>
                 <td class="text-sm text-gray-600">{{ packageName(ci) || '—' }}</td>
                 <td class="text-sm text-gray-600">{{ packagePrice(ci) }}</td>
+                <td class="text-sm text-green-600 font-medium">{{ cartItemPaid(ci) | number:'1.0-0' }}</td>
+                <td class="text-sm" [class.text-green-600]="cartItemBalance(ci) === 0" [class.text-amber-600]="cartItemBalance(ci) > 0">{{ cartItemBalance(ci) | number:'1.0-0' }}</td>
                 <td class="text-sm text-gray-600">{{ packageDuration(ci) }}</td>
                 <td class="text-sm text-gray-600">
                   @if (ci.notes) {
@@ -310,8 +348,11 @@
     <!-- Payment Summary (for paid/paying products) -->
     @if (paidCartItems().length) {
       <div class="mb-6 rounded-xl border bg-white p-4 shadow-sm sm:p-6">
-        <div class="mb-3 flex items-center justify-between">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 class="text-lg font-bold text-gray-900">Payments &amp; Balances</h2>
+          @if (pendingPayAllItems().length) {
+            <p-button label="Pay All Pending" icon="pi pi-dollar" size="small" severity="success" (onClick)="openPayAllDialog()" styleClass="p-button-sm whitespace-nowrap" />
+          }
         </div>
         <div class="hidden sm:block">
           <p-table [value]="paidCartItems()" dataKey="id" styleClass="p-datatable-sm">
@@ -322,6 +363,7 @@
                 <th>Status</th>
                 <th>Amount Paid</th>
                 <th>Balance</th>
+                <th>Actions</th>
               </tr>
             </ng-template>
             <ng-template pTemplate="body" let-ci>
@@ -334,6 +376,11 @@
                 <td class="text-sm text-green-600 font-medium">{{ paidForProduct(ci) | number:'1.0-0' }}</td>
                 <td class="text-sm" [class.text-green-600]="balanceForProduct(ci) === 0" [class.text-amber-600]="balanceForProduct(ci) > 0">
                   {{ balanceForProduct(ci) | number:'1.0-0' }}
+                </td>
+                <td>
+                  @if (cartItemBalance(ci) > 0) {
+                    <p-button label="Pay" icon="pi pi-dollar" size="small" severity="success" (onClick)="openMakePaymentDialog(ci)" styleClass="p-button-sm" />
+                  }
                 </td>
               </tr>
             </ng-template>
@@ -353,6 +400,11 @@
                 <span>Paid: <strong class="text-green-600">{{ paidForProduct(ci) | number:'1.0-0' }}</strong></span>
                 <span>Balance: <strong [class.text-green-600]="balanceForProduct(ci) === 0" [class.text-amber-600]="balanceForProduct(ci) > 0">{{ balanceForProduct(ci) | number:'1.0-0' }}</strong></span>
               </div>
+              @if (cartItemBalance(ci) > 0) {
+                <div class="mt-2">
+                  <p-button label="Pay" icon="pi pi-dollar" size="small" severity="success" (onClick)="openMakePaymentDialog(ci)" styleClass="p-button-sm" />
+                </div>
+              }
             </div>
           }
         </div>
@@ -373,6 +425,7 @@
                 <th>Status</th>
                 <th>Date</th>
                 <th>Installments</th>
+                <th>Receipt</th>
               </tr>
             </ng-template>
             <ng-template pTemplate="body" let-pay>
@@ -383,6 +436,13 @@
                 <td><p-tag [value]="paymentStatus(pay)" [severity]="paymentSeverity(paymentStatus(pay))" /></td>
                 <td class="text-sm text-gray-500">{{ pay.created_at | date:'shortDate' }}</td>
                 <td class="text-sm text-gray-500">{{ pay.installments.length }}</td>
+                <td>
+                  <div class="flex items-center gap-1">
+                    <p-button icon="pi pi-eye" severity="info" (onClick)="openReceipt(pay.id)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="View" />
+                    <p-button icon="pi pi-download" severity="secondary" (onClick)="downloadReceipt(pay.id)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Download" />
+                    <p-button icon="pi pi-print" severity="success" (onClick)="reprintReceipt(pay.id)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Print" />
+                  </div>
+                </td>
               </tr>
             </ng-template>
           </p-table>
@@ -397,6 +457,11 @@
               <div class="space-y-1 text-xs text-gray-500">
                 <p>Paid: <span class="text-green-600 font-medium">{{ paymentPaidAmount(pay) | number:'1.0-0' }}</span> | Balance: <span [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</span></p>
                 <p>{{ pay.created_at | date:'shortDate' }}</p>
+              </div>
+              <div class="mt-2 flex items-center gap-1">
+                <p-button icon="pi pi-eye" severity="info" (onClick)="openReceipt(pay.id)" styleClass="p-button-sm p-button-text" label="View" />
+                <p-button icon="pi pi-download" severity="secondary" (onClick)="downloadReceipt(pay.id)" styleClass="p-button-sm p-button-text" label="Download" />
+                <p-button icon="pi pi-print" severity="success" (onClick)="reprintReceipt(pay.id)" styleClass="p-button-sm p-button-text" label="Print" />
               </div>
             </div>
           }
@@ -777,6 +842,8 @@
                     <th>Product</th>
                     <th>Package</th>
                     <th>Price</th>
+                    <th>Paid</th>
+                    <th>Bal</th>
                     <th>Duration</th>
                     <th>Note</th>
                     <th>Date Added</th>
@@ -867,7 +934,7 @@
                 </div>
                 <p class="text-xs text-gray-500">{{ packageName(ci) || '—' }}</p>
                 <p class="text-xs text-gray-500">
-                  {{ packagePrice(ci) }}{{ packagePrice(ci) !== '—' ? ' · ' : '' }}{{ packageDuration(ci) }}
+                {{ packagePrice(ci) }}{{ packagePrice(ci) !== '—' ? ' · ' : '' }}{{ packageDuration(ci) }} · <span class="text-green-600">Paid: {{ cartItemPaid(ci) | number:'1.0-0' }}</span> · <span [class.text-green-600]="cartItemBalance(ci) === 0" [class.text-amber-600]="cartItemBalance(ci) > 0">Bal: {{ cartItemBalance(ci) | number:'1.0-0' }}</span>
                 </p>
                 <p class="text-xs text-gray-400 mt-1">{{ timeAgo(ci.created_at) }}</p>
                 @if (ci.notes) {
@@ -1025,7 +1092,12 @@
           <!-- Payment Summary -->
           @if (paidCartItems().length) {
             <div class="mb-3">
-              <h3 class="text-md font-bold text-gray-900 mb-2">Payments &amp; Balances</h3>
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-md font-bold text-gray-900">Payments &amp; Balances</h3>
+                @if (pendingPayAllItems().length) {
+                  <p-button label="Pay All Pending" icon="pi pi-dollar" size="small" severity="success" (onClick)="openPayAllDialog()" styleClass="p-button-sm whitespace-nowrap" />
+                }
+              </div>
               <div class="hidden sm:block">
                 <p-table [value]="paidCartItems()" dataKey="id" styleClass="p-datatable-sm">
                   <ng-template pTemplate="header">
@@ -1035,6 +1107,7 @@
                       <th>Status</th>
                       <th>Amount Paid</th>
                       <th>Balance</th>
+                      <th>Actions</th>
                     </tr>
                   </ng-template>
                   <ng-template pTemplate="body" let-ci>
@@ -1047,6 +1120,11 @@
                       <td class="text-sm text-green-600 font-medium">{{ paidForProduct(ci) | number:'1.0-0' }}</td>
                       <td class="text-sm" [class.text-green-600]="balanceForProduct(ci) === 0" [class.text-amber-600]="balanceForProduct(ci) > 0">
                         {{ balanceForProduct(ci) | number:'1.0-0' }}
+                      </td>
+                      <td>
+                        @if (cartItemBalance(ci) > 0) {
+                          <p-button label="Pay" icon="pi pi-dollar" size="small" severity="success" (onClick)="openMakePaymentDialog(ci)" styleClass="p-button-sm" />
+                        }
                       </td>
                     </tr>
                   </ng-template>
@@ -1066,6 +1144,11 @@
                       <span>Paid: <strong class="text-green-600">{{ paidForProduct(ci) | number:'1.0-0' }}</strong></span>
                       <span>Balance: <strong [class.text-green-600]="balanceForProduct(ci) === 0" [class.text-amber-600]="balanceForProduct(ci) > 0">{{ balanceForProduct(ci) | number:'1.0-0' }}</strong></span>
                     </div>
+                    @if (cartItemBalance(ci) > 0) {
+                      <div class="mt-2">
+                        <p-button label="Pay" icon="pi pi-dollar" size="small" severity="success" (onClick)="openMakePaymentDialog(ci)" styleClass="p-button-sm" />
+                      </div>
+                    }
                   </div>
                 }
               </div>
@@ -1085,6 +1168,7 @@
                       <th>Status</th>
                       <th>Date</th>
                       <th>Installments</th>
+                      <th>Receipt</th>
                     </tr>
                   </ng-template>
                   <ng-template pTemplate="body" let-pay>
@@ -1095,6 +1179,9 @@
                       <td><p-tag [value]="paymentStatus(pay)" [severity]="paymentSeverity(paymentStatus(pay))" /></td>
                       <td class="text-sm text-gray-500">{{ pay.created_at | date:'shortDate' }}</td>
                       <td class="text-sm text-gray-500">{{ pay.installments.length }}</td>
+                      <td>
+                        <p-button icon="pi pi-receipt" severity="info" (onClick)="openReceipt(pay.id)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="View Receipt" />
+                      </td>
                     </tr>
                   </ng-template>
                 </p-table>
@@ -1109,6 +1196,9 @@
                     <div class="space-y-1 text-xs text-gray-500">
                       <p>Paid: <span class="text-green-600 font-medium">{{ paymentPaidAmount(pay) | number:'1.0-0' }}</span> | Balance: <span [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</span></p>
                       <p>{{ pay.created_at | date:'shortDate' }}</p>
+                    </div>
+                    <div class="mt-2">
+                      <p-button icon="pi pi-receipt" severity="info" (onClick)="openReceipt(pay.id)" styleClass="p-button-sm p-button-text" label="Receipt" />
                     </div>
                   </div>
                 }
@@ -1810,18 +1900,21 @@
               </div>
               <div>
                 <label class="mb-1 block text-sm font-medium text-gray-700">Receipt Number (optional)</label>
-                <div class="relative">
-                  <input [(ngModel)]="addPaymentReceiptNumber" (blur)="validateAddReceipt()" type="text"
-                         class="w-full rounded-lg border px-3 py-2 text-sm pr-10"
-                         [class.border-red-400]="receiptAvailable() === false"
-                         [class.border-green-400]="receiptAvailable() === true"
-                         [class.border-gray-300]="receiptAvailable() === null"
-                         placeholder="e.g. RCP-001234" />
-                  <span class="absolute right-3 top-1/2 -translate-y-1/2">
-                    @if (receiptChecking()) { <span class="pi pi-spin pi-spinner text-sm text-gray-400"></span> }
-                    @else if (receiptAvailable() === true) { <span class="pi pi-check-circle text-sm text-green-500"></span> }
-                    @else if (receiptAvailable() === false) { <span class="pi pi-times-circle text-sm text-red-500"></span> }
-                  </span>
+                <div class="flex gap-2">
+                  <div class="relative flex-1">
+                    <input [(ngModel)]="addPaymentReceiptNumber" (ngModelChange)="addPaymentReceiptNumber().length >= 2 ? validateAddReceipt() : receiptAvailable.set(null)" type="text"
+                           class="w-full rounded-lg border px-3 py-2 text-sm pr-10"
+                           [class.border-red-400]="receiptAvailable() === false"
+                           [class.border-green-400]="receiptAvailable() === true"
+                           [class.border-gray-300]="receiptAvailable() === null"
+                           placeholder="e.g. RCP-001234" />
+                    <span class="absolute right-3 top-1/2 -translate-y-1/2">
+                      @if (receiptChecking()) { <span class="pi pi-spin pi-spinner text-sm text-gray-400"></span> }
+                      @else if (receiptAvailable() === true) { <span class="pi pi-check-circle text-sm text-green-500"></span> }
+                      @else if (receiptAvailable() === false) { <span class="pi pi-times-circle text-sm text-red-500"></span> }
+                    </span>
+                  </div>
+                  <p-button icon="pi pi-search" severity="secondary" (onClick)="validateAddReceipt()" styleClass="p-button-sm" pTooltip="Check receipt" [disabled]="!addPaymentReceiptNumber()" />
                 </div>
                 @if (receiptAvailable() === false) { <p class="mt-1 text-xs text-red-500">This receipt number already exists</p> }
                 @else if (receiptAvailable() === true) { <p class="mt-1 text-xs text-green-600">Receipt number is available</p> }
@@ -1880,8 +1973,10 @@
                   </div>
                 }
               </div>
-              <div class="flex gap-2">
-                <p-button label="Print" icon="pi pi-print" (onClick)="printAddReceipt()" styleClass="flex-1 justify-center" severity="secondary" />
+              <div class="flex flex-wrap gap-2">
+                @for (pid of addReceiptPaymentIds; track pid; let i = $index) {
+                  <p-button [label]="'Receipt ' + (i + 1)" icon="pi pi-receipt" (onClick)="openReceipt(pid)" styleClass="flex-1 justify-center" severity="info" />
+                }
                 <p-button label="Close" icon="pi pi-times" (onClick)="closeAddReceipt()" styleClass="flex-1 justify-center" />
               </div>
             </div>
@@ -2115,26 +2210,29 @@
 
             <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">Receipt Number (optional)</label>
-              <div class="relative">
-                <input
-                  [(ngModel)]="completeSaleReceiptNumber"
-                  (blur)="validateReceipt()"
-                  type="text"
-                  class="w-full rounded-lg border px-3 py-2 text-sm pr-10"
-                  [class.border-red-400]="receiptAvailable() === false"
-                  [class.border-green-400]="receiptAvailable() === true"
-                  [class.border-gray-300]="receiptAvailable() === null"
-                  placeholder="e.g. RCP-001234"
-                />
-                <span class="absolute right-3 top-1/2 -translate-y-1/2">
-                  @if (receiptChecking()) {
-                    <span class="pi pi-spin pi-spinner text-sm text-gray-400"></span>
-                  } @else if (receiptAvailable() === true) {
-                    <span class="pi pi-check-circle text-sm text-green-500"></span>
-                  } @else if (receiptAvailable() === false) {
-                    <span class="pi pi-times-circle text-sm text-red-500"></span>
-                  }
-                </span>
+              <div class="flex gap-2">
+                <div class="relative flex-1">
+                  <input
+                    [(ngModel)]="completeSaleReceiptNumber"
+                    (ngModelChange)="completeSaleReceiptNumber().length >= 2 ? validateReceipt() : receiptAvailable.set(null)"
+                    type="text"
+                    class="w-full rounded-lg border px-3 py-2 text-sm pr-10"
+                    [class.border-red-400]="receiptAvailable() === false"
+                    [class.border-green-400]="receiptAvailable() === true"
+                    [class.border-gray-300]="receiptAvailable() === null"
+                    placeholder="e.g. RCP-001234"
+                  />
+                  <span class="absolute right-3 top-1/2 -translate-y-1/2">
+                    @if (receiptChecking()) {
+                      <span class="pi pi-spin pi-spinner text-sm text-gray-400"></span>
+                    } @else if (receiptAvailable() === true) {
+                      <span class="pi pi-check-circle text-sm text-green-500"></span>
+                    } @else if (receiptAvailable() === false) {
+                      <span class="pi pi-times-circle text-sm text-red-500"></span>
+                    }
+                  </span>
+                </div>
+                <p-button icon="pi pi-search" severity="secondary" (onClick)="validateReceipt()" styleClass="p-button-sm" pTooltip="Check receipt" [disabled]="!completeSaleReceiptNumber()" />
               </div>
               @if (receiptAvailable() === false) {
                 <p class="mt-1 text-xs text-red-500">This receipt number already exists</p>
@@ -2181,6 +2279,168 @@
             }
 
             <p-button label="Complete Sale" [loading]="loading()" (onClick)="completeSale()" styleClass="w-full justify-center" severity="success" [disabled]="!canCompleteSale()" />
+          </div>
+
+          @if (loading()) {
+            <div class="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/70">
+              <span class="pi pi-spin pi-spinner text-3xl text-blue-600"></span>
+            </div>
+          }
+        </div>
+      </p-dialog>
+    }
+
+    <!-- Make Payment Dialog -->
+    @if (makePaymentTarget(); as mp) {
+      <p-dialog header="Make Payment" [(visible)]="showMakePaymentDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '480px' }" [draggable]="false" [resizable]="false" [closable]="!loading()">
+        <div class="relative">
+          <div class="flex flex-col gap-4 pt-2">
+            <p class="text-sm text-gray-600">
+              Product: <strong>{{ productName(mp) }}</strong>
+              @if (packageName(mp)) {
+                <span><br/>Package: <strong>{{ packageName(mp) }}</strong></span>
+              }
+            </p>
+
+            <div class="rounded-lg bg-gray-50 p-3 text-sm">
+              <div class="flex justify-between">
+                <span class="text-gray-600">Total Price</span>
+                <span class="font-semibold">{{ cartItemTotal(mp) | number:'1.0-0' }}</span>
+              </div>
+              <div class="flex justify-between mt-1">
+                <span class="text-gray-600">Already Paid</span>
+                <span class="font-semibold text-green-600">{{ cartItemPaid(mp) | number:'1.0-0' }}</span>
+              </div>
+              <div class="flex justify-between mt-1 border-t border-gray-200 pt-1">
+                <span class="text-gray-600">Balance</span>
+                <span class="font-semibold text-amber-600">{{ makePaymentBalance() | number:'1.0-0' }}</span>
+              </div>
+            </div>
+
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Amount to Pay</label>
+              <p-inputNumber [(ngModel)]="makePaymentAmount" [min]="0" [max]="makePaymentBalance()" [placeholder]="'0'" class="w-full" inputStyleClass="w-full px-3 py-2 text-sm" />
+            </div>
+
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Receipt Number (optional)</label>
+              <div class="flex gap-2">
+                <div class="relative flex-1">
+                  <input
+                    [(ngModel)]="makePaymentReceiptNumber"
+                    (ngModelChange)="makePaymentReceiptNumber().length >= 2 ? validateMakePaymentReceipt() : receiptAvailable.set(null)"
+                    type="text"
+                    class="w-full rounded-lg border px-3 py-2 text-sm pr-10"
+                    [class.border-red-400]="receiptAvailable() === false"
+                    [class.border-green-400]="receiptAvailable() === true"
+                    [class.border-gray-300]="receiptAvailable() === null"
+                    placeholder="e.g. RCP-001234"
+                  />
+                  <span class="absolute right-3 top-1/2 -translate-y-1/2">
+                    @if (receiptChecking()) {
+                      <span class="pi pi-spin pi-spinner text-sm text-gray-400"></span>
+                    } @else if (receiptAvailable() === true) {
+                      <span class="pi pi-check-circle text-sm text-green-500"></span>
+                    } @else if (receiptAvailable() === false) {
+                      <span class="pi pi-times-circle text-sm text-red-500"></span>
+                    }
+                  </span>
+                </div>
+                <p-button icon="pi pi-search" severity="secondary" (onClick)="validateMakePaymentReceipt()" styleClass="p-button-sm" pTooltip="Check receipt" [disabled]="!makePaymentReceiptNumber()" />
+              </div>
+              @if (receiptAvailable() === false) {
+                <p class="mt-1 text-xs text-red-500">This receipt number already exists</p>
+              } @else if (receiptAvailable() === true) {
+                <p class="mt-1 text-xs text-green-600">Receipt number is available</p>
+              } @else {
+                <p class="mt-1 text-xs text-gray-400">Manually entered. Must be unique if provided.</p>
+              }
+            </div>
+
+            <div class="flex gap-2">
+              <p-button label="Cancel" severity="secondary" (onClick)="closeMakePaymentDialog()" styleClass="flex-1 justify-center" [disabled]="loading()" />
+              <p-button label="Pay" [loading]="loading()" (onClick)="makePayment()" styleClass="flex-1 justify-center" severity="success" [disabled]="!makePaymentAmount() || makePaymentAmount() <= 0" />
+            </div>
+          </div>
+
+          @if (loading()) {
+            <div class="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/70">
+              <span class="pi pi-spin pi-spinner text-3xl text-blue-600"></span>
+            </div>
+          }
+        </div>
+      </p-dialog>
+    }
+
+    <!-- Pay All Dialog -->
+    @if (payAllItems().length) {
+      <p-dialog header="Pay All Pending" [(visible)]="showPayAllDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '520px' }" [draggable]="false" [resizable]="false" [closable]="!loading()">
+        <div class="relative">
+          <div class="flex flex-col gap-4 pt-2">
+            <div class="rounded-lg border">
+              <div class="grid grid-cols-12 gap-2 border-b bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600">
+                <div class="col-span-5">Product</div>
+                <div class="col-span-3 text-right">Balance</div>
+                <div class="col-span-4 text-right">Pay Now</div>
+              </div>
+              @for (it of payAllItems(); track $index; let i = $index) {
+                <div class="grid grid-cols-12 items-center gap-2 border-b px-3 py-2 last:border-0">
+                  <div class="col-span-5 text-sm">
+                    <div class="font-medium">{{ it.productName }}</div>
+                    @if (it.packageName) { <div class="text-xs text-gray-400">{{ it.packageName }}</div> }
+                  </div>
+                  <div class="col-span-3 text-right text-sm">{{ it.balance | number:'1.0-0' }}</div>
+                  <div class="col-span-4 text-right">
+                    <p-inputNumber [ngModel]="it.payNow" (onInput)="payAllItems()[i].payNow = $event.value ?? 0" [min]="0" [max]="it.balance" placeholder="0" inputStyleClass="w-full px-2 py-1 text-sm text-right" />
+                  </div>
+                </div>
+              }
+              <div class="grid grid-cols-12 gap-2 border-t bg-gray-50 px-3 py-2 text-sm font-semibold">
+                <div class="col-span-5">Total</div>
+                <div class="col-span-3 text-right"></div>
+                <div class="col-span-4 text-right text-green-600">{{ payAllTotal() | number:'1.0-0' }}</div>
+              </div>
+            </div>
+
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Receipt Number (optional)</label>
+              <div class="flex gap-2">
+                <div class="relative flex-1">
+                  <input
+                    [(ngModel)]="payAllReceiptNumber"
+                    (ngModelChange)="payAllReceiptNumber().length >= 2 ? validatePayAllReceipt() : receiptAvailable.set(null)"
+                    type="text"
+                    class="w-full rounded-lg border px-3 py-2 text-sm pr-10"
+                    [class.border-red-400]="receiptAvailable() === false"
+                    [class.border-green-400]="receiptAvailable() === true"
+                    [class.border-gray-300]="receiptAvailable() === null"
+                    placeholder="e.g. RCP-001234"
+                  />
+                  <span class="absolute right-3 top-1/2 -translate-y-1/2">
+                    @if (receiptChecking()) {
+                      <span class="pi pi-spin pi-spinner text-sm text-gray-400"></span>
+                    } @else if (receiptAvailable() === true) {
+                      <span class="pi pi-check-circle text-sm text-green-500"></span>
+                    } @else if (receiptAvailable() === false) {
+                      <span class="pi pi-times-circle text-sm text-red-500"></span>
+                    }
+                  </span>
+                </div>
+                <p-button icon="pi pi-search" severity="secondary" (onClick)="validatePayAllReceipt()" styleClass="p-button-sm" pTooltip="Check receipt" [disabled]="!payAllReceiptNumber()" />
+              </div>
+              @if (receiptAvailable() === false) {
+                <p class="mt-1 text-xs text-red-500">This receipt number already exists</p>
+              } @else if (receiptAvailable() === true) {
+                <p class="mt-1 text-xs text-green-600">Receipt number is available</p>
+              } @else {
+                <p class="mt-1 text-xs text-gray-400">Manually entered. Must be unique if provided.</p>
+              }
+            </div>
+
+            <div class="flex gap-2">
+              <p-button label="Cancel" severity="secondary" (onClick)="closePayAllDialog()" styleClass="flex-1 justify-center" [disabled]="loading()" />
+              <p-button label="Pay All" [loading]="loading()" (onClick)="payAll()" styleClass="flex-1 justify-center" severity="success" [disabled]="payAllTotal() <= 0" />
+            </div>
           </div>
 
           @if (loading()) {
@@ -2314,8 +2574,8 @@
                 <span class="text-xs font-normal">(Days 1 – {{ scheduleManualDays() }})</span>
               </p>
               <p-select [(ngModel)]="scheduleVehicleId"
-                        [options]="manualVehicles()"
-                        optionLabel="name" optionValue="id"
+                        [options]="manualVehicleOptions()"
+                        optionLabel="label" optionValue="id"
                         placeholder="Select manual vehicle"
                         styleClass="w-full" appendTo="body"
                         (onChange)="onScheduleVehicleChange()" />
@@ -2329,8 +2589,8 @@
               <span class="text-xs font-normal">(Days {{ scheduleManualDays() + 1 }} – end)</span>
             </p>
             <p-select [(ngModel)]="scheduleVehicleIdAuto"
-                      [options]="autoVehicles()"
-                      optionLabel="name" optionValue="id"
+                      [options]="autoVehicleOptions()"
+                      optionLabel="label" optionValue="id"
                       placeholder="Select auto vehicle"
                       styleClass="w-full" appendTo="body"
                       (onChange)="onScheduleVehicleAutoChange()" />

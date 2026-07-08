@@ -10,6 +10,7 @@ import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { SelectModule } from 'primeng/select';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { CompanyService, Company, CompanyCreate, CompanyUpdate } from '../../core/services/company.service';
 
@@ -17,7 +18,7 @@ import { CompanyService, Company, CompanyCreate, CompanyUpdate } from '../../cor
   selector: 'app-companies',
   imports: [
     CommonModule, FormsModule, ButtonModule, TableModule, DialogModule,
-    InputTextModule, TextareaModule, ToggleSwitchModule, TagModule, ToastModule, ConfirmDialogModule,
+    InputTextModule, TextareaModule, ToggleSwitchModule, TagModule, ToastModule, ConfirmDialogModule, SelectModule,
   ],
   providers: [ConfirmationService, MessageService],
   template: `
@@ -39,6 +40,7 @@ import { CompanyService, Company, CompanyCreate, CompanyUpdate } from '../../cor
             <th>Code</th>
             <th>Phone</th>
             <th>Email</th>
+            <th>Currency</th>
             <th>Status</th>
             <th>Created</th>
             <th>Actions</th>
@@ -50,6 +52,7 @@ import { CompanyService, Company, CompanyCreate, CompanyUpdate } from '../../cor
             <td><span class="font-mono text-sm bg-gray-100 px-1.5 py-0.5 rounded">{{ c.code }}</span></td>
             <td>{{ c.phone || '-' }}</td>
             <td>{{ c.email || '-' }}</td>
+            <td><span class="font-medium">{{ c.currency }}</span></td>
             <td><p-tag [value]="c.is_active ? 'Active' : 'Inactive'" [severity]="c.is_active ? 'success' : 'danger'" /></td>
             <td class="text-sm text-gray-500">{{ c.created_at | date:'dd/MM/yy' }}</td>
             <td>
@@ -86,6 +89,11 @@ import { CompanyService, Company, CompanyCreate, CompanyUpdate } from '../../cor
           <label class="mb-1 block text-sm font-medium text-gray-700">Address</label>
           <textarea pInputTextarea [(ngModel)]="form.address" class="w-full" rows="2"></textarea>
         </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Currency</label>
+          <p-select [(ngModel)]="form.currency" [options]="currencyOptions" optionLabel="label" optionValue="value"
+            placeholder="Select currency" styleClass="w-full" appendTo="body" />
+        </div>
         @if (editId) {
           <div class="flex items-center gap-2">
             <p-toggleswitch [(ngModel)]="form.is_active" />
@@ -103,7 +111,18 @@ export class CompaniesCmp implements OnInit {
   saving = signal(false);
   dialogVisible = false;
   editId: string | null = null;
-  form: CompanyCreate & { is_active?: boolean } = { name: '', code: '', address: '', phone: '', email: '', is_active: true };
+
+  currencyOptions = [
+    { label: 'USD ($)', value: 'USD' },
+    { label: 'UGX (Sh)', value: 'UGX' },
+    { label: 'EUR (€)', value: 'EUR' },
+    { label: 'GBP (£)', value: 'GBP' },
+    { label: 'KES (KSh)', value: 'KES' },
+    { label: 'TZS (TSh)', value: 'TZS' },
+    { label: 'RWF (FRw)', value: 'RWF' },
+  ];
+
+  form: CompanyCreate & { is_active?: boolean } = { name: '', code: '', address: '', phone: '', email: '', currency: 'USD', is_active: true };
 
   constructor(
     private service: CompanyService,
@@ -129,13 +148,13 @@ export class CompaniesCmp implements OnInit {
 
   showCreate() {
     this.editId = null;
-    this.form = { name: '', code: '', address: '', phone: '', email: '', is_active: true };
+    this.form = { name: '', code: '', address: '', phone: '', email: '', currency: 'USD', is_active: true };
     this.dialogVisible = true;
   }
 
   showEdit(c: Company) {
     this.editId = c.id;
-    this.form = { name: c.name, code: c.code, address: c.address, phone: c.phone, email: c.email, is_active: c.is_active };
+    this.form = { name: c.name, code: c.code, address: c.address, phone: c.phone, email: c.email, currency: c.currency, is_active: c.is_active };
     this.dialogVisible = true;
   }
 

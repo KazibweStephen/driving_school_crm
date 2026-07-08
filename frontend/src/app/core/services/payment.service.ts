@@ -113,4 +113,9 @@ export class PaymentService {
   checkReceipt(receiptNumber: string) {
     return this.http.get<{ exists: boolean }>(`/api/v1/payments/check-receipt/${encodeURIComponent(receiptNumber)}`);
   }
+
+  getReceipt(paymentId: string, download: boolean = false) {
+    const url = `/api/v1/receipts/${paymentId}/download${download ? '?download=1' : ''}`;
+    return this.http.get(url, { responseType: 'text' });
+  }
 }

@@ -35,6 +35,7 @@ async def create_template(
     template_type: str = "practical",
     items_data: list[dict] | None = None,
     created_by_phone: str | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> LessonPlanTemplate:
     template = LessonPlanTemplate(
         name=name,
@@ -44,6 +45,7 @@ async def create_template(
         total_weeks=total_weeks,
         template_type=template_type,
         created_by_phone=created_by_phone,
+        company_id=company_id,
     )
     db.add(template)
     await db.flush()
@@ -97,20 +99,26 @@ async def create_template(
 
 
 async def get_template_by_id(
-    db: AsyncSession, template_id: uuid.UUID
+    db: AsyncSession, template_id: uuid.UUID, company_id: uuid.UUID | None = None
 ) -> LessonPlanTemplate | None:
-    result = await db.execute(
+    query = (
         select(LessonPlanTemplate)
         .where(LessonPlanTemplate.id == template_id)
         .options(selectinload(LessonPlanTemplate.lesson_items))
     )
+    if company_id:
+        query = query.where(LessonPlanTemplate.company_id == company_id)
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
 async def list_templates(
-    db: AsyncSession, transmission_type: str | None = None, status: str | None = None
+    db: AsyncSession, transmission_type: str | None = None, status: str | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> list[LessonPlanTemplate]:
     query = select(LessonPlanTemplate).options(selectinload(LessonPlanTemplate.lesson_items)).order_by(LessonPlanTemplate.created_at.desc())
+    if company_id:
+        query = query.where(LessonPlanTemplate.company_id == company_id)
     if transmission_type:
         query = query.where(LessonPlanTemplate.transmission_type == TransmissionType(transmission_type))
     if status:
@@ -248,8 +256,9 @@ async def duplicate_template(
     template_id: uuid.UUID,
     new_name: str,
     created_by_phone: str | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> LessonPlanTemplate:
-    original = await get_template_by_id(db, template_id)
+    original = await get_template_by_id(db, template_id, company_id=company_id)
     if not original:
         raise ValueError("Template not found")
 
@@ -260,6 +269,7 @@ async def duplicate_template(
         total_days=original.total_days,
         total_weeks=original.total_weeks,
         created_by_phone=created_by_phone,
+        company_id=company_id or original.company_id,
     )
     db.add(template)
     await db.flush()
@@ -936,9 +946,9 @@ async def get_lesson_history(
 
 
 async def export_template_json(
-    db: AsyncSession, template_id: uuid.UUID
+    db: AsyncSession, template_id: uuid.UUID, company_id: uuid.UUID | None = None
 ) -> dict:
-    template = await get_template_by_id(db, template_id)
+    template = await get_template_by_id(db, template_id, company_id=company_id)
     if not template:
         raise ValueError("Template not found")
 
@@ -978,6 +988,7 @@ async def import_template_json(
     db: AsyncSession,
     data: dict,
     created_by_phone: str | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> tuple[LessonPlanTemplate, ImportLog]:
     import_log = ImportLog(
         import_type="lesson_plan_template",
@@ -1017,6 +1028,7 @@ async def import_template_json(
             total_weeks=total_weeks,
             items_data=items_data,
             created_by_phone=created_by_phone,
+            company_id=company_id,
         )
 
         import_log.status = ImportStatus.COMPLETED

@@ -86,6 +86,7 @@ export class ClientProfile implements OnInit {
   // Step 3 receipt
   addReceiptItems = signal<{ productName: string; packageName: string; price: number; paid: number; balance: number }[]>([]);
   addReceiptSystemNumber = signal('');
+  addReceiptPaymentIds: string[] = [];
   addReceiptTotalPaid = signal(0);
   addReceiptDate = signal('');
   addReceiptUserName = signal('');
@@ -124,6 +125,16 @@ export class ClientProfile implements OnInit {
   completeSaleBalance = signal<number>(0);
   completeSaleReceiptNumber = signal('');
   completeSaleSystemReceiptNumber = signal('');
+
+  showMakePaymentDialog = signal(false);
+  makePaymentTarget = signal<CartItemRead | null>(null);
+  makePaymentAmount = signal<number>(0);
+  makePaymentBalance = signal<number>(0);
+  makePaymentReceiptNumber = signal('');
+
+  showPayAllDialog = signal(false);
+  payAllItems = signal<{ cartItem: CartItemRead; payNow: number; balance: number; productName: string; packageName: string }[]>([]);
+  payAllReceiptNumber = signal('');
 
   showGuide = signal(false);
   guideContent = signal('');
@@ -913,6 +924,12 @@ export class ClientProfile implements OnInit {
   newAvailabilityTimes = signal<string[]>([]);
   manualVehicles = computed(() => this.availableVehicles().filter(v => v.transmission === 'manual'));
   autoVehicles = computed(() => this.availableVehicles().filter(v => v.transmission === 'automatic'));
+  manualVehicleOptions = computed(() =>
+    this.manualVehicles().map(v => ({ id: v.id, label: `${v.plate_number} · ${v.transmission}` }))
+  );
+  autoVehicleOptions = computed(() =>
+    this.autoVehicles().map(v => ({ id: v.id, label: `${v.plate_number} · ${v.transmission}` }))
+  );
 
   timeOptions = Array.from({length: 26}, (_, i) => {
     const h = Math.floor((i * 30) / 60) + 6;
@@ -1643,6 +1660,21 @@ export class ClientProfile implements OnInit {
     return pkg?.price != null ? `${pkg.price}` : '—';
   }
 
+  cartItemTotal(ci: CartItemRead): number {
+    if (!ci.package_id) return 0;
+    const p = this.products().find(pr => pr.id === ci.product_id);
+    const pkg = p?.packages.find(pk => pk.id === ci.package_id);
+    return pkg?.price ?? 0;
+  }
+
+  cartItemPaid(ci: CartItemRead): number {
+    return this.paidForProduct(ci);
+  }
+
+  cartItemBalance(ci: CartItemRead): number {
+    return Math.max(0, this.cartItemTotal(ci) - this.cartItemPaid(ci));
+  }
+
   productDuration(ci: CartItemRead): string {
     const p = this.products().find(pr => pr.id === ci.product_id);
     return p?.duration_label || '—';
@@ -1792,6 +1824,7 @@ export class ClientProfile implements OnInit {
     this.addPaymentInstallments = [];
     this.addReceiptItems.set([]);
     this.addReceiptSystemNumber.set('');
+    this.addReceiptPaymentIds = [];
     this.addReceiptTotalPaid.set(0);
     this.addReceiptDate.set('');
     this.addReceiptUserName.set('');
@@ -1948,27 +1981,37 @@ export class ClientProfile implements OnInit {
     }
   }
 
+  private async findOrCreateCartItem(
+    c: Consultation,
+    sp: { product: Product; packageId: string | null; packageName: string; price: number; cartItemId?: string },
+  ): Promise<string | undefined> {
+    if (sp.cartItemId) return sp.cartItemId;
+    const existing = c.cart_items?.find(
+      ci => ci.product_id === sp.product.id && (ci.package_id ?? null) === (sp.packageId ?? null),
+    );
+    if (existing) return existing.id;
+    const item = await this.cartItemService.create(c.id, {
+      product_id: sp.product.id,
+      package_id: sp.packageId || undefined,
+      notes: this.addNote() || undefined,
+      is_important: this.addIsImportant(),
+    }).toPromise();
+    return item?.id;
+  }
+
   async finishAddProducts() {
     const c = this.consultation();
     if (!c) return;
     this.loading.set(true);
     try {
       for (const sp of this.addSelectedProducts()) {
-        // For existing items, get the cart item ID; for new, create it
-        let itemId = sp.cartItemId;
-        if (!itemId) {
-          const item = await this.cartItemService.create(c.id, {
-            product_id: sp.product.id,
-            package_id: sp.packageId || undefined,
-            notes: this.addNote() || undefined,
-            is_important: this.addIsImportant(),
-          }).toPromise();
-          if (item) itemId = item.id;
-        }
+        const itemId = await this.findOrCreateCartItem(c, sp);
 
         if (itemId) {
           const userNote = this.addNote() || '';
-          const isExistingItem = !!sp.cartItemId;
+          const isExistingItem = !!sp.cartItemId || !!(c.cart_items?.some(
+            ci => ci.product_id === sp.product.id && (ci.package_id ?? null) === (sp.packageId ?? null),
+          ));
           const note = isExistingItem ? (userNote || 'Still interested in this product') : (userNote || 'Follow up on this client');
           const convFu = await this.consultationService
             .createFollowUp(c.id, {
@@ -2014,19 +2057,13 @@ export class ClientProfile implements OnInit {
       // Resolve cart item IDs: existing items use their ID, new items get created
       const itemIds: (string | undefined)[] = [];
       for (const sp of this.addSelectedProducts()) {
-        if (sp.cartItemId) {
-          itemIds.push(sp.cartItemId);
-        } else {
-          const item = await this.cartItemService.create(c.id, {
-            product_id: sp.product.id,
-            package_id: sp.packageId || undefined,
-          }).toPromise();
-          itemIds.push(item?.id);
-        }
+        const itemId = await this.findOrCreateCartItem(c, sp);
+        itemIds.push(itemId);
       }
 
       // Create payments for each allocated product
       let systemReceipt = '';
+      const paymentIds: string[] = [];
       for (let i = 0; i < this.addSelectedProducts().length; i++) {
         const sp = this.addSelectedProducts()[i];
         const allocation = this.getAllocation(i);
@@ -2047,21 +2084,22 @@ export class ClientProfile implements OnInit {
           }));
         installments.push(...scheduledInstallments);
 
-        const transactionTotal = installments.reduce((s, i) => s + i.amount, 0);
-
         const paymentResult = await this.paymentService
           .createPayment(c.id, {
             product_id: sp.product.id,
             package_id: sp.packageId || undefined,
-            total_amount: transactionTotal,
+            total_amount: sp.price,
             notes: `Paid: ${allocation}, Balance: ${remaining}`,
             receipt_number: this.addPaymentReceiptNumber() || undefined,
             installments,
           })
           .toPromise();
 
-        if (!systemReceipt && paymentResult) {
-          systemReceipt = paymentResult.system_receipt_number;
+        if (paymentResult) {
+          paymentIds.push(paymentResult.id);
+          if (!systemReceipt) {
+            systemReceipt = paymentResult.system_receipt_number;
+          }
         }
 
         // Mark first installment as paid
@@ -2125,6 +2163,7 @@ export class ClientProfile implements OnInit {
 
       this.addReceiptItems.set(receiptItems);
       this.addReceiptSystemNumber.set(systemReceipt);
+      this.addReceiptPaymentIds = paymentIds;
       this.addReceiptTotalPaid.set(this.addTotalAllocated);
       this.addReceiptDate.set(new Date().toLocaleDateString());
       const currentUser = (this as any).authService?.currentUser?.();
@@ -2298,6 +2337,7 @@ export class ClientProfile implements OnInit {
   closeAddReceipt() {
     this.showAddProductDialog.set(false);
     this.addStep.set(1);
+    this.addReceiptPaymentIds = [];
   }
 
   async updateCartItemStatus(ci: CartItemRead, status: string) {
@@ -2471,6 +2511,7 @@ export class ClientProfile implements OnInit {
         .toPromise();
 
       const systemReceipt = paymentResult?.system_receipt_number || 'N/A';
+      const receiptId = paymentResult?.id;
       this.completeSaleSystemReceiptNumber.set(systemReceipt);
 
       await this.cartItemService.update(ci.id, { status }).toPromise();
@@ -2478,6 +2519,11 @@ export class ClientProfile implements OnInit {
       this.showCompleteSaleDialog.set(false);
       this.completeSaleTarget.set(null);
       await this.loadConsultation(c.id);
+
+      if (receiptId) {
+        this.openReceipt(receiptId);
+      }
+
       this.messageService.add({
         severity: 'success',
         summary: 'Sale Completed',
@@ -2488,6 +2534,217 @@ export class ClientProfile implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  openMakePaymentDialog(ci: CartItemRead) {
+    const balance = this.cartItemBalance(ci);
+    if (balance <= 0) return;
+    this.makePaymentTarget.set(ci);
+    this.makePaymentAmount.set(balance);
+    this.makePaymentBalance.set(balance);
+    this.makePaymentReceiptNumber.set('');
+    this.receiptChecking.set(false);
+    this.receiptAvailable.set(null);
+    this.showMakePaymentDialog.set(true);
+  }
+
+  async makePayment() {
+    const ci = this.makePaymentTarget();
+    const c = this.consultation();
+    if (!ci || !c) return;
+    const amount = this.makePaymentAmount();
+    if (!amount || amount <= 0) return;
+
+    this.loading.set(true);
+    try {
+      const paymentResult = await this.paymentService
+        .createPayment(c.id, {
+          product_id: ci.product_id,
+          package_id: ci.package_id || undefined,
+          total_amount: amount,
+          notes: `Additional payment of ${amount}`,
+          receipt_number: this.makePaymentReceiptNumber() || undefined,
+          installments: [
+            { due_date: this.formatDate(new Date()), amount },
+          ],
+        })
+        .toPromise();
+
+      if (paymentResult?.installments.length) {
+        await this.paymentService
+          .updateInstallment(paymentResult.id, paymentResult.installments[0].id, {
+            paid_date: this.formatDate(new Date()),
+            paid_amount: amount,
+            notes: 'Paid',
+          })
+          .toPromise();
+      }
+
+      this.showMakePaymentDialog.set(false);
+      this.makePaymentTarget.set(null);
+      await this.loadConsultation(c.id);
+
+      // Check if fully paid after refresh
+      const updatedCartItems = this.consultation()?.cart_items || [];
+      const updatedCi = updatedCartItems.find(item => item.id === ci.id);
+      const totalPaid = this.paidForProduct(ci);
+      const totalAmt = this.cartItemTotal(ci);
+      const receiptId = paymentResult?.id;
+      if (totalPaid >= totalAmt && updatedCi?.status === 'converted_paying') {
+        await this.cartItemService.update(ci.id, { status: 'converted_paid' }).toPromise();
+        await this.loadConsultation(c.id);
+      }
+
+      if (receiptId) {
+        this.openReceipt(receiptId);
+      }
+
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Payment Recorded',
+        detail: `Payment of ${amount} recorded`,
+      });
+    } catch (err: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: err?.error?.detail || 'Failed to process payment' });
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  closeMakePaymentDialog() {
+    this.showMakePaymentDialog.set(false);
+    this.makePaymentTarget.set(null);
+  }
+
+  async validateMakePaymentReceipt() {
+    const receipt = this.makePaymentReceiptNumber();
+    if (!receipt || receipt.trim().length < 2) {
+      this.receiptAvailable.set(null);
+      return;
+    }
+    this.receiptChecking.set(true);
+    this.receiptAvailable.set(null);
+    try {
+      const res = await this.paymentService.checkReceipt(receipt.trim()).toPromise();
+      this.receiptAvailable.set(res ? !res.exists : null);
+    } catch {
+      this.receiptAvailable.set(null);
+    } finally {
+      this.receiptChecking.set(false);
+    }
+  }
+
+  pendingPayAllItems(): CartItemRead[] {
+    return this.paidCartItems().filter(ci => this.cartItemBalance(ci) > 0);
+  }
+
+  openPayAllDialog() {
+    const items = this.pendingPayAllItems().map(ci => ({
+      cartItem: ci,
+      payNow: this.cartItemBalance(ci),
+      balance: this.cartItemBalance(ci),
+      productName: this.productName(ci),
+      packageName: this.packageName(ci) || '',
+    }));
+    if (!items.length) return;
+    this.payAllItems.set(items);
+    this.payAllReceiptNumber.set('');
+    this.receiptChecking.set(false);
+    this.receiptAvailable.set(null);
+    this.showPayAllDialog.set(true);
+  }
+
+  payAllTotal(): number {
+    return this.payAllItems().reduce((s, it) => s + (it.payNow || 0), 0);
+  }
+
+  async validatePayAllReceipt() {
+    const receipt = this.payAllReceiptNumber();
+    if (!receipt || receipt.trim().length < 2) {
+      this.receiptAvailable.set(null);
+      return;
+    }
+    this.receiptChecking.set(true);
+    this.receiptAvailable.set(null);
+    try {
+      const res = await this.paymentService.checkReceipt(receipt.trim()).toPromise();
+      this.receiptAvailable.set(res ? !res.exists : null);
+    } catch {
+      this.receiptAvailable.set(null);
+    } finally {
+      this.receiptChecking.set(false);
+    }
+  }
+
+  async payAll() {
+    const c = this.consultation();
+    if (!c) return;
+    const items = this.payAllItems().filter(it => it.payNow > 0);
+    if (!items.length) return;
+
+    const receipt = this.payAllReceiptNumber();
+    if (receipt && receipt.trim().length >= 2 && this.receiptAvailable() !== true) return;
+
+    this.loading.set(true);
+    const receiptIds: string[] = [];
+    try {
+      for (const it of items) {
+        const ci = it.cartItem;
+        const amount = it.payNow;
+        const paymentResult = await this.paymentService
+          .createPayment(c.id, {
+            product_id: ci.product_id,
+            package_id: ci.package_id || undefined,
+            total_amount: amount,
+            notes: `Bulk payment of ${amount}`,
+            receipt_number: receipt || undefined,
+            installments: [{ due_date: this.formatDate(new Date()), amount }],
+          })
+          .toPromise();
+
+        if (paymentResult?.installments.length) {
+          await this.paymentService
+            .updateInstallment(paymentResult.id, paymentResult.installments[0].id, {
+              paid_date: this.formatDate(new Date()),
+              paid_amount: amount,
+              notes: 'Paid',
+            })
+            .toPromise();
+        }
+        if (paymentResult?.id) receiptIds.push(paymentResult.id);
+      }
+
+      this.showPayAllDialog.set(false);
+      this.payAllItems.set([]);
+      await this.loadConsultation(c.id);
+
+      // Update any fully paid cart items
+      for (const it of items) {
+        const ci = it.cartItem;
+        const totalPaid = this.paidForProduct(ci);
+        const totalAmt = this.cartItemTotal(ci);
+        const updatedCi = this.consultation()?.cart_items?.find(item => item.id === ci.id);
+        if (totalPaid >= totalAmt && updatedCi?.status === 'converted_paying') {
+          await this.cartItemService.update(ci.id, { status: 'converted_paid' }).toPromise();
+        }
+      }
+      await this.loadConsultation(c.id);
+
+      for (const id of receiptIds) {
+        if (id) this.openReceipt(id);
+      }
+
+      this.messageService.add({ severity: 'success', summary: 'Payments Recorded', detail: `${items.length} payment(s) recorded` });
+    } catch (err: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: err?.error?.detail || 'Failed to process payments' });
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  closePayAllDialog() {
+    this.showPayAllDialog.set(false);
+    this.payAllItems.set([]);
   }
 
   async saveRecover() {
@@ -2720,6 +2977,12 @@ export class ClientProfile implements OnInit {
     );
   }
 
+  latestPaymentForCartItem(ci: CartItemRead): PaymentRead | null {
+    const pays = this.paymentsForProduct(ci);
+    if (!pays.length) return null;
+    return [...pays].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+  }
+
   paidForProduct(ci: CartItemRead): number {
     const pays = this.paymentsForProduct(ci);
     if (!pays.length) return 0;
@@ -2741,6 +3004,52 @@ export class ClientProfile implements OnInit {
     return [...this.payments()].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
+  }
+
+  openReceipt(paymentId: string) {
+    this.paymentService.getReceipt(paymentId).subscribe({
+      next: (html) => {
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+        }
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+    });
+  }
+
+  downloadReceipt(paymentId: string) {
+    this.paymentService.getReceipt(paymentId, true).subscribe({
+      next: (html) => {
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `receipt-${paymentId}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to download receipt' }),
+    });
+  }
+
+  reprintReceipt(paymentId: string) {
+    this.paymentService.getReceipt(paymentId).subscribe({
+      next: (html) => {
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+          setTimeout(() => {
+            try { win.print(); } catch { /* fallback */ }
+          }, 800);
+        }
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+    });
   }
 
   paymentProductName(pay: PaymentRead): string {
@@ -2767,6 +3076,21 @@ export class ClientProfile implements OnInit {
   }
 
   paymentStatus(pay: PaymentRead): string {
+    const ci = this.consultation()?.cart_items?.find(item =>
+      item.product_id === pay.product_id &&
+      (pay.package_id ? item.package_id === pay.package_id : !item.package_id)
+    );
+
+    if (ci) {
+      const balance = this.balanceForProduct(ci);
+      if (balance > 0) {
+        const statuses = pay.installments.map(i => i.status);
+        if (statuses.some(s => s === 'paid')) return 'partial';
+        if (statuses.some(s => s === 'overdue')) return 'overdue';
+        return 'pending';
+      }
+    }
+
     const statuses = pay.installments.map(i => i.status);
     if (statuses.every(s => s === 'paid')) return 'paid';
     if (statuses.some(s => s === 'paid')) return 'partial';

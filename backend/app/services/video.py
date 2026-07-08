@@ -27,6 +27,7 @@ async def create_video(
     file_size: int | None = None,
     mime_type: str | None = None,
     created_by_phone: str | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> VideoLibrary:
     video = VideoLibrary(
         title=title,
@@ -39,6 +40,7 @@ async def create_video(
         thumbnail_url=thumbnail_url,
         qr_code_data=qr_code_data,
         created_by_phone=created_by_phone,
+        company_id=company_id,
     )
     db.add(video)
     await db.flush()
@@ -51,6 +53,7 @@ async def upload_video_file(
     title: str,
     file: UploadFile,
     created_by_phone: str | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> VideoLibrary:
     await ensure_upload_dir()
 
@@ -75,6 +78,7 @@ async def upload_video_file(
         file_size=file_size,
         mime_type=mime_type,
         created_by_phone=created_by_phone,
+        company_id=company_id,
     )
     db.add(video)
     await db.flush()
@@ -83,18 +87,22 @@ async def upload_video_file(
 
 
 async def get_video_by_id(
-    db: AsyncSession, video_id: uuid.UUID
+    db: AsyncSession, video_id: uuid.UUID, company_id: uuid.UUID | None = None
 ) -> VideoLibrary | None:
-    result = await db.execute(
-        select(VideoLibrary).where(VideoLibrary.id == video_id)
-    )
+    query = select(VideoLibrary).where(VideoLibrary.id == video_id)
+    if company_id:
+        query = query.where(VideoLibrary.company_id == company_id)
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
 async def list_videos(
-    db: AsyncSession, source: str | None = None, search: str | None = None
+    db: AsyncSession, source: str | None = None, search: str | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> list[VideoLibrary]:
     query = select(VideoLibrary).order_by(VideoLibrary.created_at.desc())
+    if company_id:
+        query = query.where(VideoLibrary.company_id == company_id)
     if source:
         query = query.where(VideoLibrary.source == VideoSource(source))
     if search:

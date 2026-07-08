@@ -34,6 +34,7 @@ export class ScheduleBreaksCmp implements OnInit {
     start_time: '',
     end_time: '',
     is_active: true,
+    is_standard: false,
   };
 
   constructor(
@@ -60,7 +61,7 @@ export class ScheduleBreaksCmp implements OnInit {
 
   openCreate() {
     this.editingBreak.set(null);
-    this.form = { name: '', start_time: '', end_time: '', is_active: true };
+    this.form = { name: '', start_time: '', end_time: '', is_active: true, is_standard: false };
     this.showDialog.set(true);
   }
 
@@ -71,6 +72,7 @@ export class ScheduleBreaksCmp implements OnInit {
       start_time: b.start_time.slice(0, 5),
       end_time: b.end_time.slice(0, 5),
       is_active: b.is_active,
+      is_standard: b.is_standard,
     };
     this.showDialog.set(true);
   }
@@ -85,6 +87,7 @@ export class ScheduleBreaksCmp implements OnInit {
           start_time: this.form.start_time,
           end_time: this.form.end_time,
           is_active: this.form.is_active,
+          is_standard: this.form.is_standard,
         }).toPromise();
         this.messageService.add({ severity: 'success', summary: 'Updated', detail: 'Break updated' });
       } else {
@@ -93,6 +96,7 @@ export class ScheduleBreaksCmp implements OnInit {
           start_time: this.form.start_time,
           end_time: this.form.end_time,
           is_active: this.form.is_active,
+          is_standard: this.form.is_standard,
         }).toPromise();
         this.messageService.add({ severity: 'success', summary: 'Created', detail: 'Break created' });
       }

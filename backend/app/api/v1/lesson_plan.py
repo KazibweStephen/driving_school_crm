@@ -38,7 +38,7 @@ async def list_templates(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    templates = await lesson_service.list_templates(db, transmission_type, status)
+    templates = await lesson_service.list_templates(db, transmission_type, status, company_id=current_user.company_id)
     return [LessonPlanTemplateRead.model_validate(t) for t in templates]
 
 
@@ -59,6 +59,7 @@ async def create_template(
         template_type=data.template_type,
         items_data=items_data,
         created_by_phone=current_user.phone,
+        company_id=current_user.company_id,
     )
     return LessonPlanTemplateRead.model_validate(template)
 
@@ -73,7 +74,7 @@ async def get_template(
         tid = uuid.UUID(template_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
-    template = await lesson_service.get_template_by_id(db, tid)
+    template = await lesson_service.get_template_by_id(db, tid, company_id=current_user.company_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     return LessonPlanTemplateRead.model_validate(template)
@@ -90,7 +91,7 @@ async def update_template(
         tid = uuid.UUID(template_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
-    template = await lesson_service.get_template_by_id(db, tid)
+    template = await lesson_service.get_template_by_id(db, tid, company_id=current_user.company_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     updated = await lesson_service.update_template(
@@ -117,7 +118,7 @@ async def delete_template(
         tid = uuid.UUID(template_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
-    template = await lesson_service.get_template_by_id(db, tid)
+    template = await lesson_service.get_template_by_id(db, tid, company_id=current_user.company_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     await lesson_service.delete_template(db, template)
@@ -135,7 +136,7 @@ async def duplicate_template(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
     try:
-        template = await lesson_service.duplicate_template(db, tid, name, created_by_phone=current_user.phone)
+        template = await lesson_service.duplicate_template(db, tid, name, created_by_phone=current_user.phone, company_id=current_user.company_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return LessonPlanTemplateRead.model_validate(template)
@@ -151,7 +152,7 @@ async def archive_template(
         tid = uuid.UUID(template_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
-    template = await lesson_service.get_template_by_id(db, tid)
+    template = await lesson_service.get_template_by_id(db, tid, company_id=current_user.company_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     updated = await lesson_service.archive_template(db, template)
@@ -169,7 +170,7 @@ async def export_template(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid template ID")
     try:
-        return await lesson_service.export_template_json(db, tid)
+        return await lesson_service.export_template_json(db, tid, company_id=current_user.company_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -181,7 +182,7 @@ async def import_template_from_json(
     current_user: User = Depends(get_current_user),
 ):
     try:
-        template, import_log = await lesson_service.import_template_json(db, data, created_by_phone=current_user.phone)
+        template, import_log = await lesson_service.import_template_json(db, data, created_by_phone=current_user.phone, company_id=current_user.company_id)
         return LessonPlanImportResponse(
             template=LessonPlanTemplateRead.model_validate(template),
             import_log=None,  # TODO: add ImportLogRead

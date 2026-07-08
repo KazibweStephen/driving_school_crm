@@ -9,6 +9,7 @@ export interface Company {
   address?: string;
   phone?: string;
   email?: string;
+  currency: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -20,6 +21,7 @@ export interface CompanyCreate {
   address?: string;
   phone?: string;
   email?: string;
+  currency?: string;
 }
 
 export interface CompanyUpdate {
@@ -28,6 +30,7 @@ export interface CompanyUpdate {
   address?: string;
   phone?: string;
   email?: string;
+  currency?: string;
   is_active?: boolean;
 }
 

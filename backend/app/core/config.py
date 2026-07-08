@@ -29,8 +29,17 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 60
     jwt_refresh_token_expire_days: int = 7
 
-    # SMS
+    # SMS / Twilio
     sms_provider: str = "logging"
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_phone_number: str = ""
+
+    # Receipt download base URL
+    receipt_base_url: str = "http://localhost:80"
+
+    # App URL for SMS links
+    app_url: str = "http://localhost:80"
 
     # Security
     cors_origins: list[str] = ["http://localhost:80", "http://localhost:4200"]

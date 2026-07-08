@@ -6,6 +6,7 @@ import { SelectModule } from 'primeng/select';
 import { CheckboxModule } from 'primeng/checkbox';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
+import { ScheduleBreakService, ScheduleBreak } from '../../core/services/schedule-break.service';
 import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
 import { UserService, User } from '../../core/services/user.service';
 import {
@@ -45,12 +46,14 @@ export class VehicleScheduleCmp implements OnInit {
   dayLabels = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   timeSlots: string[] = [];
   slotDuration = 30;
-  lunchSlot = '13:00';
+
+  breaks = signal<ScheduleBreak[]>([]);
 
   constructor(
     private vehicleService: VehicleService,
     private userService: UserService,
     private scheduleService: VehicleScheduleService,
+    private breakService: ScheduleBreakService,
     private messageService: MessageService,
   ) {
     for (let i = 0; i < 26; i++) {
@@ -62,13 +65,36 @@ export class VehicleScheduleCmp implements OnInit {
     }
   }
 
-  isLunchSlot(slot: string): boolean {
-    return slot === this.lunchSlot;
+  isBreakSlot(slot: string): boolean {
+    return this.breaks().some(b => {
+      const bs = b.start_time.substring(0, 5);
+      const be = b.end_time.substring(0, 5);
+      return slot >= bs && slot < be;
+    });
+  }
+
+  breakName(slot: string): string {
+    const b = this.breaks().find(b => {
+      const bs = b.start_time.substring(0, 5);
+      const be = b.end_time.substring(0, 5);
+      return slot >= bs && slot < be;
+    });
+    return b ? b.name : 'Break';
   }
 
   ngOnInit() {
     this.loadVehicles();
     this.loadInstructors();
+    this.loadBreaks();
+  }
+
+  async loadBreaks() {
+    try {
+      const res = await this.breakService.list(true).toPromise();
+      this.breaks.set(res || []);
+    } catch {
+      // silently fail — breaks are non-critical for schedule load
+    }
   }
 
   async loadVehicles() {
@@ -159,7 +185,7 @@ export class VehicleScheduleCmp implements OnInit {
 
   /** Toggle a single cell */
   toggleCell(day: number, time: string) {
-    if (this.isLunchSlot(time)) return;
+    if (this.isBreakSlot(time)) return;
     const instId = this.activeInstructorId();
     if (!instId) return;
 
@@ -193,7 +219,7 @@ export class VehicleScheduleCmp implements OnInit {
 
     if (checked) {
       for (const time of this.timeSlots) {
-        if (this.isLunchSlot(time)) continue;
+        if (this.isBreakSlot(time)) continue;
         const currentInst = this.cellInstructor(dayIdx, time);
         if (currentInst !== instId) {
           changes.push({ day: dayIdx, time, instructor_id: instId, assign: true });

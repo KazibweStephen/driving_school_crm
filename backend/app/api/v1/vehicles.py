@@ -19,7 +19,7 @@ async def list_vehicles(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    vehicles = await vehicle_service.list_vehicles(db, status, transmission)
+    vehicles = await vehicle_service.list_vehicles(db, status, transmission, company_id=current_user.company_id)
     result = []
     for v in vehicles:
         item = VehicleRead.model_validate(v)
@@ -41,6 +41,7 @@ async def create_vehicle(
         transmission=data.transmission,
         notes=data.notes,
         branch_ids=data.branch_ids,
+        company_id=current_user.company_id,
     )
     v = VehicleRead.model_validate(vehicle)
     v.branch_ids = await vehicle_service._get_branch_ids(db, vehicle.id)
@@ -57,7 +58,7 @@ async def get_vehicle(
         vid = uuid.UUID(vehicle_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid vehicle ID")
-    vehicle = await vehicle_service.get_vehicle_by_id(db, vid)
+    vehicle = await vehicle_service.get_vehicle_by_id(db, vid, company_id=current_user.company_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     v = VehicleRead.model_validate(vehicle)
@@ -76,7 +77,7 @@ async def update_vehicle(
         vid = uuid.UUID(vehicle_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid vehicle ID")
-    vehicle = await vehicle_service.get_vehicle_by_id(db, vid)
+    vehicle = await vehicle_service.get_vehicle_by_id(db, vid, company_id=current_user.company_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     updated = await vehicle_service.update_vehicle(
@@ -103,7 +104,7 @@ async def delete_vehicle(
         vid = uuid.UUID(vehicle_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid vehicle ID")
-    vehicle = await vehicle_service.get_vehicle_by_id(db, vid)
+    vehicle = await vehicle_service.get_vehicle_by_id(db, vid, company_id=current_user.company_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     await vehicle_service.delete_vehicle(db, vehicle)

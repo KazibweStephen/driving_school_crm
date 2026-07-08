@@ -59,9 +59,9 @@ async def create_consultation(
 
 
 async def get_consultation_by_id(
-    db: AsyncSession, consultation_id: uuid.UUID
+    db: AsyncSession, consultation_id: uuid.UUID, branch_id: uuid.UUID | None = None
 ) -> Consultation | None:
-    result = await db.execute(
+    query = (
         select(Consultation)
         .where(Consultation.id == consultation_id)
         .options(
@@ -69,6 +69,9 @@ async def get_consultation_by_id(
             selectinload(Consultation.cart_items),
         )
     )
+    if branch_id:
+        query = query.where(Consultation.branch_id == branch_id)
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
@@ -80,11 +83,15 @@ async def search_consultations(
     page_size: int = 20,
     exclude_converted: bool = False,
     stage: str | None = None,
+    branch_id: uuid.UUID | None = None,
 ) -> tuple[list[Consultation], int]:
     query = select(Consultation).options(
         selectinload(Consultation.follow_ups).selectinload(FollowUp.cart_items),
         selectinload(Consultation.cart_items),
     )
+
+    if branch_id:
+        query = query.where(Consultation.branch_id == branch_id)
 
     if search:
         search_term = f"%{search}%"
@@ -202,7 +209,7 @@ async def client_search(
     db: AsyncSession,
     search: str,
 ) -> list[dict]:
-    """Search for unique clients by phone/name, returning latest consultation per phone."""
+    """Search for unique clients by phone/name across all branches."""
     stmt = select(Consultation).options(selectinload(Consultation.follow_ups))
     search_term = f"%{search}%"
     stmt = stmt.where(

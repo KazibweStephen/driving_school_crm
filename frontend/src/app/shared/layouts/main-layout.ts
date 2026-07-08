@@ -1,6 +1,5 @@
 import { Component, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { NgClass } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
 import { TooltipModule } from 'primeng/tooltip';
 import { AuthService } from '../../core/auth/auth.service';
@@ -20,7 +19,7 @@ interface NavGroup {
 
 @Component({
   selector: 'app-main-layout',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, ButtonModule, TooltipModule, NgClass],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ButtonModule, TooltipModule],
   templateUrl: './main-layout.html',
   styleUrl: './main-layout.css',
 })
@@ -40,6 +39,7 @@ export class MainLayout {
         { path: '/branches', label: 'Branches', icon: 'pi pi-sitemap' },
         { path: '/companies', label: 'Companies', icon: 'pi pi-building' },
         { path: '/products', label: 'Products', icon: 'pi pi-box' },
+        { path: '/expenses', label: 'Expenses', icon: 'pi pi-dollar' },
       ],
     },
     {
@@ -51,7 +51,7 @@ export class MainLayout {
       ],
     },
     {
-      label: 'Training', icon: 'pi pi-truck', expanded: false,
+      label: 'Fleet', icon: 'pi pi-truck', expanded: false,
       children: [
         { path: '/vehicles', label: 'Vehicles', icon: 'pi pi-truck' },
         { path: '/vehicle-schedule', label: 'Vehicle Schedule', icon: 'pi pi-calendar-clock' },

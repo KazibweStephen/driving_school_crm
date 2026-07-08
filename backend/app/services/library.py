@@ -38,6 +38,7 @@ async def create_lesson(
     prerequisite_competencies: list[str] | None = None,
     prerequisite_lesson_ids: list[uuid.UUID] | None = None,
     is_theory: bool = False,
+    company_id: uuid.UUID | None = None,
 ) -> LessonLibrary:
     lesson = LessonLibrary(
         title=title,
@@ -59,6 +60,7 @@ async def create_lesson(
         training_category=training_category,
         prerequisite_competencies=prerequisite_competencies or [],
         is_theory=is_theory,
+        company_id=company_id,
     )
     db.add(lesson)
     await db.flush()
@@ -83,12 +85,15 @@ async def create_lesson(
     return result.scalar_one()
 
 
-async def get_lesson_by_id(db: AsyncSession, lesson_id: uuid.UUID) -> LessonLibrary | None:
-    result = await db.execute(
+async def get_lesson_by_id(db: AsyncSession, lesson_id: uuid.UUID, company_id: uuid.UUID | None = None) -> LessonLibrary | None:
+    query = (
         select(LessonLibrary)
         .where(LessonLibrary.id == lesson_id)
         .options(selectinload(LessonLibrary.videos), selectinload(LessonLibrary.prerequisite_lessons))
     )
+    if company_id:
+        query = query.where(LessonLibrary.company_id == company_id)
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
@@ -98,8 +103,11 @@ async def list_lessons(
     difficulty: str | None = None,
     status: str | None = None,
     search: str | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> list[LessonLibrary]:
     query = select(LessonLibrary).options(selectinload(LessonLibrary.videos), selectinload(LessonLibrary.prerequisite_lessons))
+    if company_id:
+        query = query.where(LessonLibrary.company_id == company_id)
     if transmission_type:
         query = query.where(LessonLibrary.transmission_type == TransmissionType(transmission_type))
     if difficulty:

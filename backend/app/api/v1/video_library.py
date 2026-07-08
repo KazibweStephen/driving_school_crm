@@ -21,7 +21,7 @@ async def list_videos(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    videos = await video_service.list_videos(db, source, search)
+    videos = await video_service.list_videos(db, source, search, company_id=current_user.company_id)
     return [VideoLibraryRead.model_validate(v) for v in videos]
 
 
@@ -41,6 +41,7 @@ async def create_video(
         thumbnail_url=data.thumbnail_url,
         qr_code_data=data.qr_code_data,
         created_by_phone=current_user.phone,
+        company_id=current_user.company_id,
     )
     if lesson_id:
         try:
@@ -70,7 +71,7 @@ async def upload_video(
     if size > max_size:
         raise HTTPException(status_code=400, detail="File too large (max 500MB)")
 
-    video = await video_service.upload_video_file(db, title, file, created_by_phone=current_user.phone)
+    video = await video_service.upload_video_file(db, title, file, created_by_phone=current_user.phone, company_id=current_user.company_id)
     if lesson_id:
         try:
             lid = uuid.UUID(lesson_id)
@@ -90,7 +91,7 @@ async def get_video(
         vid = uuid.UUID(video_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid video ID")
-    video = await video_service.get_video_by_id(db, vid)
+    video = await video_service.get_video_by_id(db, vid, company_id=current_user.company_id)
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
     return VideoLibraryRead.model_validate(video)
@@ -107,7 +108,7 @@ async def update_video(
         vid = uuid.UUID(video_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid video ID")
-    video = await video_service.get_video_by_id(db, vid)
+    video = await video_service.get_video_by_id(db, vid, company_id=current_user.company_id)
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
     updated = await video_service.update_video(
@@ -131,7 +132,7 @@ async def delete_video(
         vid = uuid.UUID(video_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid video ID")
-    video = await video_service.get_video_by_id(db, vid)
+    video = await video_service.get_video_by_id(db, vid, company_id=current_user.company_id)
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
     await video_service.delete_video(db, video)
@@ -147,7 +148,7 @@ async def stream_video(
         vid = uuid.UUID(video_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid video ID")
-    video = await video_service.get_video_by_id(db, vid)
+    video = await video_service.get_video_by_id(db, vid, company_id=current_user.company_id)
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 

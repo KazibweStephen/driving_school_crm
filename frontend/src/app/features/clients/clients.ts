@@ -120,6 +120,8 @@ export class Clients implements OnInit, OnDestroy {
   receiptItems = signal<ReceiptItem[]>([]);
   receiptSystemNumber = signal('');
   receiptManualNumber = signal('');
+  receiptPaymentId = signal<string | null>(null);
+  receiptPaymentIds: string[] = [];
   receiptTotalPaid = signal(0);
   receiptDate = signal('');
   receiptUserName = signal('');
@@ -334,6 +336,8 @@ export class Clients implements OnInit, OnDestroy {
     this.receiptAvailable.set(null);
     this.receiptItems.set([]);
     this.receiptSystemNumber.set('');
+    this.receiptPaymentId.set(null);
+    this.receiptPaymentIds = [];
     this.receiptManualNumber.set('');
     this.receiptTotalPaid.set(0);
     this.receiptDate.set('');
@@ -575,12 +579,14 @@ export class Clients implements OnInit, OnDestroy {
         });
       }
 
-      // Get system receipt from the first payment
+      // Get system receipt and all payment IDs
       let systemReceipt = '';
+      const paymentIds: string[] = [];
       if (c.cart_items && c.cart_items.length > 0) {
         const payments = await this.paymentService.getPaymentsByConsultation(c.id).toPromise();
         if (payments && payments.length > 0) {
           systemReceipt = payments[0].system_receipt_number;
+          payments.forEach(p => paymentIds.push(p.id));
         }
       }
 
@@ -596,6 +602,8 @@ export class Clients implements OnInit, OnDestroy {
       this.receiptInstallments.set(receiptInsts);
       this.receiptItems.set(receiptData);
       this.receiptSystemNumber.set(systemReceipt);
+      this.receiptPaymentId.set(paymentIds.length ? paymentIds[0] : null);
+      this.receiptPaymentIds = paymentIds;
       this.receiptManualNumber.set(this.paymentReceiptNumber());
       this.receiptTotalPaid.set(totalPaid);
       this.receiptDate.set(new Date().toLocaleDateString());
@@ -656,6 +664,52 @@ export class Clients implements OnInit, OnDestroy {
       this.onSearch();
       this.router.navigate(['/consultations', c.id]);
     }
+  }
+
+  openReceipt(paymentId: string) {
+    this.paymentService.getReceipt(paymentId).subscribe({
+      next: (html) => {
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+        }
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+    });
+  }
+
+  downloadReceipt(paymentId: string) {
+    this.paymentService.getReceipt(paymentId, true).subscribe({
+      next: (html) => {
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `receipt-${paymentId}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to download receipt' }),
+    });
+  }
+
+  reprintReceipt(paymentId: string) {
+    this.paymentService.getReceipt(paymentId).subscribe({
+      next: (html) => {
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+          setTimeout(() => {
+            try { win.print(); } catch { /* fallback */ }
+          }, 800);
+        }
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+    });
   }
 
   printReceipt() {

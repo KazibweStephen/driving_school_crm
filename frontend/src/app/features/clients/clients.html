@@ -281,17 +281,29 @@
 
             <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">Receipt Number (optional)</label>
-              <div class="relative">
-                <input [(ngModel)]="paymentReceiptNumber" (blur)="validateReceipt()" type="text" class="w-full rounded-lg border px-3 py-2 text-sm pr-10" [class.border-red-400]="receiptAvailable() === false" [class.border-green-400]="receiptAvailable() === true" [class.border-gray-300]="receiptAvailable() === null" placeholder="e.g. RCP-001234" />
-                <span class="absolute right-3 top-1/2 -translate-y-1/2">
-                  @if (receiptChecking()) { <span class="pi pi-spin pi-spinner text-sm text-gray-400"></span> }
-                  @else if (receiptAvailable() === true) { <span class="pi pi-check-circle text-sm text-green-500"></span> }
-                  @else if (receiptAvailable() === false) { <span class="pi pi-times-circle text-sm text-red-500"></span> }
-                </span>
+              <div class="flex gap-2">
+                <div class="relative flex-1">
+                  <input
+                    [(ngModel)]="paymentReceiptNumber"
+                    (ngModelChange)="paymentReceiptNumber().length >= 2 ? validateReceipt() : receiptAvailable.set(null)"
+                    type="text"
+                    class="w-full rounded-lg border px-3 py-2 text-sm pr-10"
+                    [class.border-red-400]="receiptAvailable() === false"
+                    [class.border-green-400]="receiptAvailable() === true"
+                    [class.border-gray-300]="receiptAvailable() === null"
+                    placeholder="e.g. RCP-001234"
+                  />
+                  <span class="absolute right-3 top-1/2 -translate-y-1/2">
+                    @if (receiptChecking()) { <span class="pi pi-spin pi-spinner text-sm text-gray-400"></span> }
+                    @else if (receiptAvailable() === true) { <span class="pi pi-check-circle text-sm text-green-500"></span> }
+                    @else if (receiptAvailable() === false) { <span class="pi pi-times-circle text-sm text-red-500"></span> }
+                  </span>
+                </div>
+                <p-button icon="pi pi-search" severity="secondary" (onClick)="validateReceipt()" styleClass="p-button-sm" pTooltip="Check receipt" [disabled]="!paymentReceiptNumber()" />
               </div>
               @if (receiptAvailable() === false) { <p class="mt-1 text-xs text-red-500">This receipt number already exists</p> }
               @else if (receiptAvailable() === true) { <p class="mt-1 text-xs text-green-600">Receipt number is available</p> }
-              @else { <p class="mt-1 text-xs text-gray-400">Must be unique if provided</p> }
+              @else { <p class="mt-1 text-xs text-gray-400">Manually entered. Must be unique if provided.</p> }
             </div>
             <div class="flex gap-2">
               <p-button label="Back" icon="pi pi-arrow-left" severity="secondary" (onClick)="prevStep()" styleClass="flex-1 justify-center" />
@@ -303,9 +315,9 @@
         <!-- Step 4: Receipt -->
         @if (createStep() === 4) {
           <div class="flex flex-col gap-4">
-            <div class="rounded-lg border p-4" id="receipt-content">
+            <div class="rounded-lg border p-4">
               <div class="mb-4 text-center">
-                <h2 class="text-lg font-bold">Payment Receipt</h2>
+                <h2 class="text-lg font-bold">Payment Receipts</h2>
                 <p class="text-xs text-gray-500">{{ receiptDate() }}</p>
               </div>
               <div class="mb-3 text-sm">
@@ -351,8 +363,10 @@
                 @if (receiptSystemNumber()) { <div>System Ref: {{ receiptSystemNumber() }}</div> }
               </div>
             </div>
-            <div class="flex gap-2">
-              <p-button label="Print Receipt" icon="pi pi-print" (onClick)="printReceipt()" styleClass="flex-1 justify-center" severity="secondary" />
+            <div class="flex flex-wrap gap-2">
+              @for (pid of receiptPaymentIds; track pid; let i = $index) {
+                <p-button [label]="'Receipt ' + (i + 1)" icon="pi pi-receipt" (onClick)="openReceipt(pid)" styleClass="flex-1 justify-center" severity="info" />
+              }
               <p-button label="Close" icon="pi pi-check" (onClick)="closeReceipt()" styleClass="flex-1 justify-center" severity="success" />
             </div>
           </div>

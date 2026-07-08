@@ -118,4 +118,11 @@ export class PaymentService {
     const url = `/api/v1/receipts/${paymentId}/download${download ? '?download=1' : ''}`;
     return this.http.get(url, { responseType: 'text' });
   }
+
+  getConsolidatedReceipt(receiptNumber: string, consultationId: string, download: boolean = false) {
+    let params = new HttpParams().set('consultation_id', consultationId);
+    if (download) params = params.set('download', '1');
+    const url = `/api/v1/receipts/by-number/${encodeURIComponent(receiptNumber)}`;
+    return this.http.get(url, { responseType: 'text', params });
+  }
 }

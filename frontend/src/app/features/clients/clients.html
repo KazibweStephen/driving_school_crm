@@ -364,8 +364,16 @@
               </div>
             </div>
             <div class="flex flex-wrap gap-2">
-              @for (pid of receiptPaymentIds; track pid; let i = $index) {
-                <p-button [label]="'Receipt ' + (i + 1)" icon="pi pi-receipt" (onClick)="openReceipt(pid)" styleClass="flex-1 justify-center" severity="info" />
+              @if (receiptManualNumber(); as rn) {
+                <p-button label="View Receipt" icon="pi pi-receipt" (onClick)="openConsolidatedReceipt(rn)" styleClass="flex-1 justify-center" severity="info" />
+                <p-button label="Print" icon="pi pi-print" (onClick)="reprintConsolidatedReceipt(rn)" styleClass="flex-1 justify-center" severity="secondary" />
+                <p-button label="Download" icon="pi pi-download" (onClick)="downloadConsolidatedReceipt(rn)" styleClass="flex-1 justify-center" severity="secondary" />
+              } @else {
+                @for (pid of receiptPaymentIds; track pid; let i = $index) {
+                  <p-button [label]="'Receipt ' + (i + 1)" icon="pi pi-receipt" (onClick)="openReceipt(pid)" styleClass="flex-1 justify-center" severity="info" />
+                  <p-button icon="pi pi-print" (onClick)="reprintReceipt(pid)" styleClass="flex-1 justify-center" severity="secondary" pTooltip="Print" />
+                  <p-button icon="pi pi-download" (onClick)="downloadReceipt(pid)" styleClass="flex-1 justify-center" severity="secondary" pTooltip="Download" />
+                }
               }
               <p-button label="Close" icon="pi pi-check" (onClick)="closeReceipt()" styleClass="flex-1 justify-center" severity="success" />
             </div>

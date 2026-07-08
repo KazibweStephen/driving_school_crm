@@ -35,18 +35,6 @@ async def create_payment(
     installments_data: list[dict],
     receipt_number: str | None = None,
 ) -> Payment:
-    # Validate receipt_number uniqueness if provided
-    if receipt_number:
-        existing = await db.execute(
-            select(Payment).where(Payment.receipt_number == receipt_number)
-        )
-        if existing.scalar_one_or_none():
-            from fastapi import HTTPException
-            raise HTTPException(
-                status_code=409,
-                detail=f"Receipt number '{receipt_number}' already exists",
-            )
-
     payment = Payment(
         consultation_id=consultation_id,
         product_id=product_id,
@@ -84,7 +72,7 @@ async def get_payment_by_receipt(db: AsyncSession, receipt_number: str) -> Payme
     result = await db.execute(
         select(Payment).where(Payment.receipt_number == receipt_number)
     )
-    return result.scalar_one_or_none()
+    return result.scalars().first()
 
 
 async def get_payments_by_consultation(

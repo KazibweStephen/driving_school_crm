@@ -712,6 +712,63 @@ export class Clients implements OnInit, OnDestroy {
     });
   }
 
+  private get consultationIdForReceipt(): string {
+    const c = this.createdConsultation();
+    return c?.id || '';
+  }
+
+  openConsolidatedReceipt(receiptNumber: string) {
+    const cid = this.consultationIdForReceipt;
+    if (!cid) return;
+    this.paymentService.getConsolidatedReceipt(receiptNumber, cid).subscribe({
+      next: (html) => {
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+        }
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+    });
+  }
+
+  reprintConsolidatedReceipt(receiptNumber: string) {
+    const cid = this.consultationIdForReceipt;
+    if (!cid) return;
+    this.paymentService.getConsolidatedReceipt(receiptNumber, cid).subscribe({
+      next: (html) => {
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+          setTimeout(() => {
+            try { win.print(); } catch { /* fallback */ }
+          }, 800);
+        }
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+    });
+  }
+
+  downloadConsolidatedReceipt(receiptNumber: string) {
+    const cid = this.consultationIdForReceipt;
+    if (!cid) return;
+    this.paymentService.getConsolidatedReceipt(receiptNumber, cid, true).subscribe({
+      next: (html) => {
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `receipt-${receiptNumber}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to download receipt' }),
+    });
+  }
+
   printReceipt() {
     const receiptContent = document.getElementById('receipt-content');
     if (!receiptContent) return;

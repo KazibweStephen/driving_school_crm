@@ -85,7 +85,9 @@ export class ClientProfile implements OnInit {
   addPaymentInstallments: { due_date: Date | null; amount: number }[] = [];
   // Step 3 receipt
   addReceiptItems = signal<{ productName: string; packageName: string; price: number; paid: number; balance: number }[]>([]);
+  addReceiptInstallments = signal<{ due_date: string; amount: number; product_name: string }[]>([]);
   addReceiptSystemNumber = signal('');
+  addReceiptManualNumber = signal('');
   addReceiptPaymentIds: string[] = [];
   addReceiptTotalPaid = signal(0);
   addReceiptDate = signal('');
@@ -135,6 +137,7 @@ export class ClientProfile implements OnInit {
   showPayAllDialog = signal(false);
   payAllItems = signal<{ cartItem: CartItemRead; payNow: number; balance: number; productName: string; packageName: string }[]>([]);
   payAllReceiptNumber = signal('');
+  payAllInstallments: { due_date: Date | null; amount: number }[] = [];
 
   showGuide = signal(false);
   guideContent = signal('');
@@ -1823,7 +1826,9 @@ export class ClientProfile implements OnInit {
     this.addPaymentReceiptNumber.set('');
     this.addPaymentInstallments = [];
     this.addReceiptItems.set([]);
+    this.addReceiptInstallments.set([]);
     this.addReceiptSystemNumber.set('');
+    this.addReceiptManualNumber.set('');
     this.addReceiptPaymentIds = [];
     this.addReceiptTotalPaid.set(0);
     this.addReceiptDate.set('');
@@ -1908,6 +1913,29 @@ export class ClientProfile implements OnInit {
 
   onAllocationInput(index: number, event: any) {
     this.updateAllocation(index, event.value || 0);
+    this.initAddPaymentInstallments();
+  }
+
+  get addTotalInstallmentAmount(): number {
+    return this.addPaymentInstallments.reduce((sum, inst) => sum + (inst.amount || 0), 0);
+  }
+
+  get addInstallmentBalanceMatch(): boolean {
+    return this.addTotalInstallmentAmount >= this.addUnallocatedAmount;
+  }
+
+  initAddPaymentInstallments() {
+    const balance = this.addUnallocatedAmount;
+    if (balance <= 0) {
+      this.addPaymentInstallments = [];
+      return;
+    }
+    const now = new Date();
+    const half = Math.ceil(balance / 2);
+    this.addPaymentInstallments = [
+      { due_date: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), amount: half },
+      { due_date: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000), amount: balance - half },
+    ];
   }
 
   canCompleteAddPayment(): boolean {
@@ -2064,6 +2092,7 @@ export class ClientProfile implements OnInit {
       // Create payments for each allocated product
       let systemReceipt = '';
       const paymentIds: string[] = [];
+      const totalRemaining = this.addUnallocatedAmount;
       for (let i = 0; i < this.addSelectedProducts().length; i++) {
         const sp = this.addSelectedProducts()[i];
         const allocation = this.getAllocation(i);
@@ -2072,16 +2101,19 @@ export class ClientProfile implements OnInit {
         const remaining = Math.max(0, sp.price - allocation);
         const isFullyPaid = remaining === 0;
 
-        // Build installments: one immediate + any scheduled
+        // Build installments: one immediate + proportionally distributed scheduled installments
         const installments: { due_date: string; amount: number }[] = [
           { due_date: this.formatDate(new Date()), amount: allocation },
         ];
-        const scheduledInstallments = this.addPaymentInstallments
-          .filter(inst => inst.amount > 0 && inst.due_date)
-          .map(inst => ({
-            due_date: this.formatDate(inst.due_date!),
-            amount: inst.amount,
-          }));
+        const scheduledInstallments = totalRemaining > 0
+          ? this.addPaymentInstallments
+              .filter(inst => inst.amount > 0 && inst.due_date)
+              .map(inst => ({
+                due_date: this.formatDate(inst.due_date!),
+                amount: Math.round(inst.amount * (remaining / totalRemaining)),
+              }))
+              .filter(inst => inst.amount > 0)
+          : [];
         installments.push(...scheduledInstallments);
 
         const paymentResult = await this.paymentService
@@ -2161,8 +2193,19 @@ export class ClientProfile implements OnInit {
         };
       });
 
+      // Build receipt installment data
+      const receiptInsts = this.addPaymentInstallments
+        .filter(inst => inst.due_date && inst.amount > 0)
+        .map(inst => ({
+          due_date: inst.due_date!.toLocaleDateString(),
+          amount: inst.amount,
+          product_name: this.addSelectedProducts().map(sp => sp.product.name).join(', '),
+        }));
+
       this.addReceiptItems.set(receiptItems);
+      this.addReceiptInstallments.set(receiptInsts);
       this.addReceiptSystemNumber.set(systemReceipt);
+      this.addReceiptManualNumber.set(this.addPaymentReceiptNumber());
       this.addReceiptPaymentIds = paymentIds;
       this.addReceiptTotalPaid.set(this.addTotalAllocated);
       this.addReceiptDate.set(new Date().toLocaleDateString());
@@ -2649,13 +2692,60 @@ export class ClientProfile implements OnInit {
     if (!items.length) return;
     this.payAllItems.set(items);
     this.payAllReceiptNumber.set('');
+    this.payAllInstallments = [];
     this.receiptChecking.set(false);
     this.receiptAvailable.set(null);
+    this.initPayAllInstallments();
     this.showPayAllDialog.set(true);
   }
 
   payAllTotal(): number {
     return this.payAllItems().reduce((s, it) => s + (it.payNow || 0), 0);
+  }
+
+  get payAllRemainingBalance(): number {
+    return this.payAllItems().reduce((s, it) => s + Math.max(0, it.balance - (it.payNow || 0)), 0);
+  }
+
+  get payAllInstallmentTotal(): number {
+    return this.payAllInstallments.reduce((s, inst) => s + (inst.amount || 0), 0);
+  }
+
+  get payAllInstallmentBalanceMatch(): boolean {
+    return this.payAllInstallmentTotal >= this.payAllRemainingBalance;
+  }
+
+  initPayAllInstallments() {
+    const balance = this.payAllRemainingBalance;
+    if (balance <= 0) {
+      this.payAllInstallments = [];
+      return;
+    }
+    const now = new Date();
+    const half = Math.ceil(balance / 2);
+    this.payAllInstallments = [
+      { due_date: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), amount: half },
+      { due_date: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000), amount: balance - half },
+    ];
+  }
+
+  addPayAllInstallment() {
+    const balance = this.payAllRemainingBalance;
+    if (balance <= 0) return;
+    const sumExisting = this.payAllInstallments.reduce((s, inst) => s + (inst.amount || 0), 0);
+    const prefill = Math.max(0, balance - sumExisting);
+    const last = this.payAllInstallments[this.payAllInstallments.length - 1];
+    const base = last?.due_date ? new Date(last.due_date) : new Date();
+    const nextDate = new Date(base.getTime() + 7 * 24 * 60 * 60 * 1000);
+    this.payAllInstallments = [...this.payAllInstallments, { due_date: nextDate, amount: prefill }];
+  }
+
+  removePayAllInstallment(index: number) {
+    this.payAllInstallments = this.payAllInstallments.filter((_, i) => i !== index);
+  }
+
+  onPayAllInput() {
+    this.initPayAllInstallments();
   }
 
   async validatePayAllReceipt() {
@@ -2687,18 +2777,36 @@ export class ClientProfile implements OnInit {
 
     this.loading.set(true);
     const receiptIds: string[] = [];
+    const totalRemaining = this.payAllRemainingBalance;
     try {
       for (const it of items) {
         const ci = it.cartItem;
         const amount = it.payNow;
+        const remaining = Math.max(0, it.balance - amount);
+
+        // Build installments: one immediate + proportionally distributed scheduled
+        const installments: { due_date: string; amount: number }[] = [
+          { due_date: this.formatDate(new Date()), amount },
+        ];
+        if (totalRemaining > 0 && remaining > 0) {
+          const scheduled = this.payAllInstallments
+            .filter(inst => inst.amount > 0 && inst.due_date)
+            .map(inst => ({
+              due_date: this.formatDate(inst.due_date!),
+              amount: Math.round(inst.amount * (remaining / totalRemaining)),
+            }))
+            .filter(inst => inst.amount > 0);
+          installments.push(...scheduled);
+        }
+
         const paymentResult = await this.paymentService
           .createPayment(c.id, {
             product_id: ci.product_id,
             package_id: ci.package_id || undefined,
-            total_amount: amount,
+            total_amount: amount + remaining,
             notes: `Bulk payment of ${amount}`,
             receipt_number: receipt || undefined,
-            installments: [{ due_date: this.formatDate(new Date()), amount }],
+            installments,
           })
           .toPromise();
 
@@ -2730,8 +2838,12 @@ export class ClientProfile implements OnInit {
       }
       await this.loadConsultation(c.id);
 
-      for (const id of receiptIds) {
-        if (id) this.openReceipt(id);
+      if (receipt) {
+        this.openConsolidatedAddReceipt(receipt);
+      } else {
+        for (const id of receiptIds) {
+          if (id) this.openReceipt(id);
+        }
       }
 
       this.messageService.add({ severity: 'success', summary: 'Payments Recorded', detail: `${items.length} payment(s) recorded` });
@@ -2745,6 +2857,7 @@ export class ClientProfile implements OnInit {
   closePayAllDialog() {
     this.showPayAllDialog.set(false);
     this.payAllItems.set([]);
+    this.payAllInstallments = [];
   }
 
   async saveRecover() {
@@ -3049,6 +3162,62 @@ export class ClientProfile implements OnInit {
         }
       },
       error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+    });
+  }
+
+  private get addConsultationId(): string {
+    return this.consultation()?.id || '';
+  }
+
+  openConsolidatedAddReceipt(receiptNumber: string) {
+    const cid = this.addConsultationId;
+    if (!cid) return;
+    this.paymentService.getConsolidatedReceipt(receiptNumber, cid).subscribe({
+      next: (html) => {
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+        }
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+    });
+  }
+
+  reprintConsolidatedAddReceipt(receiptNumber: string) {
+    const cid = this.addConsultationId;
+    if (!cid) return;
+    this.paymentService.getConsolidatedReceipt(receiptNumber, cid).subscribe({
+      next: (html) => {
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+          setTimeout(() => {
+            try { win.print(); } catch { /* fallback */ }
+          }, 800);
+        }
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+    });
+  }
+
+  downloadConsolidatedAddReceipt(receiptNumber: string) {
+    const cid = this.addConsultationId;
+    if (!cid) return;
+    this.paymentService.getConsolidatedReceipt(receiptNumber, cid, true).subscribe({
+      next: (html) => {
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `receipt-${receiptNumber}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to download receipt' }),
     });
   }
 

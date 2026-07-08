@@ -128,15 +128,18 @@ async def create_payment(
         InstallmentCreate(due_date=date.today(), amount=data.total_amount)
     ]
 
+    from datetime import date as date_type
     payment = await payment_service.create_payment(
         db,
         consultation_id=cid,
         product_id=data.product_id,
         package_id=data.package_id,
         total_amount=data.total_amount,
+        document_date=data.document_date or date_type.today(),
         notes=data.notes,
         installments_data=[i.model_dump() for i in installments],
         receipt_number=data.receipt_number,
+        created_by_phone=current_user.phone,
     )
     return PaymentRead.model_validate(payment)
 

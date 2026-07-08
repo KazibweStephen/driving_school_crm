@@ -41,6 +41,7 @@ async def create_consultation(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from datetime import date as date_type
     consultation = await consultation_service.create_consultation(
         db,
         phone=data.phone,
@@ -56,6 +57,7 @@ async def create_consultation(
             else None
         ),
         start_date=data.start_date,
+        document_date=data.document_date or date_type.today(),
         notes=data.notes,
         branch_id=data.branch_id,
         created_by_phone=current_user.phone,
@@ -70,6 +72,7 @@ async def create_full_consultation(
     current_user: User = Depends(get_current_user),
 ):
     """Create a consultation with products and optional payment in a single transaction."""
+    from datetime import date as date_type
     # Create consultation
     consultation = await consultation_service.create_consultation(
         db,
@@ -81,6 +84,7 @@ async def create_full_consultation(
         how_they_knew_us=data.how_they_knew_us,
         interest_level=data.interest_level,
         start_date=data.start_date,
+        document_date=data.document_date or date_type.today(),
         notes=data.notes,
         branch_id=data.branch_id,
         created_by_phone=current_user.phone,
@@ -128,9 +132,11 @@ async def create_full_consultation(
 
             payment = Payment(
                 consultation_id=consultation.id,
+                created_by_phone=current_user.phone,
                 product_id=item_data.product_id,
                 package_id=item_data.package_id,
                 total_amount=package_price,
+                document_date=data.document_date or date_type.today(),
                 notes=f"Paid: {allocation}, Balance: {remaining}",
                 receipt_number=receipt_number,
                 system_receipt_number=transaction_id,

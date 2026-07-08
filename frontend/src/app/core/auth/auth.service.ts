@@ -19,6 +19,8 @@ export class AuthService {
   private readonly REFRESH_KEY = 'refresh_token';
 
   currentUser = signal<string | null>(null);
+  currentUserRole = signal<string | null>(null);
+  currentUserCanBackdate = signal(false);
   isAuthenticated = signal(false);
   sessionExpired = signal(false);
   sessionCountdown = signal(160);
@@ -33,7 +35,10 @@ export class AuthService {
     const token = localStorage.getItem(this.TOKEN_KEY);
     if (token) {
       this.isAuthenticated.set(true);
-      this.currentUser.set(this.decodePhoneFromToken(token));
+      const phone = this.decodePhoneFromToken(token);
+      this.currentUser.set(phone);
+      this.currentUserRole.set(this.decodeRoleFromToken(token));
+      this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
       this.startSessionTimer();
     }
   }
@@ -47,6 +52,8 @@ export class AuthService {
     localStorage.setItem(this.REFRESH_KEY, refreshToken);
     this.isAuthenticated.set(true);
     this.currentUser.set(this.decodePhoneFromToken(token));
+    this.currentUserRole.set(this.decodeRoleFromToken(token));
+    this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
     this.startSessionTimer();
   }
 
@@ -149,5 +156,15 @@ export class AuthService {
   private decodePhoneFromToken(token: string): string | null {
     const payload = this.decodeToken(token);
     return (payload?.['sub'] as string) || null;
+  }
+
+  private decodeRoleFromToken(token: string): string | null {
+    const payload = this.decodeToken(token);
+    return (payload?.['role'] as string) || null;
+  }
+
+  private decodeCanBackdate(token: string): boolean {
+    const payload = this.decodeToken(token);
+    return (payload?.['can_backdate'] as boolean) || false;
   }
 }

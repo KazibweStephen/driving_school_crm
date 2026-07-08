@@ -7,6 +7,7 @@ export interface User {
   role: string;
   status: string;
   is_company_admin: boolean;
+  can_backdate: boolean;
   company_id: string | null;
   created_by_phone: string | null;
   created_at: string;
@@ -19,6 +20,7 @@ export interface UserCreate {
   role: string;
   company_id?: string | null;
   is_company_admin?: boolean;
+  can_backdate?: boolean;
 }
 
 export interface UserUpdate {
@@ -27,6 +29,7 @@ export interface UserUpdate {
   status?: string;
   company_id?: string | null;
   is_company_admin?: boolean;
+  can_backdate?: boolean;
 }
 
 export interface PinChange {

@@ -17,6 +17,7 @@ class PaymentCreate(BaseModel):
     notes: str | None = None
     receipt_number: str | None = Field(None, max_length=100)
     installments: list[InstallmentCreate] = []
+    document_date: date | None = None
 
 
 class InstallmentRead(BaseModel):
@@ -42,6 +43,7 @@ class PaymentRead(BaseModel):
     total_amount: Decimal
     total_paid: Decimal
     balance: Decimal
+    document_date: date | None = None
     notes: str | None
     receipt_number: str | None
     system_receipt_number: str
@@ -73,6 +75,43 @@ class ClientSummary(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class PaymentWithClient(BaseModel):
+    id: uuid.UUID
+    consultation_id: uuid.UUID
+    product_id: str
+    product_name: str = ""
+    package_id: str | None = None
+    client_name: str = ""
+    client_phone: str = ""
+    created_by_name: str | None = None
+    total_amount: Decimal
+    total_paid: Decimal
+    balance: Decimal
+    document_date: date | None = None
+    notes: str | None = None
+    receipt_number: str | None = None
+    system_receipt_number: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PaymentTotals(BaseModel):
+    total_amount_sum: Decimal = Decimal("0.00")
+    total_paid_sum: Decimal = Decimal("0.00")
+    total_balance_sum: Decimal = Decimal("0.00")
+
+
+class PaymentListResponse(BaseModel):
+    payments: list[PaymentWithClient]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    totals: PaymentTotals = PaymentTotals()
 
 
 class ClientListResponse(BaseModel):

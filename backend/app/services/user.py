@@ -1,4 +1,5 @@
 import random
+import uuid
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,9 @@ async def create_user(
     name: str,
     role: UserRole,
     created_by_phone: str,
+    is_company_admin: bool = False,
+    company_id: uuid.UUID | None = None,
+    can_backdate: bool = False,
 ) -> tuple[User, str]:
     initial_pin = generate_initial_pin()
     user = User(
@@ -25,6 +29,9 @@ async def create_user(
         role=role,
         hashed_pin=hash_pin(initial_pin),
         created_by_phone=created_by_phone,
+        is_company_admin=is_company_admin,
+        company_id=company_id,
+        can_backdate=can_backdate,
     )
     db.add(user)
     await db.flush()
@@ -74,6 +81,9 @@ async def update_user(
     name: str | None = None,
     role: UserRole | None = None,
     status: UserStatus | None = None,
+    is_company_admin: bool | None = None,
+    company_id: uuid.UUID | None = None,
+    can_backdate: bool | None = None,
 ) -> User:
     if name is not None:
         user.name = name
@@ -81,6 +91,12 @@ async def update_user(
         user.role = role
     if status is not None:
         user.status = status
+    if is_company_admin is not None:
+        user.is_company_admin = is_company_admin
+    if company_id is not None:
+        user.company_id = company_id
+    if can_backdate is not None:
+        user.can_backdate = can_backdate
     await db.flush()
     await db.refresh(user)
     return user

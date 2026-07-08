@@ -54,6 +54,11 @@
 - Live GPS tracking via browser Geolocation API; stored in `ClientLessonTimer.distance_km`
 - 30min OR 3km OR competencies achieved (whichever first) ends a lesson timer
 - Frontend Lesson Library and Video Library pages registered in sidebar and routes
+- Backdating feature: per-user `can_backdate` flag (admin-configurable); `document_date` on Consultation and Payment records; default `document_date` is current date; `created_at` remains system-generated audit timestamp
+- JWT access token includes `can_backdate` claim; frontend `AuthService.currentUserCanBackdate()` exposes it
+- Payments page under Management sidebar group: list/search, date range + client type + branch filters, totals cards, print report (privileged roles)
+- Payments table: client name links to `/consultations/{id}`, received-by user shown below phone, sort icons kept on same line as headers
+- Payments list filters/sorts by `document_date` (falling back to `created_at`)
 
 ## Progress
 ### Done
@@ -112,6 +117,12 @@
 - Frontend LessonLibrary page (`/lesson-library`): full CRUD with JSONB objectives/competencies arrays UI, difficulty tags, search, pagination
 - Frontend VideoLibrary page (`/video-library`): upload with drag-drop area, YouTube/Vimeo embed links, preview dialog with video/iframe player, source tags
 - Frontend routes and sidebar updated with `/lesson-library` and `/video-library` entries
+- Payments page (`/payments`) with listing, search, date range/client type/branch filters, totals cards, print report
+- Payment model: added `created_by_phone` column (FK to `users.phone`) and `created_by_user` relationship
+- Payment service/API: `list_payments()` joins `User` to return `created_by_name`; all payment creation paths store `created_by_phone`
+- Backdating: `User.can_backdate`, `Consultation.document_date`, `Payment.document_date` columns + schemas + services + API + frontend date pickers
+- Alembic migrations `cc4d1dfb0f04` (add_created_by_phone_to_payments) and `0cedeb757155` (add_can_backdate_document_date)
+- Playwright tests updated: login tests navigate collapsed sidebar groups, lesson-plans API test sends JSONB arrays, consultation search test creates its own fixture, dialog Escape test focuses dialog first
 
 ## Multi-Company Architecture
 - **Company** (`companies`): Top-level tenant with `id`, `name`, `code` (unique), `address`, `phone`, `email`, `is_active`
@@ -146,10 +157,10 @@ Postgres `:5433` (external), backend `:8000`, frontend `:80`
 If migration files are missing from container: `docker cp backend/alembic/versions/<file> crm-backend:/app/alembic/versions/`
 
 ## Migration Head
-`03340a0699ad` (add_is_standard_to_schedule_breaks); parent `73e70b370772` (add_schedule_breaks)
+`0cedeb757155` (add_can_backdate_document_date); parent `cc4d1dfb0f04` (add_created_by_phone_to_payments)
 
 ## Test Files
-- `e2e/login.spec.ts` (11 tests): login, sidebar, user CRUD/search/PIN
+- `e2e/login.spec.ts` (11 tests): login, sidebar navigation through collapsed groups, user CRUD/search/PIN
 - `e2e/consultations.spec.ts` (15 tests): list/search, stage filter, profile with products/payments/Add to Cart, API create+verify, products page, users page
-- `e2e/lesson-plans.spec.ts` (4 tests): sidebar load, API create+verify, dialog close, UI delete
+- `e2e/lesson-plans.spec.ts` (4 tests): sidebar load, API create+verify with JSONB objectives, dialog close, UI delete
 - `e2e/vehicle-scheduling.spec.ts` (1 test): full flow create template, manual/auto vehicles, instructor, product, package, consultation, client plan with manual_days=4, lock dual-phase, verify day 1–4 manual, day 5–10 auto, cleanup

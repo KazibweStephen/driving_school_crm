@@ -48,13 +48,13 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     await db.flush()
 
     return TokenResponse(
-        access_token=create_access_token(user.phone),
+        access_token=create_access_token(user.phone, role=user.role.value, can_backdate=user.can_backdate),
         refresh_token=create_refresh_token(user.phone),
     )
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(data: RefreshRequest):
+async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
     payload = decode_token(data.refresh_token)
     if payload is None or payload.get("type") != "refresh":
         raise HTTPException(
@@ -67,7 +67,9 @@ async def refresh(data: RefreshRequest):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
         )
+    user = await get_user_by_phone(db, phone)
+    role = user.role.value if user else None
     return TokenResponse(
-        access_token=create_access_token(phone),
+        access_token=create_access_token(phone, role=role, can_backdate=user.can_backdate if user else False),
         refresh_token=create_refresh_token(phone),
     )

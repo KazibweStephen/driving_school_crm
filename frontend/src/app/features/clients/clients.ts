@@ -101,6 +101,7 @@ export class Clients implements OnInit, OnDestroy {
     notes: '',
     interest_level: '',
     start_date: null,
+    document_date: null,
     branch_id: null,
   };
 
@@ -161,7 +162,7 @@ export class Clients implements OnInit, OnDestroy {
     private productService: ProductService,
     private cartItemService: CartItemService,
     private paymentService: PaymentService,
-    private authService: AuthService,
+    public authService: AuthService,
     private companyService: CompanyService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
@@ -323,6 +324,7 @@ export class Clients implements OnInit, OnDestroy {
       notes: '',
       interest_level: '',
       start_date: null,
+      document_date: null,
     };
     this.selectedProduct.set(null);
     this.selectedPackageId.set(null);
@@ -552,6 +554,7 @@ export class Clients implements OnInit, OnDestroy {
       if (this.form.how_they_knew_us) payload.how_they_knew_us = this.form.how_they_knew_us;
       if (this.form.interest_level) payload.interest_level = this.form.interest_level;
       if (this.form.start_date) payload.start_date = this.form.start_date.toISOString().split('T')[0];
+      if (this.form.document_date) payload.document_date = this.form.document_date.toISOString().split('T')[0];
       if (this.form.notes) payload.notes = this.form.notes;
       if (this.form.branch_id) payload.branch_id = this.form.branch_id;
       payload.items = items;
@@ -630,6 +633,7 @@ export class Clients implements OnInit, OnDestroy {
       if (this.form.how_they_knew_us) payload.how_they_knew_us = this.form.how_they_knew_us;
       if (this.form.interest_level) payload.interest_level = this.form.interest_level;
       if (this.form.start_date) payload.start_date = this.form.start_date.toISOString().split('T')[0];
+      if (this.form.document_date) payload.document_date = this.form.document_date.toISOString().split('T')[0];
       if (this.form.notes) payload.notes = this.form.notes;
       if (this.form.branch_id) payload.branch_id = this.form.branch_id;
       const c = await this.consultationService.create(payload).toPromise();

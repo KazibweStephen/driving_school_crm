@@ -20,11 +20,13 @@ def generate_otp(length: int = 6) -> str:
     return "".join(random.choices(string.digits, k=length))
 
 
-def create_access_token(phone: str) -> str:
+def create_access_token(phone: str, role: str | None = None, can_backdate: bool = False) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.jwt_access_token_expire_minutes
     )
-    payload = {"sub": phone, "exp": expire, "type": "access"}
+    payload = {"sub": phone, "exp": expire, "type": "access", "can_backdate": can_backdate}
+    if role:
+        payload["role"] = role
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 

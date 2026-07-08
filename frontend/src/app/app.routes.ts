@@ -49,6 +49,11 @@ export const routes: Routes = [
           import('./features/expenses/expenses').then((c) => c.ExpensesCmp),
       },
       {
+        path: 'payments',
+        loadComponent: () =>
+          import('./features/payments/payments').then((c) => c.PaymentsCmp),
+      },
+      {
         path: 'companies',
         loadComponent: () =>
           import('./features/companies/companies').then((c) => c.CompaniesCmp),

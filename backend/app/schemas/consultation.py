@@ -69,6 +69,7 @@ class ConsultationCreate(BaseModel):
     interest_level: InterestLevel | None = None
     interested_products: list[InterestedProduct] | None = None
     start_date: date | None = None
+    document_date: date | None = None
     notes: str | None = None
     branch_id: uuid.UUID | None = None
 
@@ -99,6 +100,7 @@ class ConsultationRead(BaseModel):
     interest_level: InterestLevel | None
     interested_products: list[InterestedProduct] | None
     start_date: date | None
+    document_date: date | None
     notes: str | None
     status: ConsultationStatus
     branch_id: uuid.UUID | None = None
@@ -123,6 +125,7 @@ class ConsultationRead(BaseModel):
             interest_level=c.interest_level,
             interested_products=c.interested_products,
             start_date=c.start_date,
+            document_date=c.document_date,
             notes=c.notes,
             status=c.status,
             branch_id=c.branch_id,
@@ -181,6 +184,7 @@ class FullConsultationCreate(BaseModel):
     how_they_knew_us: str | None = None
     interest_level: InterestLevel | None = None
     start_date: date | None = None
+    document_date: date | None = None
     notes: str | None = None
     branch_id: uuid.UUID | None = None
     items: list[FullConsultationItem] = []

@@ -2297,6 +2297,13 @@
               }
             </div>
 
+            @if (authService.currentUserCanBackdate()) {
+              <div>
+                <label class="mb-1 block text-sm font-medium text-gray-700">Document Date</label>
+                <p-datepicker [(ngModel)]="completeSaleDocumentDate" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [showClear]="true" />
+              </div>
+            }
+
             <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">Amount Paid</label>
               <p-inputNumber [(ngModel)]="completeSalePaidAmount" (onInput)="onCompleteSalePaidChange()" [min]="0" [max]="completeSaleTotal()" [placeholder]="'0'" class="w-full" inputStyleClass="w-full px-3 py-2 text-sm" />
@@ -2411,6 +2418,13 @@
               }
             </div>
 
+            @if (authService.currentUserCanBackdate()) {
+              <div>
+                <label class="mb-1 block text-sm font-medium text-gray-700">Document Date</label>
+                <p-datepicker [(ngModel)]="makePaymentDocumentDate" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [showClear]="true" />
+              </div>
+            }
+
             <div class="flex gap-2">
               <p-button label="Cancel" severity="secondary" (onClick)="closeMakePaymentDialog()" styleClass="flex-1 justify-center" [disabled]="loading()" />
               <p-button label="Pay" [loading]="loading()" (onClick)="makePayment()" styleClass="flex-1 justify-center" severity="success" [disabled]="!makePaymentAmount() || makePaymentAmount() <= 0" />
@@ -2524,6 +2538,13 @@
                 <p class="mt-1 text-xs text-gray-400">Manually entered. Must be unique if provided.</p>
               }
             </div>
+
+            @if (authService.currentUserCanBackdate()) {
+              <div>
+                <label class="mb-1 block text-sm font-medium text-gray-700">Document Date</label>
+                <p-datepicker [(ngModel)]="payAllDocumentDate" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [showClear]="true" />
+              </div>
+            }
 
             <div class="flex gap-2">
               <p-button label="Cancel" severity="secondary" (onClick)="closePayAllDialog()" styleClass="flex-1 justify-center" [disabled]="loading()" />

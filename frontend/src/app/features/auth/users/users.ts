@@ -56,8 +56,8 @@ export class Users implements OnInit {
   editingUser = signal<User | null>(null);
 
   companies = signal<Company[]>([]);
-  newUser: { phone: string; name: string; role: string; company_id: string | null; is_company_admin: boolean } = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false };
-  editData: { name: string; role: string; company_id: string | null; is_company_admin: boolean } = { name: '', role: '', company_id: null, is_company_admin: false };
+  newUser: { phone: string; name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean } = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false };
+  editData: { name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean } = { name: '', role: '', company_id: null, is_company_admin: false, can_backdate: false };
   resetPinResult = signal<string | null>(null);
   changePinData = { old_pin: '', new_pin: '' };
 
@@ -152,7 +152,7 @@ export class Users implements OnInit {
     try {
       await this.userService.create(this.newUser).toPromise();
       this.showCreateDialog.set(false);
-      this.newUser = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false };
+      this.newUser = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false };
       await this.loadUsers();
       this.messageService.add({
         severity: 'success',
@@ -172,7 +172,7 @@ export class Users implements OnInit {
 
   openEdit(user: User) {
     this.editingUser.set(user);
-    this.editData = { name: user.name, role: user.role, company_id: user.company_id, is_company_admin: user.is_company_admin };
+    this.editData = { name: user.name, role: user.role, company_id: user.company_id, is_company_admin: user.is_company_admin, can_backdate: user.can_backdate };
     this.showEditDialog.set(true);
   }
 
@@ -187,6 +187,7 @@ export class Users implements OnInit {
           role: this.editData.role,
           company_id: this.editData.company_id,
           is_company_admin: this.editData.is_company_admin,
+          can_backdate: this.editData.can_backdate,
         })
         .toPromise();
       this.showEditDialog.set(false);

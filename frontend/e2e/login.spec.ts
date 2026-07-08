@@ -31,8 +31,10 @@ test.describe('Login Flow', () => {
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
-    await expect(page.locator('aside').getByText('Users')).toBeVisible();
     await expect(page.locator('aside').getByText('Dashboard')).toBeVisible();
+    await expect(page.locator('aside').getByText('Management')).toBeVisible();
+    await page.locator('aside').getByText('Management').click();
+    await expect(page.locator('aside').getByText('Users')).toBeVisible();
   });
 
   test('mobile viewport has hamburger and sidebar is hidden', async ({ page }) => {
@@ -53,6 +55,7 @@ test.describe('Login Flow', () => {
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
     await page.getByLabel('Toggle menu').click();
+    await page.locator('aside').getByText('Management').click();
     await expect(page.locator('aside').getByText('Users')).toBeVisible();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
@@ -65,8 +68,13 @@ test.describe('Login Flow', () => {
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
+    // Search for the seeded super admin instead of assuming first page
+    const searchInput = page.getByPlaceholder('Search name or phone...');
+    await searchInput.fill('256700000000');
+    await searchInput.press('Enter');
     await expect(page.getByRole('cell', { name: 'Super Admin' })).toBeVisible({ timeout: 5000 });
     await expect(page.getByRole('cell', { name: '256700000000' })).toBeVisible();
   });
@@ -78,6 +86,7 @@ test.describe('Login Flow', () => {
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
     await page.getByText('Add User').click();
@@ -93,6 +102,7 @@ test.describe('Login Flow', () => {
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
     await page.getByText('Add User').click();
@@ -109,6 +119,7 @@ test.describe('Login Flow', () => {
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
     const searchInput = page.getByPlaceholder('Search name or phone...');
@@ -124,6 +135,7 @@ test.describe('Login Flow', () => {
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
     await page.getByText('Change PIN').click();

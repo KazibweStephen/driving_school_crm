@@ -1,0 +1,111 @@
+<p-toast></p-toast>
+
+<div class="p-4 sm:p-6">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-gray-900">Payments</h1>
+    @if (canPrint()) {
+      <p-button label="Print Report" icon="pi pi-print" severity="info" (onClick)="printReport()" />
+    }
+  </div>
+
+  <div class="mb-4 flex flex-wrap items-center gap-2">
+    <span class="p-input-icon-left w-full sm:w-auto">
+      <i class="pi pi-search"></i>
+      <input pInputText [(ngModel)]="search" (keyup.enter)="applyFilters()" placeholder="Search by name, phone, or receipt..." class="w-full sm:w-72" />
+    </span>
+    <p-select [(ngModel)]="clientType" [options]="clientTypeOptions" optionLabel="label" optionValue="value"
+      placeholder="Client Type" styleClass="w-40" appendTo="body" />
+    @if (canViewAllBranches() && branches.length) {
+      <p-multiSelect [(ngModel)]="selectedBranchIds" [options]="branches" optionLabel="name" optionValue="id"
+        placeholder="All Branches" styleClass="w-56" appendTo="body" [showHeader]="false"
+        [maxSelectedLabels]="2" [selectedItemsLabel]="'{0} branches'" />
+    }
+    <p-button label="Apply" icon="pi pi-search" (onClick)="applyFilters()" />
+    <p-button label="Clear" severity="secondary" icon="pi pi-filter-slash" (onClick)="clearFilters()" />
+  </div>
+
+  <div class="mb-4 flex flex-wrap items-center gap-1.5">
+    @for (p of presets; track p.key) {
+      <button [class.active]="activePreset === p.key" class="preset-chip"
+        (click)="setPreset(p.key)">{{ p.label }}</button>
+    }
+    <p-datepicker [(ngModel)]="dateRangeValue" selectionMode="range" dateFormat="yy-mm-dd"
+      placeholder="Custom Range" styleClass="w-56" appendTo="body" [numberOfMonths]="2"
+      (onSelect)="onCustomRangeSelect()" showButtonBar="true" />
+    @if (activePreset === '' && dateRangeValue?.length) {
+      <button class="px-3 py-1.5 text-sm font-medium rounded-md border border-red-300 text-red-600 bg-white cursor-pointer hover:bg-red-50 transition-colors"
+        (click)="setPreset('today')">Clear</button>
+    }
+  </div>
+
+  @if (!loading() && totals) {
+    <div class="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <p-card>
+        <div class="text-sm text-gray-500">Total Amount</div>
+        <div class="text-xl font-bold">{{ formatAmount(totals.total_amount_sum) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Total Paid</div>
+        <div class="text-xl font-bold text-green-600">{{ formatAmount(totals.total_paid_sum) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Total Balance</div>
+        <div class="text-xl font-bold" [class.text-red-500]="+totals.total_balance_sum > 0">{{ formatAmount(totals.total_balance_sum) }}</div>
+      </p-card>
+    </div>
+  }
+
+  <p-table [value]="payments()" [loading]="loading()" [paginator]="true" [rows]="pageSize"
+    [totalRecords]="total" [lazy]="true" (onPage)="onPage($event)"
+    [rowsPerPageOptions]="[10, 20, 50]" sortField="created_at" [sortOrder]="-1">
+    <ng-template pTemplate="header">
+      <tr>
+        <th pSortableColumn="client_name"><span class="flex items-center gap-0.5 whitespace-nowrap">Client <p-sortIcon field="client_name"></p-sortIcon></span></th>
+        <th pSortableColumn="product_name"><span class="flex items-center gap-0.5 whitespace-nowrap">Product <p-sortIcon field="product_name"></p-sortIcon></span></th>
+        <th pSortableColumn="total_amount"><span class="flex items-center gap-0.5 whitespace-nowrap">Total <p-sortIcon field="total_amount"></p-sortIcon></span></th>
+        <th pSortableColumn="total_paid"><span class="flex items-center gap-0.5 whitespace-nowrap">Paid <p-sortIcon field="total_paid"></p-sortIcon></span></th>
+        <th pSortableColumn="balance"><span class="flex items-center gap-0.5 whitespace-nowrap">Balance <p-sortIcon field="balance"></p-sortIcon></span></th>
+        <th>Status</th>
+        <th pSortableColumn="receipt_number"><span class="flex items-center gap-0.5 whitespace-nowrap">Receipt <p-sortIcon field="receipt_number"></p-sortIcon></span></th>
+        <th pSortableColumn="document_date"><span class="flex items-center gap-0.5 whitespace-nowrap">Doc Date <p-sortIcon field="document_date"></p-sortIcon></span></th>
+        <th style="width: 6rem">Actions</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-p>
+      <tr>
+        <td>
+          <a [routerLink]="'/consultations/' + p.consultation_id" class="flex flex-col no-underline cursor-pointer hover:text-blue-600">
+            <span class="font-medium">{{ p.client_name }}</span>
+            <span class="text-xs text-gray-400">{{ p.client_phone }}</span>
+            @if (p.created_by_name) {
+              <span class="text-xs text-gray-500">Received by {{ p.created_by_name }}</span>
+            }
+          </a>
+        </td>
+        <td class="text-sm">{{ p.product_name }}</td>
+        <td class="font-medium whitespace-nowrap">{{ formatAmount(p.total_amount) }}</td>
+        <td class="font-medium whitespace-nowrap text-green-600">{{ formatAmount(p.total_paid) }}</td>
+        <td class="font-medium whitespace-nowrap" [class.text-red-500]="hasBalance(p)">{{ formatAmount(p.balance) }}</td>
+        <td><p-tag [value]="statusLabel(p)" [severity]="statusSeverity(p)" /></td>
+        <td class="text-sm">{{ p.receipt_number || p.system_receipt_number }}</td>
+        <td class="text-sm text-gray-500">
+          <div class="flex flex-col">
+            <span>{{ formatDate(p.document_date || p.created_at) }}</span>
+            @if (p.document_date && p.document_date !== p.created_at.split('T')[0]) {
+              <span class="text-xs text-gray-400">Created {{ formatDate(p.created_at) }}</span>
+            }
+          </div>
+        </td>
+        <td>
+          <p-button icon="pi pi-receipt" rounded="true" text="true" severity="info"
+            pTooltip="View Receipt" (onClick)="openReceipt(p)" />
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="9" class="text-center text-gray-500 py-4">No payments found</td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>

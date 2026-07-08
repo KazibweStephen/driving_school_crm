@@ -12,6 +12,7 @@ class UserCreate(BaseModel):
     role: UserRole = UserRole.OFFICE_ADMIN
     company_id: uuid.UUID | None = None
     is_company_admin: bool = False
+    can_backdate: bool = False
 
 
 class UserRead(BaseModel):
@@ -20,6 +21,7 @@ class UserRead(BaseModel):
     role: UserRole
     status: UserStatus
     is_company_admin: bool
+    can_backdate: bool
     company_id: uuid.UUID | None = None
     created_by_phone: str | None
     created_at: datetime
@@ -34,6 +36,7 @@ class UserUpdate(BaseModel):
     status: UserStatus | None = None
     company_id: uuid.UUID | None = None
     is_company_admin: bool | None = None
+    can_backdate: bool | None = None
 
 
 class UserPinChange(BaseModel):

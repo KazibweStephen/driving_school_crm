@@ -30,11 +30,15 @@ class Payment(Base):
     consultation_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("consultations.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    created_by_phone: Mapped[str | None] = mapped_column(
+        String(20), ForeignKey("users.phone", ondelete="SET NULL"), nullable=True, index=True
+    )
     product_id: Mapped[str] = mapped_column(String(36), nullable=False)
     package_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     total_paid: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, server_default="0.00")
     balance: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, server_default="0.00")
+    document_date: Mapped[date | None] = mapped_column(Date, nullable=True, default=None)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     receipt_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     system_receipt_number: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -46,6 +50,7 @@ class Payment(Base):
     )
 
     consultation: Mapped["Consultation"] = relationship("Consultation", backref="payments")
+    created_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_phone], uselist=False)
     installments: Mapped[list["Installment"]] = relationship(
         "Installment", back_populates="payment", cascade="all, delete-orphan"
     )

@@ -29,7 +29,10 @@ async def create_user(
             detail="User with this phone already exists",
         )
     user, initial_pin = await user_service.create_user(
-        db, data.phone, data.name, data.role, current_user.phone
+        db, data.phone, data.name, data.role, current_user.phone,
+        is_company_admin=data.is_company_admin,
+        company_id=data.company_id,
+        can_backdate=data.can_backdate,
     )
     return UserRead.model_validate(user)
 
@@ -92,7 +95,10 @@ async def update_user(
             detail="User not found",
         )
     updated = await user_service.update_user(
-        db, user, name=data.name, role=data.role, status=data.status
+        db, user, name=data.name, role=data.role, status=data.status,
+        is_company_admin=data.is_company_admin,
+        company_id=data.company_id,
+        can_backdate=data.can_backdate,
     )
     return UserRead.model_validate(updated)
 

@@ -28,15 +28,46 @@ test.describe('Consultations & Clients Flow', () => {
   });
 
   test('searches for existing consultation by phone', async ({ page }) => {
+    // Login via API
+    const token = await page.evaluate(async () => {
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: '256700000000', pin: '1234' }),
+      });
+      return (await res.json()).access_token;
+    });
+
+    const phone = `2567${Date.now().toString().slice(-7)}`;
+
+    // Create consultation via API
+    await page.evaluate(async ({ token, phone }) => {
+      const res = await fetch('/api/v1/consultations/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          phone,
+          first_name: 'Search',
+          last_name: 'Test',
+          location: 'Kampala',
+        }),
+      });
+      if (!res.ok) throw new Error(`Failed to create: ${await res.text()}`);
+      return res.json();
+    }, { token, phone });
+
     await page.goto('/consultations');
     await expect(page).toHaveURL(/\/consultations/, { timeout: 10000 });
 
     const searchInput = page.getByPlaceholder('Search by phone or name...');
-    await searchInput.fill('0782832720');
+    await searchInput.fill(phone);
     await page.waitForTimeout(1500);
 
     // Should show results containing the phone
-    await expect(page.locator('text=0782832720').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(`text=${phone}`).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('navigates to consultation profile from list', async ({ page }) => {

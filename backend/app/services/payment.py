@@ -1,10 +1,10 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import Date, and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from app.models.cart import CartItem, CartItemStatus
 from app.models.consultation import Consultation, FollowUp
@@ -34,12 +34,16 @@ async def create_payment(
     notes: str | None,
     installments_data: list[dict],
     receipt_number: str | None = None,
+    created_by_phone: str | None = None,
+    document_date: date | None = None,
 ) -> Payment:
     payment = Payment(
         consultation_id=consultation_id,
+        created_by_phone=created_by_phone,
         product_id=product_id,
         package_id=package_id,
         total_amount=total_amount,
+        document_date=document_date,
         notes=notes,
         receipt_number=receipt_number or None,
         system_receipt_number=_generate_system_receipt_number(),
@@ -85,6 +89,93 @@ async def get_payments_by_consultation(
         .order_by(Payment.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def list_payments(
+    db: AsyncSession,
+    search: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    client_type: str | None = "all",
+    branch_ids: list[uuid.UUID] | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[Payment], int, Decimal, Decimal, Decimal]:
+    from app.models.product import Product
+
+    base_query = select(Payment).join(Consultation, Payment.consultation_id == Consultation.id)
+    count_query = select(func.count(Payment.id)).join(Consultation, Payment.consultation_id == Consultation.id)
+    totals_query = select(
+        func.coalesce(func.sum(Payment.total_amount), 0),
+        func.coalesce(func.sum(Payment.total_paid), 0),
+        func.coalesce(func.sum(Payment.balance), 0),
+    ).join(Consultation, Payment.consultation_id == Consultation.id)
+
+    # Build prior-payments subquery for client_type filter
+    p2 = aliased(Payment)
+    has_prior = exists(
+        select(p2.id).where(
+            and_(
+                p2.consultation_id == Payment.consultation_id,
+                p2.created_at < Payment.created_at,
+                p2.id != Payment.id,
+            )
+        )
+    )
+
+    filters: list = []
+
+    if search:
+        search_filter = or_(
+            Consultation.first_name.ilike(f"%{search}%"),
+            Consultation.middle_name.ilike(f"%{search}%"),
+            Consultation.last_name.ilike(f"%{search}%"),
+            Consultation.phone.ilike(f"%{search}%"),
+            Payment.receipt_number.ilike(f"%{search}%"),
+            Payment.system_receipt_number.ilike(f"%{search}%"),
+        )
+        filters.append(search_filter)
+
+    if date_from:
+        filters.append(Payment.document_date >= date_from)
+
+    if date_to:
+        filters.append(Payment.document_date <= date_to)
+
+    if branch_ids:
+        filters.append(Consultation.branch_id.in_(branch_ids))
+
+    if client_type == "new":
+        filters.append(~has_prior)
+    elif client_type == "collection":
+        filters.append(has_prior)
+
+    for f in filters:
+        base_query = base_query.where(f)
+        count_query = count_query.where(f)
+        totals_query = totals_query.where(f)
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    totals_result = await db.execute(totals_query)
+    total_amount_sum, total_paid_sum, total_balance_sum = totals_result.one()
+
+    query = (
+        base_query
+        .options(
+            selectinload(Payment.installments),
+            selectinload(Payment.consultation),
+            selectinload(Payment.created_by_user),
+        )
+        .order_by(func.coalesce(Payment.document_date, Payment.created_at.cast(Date)).desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    result = await db.execute(query)
+    payments = list(result.scalars().all())
+
+    return payments, total, total_amount_sum, total_paid_sum, total_balance_sum
 
 
 async def mark_installment_paid(

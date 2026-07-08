@@ -13,6 +13,7 @@ export interface PaymentCreate {
   notes?: string;
   receipt_number?: string;
   installments: InstallmentCreate[];
+  document_date?: string;
 }
 
 export interface InstallmentRead {
@@ -36,6 +37,7 @@ export interface PaymentRead {
   total_amount: string;
   total_paid: string;
   balance: string;
+  document_date: string | null;
   notes: string | null;
   receipt_number: string | null;
   system_receipt_number: string;
@@ -63,6 +65,47 @@ export interface ClientSummary {
   total_paid: string;
   last_payment_date: string | null;
   created_at: string;
+}
+
+export interface PaymentWithClient {
+  id: string;
+  consultation_id: string;
+  product_id: string;
+  product_name: string;
+  package_id: string | null;
+  client_name: string;
+  client_phone: string;
+  created_by_name: string | null;
+  total_amount: string;
+  total_paid: string;
+  balance: string;
+  document_date: string | null;
+  notes: string | null;
+  receipt_number: string | null;
+  system_receipt_number: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BranchInfo {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface PaymentTotals {
+  total_amount_sum: string;
+  total_paid_sum: string;
+  total_balance_sum: string;
+}
+
+export interface PaymentListResponse {
+  payments: PaymentWithClient[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  totals: PaymentTotals;
 }
 
 export interface ClientListResponse {
@@ -117,6 +160,24 @@ export class PaymentService {
   getReceipt(paymentId: string, download: boolean = false) {
     const url = `/api/v1/receipts/${paymentId}/download${download ? '?download=1' : ''}`;
     return this.http.get(url, { responseType: 'text' });
+  }
+
+  listAllPayments(params?: { search?: string; date_from?: string; date_to?: string; client_type?: string; branch_ids?: string; page?: number; page_size?: number }) {
+    let hp = new HttpParams();
+    if (params) {
+      if (params.search) hp = hp.set('search', params.search);
+      if (params.date_from) hp = hp.set('date_from', params.date_from);
+      if (params.date_to) hp = hp.set('date_to', params.date_to);
+      if (params.client_type && params.client_type !== 'all') hp = hp.set('client_type', params.client_type);
+      if (params.branch_ids) hp = hp.set('branch_ids', params.branch_ids);
+      if (params.page) hp = hp.set('page', params.page);
+      if (params.page_size) hp = hp.set('page_size', params.page_size);
+    }
+    return this.http.get<PaymentListResponse>('/api/v1/payments/', { params: hp });
+  }
+
+  getAccessibleBranches() {
+    return this.http.get<BranchInfo[]>('/api/v1/payments/accessible-branches/');
   }
 
   getConsolidatedReceipt(receiptNumber: string, consultationId: string, download: boolean = false) {

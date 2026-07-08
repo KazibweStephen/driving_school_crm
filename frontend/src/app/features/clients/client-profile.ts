@@ -22,6 +22,7 @@ import { ConsultationService, Consultation, FollowUp } from '../../core/services
 import { CartItemService, CartItemRead, CartItemCreate } from '../../core/services/cart.service';
 import { ProductService, Product } from '../../core/services/product.service';
 import { PaymentService, PaymentRead } from '../../core/services/payment.service';
+import { AuthService } from '../../core/auth/auth.service';
 import { TrainingService, TrainingSession, TrainingSummary, Skill, SkillCreate } from '../../core/services/training.service';
 import { PermitProgressService, PermitProgress } from '../../core/services/permit-progress.service';
 import { OrderListModule } from 'primeng/orderlist';
@@ -127,17 +128,20 @@ export class ClientProfile implements OnInit {
   completeSaleBalance = signal<number>(0);
   completeSaleReceiptNumber = signal('');
   completeSaleSystemReceiptNumber = signal('');
+  completeSaleDocumentDate = signal<Date | null>(null);
 
   showMakePaymentDialog = signal(false);
   makePaymentTarget = signal<CartItemRead | null>(null);
   makePaymentAmount = signal<number>(0);
   makePaymentBalance = signal<number>(0);
   makePaymentReceiptNumber = signal('');
+  makePaymentDocumentDate = signal<Date | null>(null);
 
   showPayAllDialog = signal(false);
   payAllItems = signal<{ cartItem: CartItemRead; payNow: number; balance: number; productName: string; packageName: string }[]>([]);
   payAllReceiptNumber = signal('');
   payAllInstallments: { due_date: Date | null; amount: number }[] = [];
+  payAllDocumentDate = signal<Date | null>(null);
 
   showGuide = signal(false);
   guideContent = signal('');
@@ -264,6 +268,7 @@ export class ClientProfile implements OnInit {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private sanitizer: DomSanitizer,
+    public authService: AuthService,
   ) {}
 
   async ngOnInit() {
@@ -2452,6 +2457,7 @@ export class ClientProfile implements OnInit {
     this.completeSaleInstallments = [];
     this.completeSaleReceiptNumber.set('');
     this.completeSaleSystemReceiptNumber.set('');
+    this.completeSaleDocumentDate.set(null);
     this.receiptChecking.set(false);
     this.receiptAvailable.set(null);
     this.showCompleteSaleDialog.set(true);
@@ -2550,6 +2556,7 @@ export class ClientProfile implements OnInit {
           notes: `Paid: ${paid}, Balance: ${remaining}`,
           receipt_number: this.completeSaleReceiptNumber() || undefined,
           installments,
+          document_date: this.completeSaleDocumentDate()?.toISOString().split('T')[0] || undefined,
         })
         .toPromise();
 
@@ -2586,6 +2593,7 @@ export class ClientProfile implements OnInit {
     this.makePaymentAmount.set(balance);
     this.makePaymentBalance.set(balance);
     this.makePaymentReceiptNumber.set('');
+    this.makePaymentDocumentDate.set(null);
     this.receiptChecking.set(false);
     this.receiptAvailable.set(null);
     this.showMakePaymentDialog.set(true);
@@ -2610,6 +2618,7 @@ export class ClientProfile implements OnInit {
           installments: [
             { due_date: this.formatDate(new Date()), amount },
           ],
+          document_date: this.makePaymentDocumentDate()?.toISOString().split('T')[0] || undefined,
         })
         .toPromise();
 
@@ -2693,6 +2702,7 @@ export class ClientProfile implements OnInit {
     this.payAllItems.set(items);
     this.payAllReceiptNumber.set('');
     this.payAllInstallments = [];
+    this.payAllDocumentDate.set(null);
     this.receiptChecking.set(false);
     this.receiptAvailable.set(null);
     this.initPayAllInstallments();
@@ -2807,6 +2817,7 @@ export class ClientProfile implements OnInit {
             notes: `Bulk payment of ${amount}`,
             receipt_number: receipt || undefined,
             installments,
+            document_date: this.payAllDocumentDate()?.toISOString().split('T')[0] || undefined,
           })
           .toPromise();
 

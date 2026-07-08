@@ -263,6 +263,10 @@
         <p-checkbox [(ngModel)]="newUser.is_company_admin" [binary]="true" inputId="create_admin" />
         <label for="create_admin" class="text-sm">Company Admin</label>
       </div>
+      <div class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="newUser.can_backdate" [binary]="true" inputId="create_backdate" />
+        <label for="create_backdate" class="text-sm">Can Backdate</label>
+      </div>
       <p-button
         label="Create User"
         [loading]="loading()"
@@ -318,6 +322,10 @@
         <div class="flex items-center gap-2">
           <p-checkbox [(ngModel)]="editData.is_company_admin" [binary]="true" inputId="edit_admin" />
           <label for="edit_admin" class="text-sm">Company Admin</label>
+        </div>
+        <div class="flex items-center gap-2">
+          <p-checkbox [(ngModel)]="editData.can_backdate" [binary]="true" inputId="edit_backdate" />
+          <label for="edit_backdate" class="text-sm">Can Backdate</label>
         </div>
         <p-button
           label="Save Changes"

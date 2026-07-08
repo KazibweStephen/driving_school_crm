@@ -37,6 +37,7 @@ class User(Base):
         Enum(UserStatus), default=UserStatus.ACTIVE, nullable=False
     )
     is_company_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    can_backdate: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     company_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True
     )

@@ -177,18 +177,28 @@ async def generate_receipt_html(
             '            </tr>'
         )
 
-    # Installments table
+    # Installments table (merged by due_date)
     installments: list[Installment] = sorted(payment.installments, key=lambda x: x.due_date)
     installments_html = ""
     if installments:
-        rows = ""
+        from collections import defaultdict
+        merged: dict[str, dict] = defaultdict(lambda: {"amount": Decimal("0"), "paid": Decimal("0"), "all_paid": True})
         for inst in installments:
-            status_label = inst.status.value.capitalize()
-            paid = format_amount(inst.paid_amount) if inst.status.name == "PAID" else "—"
+            key = inst.due_date.isoformat()
+            merged[key]["amount"] += inst.amount
+            if inst.paid_amount:
+                merged[key]["paid"] += inst.paid_amount
+            if inst.status.name != "PAID":
+                merged[key]["all_paid"] = False
+        rows = ""
+        for date_key in sorted(merged.keys()):
+            m = merged[date_key]
+            status_label = "Paid" if m["all_paid"] else "Pending"
+            paid = format_amount(m["paid"]) if m["paid"] > 0 else "—"
             rows += (
                 f'<tr>\n'
-                f'              <td>{inst.due_date.isoformat()}</td>\n'
-                f'              <td class="right">{format_amount(inst.amount)}</td>\n'
+                f'              <td>{date_key}</td>\n'
+                f'              <td class="right">{format_amount(m["amount"])}</td>\n'
                 f'              <td class="right">{paid}</td>\n'
                 f'              <td class="right">{status_label}</td>\n'
                 f'            </tr>'
@@ -635,18 +645,28 @@ async def generate_consolidated_receipt_html(
     else:
         watermark_html = '<div class="watermark">PAID</div>'
 
-    # Installments table (all payments' installments combined)
+    # Installments table (all payments' installments combined, merged by due_date)
     all_installments.sort(key=lambda x: x.due_date)
     installments_html = ""
     if all_installments:
-        rows = ""
+        from collections import defaultdict
+        merged: dict[str, dict] = defaultdict(lambda: {"amount": Decimal("0"), "paid": Decimal("0"), "all_paid": True})
         for inst in all_installments:
-            status_label = inst.status.value.capitalize()
-            paid = format_amount(inst.paid_amount) if inst.status.name == "PAID" else "—"
+            key = inst.due_date.isoformat()
+            merged[key]["amount"] += inst.amount
+            if inst.paid_amount:
+                merged[key]["paid"] += inst.paid_amount
+            if inst.status.name != "PAID":
+                merged[key]["all_paid"] = False
+        rows = ""
+        for date_key in sorted(merged.keys()):
+            m = merged[date_key]
+            status_label = "Paid" if m["all_paid"] else "Pending"
+            paid = format_amount(m["paid"]) if m["paid"] > 0 else "—"
             rows += (
                 f'<tr>\n'
-                f'              <td>{inst.due_date.isoformat()}</td>\n'
-                f'              <td class="right">{format_amount(inst.amount)}</td>\n'
+                f'              <td>{date_key}</td>\n'
+                f'              <td class="right">{format_amount(m["amount"])}</td>\n'
                 f'              <td class="right">{paid}</td>\n'
                 f'              <td class="right">{status_label}</td>\n'
                 f'            </tr>'

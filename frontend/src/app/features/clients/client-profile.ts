@@ -3119,7 +3119,23 @@ export class ClientProfile implements OnInit {
     );
   }
 
+  /** Return the shared receipt_number if this payment's receipt is shared with other payments, else null. */
+  private sharedReceiptNumber(paymentId: string): string | null {
+    const payment = this.payments().find(p => p.id === paymentId);
+    if (!payment?.receipt_number) return null;
+    const shared = this.payments().filter(p =>
+      p.receipt_number === payment.receipt_number &&
+      p.consultation_id === payment.consultation_id
+    );
+    return shared.length > 1 ? payment.receipt_number : null;
+  }
+
   openReceipt(paymentId: string) {
+    const sharedRn = this.sharedReceiptNumber(paymentId);
+    if (sharedRn) {
+      this.openConsolidatedAddReceipt(sharedRn);
+      return;
+    }
     this.paymentService.getReceipt(paymentId).subscribe({
       next: (html) => {
         const win = window.open('', '_blank');
@@ -3133,6 +3149,11 @@ export class ClientProfile implements OnInit {
   }
 
   downloadReceipt(paymentId: string) {
+    const sharedRn = this.sharedReceiptNumber(paymentId);
+    if (sharedRn) {
+      this.downloadConsolidatedAddReceipt(sharedRn);
+      return;
+    }
     this.paymentService.getReceipt(paymentId, true).subscribe({
       next: (html) => {
         const blob = new Blob([html], { type: 'text/html' });
@@ -3150,6 +3171,11 @@ export class ClientProfile implements OnInit {
   }
 
   reprintReceipt(paymentId: string) {
+    const sharedRn = this.sharedReceiptNumber(paymentId);
+    if (sharedRn) {
+      this.reprintConsolidatedAddReceipt(sharedRn);
+      return;
+    }
     this.paymentService.getReceipt(paymentId).subscribe({
       next: (html) => {
         const win = window.open('', '_blank');

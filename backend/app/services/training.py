@@ -1,6 +1,6 @@
 import math
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -182,7 +182,7 @@ async def start_training_session(
     session: TrainingSession,
     started_by: str,
 ) -> TrainingSession:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     session.started_at = now
     session.started_by = started_by
     session.timer_started_at = now
@@ -207,8 +207,18 @@ async def end_training_session(
     instructor_notes: str | None = None,
 ) -> TrainingSession:
     # Capture final elapsed time before clearing live timer fields
-    if session.timer_started_at and session.timer_seconds is None:
-        session.timer_seconds = int((datetime.utcnow() - session.timer_started_at).total_seconds())
+    if session.started_at:
+        now = datetime.now(timezone.utc)
+        if session.timer_started_at:
+            start_time = session.timer_started_at
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=timezone.utc)
+            session.timer_seconds = int((now - start_time).total_seconds())
+        elif session.timer_seconds is None:
+            start_time = session.started_at
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=timezone.utc)
+            session.timer_seconds = int((now - start_time).total_seconds())
     session.timer_started_at = None
     if instructor_notes is not None:
         session.instructor_notes = instructor_notes

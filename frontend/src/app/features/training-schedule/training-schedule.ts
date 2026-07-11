@@ -267,6 +267,15 @@ export class TrainingScheduleCmp implements OnInit, OnDestroy {
       const dateStr = this._fmt(new Date());
       const totalRemaining = this.payTotalBalance;
 
+      // Pre-open receipt windows synchronously while still inside the user gesture,
+      // so popup blockers do not block them after the async payment calls complete.
+      const receiptWindows: (Window | null)[] = [];
+      if (receipt && receipt.trim().length >= 2) {
+        receiptWindows.push(window.open('', '_blank'));
+      } else {
+        for (const _ of items) receiptWindows.push(window.open('', '_blank'));
+      }
+
       const receiptIds: string[] = [];
       for (const it of items) {
         const s = it.session;
@@ -314,32 +323,38 @@ export class TrainingScheduleCmp implements OnInit, OnDestroy {
 
       if (receipt && receipt.trim().length >= 2) {
         const consultationId = items[0]?.session?.consultation_id;
-        if (consultationId) {
-          const win = window.open('', '_blank');
+        const win = receiptWindows[0];
+        if (consultationId && win) {
           this.paymentService.getConsolidatedReceipt(receipt, consultationId).subscribe({
-            next: (html: string) => {
-              if (win) { win.document.write(html); win.document.close(); }
-            },
+            next: (html: string) => { win.document.write(html); win.document.close(); },
             error: () => {
-              if (win) win.close();
+              win.close();
               this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' });
             },
           });
+        } else if (win) {
+          win.close();
         }
       } else {
+        let winIndex = 0;
         for (const id of receiptIds) {
           if (id) {
-            const win = window.open('', '_blank');
-            this.paymentService.getReceipt(id).subscribe({
-              next: (html: string) => {
-                if (win) { win.document.write(html); win.document.close(); }
-              },
-              error: () => {
-                if (win) win.close();
-                this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' });
-              },
-            });
+            const win = receiptWindows[winIndex++];
+            if (win) {
+              this.paymentService.getReceipt(id).subscribe({
+                next: (html: string) => { win.document.write(html); win.document.close(); },
+                error: () => {
+                  win.close();
+                  this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' });
+                },
+              });
+            }
           }
+        }
+        // Close any pre-opened windows that did not get used
+        for (let i = winIndex; i < receiptWindows.length; i++) {
+          const win = receiptWindows[i];
+          if (win) win.close();
         }
       }
 

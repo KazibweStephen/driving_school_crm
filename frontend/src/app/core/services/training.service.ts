@@ -119,8 +119,8 @@ export class TrainingService {
     return this.http.post<TrainingSession>(`/api/v1/cart-items/training-sessions/${sessionId}/start`, {});
   }
 
-  endSession(sessionId: string) {
-    return this.http.post<TrainingSession>(`/api/v1/cart-items/training-sessions/${sessionId}/end`, {});
+  endSession(sessionId: string, instructorNotes?: string) {
+    return this.http.post<TrainingSession>(`/api/v1/cart-items/training-sessions/${sessionId}/end`, { instructor_notes: instructorNotes || null });
   }
 
   updateTimer(sessionId: string, timerSeconds: number) {

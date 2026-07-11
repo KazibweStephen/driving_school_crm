@@ -204,9 +204,12 @@ async def update_timer(
 async def end_training_session(
     db: AsyncSession,
     session: TrainingSession,
+    instructor_notes: str | None = None,
 ) -> TrainingSession:
     session.timer_seconds = None
     session.timer_started_at = None
+    if instructor_notes is not None:
+        session.instructor_notes = instructor_notes
     await db.flush()
     return await _reload_with_skills(db, session)
 
@@ -374,7 +377,7 @@ async def get_daily_schedule(
     for s in sessions:
         consultation_ids.add(s.cart_item.consultation_id)
 
-    # Batch query payments for balances
+    # Batch query payments for balances (grouped by product_id)
     payments_by_consultation: dict[uuid.UUID, list[dict]] = {}
     if consultation_ids:
         pay_result = await db.execute(
@@ -388,6 +391,7 @@ async def get_daily_schedule(
                 "total_amount": float(p.total_amount),
                 "total_paid": float(p.total_paid),
                 "balance": float(p.balance),
+                "product_id": p.product_id,
             })
 
     # Compute lessons left per cart item
@@ -412,8 +416,9 @@ async def get_daily_schedule(
                 "completed_sessions_count": row[3],
             }
 
-    # Batch query ClientLessonPlan for transmission type and instructor
+    # Batch query ClientLessonPlan for transmission type
     plan_by_cart: dict[uuid.UUID, dict] = {}
+    plan_ids: set[uuid.UUID] = set()
     if cart_item_ids:
         plan_result = await db.execute(
             select(ClientLessonPlan).where(ClientLessonPlan.cart_item_id.in_(cart_item_ids))
@@ -422,6 +427,34 @@ async def get_daily_schedule(
             plan_by_cart[plan.cart_item_id] = {
                 "transmission_type": plan.transmission_type.value if plan.transmission_type else None,
             }
+            plan_ids.add(plan.id)
+
+    # Batch query vehicle info from ClientLessons (first lesson with vehicle per plan)
+    vehicle_by_plan: dict[uuid.UUID, dict] = {}
+    if plan_ids:
+        cl_result = await db.execute(
+            select(ClientLesson.lesson_plan_id, ClientLesson.vehicle_id)
+            .where(ClientLesson.lesson_plan_id.in_(plan_ids))
+            .where(ClientLesson.vehicle_id.isnot(None))
+            .distinct(ClientLesson.lesson_plan_id)
+        )
+        veh_ids = set()
+        cl_vehicle_map: dict[uuid.UUID, uuid.UUID] = {}
+        for row in cl_result:
+            cl_vehicle_map[row.lesson_plan_id] = row.vehicle_id
+            veh_ids.add(row.vehicle_id)
+        if veh_ids:
+            veh_result = await db.execute(
+                select(VehicleModel).where(VehicleModel.id.in_(veh_ids))
+            )
+            vehicles = {v.id: v for v in veh_result.scalars().all()}
+            for plan_id, veh_id in cl_vehicle_map.items():
+                veh = vehicles.get(veh_id)
+                if veh:
+                    vehicle_by_plan[plan_id] = {
+                        "plate_number": veh.plate_number,
+                        "name": veh.name,
+                    }
 
     # Batch query instructor names from started_by phones
     started_by_phones = set(s.started_by for s in sessions if s.started_by)
@@ -466,11 +499,17 @@ async def get_daily_schedule(
         elif s.started_at:
             status = "completed"
 
-        # Balance for this consultation
+        # Balance for this consultation (per product)
         cons_payments = payments_by_consultation.get(consultation.id, [])
-        total_amount = sum(p["total_amount"] for p in cons_payments)
-        total_paid = sum(p["total_paid"] for p in cons_payments)
-        balance = sum(p["balance"] for p in cons_payments)
+        product_payments = [p for p in cons_payments if p["product_id"] == ci.product_id] if ci.product_id else cons_payments
+        if product_payments:
+            total_amount = max(p["total_amount"] for p in product_payments)
+            total_paid = sum(p["total_paid"] for p in product_payments)
+            balance = max(0, total_amount - total_paid)
+        else:
+            total_amount = sum(p["total_amount"] for p in cons_payments)
+            total_paid = sum(p["total_paid"] for p in cons_payments)
+            balance = sum(p["balance"] for p in cons_payments)
 
         # Lessons left
         completed = completed_sessions_by_cart.get(ci.id, {})
@@ -487,6 +526,15 @@ async def get_daily_schedule(
 
         # Instructor name
         instructor_name = user_by_phone.get(s.started_by) if s.started_by else None
+
+        # Vehicle info from ClientLessonPlan's lessons
+        vehicle_info: dict = {}
+        if s.lesson_plan_id:
+            try:
+                lp_id = uuid.UUID(s.lesson_plan_id)
+                vehicle_info = vehicle_by_plan.get(lp_id, {})
+            except ValueError:
+                vehicle_info = {}
 
         # Lessons left count (each driving lesson = 30 min, each theory session = 60 min)
         driving_lessons_left = math.ceil(driving_remaining / 30) if expected_driving > 0 else 0
@@ -509,6 +557,8 @@ async def get_daily_schedule(
             "started_by": s.started_by,
             "instructor_name": instructor_name,
             "transmission_type": transmission_type,
+            "vehicle_name": vehicle_info.get("name"),
+            "vehicle_plate_number": vehicle_info.get("plate_number"),
             "timer_seconds": s.timer_seconds,
             "timer_started_at": s.timer_started_at.isoformat() if s.timer_started_at else None,
             "student_name": f"{consultation.first_name} {consultation.last_name or ''}".strip(),

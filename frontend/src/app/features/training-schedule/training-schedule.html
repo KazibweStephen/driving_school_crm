@@ -2,30 +2,52 @@
   <h1 class="text-xl sm:text-2xl font-bold mb-3 text-gray-900">Training Schedule Sheet</h1>
 
   <!-- Filters -->
-  <div class="flex flex-wrap gap-3 items-center mb-3 bg-surface-card p-3 rounded-lg shadow-sm border border-gray-200">
-    <div class="flex flex-col gap-0.5">
-      <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Period</label>
-      <p-select
-        [options]="periodOptions"
-        [(ngModel)]="period"
-        (ngModelChange)="onPeriodChange($event)"
-        appendTo="body"
-        styleClass="p-select-sm w-32"
-      />
+  <div class="flex flex-wrap gap-3 items-end mb-3 bg-surface-card p-3 rounded-lg shadow-sm border border-gray-200">
+    <!-- Period presets -->
+    <div class="flex flex-wrap items-center gap-1.5">
+      @for (p of presets; track p.key) {
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded-md border transition-colors cursor-pointer"
+          [class.bg-blue-600]="activePreset() === p.key"
+          [class.text-white]="activePreset() === p.key"
+          [class.border-blue-600]="activePreset() === p.key"
+          [class.bg-white]="activePreset() !== p.key"
+          [class.text-gray-700]="activePreset() !== p.key"
+          [class.border-gray-300]="activePreset() !== p.key"
+          [class.hover:bg-gray-50]="activePreset() !== p.key"
+          (click)="setPreset(p.key)"
+        >{{ p.label }}</button>
+      }
     </div>
-    <div class="flex flex-col gap-0.5">
-      <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Date Range</label>
-      <p-datepicker
-        [ngModel]="[startDate(), endDate()]"
-        (ngModelChange)="onDateRangeChange($event)"
-        selectionMode="range"
-        dateFormat="dd/mm/yy"
-        appendTo="body"
-        styleClass="w-48"
-        showClear
-      />
+
+    <!-- From / To dates -->
+    <div class="flex items-center gap-2">
+      <div class="flex flex-col gap-0.5">
+        <label class="text-[10px] font-medium text-gray-500 uppercase tracking-wide">From</label>
+        <p-datepicker
+          [ngModel]="fromDate()"
+          (ngModelChange)="onFromChange($event)"
+          dateFormat="dd/mm/yy"
+          appendTo="body"
+          styleClass="w-36"
+          inputStyleClass="text-xs py-1.5"
+        />
+      </div>
+      <span class="text-gray-400 pt-4 text-xs">—</span>
+      <div class="flex flex-col gap-0.5">
+        <label class="text-[10px] font-medium text-gray-500 uppercase tracking-wide">To</label>
+        <p-datepicker
+          [ngModel]="toDate()"
+          (ngModelChange)="onToChange($event)"
+          dateFormat="dd/mm/yy"
+          appendTo="body"
+          styleClass="w-36"
+          inputStyleClass="text-xs py-1.5"
+        />
+      </div>
     </div>
-    <div class="flex items-end gap-1 pt-4">
+
+    <div class="flex items-end gap-1">
       <p-button icon="pi pi-refresh" (click)="loadSchedule()" [loading]="loading()" size="small" severity="secondary" pTooltip="Refresh" />
     </div>
   </div>
@@ -73,8 +95,8 @@
         </tr>
       </ng-template>
       <ng-template pTemplate="body" let-s>
-        <tr>
-          <td class="py-2">
+        <tr class="hidden sm:table-row">
+          <td class="py-1">
             <div class="flex flex-col">
               <a [routerLink]="['/consultations', s.consultation_id]" class="text-sm font-semibold text-primary hover:underline leading-tight">
                 {{ s.student_name }}
@@ -83,21 +105,22 @@
               <span class="text-xs text-gray-500 mt-0.5 font-mono">{{ s.session_date | date:'EEE dd/MM HH:mm' }}</span>
             </div>
           </td>
-          <td class="py-2">
-            <div class="flex flex-wrap items-center gap-1.5 mb-1">
+          <td class="py-1">
+            <div class="flex flex-wrap items-center gap-1 mb-1">
               <p-tag [value]="sessionType(s)" severity="info" styleClass="text-[10px] px-1.5 py-0.5" />
               <span class="text-xs text-gray-500 font-mono">{{ s.duration_minutes }}'</span>
             </div>
-            <div class="flex flex-wrap items-center gap-1.5">
+            <div class="flex flex-wrap items-center gap-1">
               <span class="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 font-medium">{{ transmissionTag(s.transmission_type) }}</span>
               @if (s.instructor_name) {
                 <span class="text-[11px] bg-blue-50 text-blue-700 rounded px-1.5 py-0.5">{{ s.instructor_name.length > 12 ? (s.instructor_name.slice(0, 12) + '…') : s.instructor_name }}</span>
-              } @else {
-                <span class="text-[11px] text-gray-400 italic">No instructor</span>
+              }
+              @if (s.vehicle_plate_number) {
+                <span class="text-[11px] bg-amber-50 text-amber-700 rounded px-1.5 py-0.5" title="{{ s.vehicle_name || '' }}">{{ s.vehicle_plate_number }}</span>
               }
             </div>
           </td>
-          <td class="py-2">
+          <td class="py-1">
             <div class="flex items-center gap-2">
               <p-tag
                 [value]="s.status === 'in_progress' ? 'Live' : s.status === 'completed' ? 'Done' : 'Sched'"
@@ -105,7 +128,11 @@
                 styleClass="text-[10px] px-1.5 py-0.5"
               />
               @if (s.status === 'in_progress') {
-                <span class="font-mono text-xs font-bold text-green-600">{{ timerDisplay()[s.id] || formatTimer(s.timer_seconds) }}</span>
+                <span
+                  class="font-mono text-xs font-bold"
+                  [class.text-green-600]="!durationExceeded(s.id)"
+                  [class.text-red-500]="durationExceeded(s.id)"
+                >{{ timerDisplay()[s.id] || formatTimer(s.timer_seconds) }}</span>
               } @else if (s.status === 'completed') {
                 <span class="font-mono text-[11px] text-gray-400">{{ formatTimer(s.timer_seconds) }}</span>
               }
@@ -115,12 +142,12 @@
               <div class="text-[11px] text-gray-500 mt-0.5">Lessons: {{ lp.trained }} / {{ lp.total }}</div>
             }
           </td>
-          <td class="py-2">
+          <td class="py-1">
             <span class="text-sm font-semibold" [class.text-red-600]="s.balance > 0" [class.text-green-600]="s.balance === 0">
               {{ s.balance | currency:authService.currencyCode():'symbol':'1.0-0' }}
             </span>
           </td>
-          <td class="py-2">
+          <td class="py-1">
             <p-button
               label="Manage"
               icon="pi pi-cog"
@@ -129,6 +156,63 @@
               (onClick)="openManage(s)"
               styleClass="p-button-sm text-xs"
             />
+          </td>
+        </tr>
+        <!-- Mobile card view -->
+        <tr class="sm:hidden">
+          <td colspan="5" class="p-1">
+            <div class="rounded-lg border border-gray-200 p-2 space-y-1.5">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <a [routerLink]="['/consultations', s.consultation_id]" class="text-sm font-semibold text-primary hover:underline leading-tight">{{ s.student_name }}</a>
+                  <div class="text-[11px] text-gray-400">{{ s.student_phone }}</div>
+                </div>
+                <p-tag
+                  [value]="s.status === 'in_progress' ? 'Live' : s.status === 'completed' ? 'Done' : 'Sched'"
+                  [severity]="statusSeverity(s.status)"
+                  styleClass="text-[10px] px-1.5 py-0.5 shrink-0"
+                />
+              </div>
+              <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-600">
+                <span class="font-mono">{{ s.session_date | date:'EEE dd/MM HH:mm' }}</span>
+                <span class="text-gray-300">|</span>
+                <span>{{ sessionType(s) }} {{ s.duration_minutes }}'</span>
+                <span class="text-gray-300">|</span>
+                <span class="font-medium">{{ transmissionTag(s.transmission_type) }}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-1">
+                @if (s.instructor_name) {
+                  <span class="text-[11px] bg-blue-50 text-blue-700 rounded px-1.5 py-0.5">{{ s.instructor_name }}</span>
+                }
+                @if (s.vehicle_plate_number) {
+                  <span class="text-[11px] bg-amber-50 text-amber-700 rounded px-1.5 py-0.5">{{ s.vehicle_plate_number }}</span>
+                }
+                @if (s.status === 'in_progress') {
+                  <span
+                    class="font-mono text-xs font-bold ml-auto"
+                    [class.text-green-600]="!durationExceeded(s.id)"
+                    [class.text-red-500]="durationExceeded(s.id)"
+                  >{{ timerDisplay()[s.id] || formatTimer(s.timer_seconds) }}</span>
+                }
+              </div>
+              <div class="flex items-center justify-between gap-2 pt-1 border-t border-gray-100">
+                @let lp2 = lessonsProgress(s);
+                <span class="text-[11px] text-gray-500">
+                  @if (lp2.total > 0) { Lessons: {{ lp2.trained }}/{{ lp2.total }} } @else { — }
+                </span>
+                <span class="text-xs font-bold" [class.text-red-600]="s.balance > 0" [class.text-green-600]="s.balance === 0">
+                  {{ s.balance | currency:authService.currencyCode():'symbol':'1.0-0' }}
+                </span>
+                <p-button
+                  label="Manage"
+                  icon="pi pi-cog"
+                  size="small"
+                  severity="secondary"
+                  (onClick)="openManage(s)"
+                  styleClass="p-button-sm text-xs"
+                />
+              </div>
+            </div>
           </td>
         </tr>
       </ng-template>
@@ -164,6 +248,8 @@
           <span class="font-medium text-right">{{ transmissionTag(target.transmission_type) }}</span>
           <span class="text-gray-500">Instructor</span>
           <span class="font-medium text-right">{{ target.instructor_name || '—' }}</span>
+          <span class="text-gray-500">Vehicle</span>
+          <span class="font-medium text-right">{{ target.vehicle_plate_number || target.vehicle_name || '—' }}</span>
         </div>
       </div>
 
@@ -173,15 +259,19 @@
         <div class="flex items-center justify-between">
           @if (target.status === 'in_progress') {
             <div class="flex items-center gap-3">
-              <span class="font-mono text-lg font-bold text-green-600">{{ timerDisplay()[target.id] || formatTimer(target.timer_seconds) }}</span>
-              <p-tag value="In Progress" severity="info" styleClass="text-[10px]" />
+              <span
+                class="font-mono text-lg font-bold"
+                [class.text-green-600]="!durationExceeded(target.id)"
+                [class.text-red-500]="durationExceeded(target.id)"
+              >{{ timerDisplay()[target.id] || formatTimer(target.timer_seconds) }}</span>
+              <p-tag [value]="durationExceeded(target.id) ? 'Overtime' : 'In Progress'" [severity]="durationExceeded(target.id) ? 'danger' : 'info'" styleClass="text-[10px]" />
             </div>
             <p-button
               label="End Session"
               icon="pi pi-stop"
               severity="danger"
               size="small"
-              (onClick)="endSession(target)"
+              (onClick)="closeManage(); openEndConfirm(target)"
               styleClass="p-button-sm"
             />
           } @else if (target.status === 'completed') {
@@ -227,20 +317,20 @@
             </div>
           </div>
 
-          <!-- Product / Package info + Amount -->
+          <!-- Product / Package name + Amount -->
           <div class="mb-2">
             <label class="text-xs font-medium text-gray-600 mb-1 block">Amount to Pay Now</label>
-            <div class="flex items-center gap-2 mb-1">
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 mb-1">
+              <span class="text-xs text-gray-500 truncate">{{ target.product_name || 'Product' }}{{ target.package_name ? ' / ' + target.package_name : '' }}</span>
               <p-inputNumber
                 [(ngModel)]="paySessions()[0].payNow"
                 (onInput)="onPayNowChange()"
                 [min]="0"
                 [max]="target.balance"
-                class="flex-1"
+                class="w-full sm:w-40"
                 inputStyleClass="w-full text-sm py-1.5 px-3"
                 styleClass="w-full"
               />
-              <span class="text-xs text-gray-500 whitespace-nowrap">{{ target.product_name || 'Product' }}{{ target.package_name ? ' / ' + target.package_name : '' }}</span>
             </div>
           </div>
 
@@ -350,6 +440,40 @@
           />
         </div>
       }
+    </div>
+  }
+</p-dialog>
+
+<!-- End Session Confirmation Dialog -->
+@let endSession = endTarget();
+<p-dialog
+  header="End Session"
+  [(visible)]="showEndDialog"
+  [modal]="true"
+  [style]="{ width: '92vw', maxWidth: '420px' }"
+  [draggable]="false"
+  [resizable]="false"
+>
+  @if (endSession) {
+    <div class="flex flex-col gap-3 pt-1">
+      <p class="text-sm text-gray-600">
+        End session for <strong>{{ endSession.student_name }}</strong>?
+      </p>
+
+      <div>
+        <label class="text-xs font-medium text-gray-600 mb-1 block">Client Feedback (optional)</label>
+        <textarea
+          [(ngModel)]="endFeedback"
+          rows="3"
+          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm resize-none"
+          placeholder="Any notes or feedback about this session..."
+        ></textarea>
+      </div>
+
+      <div class="flex gap-2">
+        <p-button label="Cancel" severity="secondary" (onClick)="closeEndConfirm()" styleClass="flex-1 justify-center" />
+        <p-button label="End Session" icon="pi pi-check" severity="danger" (onClick)="confirmEndSession()" styleClass="flex-1 justify-center" />
+      </div>
     </div>
   }
 </p-dialog>

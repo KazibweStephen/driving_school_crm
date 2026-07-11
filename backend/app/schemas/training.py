@@ -54,6 +54,10 @@ class TrainingSessionUpdate(BaseModel):
     video_url: str | None = None
 
 
+class EndSessionRequest(BaseModel):
+    instructor_notes: str | None = None
+
+
 class TrainingSessionRead(BaseModel):
     id: uuid.UUID
     cart_item_id: uuid.UUID

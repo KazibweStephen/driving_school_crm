@@ -8,6 +8,7 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.training import (
+    EndSessionRequest,
     GenerateSessionsRequest,
     SkillCreate,
     SkillRead,
@@ -205,6 +206,7 @@ async def update_timer(
 @router.post("/training-sessions/{session_id}/end", response_model=TrainingSessionRead)
 async def end_training_session(
     session_id: str,
+    data: EndSessionRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -215,7 +217,7 @@ async def end_training_session(
     session = await training_service.get_training_session_by_id(db, sid, company_id=current_user.company_id, current_user_role=current_user.role)
     if session is None:
         raise HTTPException(status_code=404, detail="Training session not found")
-    updated = await training_service.end_training_session(db, session)
+    updated = await training_service.end_training_session(db, session, instructor_notes=data.instructor_notes)
     return TrainingSessionRead.model_validate(updated)
 
 

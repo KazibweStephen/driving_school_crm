@@ -315,23 +315,29 @@ export class TrainingScheduleCmp implements OnInit, OnDestroy {
       if (receipt && receipt.trim().length >= 2) {
         const consultationId = items[0]?.session?.consultation_id;
         if (consultationId) {
+          const win = window.open('', '_blank');
           this.paymentService.getConsolidatedReceipt(receipt, consultationId).subscribe({
             next: (html: string) => {
-              const win = window.open('', '_blank');
               if (win) { win.document.write(html); win.document.close(); }
             },
-            error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+            error: () => {
+              if (win) win.close();
+              this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' });
+            },
           });
         }
       } else {
         for (const id of receiptIds) {
           if (id) {
+            const win = window.open('', '_blank');
             this.paymentService.getReceipt(id).subscribe({
               next: (html: string) => {
-                const win = window.open('', '_blank');
                 if (win) { win.document.write(html); win.document.close(); }
               },
-              error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+              error: () => {
+                if (win) win.close();
+                this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' });
+              },
             });
           }
         }

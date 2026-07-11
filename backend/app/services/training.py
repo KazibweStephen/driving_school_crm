@@ -206,7 +206,9 @@ async def end_training_session(
     session: TrainingSession,
     instructor_notes: str | None = None,
 ) -> TrainingSession:
-    session.timer_seconds = None
+    # Capture final elapsed time before clearing live timer fields
+    if session.timer_started_at and session.timer_seconds is None:
+        session.timer_seconds = int((datetime.utcnow() - session.timer_started_at).total_seconds())
     session.timer_started_at = None
     if instructor_notes is not None:
         session.instructor_notes = instructor_notes

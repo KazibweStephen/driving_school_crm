@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_super_user
+from app.api.deps import get_current_user, require_super_user, require_admin_access
 from app.core.database import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.user import (
@@ -20,8 +20,13 @@ router = APIRouter(prefix="/users", tags=["users"])
 async def create_user(
     data: UserCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_admin_access),
 ):
+    if data.role == UserRole.COMPANY_SUPER_USER and current_user.role != UserRole.SUPER_USER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only super users can create company_super_user accounts",
+        )
     existing = await user_service.get_user_by_phone(db, data.phone)
     if existing:
         raise HTTPException(
@@ -31,7 +36,7 @@ async def create_user(
     user, initial_pin = await user_service.create_user(
         db, data.phone, data.name, data.role, current_user.phone,
         is_company_admin=data.is_company_admin,
-        company_id=data.company_id,
+        company_id=data.company_id or current_user.company_id,
         can_backdate=data.can_backdate,
     )
     return UserRead.model_validate(user)
@@ -45,10 +50,12 @@ async def list_users(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(get_current_user),
 ):
     users, total = await user_service.list_users(
-        db, search=search, role=role, status=status, page=page, page_size=page_size
+        db, search=search, role=role, status=status, page=page, page_size=page_size,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
     )
     return UserListResponse(
         users=[UserRead.model_validate(u) for u in users],
@@ -70,9 +77,13 @@ async def get_current_user_profile(
 async def get_user(
     phone: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(get_current_user),
 ):
-    user = await user_service.get_user_by_phone(db, phone)
+    user = await user_service.get_user_by_phone_with_company(
+        db, phone,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -86,8 +97,13 @@ async def update_user(
     phone: str,
     data: UserUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_admin_access),
 ):
+    if data.role == UserRole.COMPANY_SUPER_USER and current_user.role != UserRole.SUPER_USER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only super users can assign company_super_user role",
+        )
     user = await user_service.get_user_by_phone(db, phone)
     if user is None:
         raise HTTPException(
@@ -107,7 +123,7 @@ async def update_user(
 async def deactivate_user(
     phone: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_admin_access),
 ):
     if phone == current_user.phone:
         raise HTTPException(
@@ -129,11 +145,40 @@ async def deactivate_user(
     return UserRead.model_validate(updated)
 
 
+@router.post("/{phone}/approve", response_model=UserRead)
+async def approve_user(
+    phone: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_super_user),
+):
+    user = await user_service.get_user_by_phone(db, phone)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    if user.status != UserStatus.PENDING_APPROVAL:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not in pending approval status",
+        )
+    if user.role != UserRole.COMPANY_SUPER_USER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only company_super_user accounts require approval",
+        )
+    user.status = UserStatus.ACTIVE
+    user.failed_login_attempts = 0
+    await db.flush()
+    await db.refresh(user)
+    return UserRead.model_validate(user)
+
+
 @router.post("/{phone}/reset-pin", response_model=dict)
 async def reset_user_pin(
     phone: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_admin_access),
 ):
     user = await user_service.get_user_by_phone(db, phone)
     if user is None:

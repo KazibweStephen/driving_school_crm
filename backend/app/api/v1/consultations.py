@@ -202,7 +202,7 @@ async def list_consultations(
 ):
     consultations, total = await consultation_service.search_consultations(
         db, search=search, status=status, page=page, page_size=page_size, stage=stage,
-        branch_id=branch_id,
+        branch_id=branch_id, company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return ConsultationListResponse(
         consultations=[ConsultationRead.from_orm_with_cart(c) for c in consultations],
@@ -220,7 +220,7 @@ async def client_search(
     current_user: User = Depends(get_current_user),
 ):
     """Deduplicated search — returns one result per phone number across all branches."""
-    clients = await consultation_service.client_search(db, search)
+    clients = await consultation_service.client_search(db, search, company_id=current_user.company_id, current_user_role=current_user.role)
     result = []
     for c in clients:
         result.append(
@@ -252,7 +252,7 @@ async def get_consultation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID"
         )
-    consultation = await consultation_service.get_consultation_by_id(db, cid)
+    consultation = await consultation_service.get_consultation_by_id(db, cid, company_id=current_user.company_id, current_user_role=current_user.role)
     if consultation is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Consultation not found"
@@ -274,7 +274,7 @@ async def update_consultation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID"
         )
-    consultation = await consultation_service.get_consultation_by_id(db, cid)
+    consultation = await consultation_service.get_consultation_by_id(db, cid, company_id=current_user.company_id, current_user_role=current_user.role)
     if consultation is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Consultation not found"
@@ -314,7 +314,7 @@ async def deactivate_consultation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID"
         )
-    consultation = await consultation_service.get_consultation_by_id(db, cid)
+    consultation = await consultation_service.get_consultation_by_id(db, cid, company_id=current_user.company_id, current_user_role=current_user.role)
     if consultation is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Consultation not found"
@@ -349,7 +349,7 @@ async def create_follow_up(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID"
         )
-    consultation = await consultation_service.get_consultation_by_id(db, cid)
+    consultation = await consultation_service.get_consultation_by_id(db, cid, company_id=current_user.company_id, current_user_role=current_user.role)
     if consultation is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Consultation not found"
@@ -362,7 +362,7 @@ async def create_follow_up(
         fu_type=data.type,
         cart_item_ids=data.cart_item_ids,
     )
-    fu_with_cart = await consultation_service.get_follow_up_by_id(db, fu.id)
+    fu_with_cart = await consultation_service.get_follow_up_by_id(db, fu.id, company_id=current_user.company_id, current_user_role=current_user.role)
     return FollowUpRead.from_orm_with_cart(fu_with_cart or fu)
 
 
@@ -380,7 +380,7 @@ async def update_follow_up(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID"
         )
-    fu = await consultation_service.get_follow_up_by_id(db, fid)
+    fu = await consultation_service.get_follow_up_by_id(db, fid, company_id=current_user.company_id, current_user_role=current_user.role)
     if fu is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Follow-up not found"
@@ -389,7 +389,7 @@ async def update_follow_up(
         db, fu, follow_up_date=data.follow_up_date, note=data.note, status=data.status,
         fu_type=data.type, cart_item_ids=data.cart_item_ids,
     )
-    updated_with_cart = await consultation_service.get_follow_up_by_id(db, updated.id)
+    updated_with_cart = await consultation_service.get_follow_up_by_id(db, updated.id, company_id=current_user.company_id, current_user_role=current_user.role)
     return FollowUpRead.from_orm_with_cart(updated_with_cart or updated)
 
 
@@ -406,7 +406,7 @@ async def deactivate_follow_up(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID"
         )
-    fu = await consultation_service.get_follow_up_by_id(db, fid)
+    fu = await consultation_service.get_follow_up_by_id(db, fid, company_id=current_user.company_id, current_user_role=current_user.role)
     if fu is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Follow-up not found"

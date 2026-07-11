@@ -2,10 +2,12 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.models.lesson_plan import Vehicle, VehicleAssignment
 from app.models.user import User
 from app.schemas.lesson_plan import (
     VehicleAssignmentCreate,
@@ -27,7 +29,11 @@ async def list_assignments(
     current_user: User = Depends(get_current_user),
 ):
     vid = uuid.UUID(vehicle_id) if vehicle_id else None
-    assignments = await assignment_service.list_assignments(db, vid, instructor_id, on_date)
+    assignments = await assignment_service.list_assignments(
+        db, vid, instructor_id, on_date,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
     return [VehicleAssignmentRead.model_validate(a) for a in assignments]
 
 
@@ -41,10 +47,15 @@ async def get_assignment(
         aid = uuid.UUID(assignment_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid assignment ID")
-    result = await db.get(VehicleAssignment, aid)
-    if not result:
+    query = select(VehicleAssignment).where(VehicleAssignment.id == aid)
+    if current_user.role.value != 'super_user' and current_user.company_id is not None:
+        query = (query.join(Vehicle, VehicleAssignment.vehicle_id == Vehicle.id)
+                 .where(Vehicle.company_id == current_user.company_id))
+    result = await db.execute(query)
+    assignment = result.scalar_one_or_none()
+    if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    return VehicleAssignmentRead.model_validate(result)
+    return VehicleAssignmentRead.model_validate(assignment)
 
 
 @router.post("/api/v1/vehicle-assignments", response_model=VehicleAssignmentRead, status_code=201)
@@ -57,7 +68,7 @@ async def create_assignment(
         vid = uuid.UUID(data.vehicle_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid vehicle ID")
-    vehicle = await get_vehicle_by_id(db, vid)
+    vehicle = await get_vehicle_by_id(db, vid, company_id=current_user.company_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     assignment = await assignment_service.create_assignment(
@@ -77,11 +88,13 @@ async def transfer_vehicle(
         vid = uuid.UUID(vehicle_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid vehicle ID")
-    vehicle = await get_vehicle_by_id(db, vid)
+    vehicle = await get_vehicle_by_id(db, vid, company_id=current_user.company_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     assignment = await assignment_service.transfer_vehicle(
-        db, vid, data.instructor_id, data.transfer_date, data.end_date, data.update_future_lessons
+        db, vid, data.instructor_id, data.transfer_date, data.end_date, data.update_future_lessons,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
     )
     return VehicleAssignmentRead.model_validate(assignment)
 
@@ -96,7 +109,12 @@ async def delete_assignment(
         aid = uuid.UUID(assignment_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid assignment ID")
-    result = await db.get(VehicleAssignment, aid)
-    if not result:
+    query = select(VehicleAssignment).where(VehicleAssignment.id == aid)
+    if current_user.role.value != 'super_user' and current_user.company_id is not None:
+        query = (query.join(Vehicle, VehicleAssignment.vehicle_id == Vehicle.id)
+                 .where(Vehicle.company_id == current_user.company_id))
+    result = await db.execute(query)
+    assignment = result.scalar_one_or_none()
+    if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    await assignment_service.delete_assignment(db, result)
+    await assignment_service.delete_assignment(db, assignment)

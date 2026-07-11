@@ -90,6 +90,10 @@ export class UserService {
     );
   }
 
+  approve(phone: string) {
+    return this.http.post<User>(`/api/v1/users/${phone}/approve`, {});
+  }
+
   changePin(data: PinChange) {
     return this.http.post<{ message: string }>('/api/v1/users/change-pin', data);
   }

@@ -18,7 +18,11 @@ async def list_breaks(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    breaks = await break_service.list_breaks(db, active_only=active_only)
+    breaks = await break_service.list_breaks(
+        db, active_only=active_only,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
     return [ScheduleBreakRead.model_validate(b) for b in breaks]
 
 
@@ -35,6 +39,7 @@ async def create_break(
         end_time=data.end_time,
         is_active=data.is_active,
         is_standard=data.is_standard,
+        company_id=current_user.company_id,
     )
     return ScheduleBreakRead.model_validate(break_)
 
@@ -50,7 +55,7 @@ async def update_break(
         bid = uuid.UUID(break_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid break ID")
-    break_ = await break_service.get_break(db, bid)
+    break_ = await break_service.get_break(db, bid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not break_:
         raise HTTPException(status_code=404, detail="Break not found")
     updated = await break_service.update_break(
@@ -74,7 +79,7 @@ async def delete_break(
         bid = uuid.UUID(break_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid break ID")
-    break_ = await break_service.get_break(db, bid)
+    break_ = await break_service.get_break(db, bid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not break_:
         raise HTTPException(status_code=404, detail="Break not found")
     await break_service.delete_break(db, break_)

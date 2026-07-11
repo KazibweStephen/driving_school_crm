@@ -54,6 +54,16 @@ export const routes: Routes = [
           import('./features/payments/payments').then((c) => c.PaymentsCmp),
       },
       {
+        path: 'training-schedule',
+        loadComponent: () =>
+          import('./features/training-schedule/training-schedule').then((c) => c.TrainingScheduleCmp),
+      },
+      {
+        path: 'collections-sheet',
+        loadComponent: () =>
+          import('./features/collections-sheet/collections-sheet').then((c) => c.CollectionsSheetCmp),
+      },
+      {
         path: 'companies',
         loadComponent: () =>
           import('./features/companies/companies').then((c) => c.CompaniesCmp),

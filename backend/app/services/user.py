@@ -23,11 +23,13 @@ async def create_user(
     can_backdate: bool = False,
 ) -> tuple[User, str]:
     initial_pin = generate_initial_pin()
+    status = UserStatus.PENDING_APPROVAL if role == UserRole.COMPANY_SUPER_USER else UserStatus.ACTIVE
     user = User(
         phone=phone,
         name=name,
         role=role,
         hashed_pin=hash_pin(initial_pin),
+        status=status,
         created_by_phone=created_by_phone,
         is_company_admin=is_company_admin,
         company_id=company_id,
@@ -44,6 +46,22 @@ async def get_user_by_phone(db: AsyncSession, phone: str) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def get_user_by_phone_with_company(
+    db: AsyncSession,
+    phone: str,
+    company_id: uuid.UUID | None,
+    current_user_role: UserRole | None = None,
+) -> User | None:
+    """Lookup user by phone, scoped to company (super_admin bypasses)."""
+    if current_user_role == UserRole.SUPER_USER:
+        return await get_user_by_phone(db, phone)
+    query = select(User).where(User.phone == phone)
+    if company_id is not None:
+        query = query.where(User.company_id == company_id)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
 async def list_users(
     db: AsyncSession,
     search: str | None = None,
@@ -51,8 +69,13 @@ async def list_users(
     status: UserStatus | None = None,
     page: int = 1,
     page_size: int = 20,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> tuple[list[User], int]:
     query = select(User)
+
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.where(User.company_id == company_id)
 
     if search:
         query = query.where(
@@ -88,7 +111,10 @@ async def update_user(
     if name is not None:
         user.name = name
     if role is not None:
+        was_already_company_super_user = user.role == UserRole.COMPANY_SUPER_USER
         user.role = role
+        if role == UserRole.COMPANY_SUPER_USER and not was_already_company_super_user and status is None:
+            user.status = UserStatus.PENDING_APPROVAL
     if status is not None:
         user.status = status
     if is_company_admin is not None:

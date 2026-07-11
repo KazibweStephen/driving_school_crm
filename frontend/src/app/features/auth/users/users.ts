@@ -58,11 +58,18 @@ export class Users implements OnInit {
   companies = signal<Company[]>([]);
   newUser: { phone: string; name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean } = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false };
   editData: { name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean } = { name: '', role: '', company_id: null, is_company_admin: false, can_backdate: false };
+  get isSuperUser(): boolean {
+    return this.auth.currentUserRole() === 'super_user';
+  }
+  get roleOptions() {
+    return this.isSuperUser ? this.roles : this.roles.filter(r => r.value !== 'company_super_user');
+  }
   resetPinResult = signal<string | null>(null);
   changePinData = { old_pin: '', new_pin: '' };
 
   roles = [
     { label: 'Super User', value: 'super_user' },
+    { label: 'Company Super User', value: 'company_super_user' },
     { label: 'Branch Supervisor', value: 'branch_supervisor' },
     { label: 'Office Admin', value: 'office_admin' },
     { label: 'Instructor', value: 'instructor' },
@@ -77,6 +84,7 @@ export class Users implements OnInit {
 
   statuses = [
     { label: 'Active', value: 'active' },
+    { label: 'Pending Approval', value: 'pending_approval' },
     { label: 'Blocked', value: 'blocked' },
     { label: 'Deactivated', value: 'deactivated' },
   ];
@@ -257,6 +265,24 @@ export class Users implements OnInit {
     }
   }
 
+  async approveUser(user: User) {
+    try {
+      await this.userService.approve(user.phone).toPromise();
+      await this.loadUsers();
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Approved',
+        detail: `${user.name} has been approved`,
+      });
+    } catch {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to approve user',
+      });
+    }
+  }
+
   confirmResetPin(user: User) {
     this.confirmationService.confirm({
       message: `Reset PIN for ${user.name} (${user.phone})? The user will need the new PIN to log in.`,
@@ -310,10 +336,12 @@ export class Users implements OnInit {
     return this.roles.find((r) => r.value === value)?.label || value;
   }
 
-  statusSeverity(status: string): 'success' | 'warn' | 'danger' {
+  statusSeverity(status: string): 'success' | 'warn' | 'danger' | 'info' {
     switch (status) {
       case 'active':
         return 'success';
+      case 'pending_approval':
+        return 'info';
       case 'blocked':
         return 'warn';
       default:

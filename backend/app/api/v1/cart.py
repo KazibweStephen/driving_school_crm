@@ -29,7 +29,8 @@ async def add_cart_item(
         raise HTTPException(status_code=400, detail="Invalid ID")
 
     item = await cart_service.add_cart_item(
-        db, consultation_id=cid, product_id=data.product_id, package_id=data.package_id, notes=data.notes, is_important=data.is_important
+        db, consultation_id=cid, product_id=data.product_id, package_id=data.package_id, notes=data.notes, is_important=data.is_important,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return CartItemRead.model_validate(item)
 
@@ -48,7 +49,7 @@ async def list_cart_items(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID")
 
-    items = await cart_service.get_cart_items(db, cid)
+    items = await cart_service.get_cart_items(db, cid, company_id=current_user.company_id, current_user_role=current_user.role)
     return [CartItemRead.model_validate(i) for i in items]
 
 
@@ -64,7 +65,7 @@ async def update_cart_item(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID")
 
-    item = await cart_service.update_cart_item(db, item_id=iid, status=data.status, notes=data.notes, is_important=data.is_important, recovery_reason=data.recovery_reason)
+    item = await cart_service.update_cart_item(db, item_id=iid, status=data.status, notes=data.notes, is_important=data.is_important, recovery_reason=data.recovery_reason, company_id=current_user.company_id, current_user_role=current_user.role)
     if not item:
         raise HTTPException(status_code=404, detail="Cart item not found")
     return CartItemRead.model_validate(item)
@@ -81,6 +82,6 @@ async def remove_cart_item(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID")
 
-    deleted = await cart_service.remove_cart_item(db, iid)
+    deleted = await cart_service.remove_cart_item(db, iid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not deleted:
         raise HTTPException(status_code=404, detail="Cart item not found")

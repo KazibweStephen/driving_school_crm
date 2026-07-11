@@ -219,6 +219,8 @@ async def create_template_item(
     item = await lesson_service.create_template_item(
         db, tid,
         day_number=data.day_number,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
         week_number=data.week_number,
         title=data.title,
         lesson_objectives=data.lesson_objectives,
@@ -245,8 +247,16 @@ async def update_template_item(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid item ID")
     from sqlalchemy import select
-    from app.models.lesson_plan import LessonTemplateItem
-    result = await db.execute(select(LessonTemplateItem).where(LessonTemplateItem.id == iid))
+    from app.models.lesson_plan import LessonTemplateItem, LessonPlanTemplate
+    from app.models.company import Branch
+    from app.models.cart import CartItem
+    from app.models.consultation import Consultation
+    query = select(LessonTemplateItem).where(LessonTemplateItem.id == iid)
+    if current_user.role.value != 'super_user' and current_user.company_id is not None:
+        query = query.join(LessonPlanTemplate, LessonTemplateItem.template_id == LessonPlanTemplate.id).where(
+            LessonPlanTemplate.company_id == current_user.company_id
+        )
+    result = await db.execute(query)
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -278,8 +288,13 @@ async def delete_template_item(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid item ID")
     from sqlalchemy import select
-    from app.models.lesson_plan import LessonTemplateItem
-    result = await db.execute(select(LessonTemplateItem).where(LessonTemplateItem.id == iid))
+    from app.models.lesson_plan import LessonTemplateItem, LessonPlanTemplate
+    query = select(LessonTemplateItem).where(LessonTemplateItem.id == iid)
+    if current_user.role.value != 'super_user' and current_user.company_id is not None:
+        query = query.join(LessonPlanTemplate, LessonTemplateItem.template_id == LessonPlanTemplate.id).where(
+            LessonPlanTemplate.company_id == current_user.company_id
+        )
+    result = await db.execute(query)
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -299,7 +314,7 @@ async def list_client_plans(
         cid = uuid.UUID(cart_item_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid cart item ID")
-    plans = await lesson_service.list_client_plans(db, cart_item_id=cid)
+    plans = await lesson_service.list_client_plans(db, cart_item_id=cid, company_id=current_user.company_id, current_user_role=current_user.role)
     return [ClientLessonPlanRead.model_validate(p) for p in plans]
 
 
@@ -326,6 +341,7 @@ async def create_client_plan(
                 transmission_type=data.transmission_type,
                 start_date=data.start_date,
                 notes=data.notes,
+                company_id=current_user.company_id, current_user_role=current_user.role,
             )
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -337,6 +353,7 @@ async def create_client_plan(
                 start_date=data.start_date,
                 notes=data.notes,
                 manual_days=data.manual_days,
+                company_id=current_user.company_id, current_user_role=current_user.role,
             )
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -348,6 +365,7 @@ async def create_client_plan(
                 start_date=data.start_date,
                 notes=data.notes,
                 manual_days=data.manual_days,
+                company_id=current_user.company_id, current_user_role=current_user.role,
             )
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -364,6 +382,7 @@ async def create_client_plan(
             notes=data.notes,
             lessons_data=lessons_data,
             manual_days=data.manual_days,
+            company_id=current_user.company_id, current_user_role=current_user.role,
         )
     return ClientLessonPlanRead.model_validate(plan)
 
@@ -391,7 +410,8 @@ async def generate_student_plan(
         raise HTTPException(status_code=400, detail="Invalid start_date format (ISO8601)")
     try:
         plan = await lesson_service.generate_student_plan(
-            db, cid, tid, transmission_type, dt, purchased_days, notes
+            db, cid, tid, transmission_type, dt, purchased_days, notes,
+            company_id=current_user.company_id, current_user_role=current_user.role,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -408,7 +428,7 @@ async def get_client_plan(
         pid = uuid.UUID(plan_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan ID")
-    plan = await lesson_service.get_client_plan_by_id(db, pid)
+    plan = await lesson_service.get_client_plan_by_id(db, pid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not plan:
         raise HTTPException(status_code=404, detail="Lesson plan not found")
     return ClientLessonPlanRead.model_validate(plan)
@@ -425,7 +445,7 @@ async def update_client_plan(
         pid = uuid.UUID(plan_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan ID")
-    plan = await lesson_service.get_client_plan_by_id(db, pid)
+    plan = await lesson_service.get_client_plan_by_id(db, pid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not plan:
         raise HTTPException(status_code=404, detail="Lesson plan not found")
     updated = await lesson_service.update_client_plan(
@@ -449,7 +469,7 @@ async def delete_client_plan(
         pid = uuid.UUID(plan_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan ID")
-    plan = await lesson_service.get_client_plan_by_id(db, pid)
+    plan = await lesson_service.get_client_plan_by_id(db, pid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not plan:
         raise HTTPException(status_code=404, detail="Lesson plan not found")
     if delete_mode not in ("all", "unstarted", "uncompleted"):
@@ -471,7 +491,7 @@ async def upgrade_plan(
         pid = uuid.UUID(plan_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan ID")
-    plan = await lesson_service.get_client_plan_by_id(db, pid)
+    plan = await lesson_service.get_client_plan_by_id(db, pid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not plan:
         raise HTTPException(status_code=404, detail="Lesson plan not found")
     if purchased_days <= (plan.purchased_days or 0):
@@ -494,10 +514,7 @@ async def update_client_lesson(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
-    from sqlalchemy import select
-    from app.models.lesson_plan import ClientLesson
-    result = await db.execute(select(ClientLesson).where(ClientLesson.id == lid))
-    lesson = result.scalar_one_or_none()
+    lesson = await lesson_service.get_client_lesson_by_id(db, lid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
     updated = await lesson_service.update_client_lesson(
@@ -543,10 +560,7 @@ async def start_lesson(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
-    from sqlalchemy import select
-    from app.models.lesson_plan import ClientLesson
-    result = await db.execute(select(ClientLesson).where(ClientLesson.id == lid))
-    lesson = result.scalar_one_or_none()
+    lesson = await lesson_service.get_client_lesson_by_id(db, lid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
     if lesson.is_locked:
@@ -571,10 +585,7 @@ async def complete_lesson(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
-    from sqlalchemy import select
-    from app.models.lesson_plan import ClientLesson
-    result = await db.execute(select(ClientLesson).where(ClientLesson.id == lid))
-    lesson = result.scalar_one_or_none()
+    lesson = await lesson_service.get_client_lesson_by_id(db, lid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
     if lesson.status.value != "started" and lesson.status.value != "paused":
@@ -595,10 +606,7 @@ async def skip_lesson(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
-    from sqlalchemy import select
-    from app.models.lesson_plan import ClientLesson
-    result = await db.execute(select(ClientLesson).where(ClientLesson.id == lid))
-    lesson = result.scalar_one_or_none()
+    lesson = await lesson_service.get_client_lesson_by_id(db, lid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
     updated = await lesson_service.update_client_lesson(
@@ -618,10 +626,7 @@ async def move_lesson(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
-    from sqlalchemy import select
-    from app.models.lesson_plan import ClientLesson
-    result = await db.execute(select(ClientLesson).where(ClientLesson.id == lid))
-    lesson = result.scalar_one_or_none()
+    lesson = await lesson_service.get_client_lesson_by_id(db, lid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
     lessons = await lesson_service.move_lesson(db, lesson, new_day_number)
@@ -640,7 +645,7 @@ async def reorder_lessons(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan ID")
     lessons_data = [l.model_dump() for l in data.lessons]
-    lessons = await lesson_service.bulk_reorder_lessons(db, pid, lessons_data)
+    lessons = await lesson_service.bulk_reorder_lessons(db, pid, lessons_data, company_id=current_user.company_id, current_user_role=current_user.role)
     return [ClientLessonRead.model_validate(l) for l in lessons]
 
 
@@ -654,5 +659,8 @@ async def get_lesson_history(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
+    lesson = await lesson_service.get_client_lesson_by_id(db, lid, company_id=current_user.company_id, current_user_role=current_user.role)
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
     histories = await lesson_service.get_lesson_history(db, lid)
     return [LessonHistoryRead.model_validate(h) for h in histories]

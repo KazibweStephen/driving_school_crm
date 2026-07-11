@@ -41,7 +41,9 @@ async def create_availability(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid cart item ID")
     avail = await scheduling_service.create_availability(
-        db, cid, data.day_of_week, data.start_time
+        db, cid, data.day_of_week, data.start_time,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
     )
     return ClientAvailabilityRead.model_validate(avail)
 
@@ -59,7 +61,7 @@ async def list_availability(
         cid = uuid.UUID(cart_item_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid cart item ID")
-    avails = await scheduling_service.list_availability(db, cid)
+    avails = await scheduling_service.list_availability(db, cid, company_id=current_user.company_id, current_user_role=current_user.role)
     return [ClientAvailabilityRead.model_validate(a) for a in avails]
 
 
@@ -77,11 +79,13 @@ async def update_availability(
         aid = uuid.UUID(avail_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid availability ID")
-    kwargs = {}
+    kwargs: dict = {}
     if data.day_of_week is not None:
         kwargs["day_of_week"] = data.day_of_week
     if data.start_time is not None:
         kwargs["start_time"] = data.start_time
+    kwargs["company_id"] = current_user.company_id
+    kwargs["current_user_role"] = current_user.role
     avail = await scheduling_service.update_availability(db, aid, **kwargs)
     if not avail:
         raise HTTPException(status_code=404, detail="Availability not found")
@@ -98,7 +102,7 @@ async def delete_availability(
         aid = uuid.UUID(avail_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid availability ID")
-    deleted = await scheduling_service.delete_availability(db, aid)
+    deleted = await scheduling_service.delete_availability(db, aid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not deleted:
         raise HTTPException(status_code=404, detail="Availability not found")
 
@@ -124,7 +128,7 @@ async def get_instructor_schedule(
     day = InstructorScheduleDay(date=d, slots=[], collisions=[])
     for s in slots:
         day.slots.append(ScheduleSlot(**s))
-    resp = await scheduling_service.get_full_day_schedule(db, instructor_id, d)
+    resp = await scheduling_service.get_full_day_schedule(db, instructor_id, d, company_id=current_user.company_id)
     day.collisions = resp["collisions"]
     return day
 
@@ -139,7 +143,11 @@ async def get_weekly_schedule(
         d = date.fromisoformat(start_date)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format")
-    result = await scheduling_service.get_weekly_schedule(db, d)
+    result = await scheduling_service.get_weekly_schedule(
+        db, d,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
     return WeeklyScheduleResponse(
         start_date=result["start_date"],
         days=result["days"],
@@ -172,6 +180,7 @@ async def find_and_lock_schedule(
         instructor_id_auto=data.instructor_id_auto,
         vehicle_id_auto=vid_auto,
         manual_days=data.manual_days,
+        company_id=current_user.company_id,
     )
     return result
 
@@ -201,6 +210,7 @@ async def lock_schedule(
             instructor_id_auto=data.instructor_id_auto,
             vehicle_id_auto=vid_auto,
             manual_days=data.manual_days,
+            company_id=current_user.company_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -224,9 +234,9 @@ async def find_available_slot(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date/time format")
 
-    result = await scheduling_service.check_preferred_times(db, instructor_id, d, preferred)
+    result = await scheduling_service.check_preferred_times(db, instructor_id, d, preferred, company_id=current_user.company_id)
     if not result:
-        full = await scheduling_service.get_full_day_schedule(db, instructor_id, d)
+        full = await scheduling_service.get_full_day_schedule(db, instructor_id, d, company_id=current_user.company_id)
         return {"available": False, "schedule": full, "message": "No preferred time available"}
     found_start, found_end, _ = result
     return {

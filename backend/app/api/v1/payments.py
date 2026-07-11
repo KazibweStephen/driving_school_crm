@@ -23,16 +23,36 @@ async def _resolve_branch_ids(
     current_user: User,
     requested_branch_ids: list[str] | None,
 ) -> list[uuid.UUID] | None:
-    """Return resolved branch UUIDs or None (all)."""
+    """Return resolved branch UUIDs or None (all).
+
+    For non-super users: returns only branches within their company.
+    """
+    # Start with the base branch query scoped to the user's company
+    base_query = select(Branch)
+    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+        base_query = base_query.where(Branch.company_id == current_user.company_id)
+
     is_privileged = current_user.role in (
         UserRole.SUPER_USER, UserRole.OFFICE_ADMIN, UserRole.MANAGER, UserRole.BRANCH_SUPERVISOR,
     )
+
     if requested_branch_ids and is_privileged:
-        return [uuid.UUID(b) for b in requested_branch_ids]
-    # Non-privileged or no selection: use assigned branches
+        # Verify requested branches belong to the user's company
+        result = await db.execute(
+            base_query.where(Branch.id.in_([uuid.UUID(b) for b in requested_branch_ids]))
+        )
+        resolved = [b.id for b in result.scalars().all()]
+        if not resolved:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No branch access")
+        return resolved
+
+    # Non-privileged or no selection: use assigned branches (scoped to company)
     result = await db.execute(
-        select(UserBranchAssignment.branch_id).where(
-            UserBranchAssignment.user_id == current_user.phone
+        select(UserBranchAssignment.branch_id)
+        .join(Branch, UserBranchAssignment.branch_id == Branch.id)
+        .where(
+            UserBranchAssignment.user_id == current_user.phone,
+            Branch.company_id == current_user.company_id if current_user.company_id and current_user.role != UserRole.SUPER_USER else True,
         )
     )
     assigned = [row[0] for row in result.all()]
@@ -46,14 +66,18 @@ async def accessible_branches(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[BranchRead]:
+    base_query = select(Branch)
+    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+        base_query = base_query.where(Branch.company_id == current_user.company_id)
+
     is_privileged = current_user.role in (
         UserRole.SUPER_USER, UserRole.OFFICE_ADMIN, UserRole.MANAGER, UserRole.BRANCH_SUPERVISOR,
     )
     if is_privileged:
-        branches = (await db.execute(select(Branch).order_by(Branch.name))).scalars().all()
+        branches = (await db.execute(base_query.order_by(Branch.name))).scalars().all()
     else:
         result = await db.execute(
-            select(Branch).join(UserBranchAssignment).where(
+            base_query.join(UserBranchAssignment).where(
                 UserBranchAssignment.user_id == current_user.phone
             ).order_by(Branch.name)
         )
@@ -244,4 +268,21 @@ async def check_receipt(
     current_user: User = Depends(get_current_user),
 ):
     payment = await payment_service.get_payment_by_receipt(db, receipt_number)
-    return {"exists": payment is not None}
+    if payment is None:
+        return {"exists": False}
+    # Verify payment belongs to a consultation in the user's company
+    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+        from sqlalchemy import select as sa_select
+        from app.models.consultation import Consultation
+        from app.models.company import Branch
+        result = await db.execute(
+            sa_select(Consultation.id)
+            .join(Branch, Consultation.branch_id == Branch.id)
+            .where(
+                Consultation.id == payment.consultation_id,
+                Branch.company_id == current_user.company_id,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            return {"exists": False}
+    return {"exists": True}

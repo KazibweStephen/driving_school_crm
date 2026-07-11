@@ -42,7 +42,7 @@
 - Clients can combine sessions (1hr or 1.5hr); each session can combine theory + practical
 - Training session auto-generation: user enters start date, system creates sessions from package duration fields (`driving_training_duration_days` × 30 = total driving min, `theory_training_hours` × 60 = total theory min)
 - Playwright tests use system Chrome at `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`, base URL `http://localhost:80`, 30s timeout, 1 retry, screenshots on failure
-- Frontend deploy: `npm run build && docker cp dist/frontend/browser/. crm-frontend:/usr/share/nginx/html/`
+- Production deploy: see `DEPLOYMENT.md`; compose file `docker-compose.prod.yml`; scripts in `deploy/`; GitHub Actions workflow `.github/workflows/deploy.yml`; manual deploy on droplet with `./deploy/deploy.sh`
 - Video upload limited to 500MB, allowed types: mp4, webm, mov, avi; stored in `uploads/videos/`, streamed with Range headers for seeking
 - YouTube/Vimeo links stored as `source = 'youtube' | 'vimeo'` with URL; no embed sanitization needed at rest
 - JSONB arrays for lesson_objectives and practical_objectives on LessonTemplateItem and ClientLesson (not text)
@@ -137,11 +137,37 @@
 - **Scoped models** (have `branch_id` FK): Consultation, ClientAvailability
 - Default Company (`00000000-0000-0000-0000-000000000001`) and Main Branch (`00000000-0000-0000-0000-000000000002`) are seeded; all existing records backfilled to them
 
-## Next Steps
-1. Add company-scoped filtering to existing API endpoints (products, vehicles, templates, libraries)
-2. Add branch-scoped filtering to consultation/scheduling APIs
-3. Build frontend Expense and Sale pages under branches
-4. Add `appendTo="body"` to all `p-select` and `p-datepicker` dropdowns for mobile
+## Tenant Isolation Status (Done)
+- Utility module `backend/app/utils/tenant.py` with `add_company_filter()`, `add_branch_company_filter()`, `add_company_filter_from_relationship()`
+- JWT token includes `company_id` claim; auth passes it on login/refresh
+- Users API + service: scoped by `User.company_id`; `get_user_by_phone_with_company()` added
+- Products API + service: scoped by `Product.company_id`
+- Vehicles API + service: scoped by `Vehicle.company_id`
+- LessonPlanTemplates API + service: scoped by `LessonPlanTemplate.company_id`
+- LessonLibrary API + service: scoped by `LessonLibrary.company_id`
+- VideoLibrary API + service: scoped by `VideoLibrary.company_id`
+- Payments API: `_resolve_branch_ids()` scoped by `Branch.company_id`; `check_receipt` verifies company
+- Consultations API + service: `search_consultations`, `get_consultation_by_id`, `client_search` scoped via `Branch.company_id`
+- Clients API + service (`payment.py`): `list_clients`, `get_client_detail` scoped via `Branch.company_id`
+- Finance API + service: `list_expenses`, `list_borrowed`, `list_collections`, `get_dunning_list`, `get_finance_summary` — all scoped via `Branch.company_id`
+- All 31 Playwright tests pass (no regressions)
+
+## Tenant Isolation Status — All Endpoints Scoped
+All endpoints have been fixed with multi-company scoping. Each endpoint verifies that the user's `company_id` matches the entity chain before allowing access; `super_user` / `company_super_user` bypasses all checks.
+
+### Company Super User Role
+- `company_super_user` role operates all functions within their company (same operational access as `super_user` but scoped to own company).
+- Only `super_user` can create/assign `company_super_user` role via users API.
+- Created with `pending_approval` status; cannot log in until approved by `super_user` via `POST /api/v1/users/{phone}/approve`.
+- `require_admin_access` dependency used for users/products/packages endpoints (allows both `SUPER_USER` and `COMPANY_SUPER_USER`).
+- `require_super_user` kept for truly cross-company operations (companies CRUD, approving accounts).
+- Frontend should show `company_super_user` option in role dropdown (only when current user is `super_user`), `PENDING_APPROVAL` status badge, and approve button.
+
+## Remaining
+- User creation API doesn't return the auto-generated initial PIN — frontend needs to call reset-pin to get a PIN, or the API should return it in the response.
+- Build frontend for `company_super_user` role assignment (role dropdown, warning dialog, approve button).
+- Build frontend Expense and Sale pages under branches.
+- Add `appendTo="body"` to remaining `p-select` and `p-datepicker` dropdowns for mobile.
 
 ## Test Credentials
 Super Admin `256700000000`, pin=`1234`
@@ -157,7 +183,7 @@ Postgres `:5433` (external), backend `:8000`, frontend `:80`
 If migration files are missing from container: `docker cp backend/alembic/versions/<file> crm-backend:/app/alembic/versions/`
 
 ## Migration Head
-`0cedeb757155` (add_can_backdate_document_date); parent `cc4d1dfb0f04` (add_created_by_phone_to_payments)
+`280fdeff609d` (normalize userrole and userstatus enums to lowercase); parent `f5e6d7c8b9a0` (add company_super_user role and pending_approval status)
 
 ## Test Files
 - `e2e/login.spec.ts` (11 tests): login, sidebar navigation through collapsed groups, user CRUD/search/PIN

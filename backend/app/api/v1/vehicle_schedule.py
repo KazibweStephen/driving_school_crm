@@ -27,7 +27,11 @@ async def list_slots(
     current_user: User = Depends(get_current_user),
 ):
     vid = uuid.UUID(vehicle_id) if vehicle_id else None
-    slots = await schedule_service.list_slots(db, vid, instructor_id, day_of_week)
+    slots = await schedule_service.list_slots(
+        db, vid, instructor_id, day_of_week,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
     return [VehicleScheduleSlotRead.model_validate(s) for s in slots]
 
 
@@ -41,7 +45,11 @@ async def get_slot(
         sid = uuid.UUID(slot_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid slot ID")
-    slot = await schedule_service.get_slot_by_id(db, sid)
+    slot = await schedule_service.get_slot_by_id(
+        db, sid,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
     return VehicleScheduleSlotRead.model_validate(slot)
@@ -57,7 +65,7 @@ async def create_slot(
         vid = uuid.UUID(data.vehicle_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid vehicle ID")
-    vehicle = await get_vehicle_by_id(db, vid)
+    vehicle = await get_vehicle_by_id(db, vid, company_id=current_user.company_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     slot = await schedule_service.create_slot(
@@ -77,7 +85,11 @@ async def update_slot(
         sid = uuid.UUID(slot_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid slot ID")
-    slot = await schedule_service.get_slot_by_id(db, sid)
+    slot = await schedule_service.get_slot_by_id(
+        db, sid,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
     updated = await schedule_service.update_slot(
@@ -99,7 +111,11 @@ async def delete_slot(
         sid = uuid.UUID(slot_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid slot ID")
-    slot = await schedule_service.get_slot_by_id(db, sid)
+    slot = await schedule_service.get_slot_by_id(
+        db, sid,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
     await schedule_service.delete_slot(db, slot)
@@ -116,7 +132,7 @@ async def bulk_set_schedule(
         vid = uuid.UUID(vehicle_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid vehicle ID")
-    vehicle = await get_vehicle_by_id(db, vid)
+    vehicle = await get_vehicle_by_id(db, vid, company_id=current_user.company_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     created = await schedule_service.bulk_set_schedule(

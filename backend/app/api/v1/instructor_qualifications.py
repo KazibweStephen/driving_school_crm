@@ -47,7 +47,11 @@ async def list_qualifications(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    quals = await qual_service.list_qualifications(db, instructor_phone)
+    quals = await qual_service.list_qualifications(
+        db, instructor_phone,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
     return [InstructorQualificationRead.model_validate(q) for q in quals]
 
 
@@ -64,7 +68,11 @@ async def get_qualification(
         qid = uuid.UUID(qual_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID")
-    qual = await qual_service.get_qualification(db, qid)
+    qual = await qual_service.get_qualification(
+        db, qid,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
     if not qual:
         raise HTTPException(status_code=404, detail="Qualification not found")
     return InstructorQualificationRead.model_validate(qual)
@@ -87,6 +95,8 @@ async def update_qualification(
     qual = await qual_service.update_qualification(
         db, qid, is_certified=data.is_certified, certified_at=data.certified_at,
         expires_at=data.expires_at, notes=data.notes,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
     )
     if not qual:
         raise HTTPException(status_code=404, detail="Qualification not found")
@@ -103,6 +113,10 @@ async def delete_qualification(
         qid = uuid.UUID(qual_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID")
-    deleted = await qual_service.delete_qualification(db, qid)
+    deleted = await qual_service.delete_qualification(
+        db, qid,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
     if not deleted:
         raise HTTPException(status_code=404, detail="Qualification not found")

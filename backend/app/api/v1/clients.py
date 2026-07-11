@@ -33,7 +33,8 @@ async def list_clients(
     current_user: User = Depends(get_current_user),
 ):
     consultations, total = await payment_service.list_clients(
-        db, search=search, page=page, page_size=page_size
+        db, search=search, page=page, page_size=page_size,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     clients = []
     for c in consultations:
@@ -47,7 +48,7 @@ async def list_clients(
             if ci.status == CartItemStatus.CONVERTED_PAYING
         )
 
-        payments = await payment_service.get_payments_by_consultation(db, c.id)
+        payments = await payment_service.get_payments_by_consultation(db, c.id, company_id=current_user.company_id, current_user_role=current_user.role)
         total_paid = Decimal("0.00")
         last_payment_date = None
         for pay in payments:
@@ -92,7 +93,7 @@ async def get_client(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID")
 
-    consultation = await payment_service.get_client_detail(db, cid)
+    consultation = await payment_service.get_client_detail(db, cid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not consultation:
         raise HTTPException(status_code=404, detail="Client not found")
 
@@ -140,6 +141,7 @@ async def create_payment(
         installments_data=[i.model_dump() for i in installments],
         receipt_number=data.receipt_number,
         created_by_phone=current_user.phone,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return PaymentRead.model_validate(payment)
 
@@ -158,7 +160,7 @@ async def list_payments(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID")
 
-    payments = await payment_service.get_payments_by_consultation(db, cid)
+    payments = await payment_service.get_payments_by_consultation(db, cid, company_id=current_user.company_id, current_user_role=current_user.role)
     return [PaymentRead.model_validate(p) for p in payments]
 
 
@@ -181,6 +183,7 @@ async def update_installment(
         paid_date=data.paid_date,
         paid_amount=data.paid_amount,
         notes=data.notes,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     if not inst:
         raise HTTPException(status_code=404, detail="Installment not found")

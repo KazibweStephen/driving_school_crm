@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_super_user
+from app.api.deps import require_admin_access
 from app.core.database import get_db
 from app.models.product import EntityStatus
 from app.models.user import User
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/products", tags=["products"])
 async def create_product(
     data: ProductCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_admin_access),
 ):
     product = await product_service.create_product(
         db,
@@ -40,7 +40,7 @@ async def list_products(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_admin_access),
 ):
     products, total = await product_service.list_products(
         db,
@@ -63,7 +63,7 @@ async def list_products(
 async def get_product(
     product_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_admin_access),
 ):
     from uuid import UUID
     try:
@@ -87,7 +87,7 @@ async def update_product(
     product_id: str,
     data: ProductUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_admin_access),
 ):
     from uuid import UUID
     try:
@@ -118,7 +118,7 @@ async def update_product(
 async def deactivate_product(
     product_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_admin_access),
 ):
     from uuid import UUID
     try:

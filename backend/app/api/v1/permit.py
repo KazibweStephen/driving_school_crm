@@ -22,7 +22,7 @@ async def get_permit_progress(
         cid = uuid.UUID(cart_item_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid cart item ID")
-    progress = await permit_service.get_permit_progress(db, cid)
+    progress = await permit_service.get_permit_progress(db, cid, company_id=current_user.company_id, current_user_role=current_user.role)
     if progress is None:
         return None
     return PermitProgressRead.model_validate(progress)
@@ -49,5 +49,6 @@ async def update_permit_progress(
         expecting_permit_on_date=data.expecting_permit_on_date,
         delayed_days=data.delayed_days,
         notes=data.notes,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return PermitProgressRead.model_validate(progress)

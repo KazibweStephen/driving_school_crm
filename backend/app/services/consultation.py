@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.cart import CartItem, CartItemStatus, follow_up_cart_items
+from app.models.company import Branch
 from app.models.consultation import (
     Consultation,
     ConsultationStatus,
@@ -14,6 +15,7 @@ from app.models.consultation import (
     FollowUpType,
     InterestLevel,
 )
+from app.models.user import UserRole
 
 
 async def create_consultation(
@@ -61,7 +63,11 @@ async def create_consultation(
 
 
 async def get_consultation_by_id(
-    db: AsyncSession, consultation_id: uuid.UUID, branch_id: uuid.UUID | None = None
+    db: AsyncSession,
+    consultation_id: uuid.UUID,
+    branch_id: uuid.UUID | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> Consultation | None:
     query = (
         select(Consultation)
@@ -73,6 +79,8 @@ async def get_consultation_by_id(
     )
     if branch_id:
         query = query.where(Consultation.branch_id == branch_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
@@ -86,6 +94,8 @@ async def search_consultations(
     exclude_converted: bool = False,
     stage: str | None = None,
     branch_id: uuid.UUID | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> tuple[list[Consultation], int]:
     query = select(Consultation).options(
         selectinload(Consultation.follow_ups).selectinload(FollowUp.cart_items),
@@ -94,6 +104,8 @@ async def search_consultations(
 
     if branch_id:
         query = query.where(Consultation.branch_id == branch_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
 
     if search:
         search_term = f"%{search}%"
@@ -210,6 +222,8 @@ async def deactivate_consultation(db: AsyncSession, consultation: Consultation) 
 async def client_search(
     db: AsyncSession,
     search: str,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> list[dict]:
     """Search for unique clients by phone/name across all branches."""
     stmt = select(Consultation).options(selectinload(Consultation.follow_ups))
@@ -221,7 +235,10 @@ async def client_search(
             Consultation.middle_name.ilike(search_term),
             Consultation.last_name.ilike(search_term),
         )
-    ).order_by(Consultation.created_at.desc())
+    )
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        stmt = stmt.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
+    stmt = stmt.order_by(Consultation.created_at.desc())
 
     result = await db.execute(stmt)
     rows = list(result.scalars().all())
@@ -320,13 +337,16 @@ def follow_up_to_dict(fu: FollowUp) -> dict:
 
 
 async def get_follow_up_by_id(
-    db: AsyncSession, follow_up_id: uuid.UUID
+    db: AsyncSession, follow_up_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> FollowUp | None:
-    result = await db.execute(
-        select(FollowUp)
-        .where(FollowUp.id == follow_up_id)
-        .options(selectinload(FollowUp.cart_items))
-    )
+    query = select(FollowUp).where(FollowUp.id == follow_up_id).options(selectinload(FollowUp.cart_items))
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = (query.join(Consultation, FollowUp.consultation_id == Consultation.id)
+                 .join(Branch, Consultation.branch_id == Branch.id)
+                 .where(Branch.company_id == company_id))
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 

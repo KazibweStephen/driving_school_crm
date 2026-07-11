@@ -4,12 +4,34 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.cart import CartItem
+from app.models.company import Branch
+from app.models.consultation import Consultation
 from app.models.permit import PermitProgress
+from app.models.user import UserRole
+
+
+async def _verify_cart_item_company(
+    db: AsyncSession, cart_item_id: uuid.UUID,
+    company_id: uuid.UUID | None, user_role: UserRole | None,
+) -> bool:
+    if user_role == UserRole.SUPER_USER or company_id is None:
+        return True
+    result = await db.execute(
+        select(CartItem).join(Consultation, CartItem.consultation_id == Consultation.id)
+        .join(Branch, Consultation.branch_id == Branch.id)
+        .where(CartItem.id == cart_item_id, Branch.company_id == company_id)
+    )
+    return result.scalar_one_or_none() is not None
 
 
 async def get_permit_progress(
-    db: AsyncSession, cart_item_id: uuid.UUID
+    db: AsyncSession, cart_item_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> PermitProgress | None:
+    if not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
+        return None
     result = await db.execute(
         select(PermitProgress).where(PermitProgress.cart_item_id == cart_item_id)
     )
@@ -27,8 +49,10 @@ async def upsert_permit_progress(
     expecting_permit_on_date: date | None = None,
     delayed_days: int | None = None,
     notes: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> PermitProgress:
-    existing = await get_permit_progress(db, cart_item_id)
+    existing = await get_permit_progress(db, cart_item_id, company_id=company_id, current_user_role=current_user_role)
     if existing:
         if start_date is not None:
             existing.start_date = start_date

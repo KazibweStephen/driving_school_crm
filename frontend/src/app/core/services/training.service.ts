@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 
 export interface Skill {
   id: string;
@@ -119,6 +119,10 @@ export class TrainingService {
     return this.http.post<TrainingSession>(`/api/v1/cart-items/training-sessions/${sessionId}/start`, {});
   }
 
+  endSession(sessionId: string) {
+    return this.http.post<TrainingSession>(`/api/v1/cart-items/training-sessions/${sessionId}/end`, {});
+  }
+
   updateTimer(sessionId: string, timerSeconds: number) {
     return this.http.patch<TrainingSession>(`/api/v1/cart-items/training-sessions/${sessionId}/timer?timer_seconds=${timerSeconds}`, {});
   }
@@ -129,6 +133,16 @@ export class TrainingService {
 
   invalidateVideo(sessionId: string) {
     return this.http.post<TrainingSession>(`/api/v1/cart-items/training-sessions/${sessionId}/video/invalidate`, {});
+  }
+
+  getDailySchedule(date?: string, branchId?: string, extra?: { period?: string; start_date?: string; end_date?: string }) {
+    let params = new HttpParams();
+    if (date) params = params.set('date', date);
+    if (branchId) params = params.set('branch_id', branchId);
+    if (extra?.period) params = params.set('period', extra.period);
+    if (extra?.start_date) params = params.set('start_date', extra.start_date);
+    if (extra?.end_date) params = params.set('end_date', extra.end_date);
+    return this.http.get<any[]>('/api/v1/training/daily-schedule', { params });
   }
 
   // Skill CRUD

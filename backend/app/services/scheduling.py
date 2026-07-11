@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.cart import CartItem
+from app.models.company import Branch
+from app.models.consultation import Consultation
 from app.models.lesson_plan import (
     ClientAvailability,
     ClientLesson,
@@ -13,7 +15,7 @@ from app.models.lesson_plan import (
     Vehicle,
 )
 from app.models.schedule_break import ScheduleBreak
-from app.models.user import User
+from app.models.user import User, UserRole
 
 
 # Operating hours: 6:00 AM to 7:00 PM = 26 half-hour slots total
@@ -52,11 +54,14 @@ def _generate_slots(
     return slots
 
 
-async def _get_active_breaks(db: AsyncSession) -> list[tuple[time, time, bool]]:
+async def _get_active_breaks(
+    db: AsyncSession, company_id: uuid.UUID | None = None
+) -> list[tuple[time, time, bool]]:
     """Load active schedule breaks from DB, returning (start_time, end_time, is_standard)."""
-    result = await db.execute(
-        select(ScheduleBreak).where(ScheduleBreak.is_active == True)
-    )
+    query = select(ScheduleBreak).where(ScheduleBreak.is_active == True)
+    if company_id:
+        query = query.where(ScheduleBreak.company_id == company_id)
+    result = await db.execute(query)
     return [(b.start_time, b.end_time, b.is_standard) for b in result.scalars().all()]
 
 
@@ -112,6 +117,7 @@ async def _get_enforced_breaks(
     db: AsyncSession,
     vehicle_id: uuid.UUID | None = None,
     date_: date | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> list[tuple[time, time]]:
     """Get active breaks that are enforced for a given vehicle+date.
 
@@ -120,7 +126,7 @@ async def _get_enforced_breaks(
     in the relevant half-day (morning or afternoon).
     When no vehicle/date context is provided, ALL breaks are enforced (conservative).
     """
-    active = await _get_active_breaks(db)
+    active = await _get_active_breaks(db, company_id=company_id)
     # active returns (start_time, end_time, is_standard)
 
     # If no vehicle/date context, enforce all breaks
@@ -158,6 +164,7 @@ async def _get_instructor_enforced_breaks(
     db: AsyncSession,
     instructor_id: str | None = None,
     date_: date | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> list[tuple[time, time]]:
     """Get active breaks enforced for a given instructor+date.
 
@@ -165,7 +172,7 @@ async def _get_instructor_enforced_breaks(
     if the instructor is fully booked in that half-day.
     When no instructor/date context, all breaks enforced (conservative).
     """
-    active = await _get_active_breaks(db)
+    active = await _get_active_breaks(db, company_id=company_id)
 
     if instructor_id is None or date_ is None:
         return [(b[0], b[1]) for b in active]
@@ -200,7 +207,27 @@ async def create_availability(
     cart_item_id: uuid.UUID,
     day_of_week: int,
     start_time: str,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> ClientAvailability:
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        result = await db.execute(
+            select(CartItem).where(CartItem.id == cart_item_id)
+        )
+        ci = result.scalar_one_or_none()
+        if not ci:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Cart item not found")
+        consult_result = await db.execute(select(Consultation).where(Consultation.id == ci.consultation_id))
+        consult = consult_result.scalar_one_or_none()
+        if not consult:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Consultation not found")
+        branch_result = await db.execute(select(Branch).where(Branch.id == consult.branch_id))
+        branch = branch_result.scalar_one_or_none()
+        if not branch or branch.company_id != company_id:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Cart item not found")
     avail = ClientAvailability(
         cart_item_id=cart_item_id,
         day_of_week=day_of_week,
@@ -212,8 +239,25 @@ async def create_availability(
 
 
 async def list_availability(
-    db: AsyncSession, cart_item_id: uuid.UUID
+    db: AsyncSession, cart_item_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> list[ClientAvailability]:
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        result = await db.execute(
+            select(CartItem).where(CartItem.id == cart_item_id)
+        )
+        ci = result.scalar_one_or_none()
+        if not ci:
+            return []
+        consult_result = await db.execute(select(Consultation).where(Consultation.id == ci.consultation_id))
+        consult = consult_result.scalar_one_or_none()
+        if not consult:
+            return []
+        branch_result = await db.execute(select(Branch).where(Branch.id == consult.branch_id))
+        branch = branch_result.scalar_one_or_none()
+        if not branch or branch.company_id != company_id:
+            return []
     result = await db.execute(
         select(ClientAvailability).where(
             ClientAvailability.cart_item_id == cart_item_id
@@ -225,9 +269,15 @@ async def list_availability(
 async def update_availability(
     db: AsyncSession, avail_id: uuid.UUID, **kwargs
 ) -> ClientAvailability | None:
-    result = await db.execute(
-        select(ClientAvailability).where(ClientAvailability.id == avail_id)
-    )
+    query = select(ClientAvailability).where(ClientAvailability.id == avail_id)
+    company_id = kwargs.pop("company_id", None)
+    current_user_role = kwargs.pop("current_user_role", None)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = (query.join(CartItem, ClientAvailability.cart_item_id == CartItem.id)
+                 .join(Consultation, CartItem.consultation_id == Consultation.id)
+                 .join(Branch, Consultation.branch_id == Branch.id)
+                 .where(Branch.company_id == company_id))
+    result = await db.execute(query)
     avail = result.scalar_one_or_none()
     if not avail:
         return None
@@ -239,10 +289,14 @@ async def update_availability(
     return avail
 
 
-async def delete_availability(db: AsyncSession, avail_id: uuid.UUID) -> bool:
-    result = await db.execute(
-        select(ClientAvailability).where(ClientAvailability.id == avail_id)
-    )
+async def delete_availability(db: AsyncSession, avail_id: uuid.UUID, company_id: uuid.UUID | None = None, current_user_role: UserRole | None = None) -> bool:
+    query = select(ClientAvailability).where(ClientAvailability.id == avail_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = (query.join(CartItem, ClientAvailability.cart_item_id == CartItem.id)
+                 .join(Consultation, CartItem.consultation_id == Consultation.id)
+                 .join(Branch, Consultation.branch_id == Branch.id)
+                 .where(Branch.company_id == company_id))
+    result = await db.execute(query)
     avail = result.scalar_one_or_none()
     if not avail:
         return False
@@ -359,6 +413,7 @@ async def check_preferred_times(
     preferred_times: list[time],
     breaks: list[tuple[time, time]] | None = None,
     vehicle_id: uuid.UUID | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> tuple[time, time, time] | None:
     """
     Try each preferred start time in order.
@@ -374,11 +429,11 @@ async def check_preferred_times(
 
     # Load breaks with vehicle awareness
     if vehicle_id is not None:
-        breaks = await _get_enforced_breaks(db, vehicle_id, on_date)
+        breaks = await _get_enforced_breaks(db, vehicle_id, on_date, company_id=company_id)
     breaks = breaks or []
 
     # Instructor daily capacity check
-    instructor_breaks = await _get_instructor_enforced_breaks(db, instructor_id, on_date)
+    instructor_breaks = await _get_instructor_enforced_breaks(db, instructor_id, on_date, company_id=company_id)
     instructor_slots = _generate_slots(instructor_breaks)
     instructor_max = len(instructor_slots)
     existing = await _check_instructor_capacity(db, instructor_id, on_date)
@@ -417,6 +472,7 @@ async def find_and_lock_schedule(
     instructor_id_auto: str | None = None,
     vehicle_id_auto: uuid.UUID | None = None,
     manual_days: int | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> dict:
     """
     Try each preferred start time on start_date.
@@ -426,12 +482,13 @@ async def find_and_lock_schedule(
     # Use the primary vehicle for break enforcement during the initial check;
     # the manual-phase vehicle is the most relevant for the first day
     check_vehicle = vehicle_id or vehicle_id_auto
-    breaks = await _get_enforced_breaks(db, check_vehicle, start_date)
+    breaks = await _get_enforced_breaks(db, check_vehicle, start_date, company_id=company_id)
 
     preferred = [time.fromisoformat(t) for t in preferred_times]
 
     result = await check_preferred_times(
         db, instructor_id, start_date, preferred, breaks=breaks, vehicle_id=check_vehicle,
+        company_id=company_id,
     )
 
     if result:
@@ -447,6 +504,7 @@ async def find_and_lock_schedule(
             instructor_id_auto=instructor_id_auto,
             vehicle_id_auto=vehicle_id_auto,
             manual_days=manual_days,
+            company_id=company_id,
         )
         return {
             "locked": True,
@@ -456,7 +514,7 @@ async def find_and_lock_schedule(
         }
 
     all_breaks = [b for b in breaks]  # full list for display
-    full_day = await get_full_day_schedule(db, instructor_id, start_date, breaks=all_breaks)
+    full_day = await get_full_day_schedule(db, instructor_id, start_date, breaks=all_breaks, company_id=company_id)
     return {
         "locked": False,
         "schedule": full_day,
@@ -514,6 +572,7 @@ async def lock_schedule(
     vehicle_id_auto: uuid.UUID | None = None,
     manual_days: int | None = None,
     breaks: list[tuple[time, time]] | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> list[ClientLesson]:
     """Lock all future lessons in a plan to the same daily time slot.
 
@@ -596,7 +655,7 @@ async def lock_schedule(
         if v_id is not None:
             v_key = (v_id, lesson_date)
             if v_key not in vehicle_date_counts:
-                vehicle_breaks = await _get_enforced_breaks(db, v_id, lesson_date)
+                vehicle_breaks = await _get_enforced_breaks(db, v_id, lesson_date, company_id=company_id)
                 vehicle_slots = _generate_slots(vehicle_breaks)
                 vehicle_max = len(vehicle_slots)
                 existing = await _check_vehicle_capacity(db, v_id, lesson_date, exclude_plan_id=plan_id)
@@ -614,7 +673,7 @@ async def lock_schedule(
         if i_id is not None:
             i_key = (i_id, lesson_date)
             if i_key not in instructor_date_counts:
-                instr_breaks = await _get_instructor_enforced_breaks(db, i_id, lesson_date)
+                instr_breaks = await _get_instructor_enforced_breaks(db, i_id, lesson_date, company_id=company_id)
                 instr_slots = _generate_slots(instr_breaks)
                 instr_max = len(instr_slots)
                 existing = await _check_instructor_capacity(db, i_id, lesson_date, exclude_plan_id=plan_id)
@@ -660,10 +719,11 @@ async def lock_schedule(
 async def get_full_day_schedule(
     db: AsyncSession, instructor_id: str, on_date: date,
     breaks: list[tuple[time, time]] | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> dict:
     """Get full day schedule with collision highlighting."""
     if breaks is None:
-        active = await _get_active_breaks(db)
+        active = await _get_active_breaks(db, company_id=company_id)
         breaks = [(b[0], b[1]) for b in active]
     slots = await get_instructor_schedule(db, instructor_id, on_date)
     # Build list of all 30-min slots showing occupied/free
@@ -703,11 +763,13 @@ async def get_full_day_schedule(
 
 
 async def get_weekly_schedule(
-    db: AsyncSession, start_date: date
+    db: AsyncSession, start_date: date,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> list[dict]:
     """Get all scheduled lessons for a week (start_date to start_date+6)."""
     end_date = start_date + timedelta(days=6)
-    result = await db.execute(
+    query = (
         select(ClientLesson)
         .join(ClientLesson.plan)
         .join(ClientLessonPlan.cart_item)
@@ -717,14 +779,16 @@ async def get_weekly_schedule(
             ClientLesson.is_active == True,
             ClientLesson.scheduled_start_time.isnot(None),
         )
-        .options(
-            selectinload(ClientLesson.plan)
-            .selectinload(ClientLessonPlan.cart_item)
-            .selectinload(CartItem.consultation),
-            selectinload(ClientLesson.vehicle),
-        )
-        .order_by(ClientLesson.scheduled_date, ClientLesson.scheduled_start_time)
     )
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
+    query = query.options(
+        selectinload(ClientLesson.plan)
+        .selectinload(ClientLessonPlan.cart_item)
+        .selectinload(CartItem.consultation),
+        selectinload(ClientLesson.vehicle),
+    ).order_by(ClientLesson.scheduled_date, ClientLesson.scheduled_start_time)
+    result = await db.execute(query)
     lessons = result.scalars().all()
 
     # Collect unique instructor IDs for User lookup

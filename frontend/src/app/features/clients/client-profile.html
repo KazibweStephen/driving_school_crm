@@ -2299,7 +2299,7 @@
 
             @if (authService.currentUserCanBackdate()) {
               <div>
-                <label class="mb-1 block text-sm font-medium text-gray-700">Document Date</label>
+                <label class="mb-1 block text-sm font-medium text-gray-700">Transaction Date</label>
                 <p-datepicker [(ngModel)]="completeSaleDocumentDate" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [showClear]="true" />
               </div>
             }
@@ -2420,7 +2420,7 @@
 
             @if (authService.currentUserCanBackdate()) {
               <div>
-                <label class="mb-1 block text-sm font-medium text-gray-700">Document Date</label>
+                <label class="mb-1 block text-sm font-medium text-gray-700">Transaction Date</label>
                 <p-datepicker [(ngModel)]="makePaymentDocumentDate" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [showClear]="true" />
               </div>
             }
@@ -2541,7 +2541,7 @@
 
             @if (authService.currentUserCanBackdate()) {
               <div>
-                <label class="mb-1 block text-sm font-medium text-gray-700">Document Date</label>
+                <label class="mb-1 block text-sm font-medium text-gray-700">Transaction Date</label>
                 <p-datepicker [(ngModel)]="payAllDocumentDate" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [showClear]="true" />
               </div>
             }

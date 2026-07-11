@@ -5,6 +5,9 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.cart import CartItem
+from app.models.company import Branch
+from app.models.consultation import Consultation
 from app.models.lesson_plan import (
     ClientLesson,
     ClientLessonPlan,
@@ -20,6 +23,7 @@ from app.models.lesson_plan import (
     LessonTemplateItem,
     TransmissionType,
 )
+from app.models.user import UserRole
 
 
 # ── Template CRUD ──
@@ -324,7 +328,12 @@ async def create_template_item(
     lesson_library_id: str | uuid.UUID | None = None,
     preferred_location: str | None = None,
     enforce_prerequisites: bool = True,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> LessonTemplateItem:
+    if not await _verify_template_company(db, template_id, company_id, current_user_role):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Template not found")
     if lesson_library_id is None:
         lib = LessonLibrary(
             title=title,
@@ -424,7 +433,12 @@ async def create_client_plan(
     lessons_data: list[dict] | None = None,
     purchased_days: int | None = None,
     manual_days: int | None = 5,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> ClientLessonPlan:
+    if not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Cart item not found")
     plan = ClientLessonPlan(
         cart_item_id=cart_item_id,
         template_id=template_id,
@@ -477,7 +491,13 @@ async def create_client_plan_from_template(
     notes: str | None = None,
     purchased_days: int | None = None,
     manual_days: int | None = 5,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> ClientLessonPlan:
+    if not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
+        raise ValueError("Cart item not found")
+    if not await _verify_template_company(db, template_id, company_id, current_user_role):
+        raise ValueError("Template not found")
     template_result = await db.execute(
         select(LessonPlanTemplate)
         .where(LessonPlanTemplate.id == template_id)
@@ -537,7 +557,15 @@ async def create_merged_client_plan(
     start_date: datetime | None = None,
     notes: str | None = None,
     purchased_days: int | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> ClientLessonPlan:
+    if not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
+        raise ValueError("Cart item not found")
+    if not await _verify_template_company(db, practical_template_id, company_id, current_user_role):
+        raise ValueError("Practical template not found")
+    if not await _verify_template_company(db, theory_template_id, company_id, current_user_role):
+        raise ValueError("Theory template not found")
     """Merge a practical and theory template into one plan.
     
     Theory lessons are placed on days 6, 12, 18, 24 (Saturdays).
@@ -641,20 +669,63 @@ async def create_merged_client_plan(
     return result.scalar_one()
 
 
-async def get_client_plan_by_id(
-    db: AsyncSession, plan_id: uuid.UUID
-) -> ClientLessonPlan | None:
+async def _verify_cart_item_company(
+    db: AsyncSession, cart_item_id: uuid.UUID,
+    company_id: uuid.UUID | None, user_role: UserRole | None,
+) -> bool:
+    if user_role == UserRole.SUPER_USER or company_id is None:
+        return True
     result = await db.execute(
+        select(CartItem).join(Consultation, CartItem.consultation_id == Consultation.id)
+        .join(Branch, Consultation.branch_id == Branch.id)
+        .where(CartItem.id == cart_item_id, Branch.company_id == company_id)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def _verify_template_company(
+    db: AsyncSession, template_id: uuid.UUID,
+    company_id: uuid.UUID | None, user_role: UserRole | None,
+) -> bool:
+    if user_role == UserRole.SUPER_USER or company_id is None:
+        return True
+    result = await db.execute(
+        select(LessonPlanTemplate).where(
+            LessonPlanTemplate.id == template_id,
+            LessonPlanTemplate.company_id == company_id,
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def get_client_plan_by_id(
+    db: AsyncSession, plan_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> ClientLessonPlan | None:
+    query = (
         select(ClientLessonPlan)
         .where(ClientLessonPlan.id == plan_id)
         .options(selectinload(ClientLessonPlan.lessons))
     )
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = (
+            query.join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+            .join(Consultation, CartItem.consultation_id == Consultation.id)
+            .join(Branch, Consultation.branch_id == Branch.id)
+            .where(Branch.company_id == company_id)
+        )
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
 async def list_client_plans(
-    db: AsyncSession, cart_item_id: uuid.UUID | None = None
+    db: AsyncSession, cart_item_id: uuid.UUID | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> list[ClientLessonPlan]:
+    if cart_item_id and not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
+        return []
     query = select(ClientLessonPlan).options(selectinload(ClientLessonPlan.lessons))
     if cart_item_id:
         query = query.where(ClientLessonPlan.cart_item_id == cart_item_id)
@@ -906,7 +977,12 @@ async def bulk_reorder_lessons(
     db: AsyncSession,
     plan_id: uuid.UUID,
     lessons_data: list[dict],
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> list[ClientLesson]:
+    plan = await get_client_plan_by_id(db, plan_id, company_id=company_id, current_user_role=current_user_role)
+    if not plan:
+        return []
     for ld in lessons_data:
         await db.execute(
             update(ClientLesson)
@@ -926,6 +1002,24 @@ async def bulk_reorder_lessons(
         .order_by(ClientLesson.order)
     )
     return list(result.scalars().all())
+
+
+async def get_client_lesson_by_id(
+    db: AsyncSession, lesson_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> ClientLesson | None:
+    query = select(ClientLesson).where(ClientLesson.id == lesson_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = (
+            query.join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
+            .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+            .join(Consultation, CartItem.consultation_id == Consultation.id)
+            .join(Branch, Consultation.branch_id == Branch.id)
+            .where(Branch.company_id == company_id)
+        )
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
 
 
 # ── Lesson History ──
@@ -1080,6 +1174,8 @@ async def generate_student_plan(
     start_date: datetime,
     purchased_days: int,
     notes: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> ClientLessonPlan:
     plan = await create_client_plan_from_template(
         db, cart_item_id, template_id, transmission_type,

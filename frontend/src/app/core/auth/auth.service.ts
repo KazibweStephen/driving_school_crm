@@ -21,6 +21,7 @@ export class AuthService {
   currentUser = signal<string | null>(null);
   currentUserRole = signal<string | null>(null);
   currentUserCanBackdate = signal(false);
+  currencyCode = signal('USD');
   isAuthenticated = signal(false);
   sessionExpired = signal(false);
   sessionCountdown = signal(160);
@@ -39,6 +40,7 @@ export class AuthService {
       this.currentUser.set(phone);
       this.currentUserRole.set(this.decodeRoleFromToken(token));
       this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
+      this.currencyCode.set(this.decodeCurrency(token));
       this.startSessionTimer();
     }
   }
@@ -54,6 +56,7 @@ export class AuthService {
     this.currentUser.set(this.decodePhoneFromToken(token));
     this.currentUserRole.set(this.decodeRoleFromToken(token));
     this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
+    this.currencyCode.set(this.decodeCurrency(token));
     this.startSessionTimer();
   }
 
@@ -166,5 +169,10 @@ export class AuthService {
   private decodeCanBackdate(token: string): boolean {
     const payload = this.decodeToken(token);
     return (payload?.['can_backdate'] as boolean) || false;
+  }
+
+  private decodeCurrency(token: string): string {
+    const payload = this.decodeToken(token);
+    return (payload?.['currency'] as string) || 'USD';
   }
 }

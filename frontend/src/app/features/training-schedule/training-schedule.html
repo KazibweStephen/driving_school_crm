@@ -1,0 +1,355 @@
+<div class="p-3 sm:p-4 max-w-7xl mx-auto">
+  <h1 class="text-xl sm:text-2xl font-bold mb-3 text-gray-900">Training Schedule Sheet</h1>
+
+  <!-- Filters -->
+  <div class="flex flex-wrap gap-3 items-center mb-3 bg-surface-card p-3 rounded-lg shadow-sm border border-gray-200">
+    <div class="flex flex-col gap-0.5">
+      <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Period</label>
+      <p-select
+        [options]="periodOptions"
+        [(ngModel)]="period"
+        (ngModelChange)="onPeriodChange($event)"
+        appendTo="body"
+        styleClass="p-select-sm w-32"
+      />
+    </div>
+    <div class="flex flex-col gap-0.5">
+      <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Date Range</label>
+      <p-datepicker
+        [ngModel]="[startDate(), endDate()]"
+        (ngModelChange)="onDateRangeChange($event)"
+        selectionMode="range"
+        dateFormat="dd/mm/yy"
+        appendTo="body"
+        styleClass="w-48"
+        showClear
+      />
+    </div>
+    <div class="flex items-end gap-1 pt-4">
+      <p-button icon="pi pi-refresh" (click)="loadSchedule()" [loading]="loading()" size="small" severity="secondary" pTooltip="Refresh" />
+    </div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+    <div class="bg-surface-card p-3 rounded-lg border border-gray-100">
+      <div class="text-xs text-gray-500 font-medium">Sessions</div>
+      <div class="text-lg font-bold text-gray-900">{{ totalSessions() }}</div>
+    </div>
+    <div class="bg-surface-card p-3 rounded-lg border border-gray-100">
+      <div class="text-xs text-gray-500 font-medium">Students</div>
+      <div class="text-lg font-bold text-gray-900">{{ totalStudents() }}</div>
+    </div>
+    <div class="bg-surface-card p-3 rounded-lg border border-gray-100">
+      <div class="text-xs text-gray-500 font-medium">Driving / Theory</div>
+      <div class="text-lg font-bold text-gray-900">{{ totalDrivingMin() }} / {{ totalTheoryMin() }} <span class="text-xs font-normal text-gray-400">min</span></div>
+    </div>
+    <div class="bg-surface-card p-3 rounded-lg border border-gray-100">
+      <div class="text-xs text-gray-500 font-medium">Balance</div>
+      <div class="text-lg font-bold" [class.text-red-600]="totalBalance() > 0" [class.text-green-600]="totalBalance() === 0">{{ totalBalance() | currency:authService.currencyCode():'symbol':'1.0-0' }}</div>
+    </div>
+  </div>
+
+  <!-- Sessions Table -->
+  <div class="bg-surface-card rounded-lg border border-gray-200 overflow-hidden">
+    <p-table
+      [value]="sessions()"
+      [loading]="loading()"
+      [paginator]="true"
+      [rows]="20"
+      [rowsPerPageOptions]="[10,20,50]"
+      stripedRows
+      sortField="session_date"
+      [tableStyle]="{ 'min-width': '50rem' }"
+      styleClass="p-datatable-sm"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th pSortableColumn="session_date" class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Student & Session <p-sortIcon field="session_date" /></th>
+          <th class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Details</th>
+          <th class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Progress</th>
+          <th class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Balance</th>
+          <th class="text-xs uppercase tracking-wide text-gray-500 font-semibold"></th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-s>
+        <tr>
+          <td class="py-2">
+            <div class="flex flex-col">
+              <a [routerLink]="['/consultations', s.consultation_id]" class="text-sm font-semibold text-primary hover:underline leading-tight">
+                {{ s.student_name }}
+              </a>
+              <span class="text-xs text-gray-400">{{ s.student_phone }}</span>
+              <span class="text-xs text-gray-500 mt-0.5 font-mono">{{ s.session_date | date:'EEE dd/MM HH:mm' }}</span>
+            </div>
+          </td>
+          <td class="py-2">
+            <div class="flex flex-wrap items-center gap-1.5 mb-1">
+              <p-tag [value]="sessionType(s)" severity="info" styleClass="text-[10px] px-1.5 py-0.5" />
+              <span class="text-xs text-gray-500 font-mono">{{ s.duration_minutes }}'</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 font-medium">{{ transmissionTag(s.transmission_type) }}</span>
+              @if (s.instructor_name) {
+                <span class="text-[11px] bg-blue-50 text-blue-700 rounded px-1.5 py-0.5">{{ s.instructor_name.length > 12 ? (s.instructor_name.slice(0, 12) + '…') : s.instructor_name }}</span>
+              } @else {
+                <span class="text-[11px] text-gray-400 italic">No instructor</span>
+              }
+            </div>
+          </td>
+          <td class="py-2">
+            <div class="flex items-center gap-2">
+              <p-tag
+                [value]="s.status === 'in_progress' ? 'Live' : s.status === 'completed' ? 'Done' : 'Sched'"
+                [severity]="statusSeverity(s.status)"
+                styleClass="text-[10px] px-1.5 py-0.5"
+              />
+              @if (s.status === 'in_progress') {
+                <span class="font-mono text-xs font-bold text-green-600">{{ timerDisplay()[s.id] || formatTimer(s.timer_seconds) }}</span>
+              } @else if (s.status === 'completed') {
+                <span class="font-mono text-[11px] text-gray-400">{{ formatTimer(s.timer_seconds) }}</span>
+              }
+            </div>
+            @let lp = lessonsProgress(s);
+            @if (lp.total > 0) {
+              <div class="text-[11px] text-gray-500 mt-0.5">Lessons: {{ lp.trained }} / {{ lp.total }}</div>
+            }
+          </td>
+          <td class="py-2">
+            <span class="text-sm font-semibold" [class.text-red-600]="s.balance > 0" [class.text-green-600]="s.balance === 0">
+              {{ s.balance | currency:authService.currencyCode():'symbol':'1.0-0' }}
+            </span>
+          </td>
+          <td class="py-2">
+            <p-button
+              label="Manage"
+              icon="pi pi-cog"
+              size="small"
+              severity="secondary"
+              (onClick)="openManage(s)"
+              styleClass="p-button-sm text-xs"
+            />
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr><td colspan="5" class="text-center py-6 text-gray-400 text-sm">No training sessions found for this period</td></tr>
+      </ng-template>
+    </p-table>
+  </div>
+</div>
+
+<!-- Manage Dialog -->
+@let target = manageTarget();
+<p-dialog
+  [header]="target ? 'Manage — ' + target.student_name : 'Manage'"
+  [(visible)]="showManageDialog"
+  [modal]="true"
+  [style]="{ width: '92vw', maxWidth: '520px' }"
+  [draggable]="false"
+  [resizable]="false"
+  [closable]="!paymentProcessing()"
+>
+  @if (target) {
+    <div class="flex flex-col gap-3 pt-1">
+
+      <!-- Session Info Card -->
+      <div class="rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm">
+        <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+          <span class="text-gray-500">Date</span>
+          <span class="font-medium text-right">{{ target.session_date | date:'EEE dd/MM/yy HH:mm' }}</span>
+          <span class="text-gray-500">Duration</span>
+          <span class="font-medium text-right">{{ target.duration_minutes }} min ({{ sessionType(target) }})</span>
+          <span class="text-gray-500">Transmission</span>
+          <span class="font-medium text-right">{{ transmissionTag(target.transmission_type) }}</span>
+          <span class="text-gray-500">Instructor</span>
+          <span class="font-medium text-right">{{ target.instructor_name || '—' }}</span>
+        </div>
+      </div>
+
+      <!-- Timer / Start Section -->
+      <div class="rounded-lg border border-gray-200 p-3">
+        <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Session Timer</div>
+        <div class="flex items-center justify-between">
+          @if (target.status === 'in_progress') {
+            <div class="flex items-center gap-3">
+              <span class="font-mono text-lg font-bold text-green-600">{{ timerDisplay()[target.id] || formatTimer(target.timer_seconds) }}</span>
+              <p-tag value="In Progress" severity="info" styleClass="text-[10px]" />
+            </div>
+            <p-button
+              label="End Session"
+              icon="pi pi-stop"
+              severity="danger"
+              size="small"
+              (onClick)="endSession(target)"
+              styleClass="p-button-sm"
+            />
+          } @else if (target.status === 'completed') {
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-sm text-gray-500">{{ formatTimer(target.timer_seconds) }}</span>
+              <p-tag value="Completed" severity="success" styleClass="text-[10px]" />
+            </div>
+          } @else {
+            <div class="flex items-center gap-2 text-gray-400">
+              <span class="pi pi-clock text-sm"></span>
+              <span class="text-xs">Not started</span>
+            </div>
+            <p-button
+              label="Start Lesson"
+              icon="pi pi-play"
+              severity="success"
+              size="small"
+              (onClick)="startSession(target)"
+              styleClass="p-button-sm"
+            />
+          }
+        </div>
+      </div>
+
+      <!-- Payment Section -->
+      @if (target.balance > 0) {
+        <div class="rounded-lg border border-gray-200 p-3">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Make Payment</div>
+
+          <!-- Balance summary -->
+          <div class="grid grid-cols-3 gap-2 mb-3 text-xs">
+            <div class="bg-gray-50 rounded p-2 text-center">
+              <div class="text-gray-500">Total</div>
+              <div class="font-bold">{{ target.total_amount | currency:authService.currencyCode():'symbol':'1.0-0' }}</div>
+            </div>
+            <div class="bg-green-50 rounded p-2 text-center">
+              <div class="text-green-600">Paid</div>
+              <div class="font-bold text-green-700">{{ target.total_paid | currency:authService.currencyCode():'symbol':'1.0-0' }}</div>
+            </div>
+            <div class="bg-red-50 rounded p-2 text-center">
+              <div class="text-red-600">Balance</div>
+              <div class="font-bold text-red-700">{{ target.balance | currency:authService.currencyCode():'symbol':'1.0-0' }}</div>
+            </div>
+          </div>
+
+          <!-- Product / Package info + Amount -->
+          <div class="mb-2">
+            <label class="text-xs font-medium text-gray-600 mb-1 block">Amount to Pay Now</label>
+            <div class="flex items-center gap-2 mb-1">
+              <p-inputNumber
+                [(ngModel)]="paySessions()[0].payNow"
+                (onInput)="onPayNowChange()"
+                [min]="0"
+                [max]="target.balance"
+                class="flex-1"
+                inputStyleClass="w-full text-sm py-1.5 px-3"
+                styleClass="w-full"
+              />
+              <span class="text-xs text-gray-500 whitespace-nowrap">{{ target.product_name || 'Product' }}{{ target.package_name ? ' / ' + target.package_name : '' }}</span>
+            </div>
+          </div>
+
+          <!-- Receipt validation -->
+          <div class="mb-2">
+            <label class="text-xs font-medium text-gray-600 mb-1 block">Receipt Number</label>
+            <p-inputGroup>
+              <input
+                [(ngModel)]="payReceiptNumber"
+                (ngModelChange)="payReceiptNumber().length >= 2 ? validatePayReceipt() : receiptAvailable.set(null)"
+                type="text"
+                class="w-full rounded-lg border px-3 py-1.5 text-sm"
+                [class.border-red-400]="receiptAvailable() === false"
+                [class.border-green-400]="receiptAvailable() === true"
+                [class.border-gray-300]="receiptAvailable() === null"
+                placeholder="e.g. RCP-001234"
+              />
+              <p-button
+                icon="pi pi-search"
+                severity="secondary"
+                (onClick)="validatePayReceipt()"
+                styleClass="p-button-sm"
+                pTooltip="Check receipt"
+                [disabled]="!payReceiptNumber()"
+              />
+            </p-inputGroup>
+            <div class="flex items-center gap-1 mt-1">
+              @if (receiptChecking()) {
+                <span class="pi pi-spin pi-spinner text-xs text-gray-400"></span>
+                <span class="text-xs text-gray-400">Checking...</span>
+              } @else if (receiptAvailable() === true) {
+                <span class="pi pi-check-circle text-xs text-green-500"></span>
+                <span class="text-xs text-green-600">Available</span>
+              } @else if (receiptAvailable() === false) {
+                <span class="pi pi-times-circle text-xs text-red-500"></span>
+                <span class="text-xs text-red-500">Already exists</span>
+              } @else {
+                <span class="text-xs text-gray-400">Optional – must be unique</span>
+              }
+            </div>
+          </div>
+
+          <!-- Installment builder -->
+          <div class="mb-2">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-medium text-gray-600">Future Installments</span>
+              <p-button
+                label="Add"
+                icon="pi pi-plus"
+                size="small"
+                severity="secondary"
+                (onClick)="addPayInstallment()"
+                styleClass="p-button-sm p-button-text text-xs"
+                [disabled]="payTotalBalance <= 0"
+              />
+            </div>
+            @if (payTotalBalance > 0) {
+              <div class="text-xs text-gray-500 mb-1">Remaining: {{ payTotalBalance | currency:authService.currencyCode():'symbol':'1.0-0' }}</div>
+            }
+            @for (inst of payInstallments; track $index) {
+              <div class="flex items-center gap-2 mb-1">
+                <p-datepicker
+                  [(ngModel)]="inst.due_date"
+                  dateFormat="dd/mm/yy"
+                  appendTo="body"
+                  styleClass="w-32"
+                  inputStyleClass="text-xs py-1 px-2 w-full"
+                />
+                <p-inputNumber
+                  [(ngModel)]="inst.amount"
+                  [min]="0"
+                  class="flex-1"
+                  inputStyleClass="w-full text-xs py-1 px-2"
+                  styleClass="w-full"
+                />
+                <p-button
+                  icon="pi pi-trash"
+                  severity="danger"
+                  size="small"
+                  (onClick)="removePayInstallment($index)"
+                  styleClass="p-button-sm p-button-text p-button-rounded"
+                />
+              </div>
+            }
+            @if (payInstallments.length > 0 && !payInstallmentBalanceMatch) {
+              <div class="text-xs text-amber-600 mt-1">
+                Installment total ({{ payInstallmentSum | currency:authService.currencyCode():'symbol':'1.0-0' }}) does not cover remaining balance ({{ payTotalBalance | currency:authService.currencyCode():'symbol':'1.0-0' }})
+              </div>
+            }
+          </div>
+
+          <!-- Document date -->
+          @if (authService.currentUserCanBackdate()) {
+            <div class="mb-2">
+              <label class="text-xs font-medium text-gray-600 mb-1 block">Document Date</label>
+              <p-datepicker [(ngModel)]="payDocumentDate" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [showClear]="true" inputStyleClass="text-sm py-1.5 px-3" />
+            </div>
+          }
+
+          <p-button
+            label="Pay {{ payTotalNow | currency:authService.currencyCode():'symbol':'1.0-0' }}"
+            [loading]="paymentProcessing()"
+            (onClick)="doPay()"
+            styleClass="w-full justify-center mt-1"
+            severity="success"
+            [disabled]="payTotalNow <= 0 || (payReceiptNumber() && payReceiptNumber().length >= 2 && receiptAvailable() !== true)"
+          />
+        </div>
+      }
+    </div>
+  }
+</p-dialog>

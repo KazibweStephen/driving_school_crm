@@ -8,6 +8,9 @@ from app.core.security import (
     decode_token,
     verify_pin,
 )
+from sqlalchemy import select
+
+from app.models.company import Company
 from app.models.user import UserStatus
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
 from app.services.user import get_user_by_phone
@@ -47,8 +50,19 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     user.pin_reset_otp_expires_at = None
     await db.flush()
 
+    company_id_str = str(user.company_id) if user.company_id else None
+    currency = None
+    if user.company_id:
+        company_result = await db.execute(select(Company).where(Company.id == user.company_id))
+        company = company_result.scalar_one_or_none()
+        currency = company.currency if company else None
     return TokenResponse(
-        access_token=create_access_token(user.phone, role=user.role.value, can_backdate=user.can_backdate),
+        access_token=create_access_token(
+            user.phone, role=user.role.value,
+            can_backdate=user.can_backdate,
+            company_id=company_id_str,
+            currency=currency,
+        ),
         refresh_token=create_refresh_token(user.phone),
     )
 
@@ -69,7 +83,18 @@ async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
         )
     user = await get_user_by_phone(db, phone)
     role = user.role.value if user else None
+    company_id_str = str(user.company_id) if user and user.company_id else None
+    currency = None
+    if user and user.company_id:
+        company_result = await db.execute(select(Company).where(Company.id == user.company_id))
+        company = company_result.scalar_one_or_none()
+        currency = company.currency if company else None
     return TokenResponse(
-        access_token=create_access_token(phone, role=role, can_backdate=user.can_backdate if user else False),
+        access_token=create_access_token(
+            phone, role=role,
+            can_backdate=user.can_backdate if user else False,
+            company_id=company_id_str,
+            currency=currency,
+        ),
         refresh_token=create_refresh_token(phone),
     )

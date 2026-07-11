@@ -6,8 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lesson_plan import (
     ClientLesson,
+    Vehicle,
     VehicleScheduleSlot,
 )
+from app.models.user import UserRole
 
 
 async def list_slots(
@@ -15,21 +17,40 @@ async def list_slots(
     vehicle_id: uuid.UUID | None = None,
     instructor_id: str | None = None,
     day_of_week: int | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> list[VehicleScheduleSlot]:
-    query = select(VehicleScheduleSlot).order_by(
-        VehicleScheduleSlot.day_of_week, VehicleScheduleSlot.start_time
+    query = select(VehicleScheduleSlot).join(
+        Vehicle, VehicleScheduleSlot.vehicle_id == Vehicle.id
     )
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.where(Vehicle.company_id == company_id)
     if vehicle_id:
         query = query.where(VehicleScheduleSlot.vehicle_id == vehicle_id)
     if instructor_id:
         query = query.where(VehicleScheduleSlot.instructor_id == instructor_id)
     if day_of_week is not None:
         query = query.where(VehicleScheduleSlot.day_of_week == day_of_week)
+    query = query.order_by(
+        VehicleScheduleSlot.day_of_week, VehicleScheduleSlot.start_time
+    )
     result = await db.execute(query)
     return list(result.scalars().all())
 
 
-async def get_slot_by_id(db: AsyncSession, slot_id: uuid.UUID) -> VehicleScheduleSlot | None:
+async def get_slot_by_id(
+    db: AsyncSession,
+    slot_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> VehicleScheduleSlot | None:
+    query = select(VehicleScheduleSlot).where(VehicleScheduleSlot.id == slot_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(
+            Vehicle, VehicleScheduleSlot.vehicle_id == Vehicle.id
+        ).where(Vehicle.company_id == company_id)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
     result = await db.execute(
         select(VehicleScheduleSlot).where(VehicleScheduleSlot.id == slot_id)
     )

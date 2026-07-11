@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -22,6 +22,9 @@ from app.models.lesson_plan import (
     LessonHistory,
 )
 from app.models.user import User
+from app.models.cart import CartItem
+from app.models.consultation import Consultation
+from app.models.company import Branch
 from app.schemas.lesson_plan import (
     ClientLessonChecklistCreate,
     ClientLessonChecklistRead,
@@ -36,6 +39,40 @@ from app.schemas.lesson_plan import (
     TheorySessionRead,
     TheorySessionUpdate,
 )
+from app.services import lesson_plan as lesson_service
+
+
+async def _verify_lesson_access(db: AsyncSession, lesson_id: uuid.UUID, company_id: uuid.UUID | None, role: str) -> ClientLesson | None:
+    if role == 'super_user':
+        result = await db.execute(select(ClientLesson).where(ClientLesson.id == lesson_id))
+        return result.scalar_one_or_none()
+    if company_id is None:
+        return None
+    result = await db.execute(
+        select(ClientLesson)
+        .join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
+        .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+        .join(Consultation, CartItem.consultation_id == Consultation.id)
+        .join(Branch, Consultation.branch_id == Branch.id)
+        .where(ClientLesson.id == lesson_id, Branch.company_id == company_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _verify_plan_access(db: AsyncSession, plan_id: uuid.UUID, company_id: uuid.UUID | None, role: str) -> ClientLessonPlan | None:
+    if role == 'super_user':
+        result = await db.execute(select(ClientLessonPlan).where(ClientLessonPlan.id == plan_id))
+        return result.scalar_one_or_none()
+    if company_id is None:
+        return None
+    result = await db.execute(
+        select(ClientLessonPlan)
+        .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+        .join(Consultation, CartItem.consultation_id == Consultation.id)
+        .join(Branch, Consultation.branch_id == Branch.id)
+        .where(ClientLessonPlan.id == plan_id, Branch.company_id == company_id)
+    )
+    return result.scalar_one_or_none()
 
 router = APIRouter(tags=["lesson-execution"])
 
@@ -56,6 +93,8 @@ async def list_checklists(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
+    if current_user.role.value != 'super_user' and not await _verify_lesson_access(db, lid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson not found")
     query = select(ClientLessonChecklist).where(ClientLessonChecklist.client_lesson_id == lid)
     if checklist_type:
         query = query.where(ClientLessonChecklist.checklist_type == ChecklistType(checklist_type))
@@ -76,6 +115,8 @@ async def create_checklist_item(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
+    if current_user.role.value != 'super_user' and not await _verify_lesson_access(db, lid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson not found")
     item = ClientLessonChecklist(
         client_lesson_id=lid,
         checklist_type=ChecklistType(data.checklist_type),
@@ -99,7 +140,15 @@ async def update_checklist_item(
         iid = uuid.UUID(item_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid item ID")
-    result = await db.execute(select(ClientLessonChecklist).where(ClientLessonChecklist.id == iid))
+    query = select(ClientLessonChecklist).where(ClientLessonChecklist.id == iid)
+    if current_user.role.value != 'super_user' and current_user.company_id is not None:
+        query = (query.join(ClientLesson, ClientLessonChecklist.client_lesson_id == ClientLesson.id)
+                 .join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
+                 .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+                 .join(Consultation, CartItem.consultation_id == Consultation.id)
+                 .join(Branch, Consultation.branch_id == Branch.id)
+                 .where(Branch.company_id == current_user.company_id))
+    result = await db.execute(query)
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Checklist item not found")
@@ -126,7 +175,15 @@ async def delete_checklist_item(
         iid = uuid.UUID(item_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid item ID")
-    result = await db.execute(select(ClientLessonChecklist).where(ClientLessonChecklist.id == iid))
+    query = select(ClientLessonChecklist).where(ClientLessonChecklist.id == iid)
+    if current_user.role.value != 'super_user' and current_user.company_id is not None:
+        query = (query.join(ClientLesson, ClientLessonChecklist.client_lesson_id == ClientLesson.id)
+                 .join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
+                 .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+                 .join(Consultation, CartItem.consultation_id == Consultation.id)
+                 .join(Branch, Consultation.branch_id == Branch.id)
+                 .where(Branch.company_id == current_user.company_id))
+    result = await db.execute(query)
     item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Checklist item not found")
@@ -149,6 +206,8 @@ async def list_competencies(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
+    if current_user.role.value != 'super_user' and not await _verify_lesson_access(db, lid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson not found")
     result = await db.execute(
         select(ClientLessonCompetency)
         .where(ClientLessonCompetency.client_lesson_id == lid)
@@ -169,6 +228,8 @@ async def create_competency(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
+    if current_user.role.value != 'super_user' and not await _verify_lesson_access(db, lid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson not found")
     comp = ClientLessonCompetency(
         client_lesson_id=lid,
         competency_name=data.competency_name,
@@ -193,7 +254,15 @@ async def update_competency(
         cid = uuid.UUID(competency_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid competency ID")
-    result = await db.execute(select(ClientLessonCompetency).where(ClientLessonCompetency.id == cid))
+    query = select(ClientLessonCompetency).where(ClientLessonCompetency.id == cid)
+    if current_user.role.value != 'super_user' and current_user.company_id is not None:
+        query = (query.join(ClientLesson, ClientLessonCompetency.client_lesson_id == ClientLesson.id)
+                 .join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
+                 .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+                 .join(Consultation, CartItem.consultation_id == Consultation.id)
+                 .join(Branch, Consultation.branch_id == Branch.id)
+                 .where(Branch.company_id == current_user.company_id))
+    result = await db.execute(query)
     comp = result.scalar_one_or_none()
     if not comp:
         raise HTTPException(status_code=404, detail="Competency not found")
@@ -218,7 +287,15 @@ async def delete_competency(
         cid = uuid.UUID(competency_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid competency ID")
-    result = await db.execute(select(ClientLessonCompetency).where(ClientLessonCompetency.id == cid))
+    query = select(ClientLessonCompetency).where(ClientLessonCompetency.id == cid)
+    if current_user.role.value != 'super_user' and current_user.company_id is not None:
+        query = (query.join(ClientLesson, ClientLessonCompetency.client_lesson_id == ClientLesson.id)
+                 .join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
+                 .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+                 .join(Consultation, CartItem.consultation_id == Consultation.id)
+                 .join(Branch, Consultation.branch_id == Branch.id)
+                 .where(Branch.company_id == current_user.company_id))
+    result = await db.execute(query)
     comp = result.scalar_one_or_none()
     if not comp:
         raise HTTPException(status_code=404, detail="Competency not found")
@@ -241,6 +318,8 @@ async def get_timer(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
+    if current_user.role.value != 'super_user' and not await _verify_lesson_access(db, lid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson not found")
     result = await db.execute(
         select(ClientLessonTimer).where(ClientLessonTimer.client_lesson_id == lid)
     )
@@ -260,6 +339,8 @@ async def start_timer(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
+    if current_user.role.value != 'super_user' and not await _verify_lesson_access(db, lid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson not found")
     result = await db.execute(
         select(ClientLessonTimer).where(ClientLessonTimer.client_lesson_id == lid)
     )
@@ -289,6 +370,8 @@ async def pause_timer(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
+    if current_user.role.value != 'super_user' and not await _verify_lesson_access(db, lid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson not found")
     result = await db.execute(
         select(ClientLessonTimer).where(ClientLessonTimer.client_lesson_id == lid)
     )
@@ -315,6 +398,8 @@ async def resume_timer(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
+    if current_user.role.value != 'super_user' and not await _verify_lesson_access(db, lid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson not found")
     result = await db.execute(
         select(ClientLessonTimer).where(ClientLessonTimer.client_lesson_id == lid)
     )
@@ -342,6 +427,8 @@ async def sync_timer(
         lid = uuid.UUID(lesson_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid lesson ID")
+    if current_user.role.value != 'super_user' and not await _verify_lesson_access(db, lid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson not found")
     result = await db.execute(
         select(ClientLessonTimer).where(ClientLessonTimer.client_lesson_id == lid)
     )
@@ -372,6 +459,8 @@ async def list_theory_sessions(
         pid = uuid.UUID(plan_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan ID")
+    if current_user.role.value != 'super_user' and not await _verify_plan_access(db, pid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson plan not found")
     result = await db.execute(
         select(TheorySession)
         .where(TheorySession.lesson_plan_id == pid)
@@ -392,6 +481,8 @@ async def create_theory_session(
         pid = uuid.UUID(plan_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan ID")
+    if current_user.role.value != 'super_user' and not await _verify_plan_access(db, pid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson plan not found")
     session = TheorySession(
         lesson_plan_id=pid,
         week_number=data.week_number,
@@ -420,6 +511,8 @@ async def generate_theory_sessions(
         pid = uuid.UUID(plan_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan ID")
+    if current_user.role.value != 'super_user' and not await _verify_plan_access(db, pid, current_user.company_id, current_user.role.value):
+        raise HTTPException(status_code=404, detail="Lesson plan not found")
 
     topics = [
         "Road Signs & Markings",
@@ -471,7 +564,14 @@ async def update_theory_session(
         sid = uuid.UUID(session_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID")
-    result = await db.execute(select(TheorySession).where(TheorySession.id == sid))
+    query = select(TheorySession).where(TheorySession.id == sid)
+    if current_user.role.value != 'super_user' and current_user.company_id is not None:
+        query = (query.join(ClientLessonPlan, TheorySession.lesson_plan_id == ClientLessonPlan.id)
+                 .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+                 .join(Consultation, CartItem.consultation_id == Consultation.id)
+                 .join(Branch, Consultation.branch_id == Branch.id)
+                 .where(Branch.company_id == current_user.company_id))
+    result = await db.execute(query)
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(status_code=404, detail="Theory session not found")
@@ -515,8 +615,17 @@ async def get_competency_dashboard(
         cid = uuid.UUID(consultation_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid consultation ID")
-
-    from app.models.cart import CartItem
+    if current_user.role.value != 'super_user':
+        result = await db.execute(
+            select(Consultation).where(Consultation.id == cid)
+        )
+        consult = result.scalar_one_or_none()
+        if not consult:
+            raise HTTPException(status_code=404, detail="Consultation not found")
+        branch_result = await db.execute(select(Branch).where(Branch.id == consult.branch_id))
+        branch = branch_result.scalar_one_or_none()
+        if not branch or (current_user.company_id is not None and branch.company_id != current_user.company_id):
+            raise HTTPException(status_code=404, detail="Consultation not found")
     cart_result = await db.execute(
         select(CartItem).where(CartItem.consultation_id == cid)
     )

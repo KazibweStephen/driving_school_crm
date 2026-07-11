@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import select, func
@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.models.company import (
     BorrowedMoney,
     BorrowStatus,
+    Branch,
     Collection,
     CollectionStatus,
     Expense,
@@ -16,6 +17,7 @@ from app.models.company import (
 )
 from app.models.consultation import Consultation
 from app.models.payment import Installment, InstallmentStatus
+from app.models.user import UserRole
 from app.services.notification import send_dunning_notice, send_expense_approved
 
 
@@ -28,6 +30,8 @@ async def list_expenses(
     status: ExpenseStatus | None = None,
     page: int = 1,
     page_size: int = 20,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> tuple[list[Expense], int]:
     query = select(Expense)
     count_query = select(func.count(Expense.id))
@@ -35,6 +39,9 @@ async def list_expenses(
     if branch_id:
         query = query.where(Expense.branch_id == branch_id)
         count_query = count_query.where(Expense.branch_id == branch_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
+        count_query = count_query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
     if status:
         query = query.where(Expense.status == status)
         count_query = count_query.where(Expense.status == status)
@@ -50,6 +57,18 @@ async def list_expenses(
     return expenses, total
 
 
+async def _verify_branch_company(
+    db: AsyncSession, branch_id: uuid.UUID,
+    company_id: uuid.UUID | None, user_role: UserRole | None,
+) -> bool:
+    if user_role == UserRole.SUPER_USER or company_id is None:
+        return True
+    result = await db.execute(
+        select(Branch).where(Branch.id == branch_id, Branch.company_id == company_id)
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def create_expense(
     db: AsyncSession,
     branch_id: uuid.UUID,
@@ -61,7 +80,12 @@ async def create_expense(
     expense_date: datetime | None = None,
     status: str = "pending",
     created_by_phone: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> Expense:
+    if not await _verify_branch_company(db, branch_id, company_id, current_user_role):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Branch not found")
     expense = Expense(
         branch_id=branch_id,
         amount=amount,
@@ -89,8 +113,13 @@ async def update_expense(
     paid_at: datetime | None = None,
     rejection_reason: str | None = None,
     receipt_url: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> Expense | None:
-    result = await db.execute(select(Expense).where(Expense.id == expense_id))
+    query = select(Expense).where(Expense.id == expense_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
+    result = await db.execute(query)
     expense = result.scalar_one_or_none()
     if not expense:
         return None
@@ -129,6 +158,8 @@ async def list_borrowed(
     status: BorrowStatus | None = None,
     page: int = 1,
     page_size: int = 20,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> tuple[list[BorrowedMoney], int]:
     query = select(BorrowedMoney)
     count_query = select(func.count(BorrowedMoney.id))
@@ -136,6 +167,9 @@ async def list_borrowed(
     if branch_id:
         query = query.where(BorrowedMoney.branch_id == branch_id)
         count_query = count_query.where(BorrowedMoney.branch_id == branch_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Branch, BorrowedMoney.branch_id == Branch.id).where(Branch.company_id == company_id)
+        count_query = count_query.join(Branch, BorrowedMoney.branch_id == Branch.id).where(Branch.company_id == company_id)
     if status:
         query = query.where(BorrowedMoney.status == status)
         count_query = count_query.where(BorrowedMoney.status == status)
@@ -162,7 +196,12 @@ async def create_borrowed(
     borrower_name: str | None = None,
     due_date: datetime | None = None,
     created_by_phone: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> BorrowedMoney:
+    if not await _verify_branch_company(db, branch_id, company_id, current_user_role):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Branch not found")
     item = BorrowedMoney(
         branch_id=branch_id,
         direction=direction,
@@ -191,8 +230,13 @@ async def update_borrowed(
     borrower_name: str | None = None,
     due_date: datetime | None = None,
     status: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> BorrowedMoney | None:
-    result = await db.execute(select(BorrowedMoney).where(BorrowedMoney.id == item_id))
+    query = select(BorrowedMoney).where(BorrowedMoney.id == item_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Branch, BorrowedMoney.branch_id == Branch.id).where(Branch.company_id == company_id)
+    result = await db.execute(query)
     item = result.scalar_one_or_none()
     if not item:
         return None
@@ -228,6 +272,8 @@ async def list_collections(
     status: CollectionStatus | None = None,
     page: int = 1,
     page_size: int = 20,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> tuple[list[Collection], int]:
     query = select(Collection).options(
         selectinload(Collection.installment),
@@ -244,6 +290,11 @@ async def list_collections(
             count_query.join(Consultation, Collection.consultation_id == Consultation.id)
             .where(Consultation.branch_id == branch_id)
         )
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Consultation, Collection.consultation_id == Consultation.id)
+        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
+        count_query = count_query.join(Consultation, Collection.consultation_id == Consultation.id)
+        count_query = count_query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     if status:
         query = query.where(Collection.status == status)
         count_query = count_query.where(Collection.status == status)
@@ -266,7 +317,19 @@ async def create_collection(
     amount_due: Decimal,
     amount_collected: Decimal = Decimal("0.00"),
     notes: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> Collection:
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        c_result = await db.execute(
+            select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
+                Consultation.id == consultation_id,
+                Branch.company_id == company_id,
+            )
+        )
+        if not c_result.scalar_one_or_none():
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Consultation not found")
     collection = Collection(
         installment_id=installment_id,
         consultation_id=consultation_id,
@@ -288,10 +351,14 @@ async def update_collection(
     notes: str | None = None,
     collected_by: str | None = None,
     collected_at: datetime | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> Collection | None:
-    result = await db.execute(
-        select(Collection).where(Collection.id == collection_id)
-    )
+    query = select(Collection).where(Collection.id == collection_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Consultation, Collection.consultation_id == Consultation.id)
+        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
+    result = await db.execute(query)
     collection = result.scalar_one_or_none()
     if not collection:
         return None
@@ -330,6 +397,8 @@ async def get_overdue_installments(db: AsyncSession) -> list[Installment]:
 async def create_collection_for_installment(
     db: AsyncSession,
     installment_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> Collection | None:
     result = await db.execute(
         select(Installment)
@@ -339,6 +408,15 @@ async def create_collection_for_installment(
     installment = result.scalar_one_or_none()
     if not installment:
         return None
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        c_result = await db.execute(
+            select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
+                Consultation.id == installment.payment.consultation_id,
+                Branch.company_id == company_id,
+            )
+        )
+        if not c_result.scalar_one_or_none():
+            return None
 
     consultation = installment.payment.consultation
     collection = Collection(
@@ -356,6 +434,8 @@ async def create_collection_for_installment(
 async def get_dunning_list(
     db: AsyncSession,
     branch_id: uuid.UUID | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> list[dict]:
     today = date.today()
     query = (
@@ -368,6 +448,10 @@ async def get_dunning_list(
             Installment.due_date < today,
         )
     )
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Payment, Installment.payment_id == Payment.id)
+        query = query.join(Consultation, Payment.consultation_id == Consultation.id)
+        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     result = await db.execute(query)
     installments = list(result.scalars().all())
 
@@ -448,9 +532,101 @@ async def send_dunning_notifications(db: AsyncSession) -> int:
 # ── Finance Summary ──
 
 
+async def get_collections_sheet(
+    db: AsyncSession,
+    period: str = "daily",
+    start_date: date | None = None,
+    end_date: date | None = None,
+    branch_id: uuid.UUID | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> list[dict]:
+    if not start_date:
+        start_date = date.today()
+    if not end_date:
+        end_date = start_date
+
+    query = (
+        select(Collection)
+        .join(Consultation, Collection.consultation_id == Consultation.id)
+        .options(
+            selectinload(Collection.consultation),
+            selectinload(Collection.installment),
+        )
+    )
+
+    start_dt = datetime.combine(start_date, datetime.min.time())
+    end_dt = datetime.combine(end_date, datetime.max.time())
+    query = query.where(Collection.created_at >= start_dt, Collection.created_at <= end_dt)
+
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
+    if branch_id:
+        query = query.where(Consultation.branch_id == branch_id)
+
+    query = query.order_by(Collection.created_at.asc())
+    result = await db.execute(query)
+    collections = list(result.unique().scalars().all())
+
+    rows = []
+    for c in collections:
+        consultation = c.consultation
+        client_name = f"{consultation.first_name} {consultation.last_name or ''}".strip()
+        created = c.created_at.date() if c.created_at else date.today()
+        rows.append({
+            "id": str(c.id),
+            "consultation_id": str(c.consultation_id),
+            "installment_id": str(c.installment_id) if c.installment_id else None,
+            "client_name": client_name,
+            "client_phone": consultation.phone,
+            "amount_due": c.amount_due,
+            "amount_collected": c.amount_collected,
+            "status": c.status.value if c.status else "pending",
+            "date": created.isoformat(),
+            "collected_at": c.collected_at.isoformat() if c.collected_at else None,
+            "notes": c.notes,
+        })
+
+    # Group by period
+    grouped = {}
+    for r in rows:
+        d = date.fromisoformat(r["date"])
+        if period == "daily":
+            key = d.isoformat()
+            label = d.strftime("%a %d %b %Y")
+        elif period == "weekly":
+            iso_year, iso_week, _ = d.isocalendar()
+            key = f"{iso_year}-W{iso_week:02d}"
+            monday = d - timedelta(days=d.weekday())
+            label = f"Week {iso_week} ({monday.strftime('%d %b')})"
+        else:
+            key = d.strftime("%Y-%m")
+            label = d.strftime("%B %Y")
+
+        if key not in grouped:
+            grouped[key] = {
+                "period_key": key,
+                "period_label": label,
+                "date": d.isoformat(),
+                "total_due": 0.0,
+                "total_collected": 0.0,
+                "count": 0,
+                "items": [],
+            }
+        grouped[key]["total_due"] += r["amount_due"]
+        grouped[key]["total_collected"] += r["amount_collected"]
+        grouped[key]["count"] += 1
+        grouped[key]["items"].append(r)
+
+    sorted_keys = sorted(grouped.keys())
+    return [grouped[k] for k in sorted_keys]
+
+
 async def get_finance_summary(
     db: AsyncSession,
     branch_id: uuid.UUID | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> dict:
     summary = {}
 
@@ -462,6 +638,8 @@ async def get_finance_summary(
     )
     if branch_id:
         exp_query = exp_query.where(Expense.branch_id == branch_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        exp_query = exp_query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
     exp_query = exp_query.group_by(Expense.status)
     result = await db.execute(exp_query)
     expenses_by_status = {}
@@ -483,6 +661,8 @@ async def get_finance_summary(
     )
     if branch_id:
         bor_query = bor_query.where(BorrowedMoney.branch_id == branch_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        bor_query = bor_query.join(Branch, BorrowedMoney.branch_id == Branch.id).where(Branch.company_id == company_id)
     bor_query = bor_query.group_by(BorrowedMoney.status)
     result = await db.execute(bor_query)
     borrowed_by_status = {}
@@ -508,6 +688,9 @@ async def get_finance_summary(
             col_query.join(Consultation, Collection.consultation_id == Consultation.id)
             .where(Consultation.branch_id == branch_id)
         )
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        col_query = col_query.join(Consultation, Collection.consultation_id == Consultation.id)
+        col_query = col_query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     col_query = col_query.group_by(Collection.status)
     result = await db.execute(col_query)
     collections_by_status = {}

@@ -41,6 +41,8 @@ export class MainLayout {
         { path: '/products', label: 'Products', icon: 'pi pi-box' },
         { path: '/expenses', label: 'Expenses', icon: 'pi pi-dollar' },
         { path: '/payments', label: 'Payments', icon: 'pi pi-credit-card' },
+        { path: '/training-schedule', label: 'Training Schedule', icon: 'pi pi-calendar-clock' },
+        { path: '/collections-sheet', label: 'Collections Sheet', icon: 'pi pi-file-invoice' },
       ],
     },
     {

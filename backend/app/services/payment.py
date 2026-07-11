@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
 from app.models.cart import CartItem, CartItemStatus
+from app.models.company import Branch
 from app.models.consultation import Consultation, FollowUp
 from app.models.payment import Installment, InstallmentStatus, Payment
+from app.models.user import UserRole
 
 
 def _generate_system_receipt_number() -> str:
@@ -36,7 +38,19 @@ async def create_payment(
     receipt_number: str | None = None,
     created_by_phone: str | None = None,
     document_date: date | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> Payment:
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        c_result = await db.execute(
+            select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
+                Consultation.id == consultation_id,
+                Branch.company_id == company_id,
+            )
+        )
+        if not c_result.scalar_one_or_none():
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Consultation not found")
     payment = Payment(
         consultation_id=consultation_id,
         created_by_phone=created_by_phone,
@@ -80,8 +94,19 @@ async def get_payment_by_receipt(db: AsyncSession, receipt_number: str) -> Payme
 
 
 async def get_payments_by_consultation(
-    db: AsyncSession, consultation_id: uuid.UUID
+    db: AsyncSession, consultation_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> list[Payment]:
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        c_result = await db.execute(
+            select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
+                Consultation.id == consultation_id,
+                Branch.company_id == company_id,
+            )
+        )
+        if not c_result.scalar_one_or_none():
+            return []
     result = await db.execute(
         select(Payment)
         .where(Payment.consultation_id == consultation_id)
@@ -184,6 +209,8 @@ async def mark_installment_paid(
     paid_date: date | None,
     paid_amount: Decimal | None,
     notes: str | None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> Installment | None:
     result = await db.execute(
         select(Installment).where(Installment.id == installment_id)
@@ -191,6 +218,14 @@ async def mark_installment_paid(
     inst = result.scalar_one_or_none()
     if not inst:
         return None
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        p_result = await db.execute(
+            select(Payment).join(Consultation, Payment.consultation_id == Consultation.id)
+            .join(Branch, Consultation.branch_id == Branch.id)
+            .where(Payment.id == inst.payment_id, Branch.company_id == company_id)
+        )
+        if not p_result.scalar_one_or_none():
+            return None
 
     now = date.today()
     inst.status = InstallmentStatus.PAID
@@ -218,6 +253,8 @@ async def list_clients(
     search: str | None = None,
     page: int = 1,
     page_size: int = 20,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> tuple[list[Consultation], int]:
     # Clients are consultations with at least one converted_paid or converted_paying cart item
     active_statuses = [CartItemStatus.CONVERTED_PAID, CartItemStatus.CONVERTED_PAYING]
@@ -233,6 +270,9 @@ async def list_clients(
         selectinload(Consultation.cart_items),
         selectinload(Consultation.follow_ups),
     )
+
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
 
     if search:
         search_term = f"%{search}%"
@@ -256,9 +296,12 @@ async def list_clients(
 
 
 async def get_client_detail(
-    db: AsyncSession, consultation_id: uuid.UUID
+    db: AsyncSession,
+    consultation_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> Consultation | None:
-    result = await db.execute(
+    query = (
         select(Consultation)
         .where(Consultation.id == consultation_id)
         .options(
@@ -266,4 +309,7 @@ async def get_client_detail(
             selectinload(Consultation.follow_ups).selectinload(FollowUp.cart_items),
         )
     )
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
+    result = await db.execute(query)
     return result.scalar_one_or_none()

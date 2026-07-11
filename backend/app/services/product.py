@@ -130,8 +130,11 @@ async def create_package(
     return pkg
 
 
-async def get_package_by_id(db: AsyncSession, package_id: uuid.UUID) -> Package | None:
-    result = await db.execute(select(Package).where(Package.id == package_id))
+async def get_package_by_id(db: AsyncSession, package_id: uuid.UUID, company_id: uuid.UUID | None = None) -> Package | None:
+    query = select(Package).where(Package.id == package_id).options(selectinload(Package.product))
+    if company_id:
+        query = query.join(Package.product).where(Product.company_id == company_id)
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 

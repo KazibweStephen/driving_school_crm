@@ -1,0 +1,90 @@
+<div class="p-4 max-w-6xl mx-auto">
+  <h1 class="text-2xl font-bold mb-4">Collections Sheet</h1>
+
+  <!-- Filters -->
+  <div class="flex flex-wrap gap-4 items-center mb-4 bg-surface-card p-4 rounded shadow-sm">
+    <div class="flex flex-col gap-1">
+      <label for="cs-period" class="text-sm font-medium">Period</label>
+      <p-select
+        id="cs-period"
+        [options]="periodOptions"
+        [(ngModel)]="period"
+        (ngModelChange)="onPeriodChange($event)"
+        appendTo="body"
+      />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label for="cs-start" class="text-sm font-medium">Start Date</label>
+      <p-datepicker
+        id="cs-start"
+        [ngModel]="startDate() | date:'yyyy-MM-dd'"
+        (ngModelChange)="onStartDateChange($event)"
+        dateFormat="dd/mm/yy"
+        appendTo="body"
+      />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label for="cs-end" class="text-sm font-medium">End Date</label>
+      <p-datepicker
+        id="cs-end"
+        [ngModel]="endDate() | date:'yyyy-MM-dd'"
+        (ngModelChange)="onEndDateChange($event)"
+        dateFormat="dd/mm/yy"
+        appendTo="body"
+      />
+    </div>
+    <div class="flex items-end">
+      <p-button label="Load" icon="pi pi-search" (click)="loadSheet()" [loading]="loading()" size="small" />
+    </div>
+  </div>
+
+  <!-- Totals Card -->
+  <div class="bg-surface-card p-4 rounded shadow-sm mb-4">
+    <div class="text-sm text-muted">Total Collected</div>
+    <div class="text-2xl font-bold">{{ totalAmount() | currency }}</div>
+    <div class="text-sm text-muted mt-1">{{ items().length }} period(s)</div>
+  </div>
+
+  <!-- Period Groups -->
+  @for (group of items(); track group.period_key) {
+    <div class="bg-surface-card rounded shadow-sm mb-4 overflow-hidden">
+      <div class="flex items-center justify-between p-4 bg-primary text-primary-contrast font-bold">
+        <span>{{ group.period_label }}</span>
+        <span>{{ group.total_collected | currency }}</span>
+      </div>
+      <p-table [value]="group.items" stripedRows>
+        <ng-template pTemplate="header">
+          <tr>
+            <th pSortableColumn="date">Date <p-sortIcon field="date" /></th>
+            <th>Client</th>
+            <th>Phone</th>
+            <th>Amount Due</th>
+            <th>Amount Collected</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-item>
+          <tr>
+            <td>{{ item.date | date:'dd/MM/yyyy' }}</td>
+            <td>
+              <a [routerLink]="['/consultations', item.consultation_id]" class="text-primary underline">
+                {{ item.client_name }}
+              </a>
+            </td>
+            <td>{{ item.client_phone }}</td>
+            <td>{{ item.amount_due | currency }}</td>
+            <td>{{ item.amount_collected | currency }}</td>
+            <td>{{ item.status }}</td>
+            <td>{{ item.notes || '-' }}</td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+          <tr><td colspan="7" class="text-center py-4 text-muted">No collections in this period</td></tr>
+        </ng-template>
+      </p-table>
+    </div>
+  } @empty {
+    <div class="text-center py-8 text-muted">No collections found for the selected period</div>
+  }
+</div>

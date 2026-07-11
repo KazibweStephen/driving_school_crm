@@ -47,3 +47,12 @@ async def require_super_user(current_user: User = Depends(get_current_user)) -> 
             detail="Super user access required",
         )
     return current_user
+
+
+async def require_admin_access(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role not in (UserRole.SUPER_USER, UserRole.COMPANY_SUPER_USER):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user

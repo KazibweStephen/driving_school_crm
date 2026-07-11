@@ -1,6 +1,7 @@
 import uuid
+from datetime import date as date_type
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -19,6 +20,24 @@ from app.schemas.training import (
 from app.services import training as training_service
 
 router = APIRouter(prefix="/cart-items", tags=["training"])
+schedule_router = APIRouter(prefix="/training", tags=["training"])
+
+
+@schedule_router.get("/daily-schedule", response_model=list[dict])
+async def get_daily_schedule(
+    date: date_type | None = Query(None),
+    start_date: date_type | None = Query(None),
+    end_date: date_type | None = Query(None),
+    period: str = Query("daily", pattern="^(daily|weekly|monthly)$"),
+    branch_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await training_service.get_daily_schedule(
+        db, schedule_date=date, start_date=start_date, end_date=end_date,
+        period=period, branch_id=branch_id,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
 
 
 @router.get("/{cart_item_id}/training-sessions", response_model=list[TrainingSessionRead])
@@ -31,7 +50,7 @@ async def list_training_sessions(
         cid = uuid.UUID(cart_item_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid cart item ID")
-    sessions = await training_service.list_training_sessions(db, cid)
+    sessions = await training_service.list_training_sessions(db, cid, company_id=current_user.company_id, current_user_role=current_user.role)
     return [TrainingSessionRead.model_validate(s) for s in sessions]
 
 
@@ -57,6 +76,7 @@ async def create_training_session(
         instructor_notes=data.instructor_notes,
         video_url=data.video_url,
         skills=skills_data,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return TrainingSessionRead.model_validate(session)
 
@@ -78,6 +98,7 @@ async def generate_training_sessions(
             start_date=data.start_date,
             driving_per_session_minutes=data.driving_per_session_minutes,
             theory_per_session_minutes=data.theory_per_session_minutes,
+            company_id=current_user.company_id, current_user_role=current_user.role,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -94,7 +115,7 @@ async def get_training_summary(
         cid = uuid.UUID(cart_item_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid cart item ID")
-    summary = await training_service.get_training_summary(db, cid)
+    summary = await training_service.get_training_summary(db, cid, company_id=current_user.company_id, current_user_role=current_user.role)
     return summary
 
 
@@ -109,7 +130,7 @@ async def update_training_session(
         sid = uuid.UUID(session_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID")
-    session = await training_service.get_training_session_by_id(db, sid)
+    session = await training_service.get_training_session_by_id(db, sid, company_id=current_user.company_id, current_user_role=current_user.role)
     if session is None:
         raise HTTPException(status_code=404, detail="Training session not found")
     updated = await training_service.update_training_session(
@@ -135,7 +156,7 @@ async def delete_training_session(
         sid = uuid.UUID(session_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID")
-    session = await training_service.get_training_session_by_id(db, sid)
+    session = await training_service.get_training_session_by_id(db, sid, company_id=current_user.company_id, current_user_role=current_user.role)
     if session is None:
         raise HTTPException(status_code=404, detail="Training session not found")
     await training_service.delete_training_session(db, session)
@@ -154,7 +175,7 @@ async def start_session(
         sid = uuid.UUID(session_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID")
-    session = await training_service.get_training_session_by_id(db, sid)
+    session = await training_service.get_training_session_by_id(db, sid, company_id=current_user.company_id, current_user_role=current_user.role)
     if session is None:
         raise HTTPException(status_code=404, detail="Training session not found")
     if session.started_at:
@@ -174,10 +195,27 @@ async def update_timer(
         sid = uuid.UUID(session_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID")
-    session = await training_service.get_training_session_by_id(db, sid)
+    session = await training_service.get_training_session_by_id(db, sid, company_id=current_user.company_id, current_user_role=current_user.role)
     if session is None:
         raise HTTPException(status_code=404, detail="Training session not found")
     updated = await training_service.update_timer(db, session, timer_seconds)
+    return TrainingSessionRead.model_validate(updated)
+
+
+@router.post("/training-sessions/{session_id}/end", response_model=TrainingSessionRead)
+async def end_training_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+    session = await training_service.get_training_session_by_id(db, sid, company_id=current_user.company_id, current_user_role=current_user.role)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Training session not found")
+    updated = await training_service.end_training_session(db, session)
     return TrainingSessionRead.model_validate(updated)
 
 
@@ -191,7 +229,7 @@ async def cache_video(
         sid = uuid.UUID(session_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID")
-    session = await training_service.get_training_session_by_id(db, sid)
+    session = await training_service.get_training_session_by_id(db, sid, company_id=current_user.company_id, current_user_role=current_user.role)
     if session is None:
         raise HTTPException(status_code=404, detail="Training session not found")
     updated = await training_service.mark_video_cached(db, session)
@@ -208,7 +246,7 @@ async def invalidate_video(
         sid = uuid.UUID(session_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID")
-    session = await training_service.get_training_session_by_id(db, sid)
+    session = await training_service.get_training_session_by_id(db, sid, company_id=current_user.company_id, current_user_role=current_user.role)
     if session is None:
         raise HTTPException(status_code=404, detail="Training session not found")
     updated = await training_service.invalidate_video(db, session)
@@ -228,7 +266,7 @@ async def list_skills(
         sid = uuid.UUID(session_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID")
-    skills = await training_service.list_skills(db, sid)
+    skills = await training_service.list_skills(db, sid, company_id=current_user.company_id, current_user_role=current_user.role)
     return [SkillRead.model_validate(s) for s in skills]
 
 
@@ -249,6 +287,7 @@ async def create_skill(
         description=data.description,
         competency_level=data.competency_level,
         order=data.order,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return SkillRead.model_validate(skill)
 
@@ -264,7 +303,7 @@ async def update_skill(
         sid = uuid.UUID(skill_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid skill ID")
-    skill = await training_service.get_skill_by_id(db, sid)
+    skill = await training_service.get_skill_by_id(db, sid, company_id=current_user.company_id, current_user_role=current_user.role)
     if skill is None:
         raise HTTPException(status_code=404, detail="Skill not found")
     updated = await training_service.update_skill(
@@ -288,7 +327,7 @@ async def delete_skill(
         sid = uuid.UUID(skill_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid skill ID")
-    skill = await training_service.get_skill_by_id(db, sid)
+    skill = await training_service.get_skill_by_id(db, sid, company_id=current_user.company_id, current_user_role=current_user.role)
     if skill is None:
         raise HTTPException(status_code=404, detail="Skill not found")
     await training_service.delete_skill(db, skill)

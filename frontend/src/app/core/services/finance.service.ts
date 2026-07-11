@@ -81,4 +81,18 @@ export class FinanceService {
   updateExpense(id: string, data: ExpenseUpdate): Observable<Expense> {
     return this.http.patch<Expense>(`${this.base}/expenses/${id}`, data);
   }
+
+  getCollectionsSheet(params?: {
+    period?: string;
+    start_date?: string;
+    end_date?: string;
+    branch_id?: string;
+  }): Observable<any[]> {
+    let p = new HttpParams();
+    if (params?.period) p = p.set('period', params.period);
+    if (params?.start_date) p = p.set('start_date', params.start_date);
+    if (params?.end_date) p = p.set('end_date', params.end_date);
+    if (params?.branch_id) p = p.set('branch_id', params.branch_id);
+    return this.http.get<any[]>(`${this.base}/collections/sheet`, { params: p });
+  }
 }

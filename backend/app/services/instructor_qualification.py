@@ -1,10 +1,11 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, join
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lesson_plan import InstructorQualification, TransmissionType
+from app.models.user import User, UserRole
 
 
 async def create_qualification(
@@ -30,9 +31,16 @@ async def create_qualification(
 
 
 async def list_qualifications(
-    db: AsyncSession, instructor_phone: str | None = None
+    db: AsyncSession,
+    instructor_phone: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> list[InstructorQualification]:
-    query = select(InstructorQualification)
+    query = select(InstructorQualification).join(
+        User, InstructorQualification.instructor_phone == User.phone
+    )
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.where(User.company_id == company_id)
     if instructor_phone:
         query = query.where(
             InstructorQualification.instructor_phone == instructor_phone
@@ -42,11 +50,17 @@ async def list_qualifications(
 
 
 async def get_qualification(
-    db: AsyncSession, qual_id: uuid.UUID
+    db: AsyncSession,
+    qual_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> InstructorQualification | None:
-    result = await db.execute(
-        select(InstructorQualification).where(InstructorQualification.id == qual_id)
-    )
+    query = select(InstructorQualification).where(InstructorQualification.id == qual_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(
+            User, InstructorQualification.instructor_phone == User.phone
+        ).where(User.company_id == company_id)
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
@@ -57,8 +71,10 @@ async def update_qualification(
     certified_at: datetime | None = None,
     expires_at: datetime | None = None,
     notes: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> InstructorQualification | None:
-    qual = await get_qualification(db, qual_id)
+    qual = await get_qualification(db, qual_id, company_id=company_id, current_user_role=current_user_role)
     if not qual:
         return None
     if is_certified is not None:
@@ -73,8 +89,13 @@ async def update_qualification(
     return qual
 
 
-async def delete_qualification(db: AsyncSession, qual_id: uuid.UUID) -> bool:
-    qual = await get_qualification(db, qual_id)
+async def delete_qualification(
+    db: AsyncSession,
+    qual_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> bool:
+    qual = await get_qualification(db, qual_id, company_id=company_id, current_user_role=current_user_role)
     if not qual:
         return False
     await db.delete(qual)

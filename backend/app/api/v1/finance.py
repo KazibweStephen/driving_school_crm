@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
@@ -70,7 +70,8 @@ async def list_expenses(
     current_user: User = Depends(get_current_user),
 ):
     expenses, total = await finance_service.list_expenses(
-        db, branch_id=branch_id, status=status, page=page, page_size=page_size
+        db, branch_id=branch_id, status=status, page=page, page_size=page_size,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return {
         "items": [ExpenseRead.model_validate(e) for e in expenses],
@@ -97,6 +98,7 @@ async def create_expense(
         expense_date=data.expense_date,
         status=data.status or "pending",
         created_by_phone=current_user.phone,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return ExpenseRead.model_validate(expense)
 
@@ -118,6 +120,7 @@ async def update_expense(
         paid_at=data.paid_at,
         rejection_reason=data.rejection_reason,
         receipt_url=data.receipt_url,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     if not expense:
         raise HTTPException(
@@ -140,7 +143,8 @@ async def list_borrowed(
     current_user: User = Depends(get_current_user),
 ):
     items, total = await finance_service.list_borrowed(
-        db, branch_id=branch_id, status=status, page=page, page_size=page_size
+        db, branch_id=branch_id, status=status, page=page, page_size=page_size,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return {
         "items": [BorrowedMoneyRead.model_validate(i) for i in items],
@@ -167,6 +171,7 @@ async def create_borrowed(
         borrower_name=data.borrower_name,
         due_date=data.due_date,
         created_by_phone=current_user.phone,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return BorrowedMoneyRead.model_validate(item)
 
@@ -189,6 +194,7 @@ async def update_borrowed(
         borrower_name=data.borrower_name,
         due_date=data.due_date,
         status=data.status,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     if not item:
         raise HTTPException(
@@ -211,7 +217,8 @@ async def list_collections(
     current_user: User = Depends(get_current_user),
 ):
     collections, total = await finance_service.list_collections(
-        db, branch_id=branch_id, status=status, page=page, page_size=page_size
+        db, branch_id=branch_id, status=status, page=page, page_size=page_size,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return {
         "items": [CollectionRead.model_validate(c) for c in collections],
@@ -229,7 +236,8 @@ async def create_collection_for_installment(
 ):
     if data.installment_id:
         collection = await finance_service.create_collection_for_installment(
-            db, installment_id=data.installment_id
+            db, installment_id=data.installment_id,
+            company_id=current_user.company_id, current_user_role=current_user.role,
         )
         if not collection:
             raise HTTPException(
@@ -244,6 +252,7 @@ async def create_collection_for_installment(
             amount_due=data.amount_due,
             amount_collected=data.amount_collected,
             notes=data.notes,
+            company_id=current_user.company_id, current_user_role=current_user.role,
         )
     return CollectionRead.model_validate(collection)
 
@@ -263,6 +272,7 @@ async def update_collection(
         notes=data.notes,
         collected_by=data.collected_by or current_user.phone,
         collected_at=data.collected_at,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     if not collection:
         raise HTTPException(
@@ -281,7 +291,7 @@ async def get_dunning_list(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await finance_service.get_dunning_list(db, branch_id=branch_id)
+    return await finance_service.get_dunning_list(db, branch_id=branch_id, company_id=current_user.company_id, current_user_role=current_user.role)
 
 
 @router.post("/dunning/send", response_model=dict)
@@ -296,10 +306,26 @@ async def send_dunning(
 # ── Finance Summary ──
 
 
+@router.get("/collections/sheet", response_model=list[dict])
+async def get_collections_sheet(
+    period: str = Query("daily", pattern="^(daily|weekly|monthly)$"),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    branch_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await finance_service.get_collections_sheet(
+        db, period=period, start_date=start_date, end_date=end_date,
+        branch_id=branch_id,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+
+
 @router.get("/summary", response_model=dict)
 async def get_finance_summary(
     branch_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await finance_service.get_finance_summary(db, branch_id=branch_id)
+    return await finance_service.get_finance_summary(db, branch_id=branch_id, company_id=current_user.company_id, current_user_role=current_user.role)

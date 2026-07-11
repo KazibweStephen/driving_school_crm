@@ -5,8 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.cart import CartItem, CartItemStatus, follow_up_cart_items
+from app.models.company import Branch
 from app.models.consultation import Consultation, FollowUp, FollowUpStatus, FollowUpType
 from app.models.product import Package
+from app.models.user import UserRole
 
 
 async def add_cart_item(
@@ -16,7 +18,21 @@ async def add_cart_item(
     package_id: str | None,
     notes: str | None,
     is_important: bool = False,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> CartItem:
+    # Verify consultation belongs to user's company
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        c_result = await db.execute(
+            select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
+                Consultation.id == consultation_id,
+                Branch.company_id == company_id,
+            )
+        )
+        if not c_result.scalar_one_or_none():
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Consultation not found")
+
     result = await db.execute(
         select(CartItem).where(
             CartItem.consultation_id == consultation_id,
@@ -60,11 +76,22 @@ async def update_cart_item(
     notes: str | None,
     is_important: bool | None = None,
     recovery_reason: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
 ) -> CartItem | None:
     result = await db.execute(select(CartItem).where(CartItem.id == item_id))
     item = result.scalar_one_or_none()
     if not item:
         return None
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        c_result = await db.execute(
+            select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
+                Consultation.id == item.consultation_id,
+                Branch.company_id == company_id,
+            )
+        )
+        if not c_result.scalar_one_or_none():
+            return None
 
     old_status = item.status
 
@@ -98,11 +125,25 @@ async def update_cart_item(
     return item
 
 
-async def remove_cart_item(db: AsyncSession, item_id: uuid.UUID) -> bool:
+async def remove_cart_item(
+    db: AsyncSession,
+    item_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> bool:
     result = await db.execute(select(CartItem).where(CartItem.id == item_id))
     item = result.scalar_one_or_none()
     if not item:
         return False
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        c_result = await db.execute(
+            select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
+                Consultation.id == item.consultation_id,
+                Branch.company_id == company_id,
+            )
+        )
+        if not c_result.scalar_one_or_none():
+            return False
     if item.status in (CartItemStatus.CONVERTED, CartItemStatus.CONVERTED_PAID, CartItemStatus.CONVERTED_PAYING):
         from fastapi import HTTPException
         raise HTTPException(status_code=409, detail="Cannot delete a converted product")
@@ -113,7 +154,21 @@ async def remove_cart_item(db: AsyncSession, item_id: uuid.UUID) -> bool:
     return True
 
 
-async def get_cart_items(db: AsyncSession, consultation_id: uuid.UUID) -> list[CartItem]:
+async def get_cart_items(
+    db: AsyncSession,
+    consultation_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> list[CartItem]:
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        c_result = await db.execute(
+            select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
+                Consultation.id == consultation_id,
+                Branch.company_id == company_id,
+            )
+        )
+        if not c_result.scalar_one_or_none():
+            return []
     result = await db.execute(
         select(CartItem)
         .where(CartItem.consultation_id == consultation_id)

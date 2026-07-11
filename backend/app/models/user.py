@@ -11,6 +11,7 @@ from app.core.database import Base
 
 class UserRole(str, enum.Enum):
     SUPER_USER = "super_user"
+    COMPANY_SUPER_USER = "company_super_user"
     BRANCH_SUPERVISOR = "branch_supervisor"
     OFFICE_ADMIN = "office_admin"
     INSTRUCTOR = "instructor"
@@ -20,6 +21,7 @@ class UserRole(str, enum.Enum):
 
 class UserStatus(str, enum.Enum):
     ACTIVE = "active"
+    PENDING_APPROVAL = "pending_approval"
     BLOCKED = "blocked"
     DEACTIVATED = "deactivated"
 
@@ -31,10 +33,14 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     hashed_pin: Mapped[str] = mapped_column(String(128), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole), default=UserRole.OFFICE_ADMIN, nullable=False
+        Enum(UserRole, values_callable=lambda x: [e.value for e in x]),
+        default=UserRole.OFFICE_ADMIN,
+        nullable=False,
     )
     status: Mapped[UserStatus] = mapped_column(
-        Enum(UserStatus), default=UserStatus.ACTIVE, nullable=False
+        Enum(UserStatus, values_callable=lambda x: [e.value for e in x]),
+        default=UserStatus.ACTIVE,
+        nullable=False,
     )
     is_company_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     can_backdate: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

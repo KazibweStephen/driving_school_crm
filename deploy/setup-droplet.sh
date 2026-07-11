@@ -53,6 +53,10 @@ else
     echo "WARNING: REPO_URL is not set. Please clone your repository into $APP_DIR/repo manually."
 fi
 
+echo "=== Stopping host Nginx (Nginx runs inside the crm-frontend container) ==="
+systemctl stop nginx || true
+systemctl disable nginx || true
+
 echo "=== Configuring UFW ==="
 ufw default deny incoming
 ufw default allow outgoing

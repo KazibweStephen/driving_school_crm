@@ -24,6 +24,19 @@ set +a
 echo "=== Pulling latest code ==="
 git pull origin main || true
 
+echo "=== Checking for port conflicts on 80/443 ==="
+for port in 80 443; do
+    if ss -tlnp | grep -q ":$port "; then
+        echo "WARNING: port $port is already in use on the host. Stopping host nginx if running..."
+        systemctl stop nginx || true
+        systemctl disable nginx || true
+        if ss -tlnp | grep -q ":$port "; then
+            echo "ERROR: port $port is still in use. Identify the process with: sudo ss -tlnp | grep ':$port'"
+            exit 1
+        fi
+    fi
+done
+
 echo "=== Building and starting services ==="
 docker compose -f "$COMPOSE_FILE" pull
 docker compose -f "$COMPOSE_FILE" up -d --build

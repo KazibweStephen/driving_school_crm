@@ -1,0 +1,183 @@
+<div class="p-4 sm:p-6">
+  <h1 class="text-2xl font-bold text-gray-900">Reports</h1>
+
+  <div class="mt-4">
+    <p-tabs [value]="activeTab()" (valueChange)="onTabChange($event)">
+      <p-tablist>
+        <p-tab value="overview">Overview</p-tab>
+        <p-tab value="commissions">Commissions</p-tab>
+        <p-tab value="fuel">Fuel</p-tab>
+      </p-tablist>
+
+      <!-- OVERVIEW -->
+      <p-tabpanel value="overview">
+        <div class="mt-4">
+          @if (loading()) {
+            <p class="text-gray-500">Loading...</p>
+          } @else if (summary(); as s) {
+            <!-- Top cards -->
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+              <div class="rounded-xl border bg-white p-4 shadow-sm">
+                <p class="text-sm text-gray-500">Revenue Today</p>
+                <p class="text-2xl font-bold">{{ s.total_revenue_today | number:'1.0-0' }}</p>
+              </div>
+              <div class="rounded-xl border bg-white p-4 shadow-sm">
+                <p class="text-sm text-gray-500">Revenue This Month</p>
+                <p class="text-2xl font-bold">{{ s.total_revenue_month | number:'1.0-0' }}</p>
+              </div>
+              <div class="rounded-xl border bg-white p-4 shadow-sm">
+                <p class="text-sm text-gray-500">Expenses (Month)</p>
+                <p class="text-2xl font-bold text-red-600">{{ s.total_expenses_month | number:'1.0-0' }}</p>
+              </div>
+              <div class="rounded-xl border bg-white p-4 shadow-sm">
+                <p class="text-sm text-gray-500">Commissions (Month)</p>
+                <p class="text-2xl font-bold text-amber-600">{{ s.total_commissions_month | number:'1.0-0' }}</p>
+              </div>
+            </div>
+
+            <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-3 mb-6">
+              <div class="rounded-xl border bg-white p-4 shadow-sm">
+                <p class="text-sm text-gray-500">Active Clients</p>
+                <p class="text-2xl font-bold">{{ s.active_clients }}</p>
+              </div>
+              <div class="rounded-xl border bg-white p-4 shadow-sm">
+                <p class="text-sm text-gray-500">Pending Follow-ups</p>
+                <p class="text-2xl font-bold text-amber-600">{{ s.pending_follow_ups }}</p>
+              </div>
+              <div class="rounded-xl border bg-white p-4 shadow-sm">
+                <p class="text-sm text-gray-500">Pending Commissions</p>
+                <p class="text-2xl font-bold text-amber-600">{{ s.pending_commissions }}</p>
+              </div>
+            </div>
+
+            <!-- Fuel alerts -->
+            @if (s.fuel_alerts && s.fuel_alerts.length > 0) {
+              <div class="mb-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-2">Fuel Alerts</h2>
+                <div class="grid gap-2 sm:grid-cols-2">
+                  @for (a of s.fuel_alerts; track a.vehicle_id) {
+                    <div class="rounded-lg border border-red-200 bg-red-50 p-3">
+                      <div class="flex items-center gap-2">
+                        <span class="pi pi-exclamation-triangle text-red-500"></span>
+                        <span class="font-medium text-red-700">
+                          {{ a.vehicle_name }} ({{ a.vehicle_plate }}):
+                          {{ a.remaining_lessons <= 0 ? 'OUT OF FUEL' : a.remaining_lessons + ' lesson(s) left' }}
+                        </span>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            <!-- Lesson counts -->
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div class="rounded-xl border bg-white p-4 shadow-sm">
+                <p class="text-sm text-gray-500">Upcoming Lessons Today</p>
+                <p class="text-2xl font-bold text-blue-600">{{ s.upcoming_lessons_today }}</p>
+              </div>
+              <div class="rounded-xl border bg-white p-4 shadow-sm">
+                <p class="text-sm text-gray-500">Ongoing Lessons</p>
+                <p class="text-2xl font-bold text-green-600">{{ s.ongoing_lessons }}</p>
+              </div>
+            </div>
+          }
+        </div>
+      </p-tabpanel>
+
+      <!-- COMMISSIONS REPORT -->
+      <p-tabpanel value="commissions">
+        <div class="mt-4">
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <p-datepicker [(ngModel)]="commDateFrom" dateFormat="yy-mm-dd" placeholder="From" appendTo="body" />
+            <p-datepicker [(ngModel)]="commDateTo" dateFormat="yy-mm-dd" placeholder="To" appendTo="body" />
+            <p-button label="Generate" icon="pi pi-search" (click)="loadCommissionReport()" />
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div class="rounded-xl border bg-white p-4 shadow-sm">
+              <p class="text-sm text-gray-500">Total Commissions</p>
+              <p class="text-2xl font-bold">{{ commissionTotals().grand_total | number:'1.0-0' }}</p>
+            </div>
+            <div class="rounded-xl border bg-white p-4 shadow-sm">
+              <p class="text-sm text-gray-500">Paid</p>
+              <p class="text-2xl font-bold text-green-600">{{ commissionTotals().grand_paid | number:'1.0-0' }}</p>
+            </div>
+            <div class="rounded-xl border bg-white p-4 shadow-sm">
+              <p class="text-sm text-gray-500">Pending</p>
+              <p class="text-2xl font-bold text-amber-600">{{ commissionTotals().grand_pending | number:'1.0-0' }}</p>
+            </div>
+          </div>
+
+          <p-table [value]="commissionReport()" [loading]="loading()">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Instructor</th>
+                <th>Sessions</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Pending</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-r>
+              <tr>
+                <td>{{ r.instructor_name || r.instructor_id }}</td>
+                <td>{{ r.total_count }}</td>
+                <td>{{ r.total_commissions | number:'1.0-0' }}</td>
+                <td class="text-green-600">{{ r.paid_amount | number:'1.0-0' }} ({{ r.paid_count }})</td>
+                <td class="text-amber-600">{{ r.pending_amount | number:'1.0-0' }} ({{ r.pending_count }})</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      </p-tabpanel>
+
+      <!-- FUEL REPORT -->
+      <p-tabpanel value="fuel">
+        <div class="mt-4">
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <p-datepicker [(ngModel)]="fuelDateFrom" dateFormat="yy-mm-dd" placeholder="From" appendTo="body" />
+            <p-datepicker [(ngModel)]="fuelDateTo" dateFormat="yy-mm-dd" placeholder="To" appendTo="body" />
+            <p-button label="Generate" icon="pi pi-search" (click)="loadFuelReport()" />
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div class="rounded-xl border bg-white p-4 shadow-sm">
+              <p class="text-sm text-gray-500">Total Fuel Cost</p>
+              <p class="text-2xl font-bold">{{ fuelTotals().grand_total | number:'1.0-0' }}</p>
+            </div>
+            <div class="rounded-xl border bg-white p-4 shadow-sm">
+              <p class="text-sm text-gray-500">Total Liters</p>
+              <p class="text-2xl font-bold">{{ fuelTotals().grand_liters ? (fuelTotals().grand_liters! | number:'1.1-1') : '-' }}</p>
+            </div>
+            <div class="rounded-xl border bg-white p-4 shadow-sm">
+              <p class="text-sm text-gray-500">Lessons Covered</p>
+              <p class="text-2xl font-bold">{{ fuelTotals().grand_lessons_covered }}</p>
+            </div>
+          </div>
+
+          <p-table [value]="fuelReport()" [loading]="loading()">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Vehicle</th>
+                <th>Refuelings</th>
+                <th>Total Cost</th>
+                <th>Liters</th>
+                <th>Lessons Covered</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-r>
+              <tr>
+                <td>{{ r.vehicle_name || r.vehicle_id }} ({{ r.vehicle_plate || '-' }})</td>
+                <td>{{ r.total_refuelings }}</td>
+                <td>{{ r.total_amount | number:'1.0-0' }}</td>
+                <td>{{ r.total_liters ? (r.total_liters | number:'1.1-1') : '-' }}</td>
+                <td>{{ r.total_lessons_covered }}</td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      </p-tabpanel>
+    </p-tabs>
+  </div>
+</div>

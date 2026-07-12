@@ -1,0 +1,164 @@
+<div class="p-4 sm:p-6">
+  <h1 class="text-2xl font-bold text-gray-900">Fuel Tracking</h1>
+
+  <div class="mt-4">
+    <p-tabs [value]="activeTab()" (valueChange)="onTabChange($event)">
+      <p-tablist>
+        <p-tab value="alerts">Alerts</p-tab>
+        <p-tab value="rates">Fuel Rates</p-tab>
+        <p-tab value="refuelings">Refueling Log</p-tab>
+      </p-tablist>
+
+      <!-- ALERTS TAB -->
+      <p-tabpanel value="alerts">
+        <div class="mt-4">
+          @if (alerts().length === 0) {
+            <div class="rounded-xl border bg-white p-8 text-center text-gray-500 shadow-sm">
+              <span class="pi pi-check-circle text-4xl text-green-500"></span>
+              <p class="mt-2 font-medium">All vehicles have sufficient fuel</p>
+            </div>
+          }
+
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            @for (a of alerts(); track a.vehicle_id) {
+              <div class="rounded-xl border bg-white p-4 shadow-sm">
+                <div class="flex items-center gap-3">
+                  <span class="pi pi-exclamation-triangle text-2xl text-red-500"></span>
+                  <div>
+                    <p class="font-semibold text-gray-900">{{ a.vehicle_name }} ({{ a.vehicle_plate }})</p>
+                    <p class="text-sm text-red-600 font-medium">
+                      {{ a.remaining_lessons <= 0 ? 'OUT OF FUEL' : 'Only ' + a.remaining_lessons + ' lesson(s) remaining' }}
+                    </p>
+                    <p class="text-xs text-gray-500">Covered {{ a.lessons_covered }} lessons since last refuel</p>
+                  </div>
+                </div>
+                <p-button label="Log Refueling" icon="pi pi-plus" size="small" class="mt-3 w-full"
+                  (click)="refuelForm.vehicle_id = a.vehicle_id; openNewRefueling()" />
+              </div>
+            }
+          </div>
+        </div>
+      </p-tabpanel>
+
+      <!-- RATES TAB -->
+      <p-tabpanel value="rates">
+        <div class="mt-4">
+          <div class="flex flex-wrap items-center gap-3 mb-3">
+            <p-select
+              [options]="[{ label: 'All Vehicles', value: '' }, ...vehicleOptions()]"
+              [(ngModel)]="filterVehicle" (onChange)="loadRates()"
+              placeholder="Filter by vehicle" appendTo="body" class="w-56" />
+            <p-button label="New Rate" icon="pi pi-plus" (click)="openNewRate()" />
+          </div>
+
+          <p-table [value]="rates()" [loading]="loading()">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Vehicle</th>
+                <th>Rate / Lesson</th>
+                <th>Status</th>
+                <th>Effective From</th>
+                <th>Actions</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-r>
+              <tr>
+                <td>{{ r.vehicle_name || r.vehicle_id }} ({{ r.vehicle_plate || '' }})</td>
+                <td>{{ r.rate_per_lesson | number:'1.0-0' }}</td>
+                <td>
+                  <p-tag [value]="r.is_active ? 'Active' : 'Inactive'"
+                    [severity]="r.is_active ? 'success' : 'secondary'" />
+                </td>
+                <td>{{ r.effective_from | date:'shortDate' }}</td>
+                <td>
+                  <p-button icon="pi pi-pencil" (click)="editRate(r)" severity="secondary" size="small" class="mr-1" />
+                  <p-button icon="pi pi-trash" (click)="deleteRate(r)" severity="danger" size="small" />
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      </p-tabpanel>
+
+      <!-- REFUELINGS TAB -->
+      <p-tabpanel value="refuelings">
+        <div class="mt-4">
+          <div class="flex flex-wrap items-center gap-3 mb-3">
+            <p-select
+              [options]="[{ label: 'All Vehicles', value: '' }, ...vehicleOptions()]"
+              [(ngModel)]="filterVehicle" (onChange)="loadRefuelings()"
+              placeholder="Filter by vehicle" appendTo="body" class="w-56" />
+            <p-button label="Log Refueling" icon="pi pi-plus" (click)="openNewRefueling()" />
+          </div>
+
+          <p-table [value]="refuelings()" [loading]="loading()" [totalRecords]="total"
+            [paginator]="true" [rows]="pageSize" [lazy]="true"
+            (onPage)="onPageChange($event)">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Vehicle</th>
+                <th>Amount</th>
+                <th>Liters</th>
+                <th>Lessons Covered</th>
+                <th>Remaining</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-r>
+              <tr>
+                <td>{{ r.vehicle_name || '-' }}</td>
+                <td>{{ r.amount | number:'1.0-0' }}</td>
+                <td>{{ r.liters ? (r.liters | number:'1.1-1') : '-' }}</td>
+                <td>{{ r.lessons_covered }}</td>
+                <td>
+                  @if (r.remaining_lessons !== null && r.remaining_lessons !== undefined) {
+                    <span [class.text-red-600]="r.remaining_lessons <= 1"
+                      [class.font-bold]="r.remaining_lessons <= 1">
+                      {{ r.remaining_lessons }}
+                    </span>
+                    @if (r.remaining_lessons <= 1) {
+                      <span class="pi pi-exclamation-triangle text-red-500 ml-1"></span>
+                    }
+                  } @else { - }
+                </td>
+                <td>{{ r.refueled_at | date:'short' }}</td>
+                <td>
+                  <p-button icon="pi pi-trash" (click)="deleteRefueling(r)" severity="danger" size="small" />
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      </p-tabpanel>
+    </p-tabs>
+  </div>
+</div>
+
+<!-- Rate Dialog -->
+<p-dialog [(visible)]="showRateDialog" [header]="editingRate() ? 'Edit Fuel Rate' : 'New Fuel Rate'"
+  [modal]="true" [closable]="true" appendTo="body">
+  <div class="flex flex-col gap-3 p-4">
+    <p-select [options]="vehicleOptions()" [(ngModel)]="rateForm.vehicle_id"
+      placeholder="Select Vehicle" appendTo="body" />
+    <p-inputNumber [(ngModel)]="rateForm.rate_per_lesson" placeholder="Rate per Lesson" mode="decimal" [min]="0" class="w-full" />
+    <textarea pTextarea [(ngModel)]="rateForm.notes" placeholder="Notes" rows="3"></textarea>
+    <p-button label="Save" icon="pi pi-check" (click)="saveRate()" />
+  </div>
+</p-dialog>
+
+<!-- Refueling Dialog -->
+<p-dialog [(visible)]="showRefuelDialog" header="Log Refueling"
+  [modal]="true" [closable]="true" appendTo="body">
+  <div class="flex flex-col gap-3 p-4">
+    <p-select [options]="vehicleOptions()" [(ngModel)]="refuelForm.vehicle_id"
+      placeholder="Select Vehicle" appendTo="body" />
+    <p-inputNumber [(ngModel)]="refuelForm.amount" placeholder="Amount (total fuel cost)" mode="decimal" [min]="0" class="w-full" />
+    <p-inputNumber [(ngModel)]="refuelForm.liters" placeholder="Liters (optional)" mode="decimal" [min]="0" class="w-full" />
+    <textarea pTextarea [(ngModel)]="refuelForm.notes" placeholder="Notes" rows="3"></textarea>
+    <p-button label="Record Refueling" icon="pi pi-check" (click)="saveRefueling()" />
+  </div>
+</p-dialog>
+
+<p-confirmDialog appendTo="body" />
+<p-toast />

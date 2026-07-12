@@ -55,6 +55,8 @@ from app.models.payment import (
 )
 from app.models.permit import PermitProgress
 from app.models.product import Package, Product
+from app.models.commission import Commission, CommissionRate, CommissionStatus
+from app.models.fuel import FuelRate, FuelRefueling
 from app.models.schedule_break import ScheduleBreak
 from app.models.training import TrainingSession
 from app.models.user import User, UserRole, UserStatus
@@ -80,4 +82,6 @@ __all__ = [
     "InstructorQualification",
     "ScheduleBreak",
     "Vehicle", "VehicleAssignment", "VehicleScheduleSlot", "VehicleStatus",
+    "Commission", "CommissionRate", "CommissionStatus",
+    "FuelRate", "FuelRefueling",
 ]

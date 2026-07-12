@@ -29,6 +29,7 @@ export class MainLayout {
   topItems: NavItem[] = [
     { path: '/dashboard', label: 'Dashboard', icon: 'pi pi-home' },
     { path: '/consultations', label: 'Consultations', icon: 'pi pi-phone' },
+    { path: '/reports', label: 'Reports', icon: 'pi pi-chart-bar' },
   ];
 
   navGroups: NavGroup[] = [
@@ -41,6 +42,8 @@ export class MainLayout {
         { path: '/products', label: 'Products', icon: 'pi pi-box' },
         { path: '/expenses', label: 'Expenses', icon: 'pi pi-dollar' },
         { path: '/payments', label: 'Payments', icon: 'pi pi-credit-card' },
+        { path: '/commissions', label: 'Commissions', icon: 'pi pi-dollar' },
+        { path: '/fuel-tracking', label: 'Fuel Tracking', icon: 'pi pi-car' },
         { path: '/training-schedule', label: 'Training Schedule', icon: 'pi pi-calendar-clock' },
         { path: '/collections-sheet', label: 'Collections Sheet', icon: 'pi pi-file-invoice' },
       ],

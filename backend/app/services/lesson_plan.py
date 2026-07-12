@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -881,6 +882,63 @@ async def update_client_lesson(
         if status == "completed" and not lesson.completed_at:
             lesson.completed_at = datetime.utcnow()
         # Record history
+        history = LessonHistory(
+            client_lesson_id=lesson.id,
+            from_state=from_state,
+            to_state=status,
+            changed_by=instructor_id,
+        )
+        db.add(history)
+        # Auto-create commission when lesson completed with instructor
+        if status == "completed" and lesson.instructor_id and from_state != "completed":
+            try:
+                from app.models.commission import Commission, CommissionRate, CommissionStatus
+                from app.models.cart import CartItem
+                from app.models.consultation import Consultation
+                from app.models.company import Branch
+                plan_q = await db.execute(
+                    select(ClientLessonPlan).where(ClientLessonPlan.id == lesson.lesson_plan_id)
+                )
+                plan = plan_q.scalar_one_or_none()
+                if plan:
+                    ci_q = await db.execute(
+                        select(CartItem).where(CartItem.id == plan.cart_item_id)
+                    )
+                    ci = ci_q.scalar_one_or_none()
+                    if ci:
+                        c_q = await db.execute(
+                            select(Consultation).where(Consultation.id == ci.consultation_id)
+                        )
+                        c = c_q.scalar_one_or_none()
+                        if c and c.branch_id:
+                            b_q = await db.execute(
+                                select(Branch).where(Branch.id == c.branch_id)
+                            )
+                            b = b_q.scalar_one_or_none()
+                            if b:
+                                company_id = b.company_id
+                                rate_q = await db.execute(
+                                    select(CommissionRate)
+                                    .where(
+                                        CommissionRate.company_id == company_id,
+                                        CommissionRate.is_active == True,
+                                    )
+                                    .order_by(CommissionRate.created_at.desc())
+                                    .limit(1)
+                                )
+                                rate = rate_q.scalars().first()
+                                amount = rate.amount if rate else Decimal("0.00")
+                                commission = Commission(
+                                    company_id=company_id,
+                                    instructor_id=lesson.instructor_id,
+                                    client_lesson_id=lesson.id,
+                                    commission_rate_id=rate.id if rate else None,
+                                    amount=amount,
+                                    status=CommissionStatus.PENDING,
+                                )
+                                db.add(commission)
+            except Exception:
+                pass
         history = LessonHistory(
             client_lesson_id=lesson.id,
             from_state=from_state,

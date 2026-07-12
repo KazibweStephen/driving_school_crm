@@ -94,6 +94,21 @@ export const routes: Routes = [
           import('./features/schedule-breaks/schedule-breaks').then((c) => c.ScheduleBreaksCmp),
       },
       {
+        path: 'commissions',
+        loadComponent: () =>
+          import('./features/commissions/commissions').then((c) => c.CommissionsCmp),
+      },
+      {
+        path: 'fuel-tracking',
+        loadComponent: () =>
+          import('./features/fuel-tracking/fuel-tracking').then((c) => c.FuelTrackingCmp),
+      },
+      {
+        path: 'reports',
+        loadComponent: () =>
+          import('./features/reports/reports').then((c) => c.ReportsCmp),
+      },
+      {
         path: 'consultations',
         loadComponent: () =>
           import('./features/clients/clients').then((c) => c.Clients),

@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -6,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.product import EntityStatus, Package, Product
+from app.models.commission import CommissionRate
 
 
 async def create_product(
@@ -95,6 +97,66 @@ async def deactivate_product(db: AsyncSession, product: Product) -> Product:
         select(Product).where(Product.id == product.id).options(selectinload(Product.packages))
     )
     return result.scalar_one()
+
+
+async def create_package_with_rate(
+    db: AsyncSession,
+    product_id: uuid.UUID,
+    name: str,
+    price: Decimal,
+    created_by_phone: str,
+    company_id: uuid.UUID | None = None,
+    duration_label: str | None = None,
+    requires_driving_training: bool = False,
+    requires_theory_training: bool = False,
+    requires_permit_processing: bool = False,
+    driving_training_duration_days: int | None = None,
+    theory_training_hours: int | None = None,
+    permit_processing_duration_days: int | None = None,
+    is_extension: bool = False,
+    extension_days: int | None = None,
+    # Commission rate fields (optional)
+    rate_total_amount: Decimal | None = None,
+    rate_converter_pct: Decimal | None = None,
+    rate_primary_recommender_pct: Decimal = 0,
+    rate_secondary_recommender_pct: Decimal = 0,
+    rate_active_from: date | None = None,
+    rate_active_until: date | None = None,
+    rate_notes: str | None = None,
+) -> Package:
+    pkg = await create_package(
+        db=db,
+        product_id=product_id,
+        name=name,
+        price=price,
+        duration_label=duration_label,
+        created_by_phone=created_by_phone,
+        requires_driving_training=requires_driving_training,
+        requires_theory_training=requires_theory_training,
+        requires_permit_processing=requires_permit_processing,
+        driving_training_duration_days=driving_training_duration_days,
+        theory_training_hours=theory_training_hours,
+        permit_processing_duration_days=permit_processing_duration_days,
+    )
+    # Optionally create a commission rate
+    if rate_total_amount is not None and rate_converter_pct is not None and company_id and rate_active_from:
+        total = rate_converter_pct + rate_primary_recommender_pct + rate_secondary_recommender_pct
+        if total != Decimal("100.00"):
+            raise ValueError("Commission rate percentages must sum to 100")
+        rate = CommissionRate(
+            company_id=company_id,
+            total_amount=rate_total_amount,
+            converter_pct=rate_converter_pct,
+            primary_recommender_pct=rate_primary_recommender_pct,
+            secondary_recommender_pct=rate_secondary_recommender_pct,
+            active_from=rate_active_from,
+            active_until=rate_active_until,
+            notes=rate_notes,
+        )
+        rate.packages = [pkg]
+        db.add(rate)
+        await db.flush()
+    return pkg
 
 
 async def create_package(

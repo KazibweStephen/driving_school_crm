@@ -2,13 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import (
-    auth, cart, clients, commission, companies, consultations, finance,
-    fuel,
-    instructor_qualifications,
-    lead,
-    lesson_plan, lesson_execution, library, packages, payments, permit,
-    products, receipts, reports, schedule_breaks, scheduling, training, users,
-    vehicle_assignments, vehicle_schedule, vehicles, video_library,
+    auth, bulk_onboarding, cart, clients, commission, companies, consultations,
+    finance, fuel, instructor_qualifications, lead, lesson_plan, lesson_execution,
+    library, packages, payments, permit, products, receipts, reports,
+    schedule_breaks, scheduling, training, users, vehicle_assignments,
+    vehicle_schedule, vehicles, video_library,
 )
 from app.core.config import settings
 
@@ -54,6 +52,7 @@ app.include_router(fuel.router, prefix="/api/v1")
 app.include_router(receipts.router)
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(schedule_breaks.router)
+app.include_router(bulk_onboarding.router, prefix="/api/v1")
 
 
 @app.get("/health")

@@ -9,7 +9,7 @@ import { SelectModule } from 'primeng/select';
 import { DatePickerModule } from 'primeng/datepicker';
 import { TagModule } from 'primeng/tag';
 import { MessageService } from 'primeng/api';
-import { CommissionService, CommissionReportItem, CommissionReportResponse } from '../../core/services/commission.service';
+import { CommissionService, CommissionSummaryItem } from '../../core/services/commission.service';
 import { FuelService, FuelReportItem, FuelReportResponse } from '../../core/services/fuel.service';
 import { ReportsService, DashboardSummary } from '../../core/services/reports.service';
 
@@ -29,10 +29,8 @@ export class ReportsCmp implements OnInit {
   summary = signal<DashboardSummary | null>(null);
 
   // Commission report
-  commissionReport = signal<CommissionReportItem[]>([]);
+  commissionReport = signal<CommissionSummaryItem[]>([]);
   commissionTotals = signal<{ grand_total: number; grand_paid: number; grand_pending: number }>({ grand_total: 0, grand_paid: 0, grand_pending: 0 });
-  commDateFrom = signal<string>('');
-  commDateTo = signal<string>('');
 
   // Fuel report
   fuelReport = signal<FuelReportItem[]>([]);
@@ -63,10 +61,7 @@ export class ReportsCmp implements OnInit {
 
   loadCommissionReport() {
     this.loading.set(true);
-    this.commissionSvc.getReport({
-      date_from: this.commDateFrom() || undefined,
-      date_to: this.commDateTo() || undefined,
-    }).subscribe(r => {
+    this.commissionSvc.getSummary().subscribe(r => {
       this.commissionReport.set(r.items);
       this.commissionTotals.set({ grand_total: r.grand_total, grand_paid: r.grand_paid, grand_pending: r.grand_pending });
       this.loading.set(false);

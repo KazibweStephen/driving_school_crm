@@ -7,7 +7,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.models.commission import Commission, CommissionRate, CommissionStatus, CommissionContest, ContestStatus
+from app.models.commission import Commission, CommissionRate, CommissionStatus, CommissionContest, ContestStatus, commission_rate_packages
 from app.models.cart import CartItem, CartItemStatus
 from app.models.consultation import Consultation
 from app.models.user import User
@@ -21,11 +21,9 @@ async def list_commission_rates(
     package_id: Optional[uuid.UUID] = None,
     active_only: bool = False,
 ) -> list[CommissionRate]:
-    query = select(CommissionRate)
+    query = select(CommissionRate).options(joinedload(CommissionRate.packages))
     if user_role != "super_user" and company_id is not None:
         query = query.where(CommissionRate.company_id == company_id)
-    if package_id:
-        query = query.where(CommissionRate.package_id == package_id)
     if active_only:
         today = date.today()
         query = query.where(
@@ -40,7 +38,7 @@ async def list_commission_rates(
         )
     query = query.order_by(CommissionRate.created_at.desc())
     result = await db.execute(query)
-    return result.scalars().all()
+    return result.unique().scalars().all()
 
 
 async def get_commission_rate_by_id(
@@ -48,11 +46,15 @@ async def get_commission_rate_by_id(
     rate_id: uuid.UUID,
     company_id: Optional[uuid.UUID],
 ) -> Optional[CommissionRate]:
-    query = select(CommissionRate).where(CommissionRate.id == rate_id)
+    query = (
+        select(CommissionRate)
+        .options(joinedload(CommissionRate.packages))
+        .where(CommissionRate.id == rate_id)
+    )
     if company_id is not None:
         query = query.where(CommissionRate.company_id == company_id)
     result = await db.execute(query)
-    return result.scalar_one_or_none()
+    return result.unique().scalar_one_or_none()
 
 
 async def create_commission_rate(
@@ -65,7 +67,6 @@ async def create_commission_rate(
         raise ValueError("Percentages must sum to 100")
     rate = CommissionRate(
         company_id=company_id,
-        package_id=data["package_id"],
         total_amount=data["total_amount"],
         converter_pct=data["converter_pct"],
         primary_recommender_pct=data.get("primary_recommender_pct", 0),
@@ -74,6 +75,11 @@ async def create_commission_rate(
         active_until=data.get("active_until"),
         notes=data.get("notes"),
     )
+    if "package_ids" in data and data["package_ids"]:
+        pkg_result = await db.execute(
+            select(Package).where(Package.id.in_(data["package_ids"]))
+        )
+        rate.packages = list(pkg_result.scalars().all())
     db.add(rate)
     await db.flush()
     return rate
@@ -84,11 +90,16 @@ async def update_commission_rate(
     rate: CommissionRate,
     data: dict,
 ) -> CommissionRate:
-    fields = ("package_id", "total_amount", "converter_pct", "primary_recommender_pct",
+    fields = ("total_amount", "converter_pct", "primary_recommender_pct",
               "secondary_recommender_pct", "active_from", "active_until", "notes")
     for field in fields:
         if field in data and data[field] is not None:
             setattr(rate, field, data[field])
+    if "package_ids" in data and data["package_ids"] is not None:
+        pkg_result = await db.execute(
+            select(Package).where(Package.id.in_(data["package_ids"]))
+        )
+        rate.packages = list(pkg_result.scalars().all())
     await db.flush()
     return rate
 
@@ -170,9 +181,10 @@ async def create_commission_from_conversion(
 
     rate_query = (
         select(CommissionRate)
+        .join(commission_rate_packages, CommissionRate.id == commission_rate_packages.c.commission_rate_id)
         .where(
             CommissionRate.company_id == company_id,
-            CommissionRate.package_id == package_id,
+            commission_rate_packages.c.package_id == package_id,
             CommissionRate.active_from <= date.today(),
             and_(
                 CommissionRate.active_until.is_(None),
@@ -302,8 +314,8 @@ async def get_user_commission_summary(
         client = consultation.scalar_one_or_none()
 
         pkg_name = None
-        if c.commission_rate and c.commission_rate.package:
-            pkg_name = c.commission_rate.package.name
+        if c.commission_rate and c.commission_rate.packages:
+            pkg_name = ", ".join(p.name for p in c.commission_rate.packages)
 
         items.append({
             "commission_id": c.id,

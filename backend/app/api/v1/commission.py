@@ -35,7 +35,21 @@ async def list_rates(
         db, current_user.company_id, current_user.role,
         package_id=package_id, active_only=active_only
     )
-    return [CommissionRateRead.model_validate(r) for r in items]
+    return [
+        CommissionRateRead(
+            id=r.id, company_id=r.company_id,
+            package_ids=[p.id for p in (r.packages or [])],
+            total_amount=r.total_amount,
+            converter_pct=r.converter_pct,
+            primary_recommender_pct=r.primary_recommender_pct,
+            secondary_recommender_pct=r.secondary_recommender_pct,
+            active_from=r.active_from, active_until=r.active_until,
+            deactivated_at=r.deactivated_at, notes=r.notes,
+            created_at=r.created_at, updated_at=r.updated_at,
+            package_names=[p.name for p in (r.packages or [])],
+        )
+        for r in items
+    ]
 
 
 @router.post("/rates", response_model=CommissionRateRead, status_code=status.HTTP_201_CREATED)
@@ -51,7 +65,19 @@ async def create_rate(
         rate = await commission_service.create_commission_rate(db, company_id, data.model_dump())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return await commission_service.get_commission_rate_by_id(db, rate.id, company_id)
+    r = await commission_service.get_commission_rate_by_id(db, rate.id, company_id)
+    return CommissionRateRead(
+        id=r.id, company_id=r.company_id,
+        package_ids=[p.id for p in (r.packages or [])],
+        total_amount=r.total_amount,
+        converter_pct=r.converter_pct,
+        primary_recommender_pct=r.primary_recommender_pct,
+        secondary_recommender_pct=r.secondary_recommender_pct,
+        active_from=r.active_from, active_until=r.active_until,
+        deactivated_at=r.deactivated_at, notes=r.notes,
+        created_at=r.created_at, updated_at=r.updated_at,
+        package_names=[p.name for p in (r.packages or [])],
+    )
 
 
 @router.patch("/rates/{rate_id}", response_model=CommissionRateRead)
@@ -65,7 +91,19 @@ async def update_rate(
     if not rate:
         raise HTTPException(status_code=404, detail="Commission rate not found")
     await commission_service.update_commission_rate(db, rate, data.model_dump(exclude_unset=True))
-    return await commission_service.get_commission_rate_by_id(db, rate_id, current_user.company_id)
+    r = await commission_service.get_commission_rate_by_id(db, rate_id, current_user.company_id)
+    return CommissionRateRead(
+        id=r.id, company_id=r.company_id,
+        package_ids=[p.id for p in (r.packages or [])],
+        total_amount=r.total_amount,
+        converter_pct=r.converter_pct,
+        primary_recommender_pct=r.primary_recommender_pct,
+        secondary_recommender_pct=r.secondary_recommender_pct,
+        active_from=r.active_from, active_until=r.active_until,
+        deactivated_at=r.deactivated_at, notes=r.notes,
+        created_at=r.created_at, updated_at=r.updated_at,
+        package_names=[p.name for p in (r.packages or [])],
+    )
 
 
 @router.delete("/rates/{rate_id}", status_code=status.HTTP_204_NO_CONTENT)

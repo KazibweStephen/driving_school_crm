@@ -347,106 +347,169 @@
     }
   </p-dialog>
 
-  <!-- Create Package Dialog -->
+  <!-- Create Package Dialog (Stepper) -->
   <p-dialog
     header="New Package"
     [(visible)]="showCreatePackageDialog"
     [modal]="true"
-    [style]="{ width: '90vw', maxWidth: '500px' }"
+    [style]="{ width: '90vw', maxWidth: '520px' }"
     [draggable]="false"
     [resizable]="false"
+    [closable]="!loading()"
   >
     @if (selectedProductForPackage()) {
-      <div class="flex flex-col gap-4 pt-2">
-        <div class="mb-1 text-sm text-gray-500">
-          Product: <span class="font-medium text-gray-700">{{ selectedProductForPackage()!.name }}</span>
+      <!-- Step indicators -->
+      <div class="flex items-center gap-2 mb-4 pt-2">
+        <div class="flex items-center gap-1">
+          <span class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold"
+            [class.bg-blue-600]="cs() === 0"
+            [class.bg-green-600]="cs() > 0"
+            [class.text-white]="cs() >= 0"
+            [class.bg-gray-200]="cs() < 0">1</span>
+          <span class="text-xs font-medium" [class.text-blue-600]="cs() === 0"
+            [class.text-green-600]="cs() > 0">Package</span>
         </div>
-        <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700">Name</label>
-          <input pInputText [(ngModel)]="packageForm.name" placeholder="e.g. 5 Years Permit" class="w-full" />
+        <span class="pi pi-chevron-right text-xs text-gray-400"></span>
+        <div class="flex items-center gap-1">
+          <span class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold"
+            [class.bg-blue-600]="cs() === 1"
+            [class.bg-green-600]="cs() > 1"
+            [class.text-white]="cs() >= 1"
+            [class.bg-gray-200]="cs() < 1">2</span>
+          <span class="text-xs font-medium" [class.text-blue-600]="cs() === 1"
+            [class.text-green-600]="cs() > 1">Commission</span>
         </div>
-        <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700">Price</label>
-          <p-inputNumber
-            [(ngModel)]="packageForm.price"
-            [min]="0"
-            [minFractionDigits]="0"
-            placeholder="830000"
-            styleClass="w-full"
-          />
-        </div>
-        <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700">Duration Label</label>
-          <input pInputText [(ngModel)]="packageForm.duration_label" placeholder="e.g. 5 Years" class="w-full" />
-        </div>
+      </div>
 
-        <div class="border-t pt-3">
-          <label class="mb-2 block text-sm font-semibold text-gray-700">Training &amp; Permit Options</label>
-
-          <div class="mb-2 flex items-center gap-2">
-            <p-checkbox
-              [(ngModel)]="packageForm.requires_driving_training"
-              [binary]="true"
-              inputId="req_driving"
-            />
-            <label for="req_driving" class="text-sm">Requires Driving Training</label>
+      @if (cs() === 0) {
+        <!-- Step 1: Package Details -->
+        <div class="flex flex-col gap-4 pt-2">
+          <div class="text-sm text-gray-500">
+            Product: <span class="font-medium text-gray-700">{{ selectedProductForPackage()!.name }}</span>
           </div>
-          @if (packageForm.requires_driving_training) {
-            <div class="ml-6 mb-2">
-              <label class="mb-1 block text-xs text-gray-500">Driving Training Duration (Days)</label>
-              <p-inputNumber
-                [(ngModel)]="packageForm.driving_training_duration_days"
-                [min]="0"
-                styleClass="w-full"
-              />
-            </div>
-          }
-
-          <div class="mb-2 flex items-center gap-2">
-            <p-checkbox
-              [(ngModel)]="packageForm.requires_theory_training"
-              [binary]="true"
-              inputId="req_theory"
-            />
-            <label for="req_theory" class="text-sm">Requires Theory Training</label>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Name *</label>
+            <input pInputText [(ngModel)]="packageForm.name" placeholder="e.g. 5 Years Permit" class="w-full" />
           </div>
-          @if (packageForm.requires_theory_training) {
-            <div class="ml-6 mb-2">
-              <label class="mb-1 block text-xs text-gray-500">Theory Training (Hours)</label>
-              <p-inputNumber
-                [(ngModel)]="packageForm.theory_training_hours"
-                [min]="0"
-                styleClass="w-full"
-              />
-            </div>
-          }
-
-          <div class="mb-2 flex items-center gap-2">
-            <p-checkbox
-              [(ngModel)]="packageForm.requires_permit_processing"
-              [binary]="true"
-              inputId="req_permit"
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Price *</label>
+            <p-inputNumber
+              [(ngModel)]="packageForm.price"
+              [min]="0"
+              [minFractionDigits]="0"
+              placeholder="830000"
+              styleClass="w-full"
             />
-            <label for="req_permit" class="text-sm">Requires Permit Processing</label>
           </div>
-          @if (packageForm.requires_permit_processing) {
-            <div class="ml-6 mb-2">
-              <label class="mb-1 block text-xs text-gray-500">Permit Processing Duration (Days)</label>
-              <p-inputNumber
-                [(ngModel)]="packageForm.permit_processing_duration_days"
-                [min]="0"
-                styleClass="w-full"
-              />
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Duration Label</label>
+            <input pInputText [(ngModel)]="packageForm.duration_label" placeholder="e.g. 5 Years" class="w-full" />
+          </div>
+
+          <div class="border-t pt-3">
+            <label class="mb-2 block text-sm font-semibold text-gray-700">Training &amp; Permit Options</label>
+            <div class="mb-2 flex items-center gap-2">
+              <p-checkbox [(ngModel)]="packageForm.requires_driving_training" [binary]="true" inputId="req_driving" />
+              <label for="req_driving" class="text-sm">Requires Driving Training</label>
             </div>
-          }
+            @if (packageForm.requires_driving_training) {
+              <div class="ml-6 mb-2">
+                <label class="mb-1 block text-xs text-gray-500">Driving Training Duration (Days)</label>
+                <p-inputNumber [(ngModel)]="packageForm.driving_training_duration_days" [min]="0" styleClass="w-full" />
+              </div>
+            }
+            <div class="mb-2 flex items-center gap-2">
+              <p-checkbox [(ngModel)]="packageForm.requires_theory_training" [binary]="true" inputId="req_theory" />
+              <label for="req_theory" class="text-sm">Requires Theory Training</label>
+            </div>
+            @if (packageForm.requires_theory_training) {
+              <div class="ml-6 mb-2">
+                <label class="mb-1 block text-xs text-gray-500">Theory Training (Hours)</label>
+                <p-inputNumber [(ngModel)]="packageForm.theory_training_hours" [min]="0" styleClass="w-full" />
+              </div>
+            }
+            <div class="mb-2 flex items-center gap-2">
+              <p-checkbox [(ngModel)]="packageForm.requires_permit_processing" [binary]="true" inputId="req_permit" />
+              <label for="req_permit" class="text-sm">Requires Permit Processing</label>
+            </div>
+            @if (packageForm.requires_permit_processing) {
+              <div class="ml-6 mb-2">
+                <label class="mb-1 block text-xs text-gray-500">Permit Processing Duration (Days)</label>
+                <p-inputNumber [(ngModel)]="packageForm.permit_processing_duration_days" [min]="0" styleClass="w-full" />
+              </div>
+            }
+          </div>
+
+          <p-button label="Next: Commission Rate" icon="pi pi-arrow-right" iconPos="right"
+            (onClick)="goToStep(1)"
+            [disabled]="!packageForm.name || !packageForm.price" />
         </div>
+      }
 
-        <p-button
-          label="Create Package"
-          [loading]="loading()"
-          (onClick)="createPackage()"
-          styleClass="w-full justify-center"
-        />
+      @if (cs() === 1) {
+        <!-- Step 2: Commission Rate (optional) -->
+        <div class="flex flex-col gap-4 pt-2">
+          <p class="text-sm text-gray-500">Optionally set a commission rate for this package. Leave blank to skip.</p>
+
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Total Amount</label>
+            <p-inputNumber [(ngModel)]="rateForm.total_amount" placeholder="e.g. 50000" mode="decimal" [min]="0" class="w-full" />
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label class="block text-sm font-medium text-gray-700">Split Percentages</label>
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Converter %</label>
+                <p-inputNumber [(ngModel)]="rateForm.converter_pct" placeholder="%" [min]="0" [max]="100" class="w-full" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Primary %</label>
+                <p-inputNumber [(ngModel)]="rateForm.primary_recommender_pct" placeholder="%" [min]="0" [max]="100" class="w-full" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Secondary %</label>
+                <p-inputNumber [(ngModel)]="rateForm.secondary_recommender_pct" placeholder="%" [min]="0" [max]="100" class="w-full" />
+              </div>
+            </div>
+            @if (rateForm.total_amount) {
+              <div class="text-sm" [class.text-red-600]="getRateTotalPct() !== 100" [class.text-green-600]="getRateTotalPct() === 100">
+                Total: {{ getRateTotalPct() }}% {{ getRateTotalPct() !== 100 ? '(must equal 100%)' : '' }}
+              </div>
+            }
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Active From</label>
+              <p-datepicker [(ngModel)]="rateForm.active_from" dateFormat="yy-mm-dd" placeholder="Start date" appendTo="body" class="w-full" />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Active Until</label>
+              <p-datepicker [(ngModel)]="rateForm.active_until" dateFormat="yy-mm-dd" placeholder="End date (optional)" appendTo="body" class="w-full" />
+            </div>
+          </div>
+
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+            <textarea pTextarea [(ngModel)]="rateForm.notes" placeholder="Optional notes" rows="2" class="w-full"></textarea>
+          </div>
+
+          <div class="flex gap-2">
+            <p-button label="Back" icon="pi pi-arrow-left" severity="secondary"
+               (onClick)="goToStep(0)" />
+            <p-button label="Create Package" icon="pi pi-check"
+              [loading]="loading()"
+              (onClick)="createPackage()"
+              [disabled]="rateForm.total_amount && getRateTotalPct() !== 100"
+              class="ml-auto" />
+          </div>
+        </div>
+      }
+    }
+    @if (loading()) {
+      <div class="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/70">
+        <span class="pi pi-spin pi-spinner text-3xl text-blue-600"></span>
       </div>
     }
   </p-dialog>

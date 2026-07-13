@@ -5,10 +5,51 @@ from app.api.deps import require_admin_access
 from app.core.database import get_db
 from app.models.product import EntityStatus
 from app.models.user import User
-from app.schemas.product import PackageCreate, PackageRead, PackageUpdate
+from app.schemas.product import PackageCreate, PackageRead, PackageUpdate, PackageWithRateCreate
 from app.services import product as product_service
+from app.utils.tenant import resolve_company_id
 
 router = APIRouter(prefix="/packages", tags=["packages"])
+
+
+@router.post("/with-rate", response_model=PackageRead, status_code=status.HTTP_201_CREATED)
+async def create_package_with_rate(
+    data: PackageWithRateCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_access),
+):
+    product = await product_service.get_product_by_id(db, data.product_id, company_id=current_user.company_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    company_id = await resolve_company_id(db, current_user)
+    try:
+        pkg = await product_service.create_package_with_rate(
+            db,
+            product_id=data.product_id,
+            name=data.name,
+            price=data.price,
+            duration_label=data.duration_label,
+            created_by_phone=current_user.phone,
+            company_id=company_id,
+            requires_driving_training=data.requires_driving_training,
+            requires_theory_training=data.requires_theory_training,
+            requires_permit_processing=data.requires_permit_processing,
+            driving_training_duration_days=data.driving_training_duration_days,
+            theory_training_hours=data.theory_training_hours,
+            permit_processing_duration_days=data.permit_processing_duration_days,
+            is_extension=data.is_extension,
+            extension_days=data.extension_days,
+            rate_total_amount=data.rate_total_amount,
+            rate_converter_pct=data.rate_converter_pct,
+            rate_primary_recommender_pct=data.rate_primary_recommender_pct,
+            rate_secondary_recommender_pct=data.rate_secondary_recommender_pct,
+            rate_active_from=data.rate_active_from,
+            rate_active_until=data.rate_active_until,
+            rate_notes=data.rate_notes,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return PackageRead.model_validate(pkg)
 
 
 @router.post("/", response_model=PackageRead, status_code=status.HTTP_201_CREATED)

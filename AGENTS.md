@@ -199,8 +199,13 @@ Postgres `:5433` (external), backend `:8000`, frontend `:80`
 `docker compose exec backend bash -c 'PYTHONPATH=/app alembic upgrade head'`
 If migration files are missing from container: `docker cp backend/alembic/versions/<file> crm-backend:/app/alembic/versions/`
 
-## Migration Head
-`280fdeff609d` (normalize userrole and userstatus enums to lowercase); parent `f5e6d7c8b9a0` (add company_super_user role and pending_approval status)
+## Migration Heads
+`7fdead775930` (branch A) and `b219a06bb6d7` (branch B — commission_and_lead_redesign, parent `b4c5d6e7f8a0`)
+
+## Known Backend Fixes Applied
+- `reports.py:33,36` — `Commission.amount` → `Commission.total_amount` (dashboard 500 error)
+- `cart.py:72` — `update_cart_item()` accepts `converter_id`/`recommender_id`; auto-creates commission on conversion
+- `fuel.service.ts` + `commission.service.ts` — switched from `params as any` to `HttpParams` builder to avoid literal `"undefined"` strings
 
 ## Test Files
 - `e2e/login.spec.ts` (11 tests): login, sidebar navigation through collapsed groups, user CRUD/search/PIN

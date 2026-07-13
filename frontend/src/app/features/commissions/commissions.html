@@ -1,21 +1,68 @@
 <div class="p-4 sm:p-6">
   <h1 class="text-2xl font-bold text-gray-900">Commissions</h1>
 
-  <!-- Tabs -->
   <div class="mt-4">
     <p-tabs [value]="activeTab()" (valueChange)="onTabChange($event)">
       <p-tablist>
-        <p-tab value="commissions">Commissions</p-tab>
         <p-tab value="rates">Commission Rates</p-tab>
-        <p-tab value="report">Report</p-tab>
+        <p-tab value="commissions">Commissions</p-tab>
+        <p-tab value="report">Summary</p-tab>
       </p-tablist>
+
+      <!-- RATES TAB -->
+      <p-tabpanel value="rates">
+        <div class="mt-4">
+          <p-button label="New Rate" icon="pi pi-plus" (click)="openNewRate()" class="mb-3" />
+
+          <p-table [value]="rates()" [loading]="loading()">
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Package</th>
+                <th>Total Amount</th>
+                <th>Converter %</th>
+                <th>Primary %</th>
+                <th>Secondary %</th>
+                <th>Active From</th>
+                <th>Active Until</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-r>
+              <tr>
+                <td>{{ r.package_names?.length ? r.package_names.join(', ') : '—' }}</td>
+                <td>{{ r.total_amount | number:'1.0-0' }}</td>
+                <td>{{ r.converter_pct }}%</td>
+                <td>{{ r.primary_recommender_pct }}%</td>
+                <td>{{ r.secondary_recommender_pct }}%</td>
+                <td>{{ r.active_from | date:'shortDate' }}</td>
+                <td>{{ r.active_until ? (r.active_until | date:'shortDate') : '-' }}</td>
+                <td>
+                  <p-tag [value]="r.deactivated_at ? 'Inactive' : 'Active'"
+                    [severity]="r.deactivated_at ? 'secondary' : 'success'" />
+                </td>
+                <td class="flex gap-1">
+                  <p-button icon="pi pi-pencil" (click)="editRate(r)" severity="secondary" size="small" pTooltip="Edit" />
+                  <p-button icon="pi pi-ban" (click)="deactivateRate(r)" severity="warn" size="small" pTooltip="Deactivate" />
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      </p-tabpanel>
 
       <!-- COMMISSIONS TAB -->
       <p-tabpanel value="commissions">
         <div class="mt-4 space-y-3">
           <div class="flex flex-wrap items-center gap-3">
             <p-select
-              [options]="[{ label: 'All', value: '' }, { label: 'Pending', value: 'pending' }, { label: 'Paid', value: 'paid' }]"
+              [options]="[
+                { label: 'All', value: '' },
+                { label: 'Pending', value: 'pending' },
+                { label: 'Approved', value: 'approved' },
+                { label: 'Paid', value: 'paid' },
+                { label: 'Cancelled', value: 'cancelled' }
+              ]"
               [(ngModel)]="filterStatus" (onChange)="loadCommissions()"
               placeholder="Status" appendTo="body" />
             <p-button label="Refresh" icon="pi pi-refresh" (click)="loadCommissions()" severity="secondary" />
@@ -26,9 +73,11 @@
             (onPage)="onPageChange($event)">
             <ng-template pTemplate="header">
               <tr>
-                <th>Instructor</th>
-                <th>Lesson</th>
-                <th>Amount</th>
+                <th>Client</th>
+                <th>Package</th>
+                <th>Converter</th>
+                <th>Recommender</th>
+                <th>Total</th>
                 <th>Status</th>
                 <th>Date</th>
                 <th>Actions</th>
@@ -36,11 +85,16 @@
             </ng-template>
             <ng-template pTemplate="body" let-c>
               <tr>
-                <td>{{ c.instructor_name || c.instructor_id }}</td>
-                <td>{{ c.lesson_title || '-' }}</td>
-                <td>{{ c.amount | number:'1.0-0' }}</td>
+                <td>{{ c.client_name || '-' }}</td>
+                <td>{{ c.package_name || '-' }}</td>
+                <td>{{ c.converter_name || c.converter_id }}</td>
+                <td>{{ c.primary_recommender_name || c.primary_recommender_id || '-' }}</td>
+                <td>{{ c.total_amount | number:'1.0-0' }}</td>
                 <td>
-                  <p-tag [value]="c.status" [severity]="c.status === 'paid' ? 'success' : 'warn'" />
+                  <p-tag [value]="c.status" [severity]="
+                    c.status === 'paid' ? 'success' :
+                    c.status === 'approved' ? 'info' :
+                    c.status === 'cancelled' ? 'danger' : 'warn'" />
                 </td>
                 <td>{{ c.created_at | date:'shortDate' }}</td>
                 <td>
@@ -54,84 +108,41 @@
         </div>
       </p-tabpanel>
 
-      <!-- RATES TAB -->
-      <p-tabpanel value="rates">
-        <div class="mt-4">
-          <p-button label="New Rate" icon="pi pi-plus" (click)="openNewRate()" class="mb-3" />
-
-          <p-table [value]="rates()" [loading]="loading()">
-            <ng-template pTemplate="header">
-              <tr>
-                <th>Name</th>
-                <th>Amount</th>
-                <th>Lesson Type</th>
-                <th>Active</th>
-                <th>Actions</th>
-              </tr>
-            </ng-template>
-            <ng-template pTemplate="body" let-r>
-              <tr>
-                <td>{{ r.name }}</td>
-                <td>{{ r.amount | number:'1.0-0' }}</td>
-                <td>{{ r.lesson_type || 'All' }}</td>
-                <td>
-                  <p-tag [value]="r.is_active ? 'Active' : 'Inactive'"
-                    [severity]="r.is_active ? 'success' : 'secondary'" />
-                </td>
-                <td class="flex gap-1">
-                  <p-button icon="pi pi-pencil" (click)="editRate(r)" severity="secondary" size="small" pTooltip="Edit" />
-                  <p-button [icon]="r.is_active ? 'pi pi-ban' : 'pi pi-check-circle'"
-                    (click)="toggleActive(r)" [severity]="r.is_active ? 'warn' : 'success'" size="small"
-                    [pTooltip]="r.is_active ? 'Deactivate' : 'Activate'" />
-                  <p-button icon="pi pi-trash" (click)="deleteRate(r)" severity="danger" size="small" pTooltip="Delete" />
-                </td>
-              </tr>
-            </ng-template>
-          </p-table>
-        </div>
-      </p-tabpanel>
-
-      <!-- REPORT TAB -->
+      <!-- REPORT/SUMMARY TAB -->
       <p-tabpanel value="report">
         <div class="mt-4">
-          <div class="flex flex-wrap items-center gap-3 mb-4">
-            <p-datepicker [(ngModel)]="reportDateFrom" dateFormat="yy-mm-dd" placeholder="From" appendTo="body" />
-            <p-datepicker [(ngModel)]="reportDateTo" dateFormat="yy-mm-dd" placeholder="To" appendTo="body" />
-            <p-button label="Generate" icon="pi pi-search" (click)="loadReport()" />
-          </div>
-
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             <div class="rounded-xl border bg-white p-4 shadow-sm">
               <p class="text-sm text-gray-500">Grand Total</p>
-              <p class="text-2xl font-bold">{{ reportTotals().grand_total | number:'1.0-0' }}</p>
+              <p class="text-2xl font-bold">{{ summaryTotals().grand_total | number:'1.0-0' }}</p>
             </div>
             <div class="rounded-xl border bg-white p-4 shadow-sm">
               <p class="text-sm text-gray-500">Paid</p>
-              <p class="text-2xl font-bold text-green-600">{{ reportTotals().grand_paid | number:'1.0-0' }}</p>
+              <p class="text-2xl font-bold text-green-600">{{ summaryTotals().grand_paid | number:'1.0-0' }}</p>
             </div>
             <div class="rounded-xl border bg-white p-4 shadow-sm">
               <p class="text-sm text-gray-500">Pending</p>
-              <p class="text-2xl font-bold text-amber-600">{{ reportTotals().grand_pending | number:'1.0-0' }}</p>
+              <p class="text-2xl font-bold text-amber-600">{{ summaryTotals().grand_pending | number:'1.0-0' }}</p>
             </div>
           </div>
 
-          <p-table [value]="report()" [loading]="loading()">
+          <p-table [value]="summary()" [loading]="loading()">
             <ng-template pTemplate="header">
               <tr>
-                <th>Instructor</th>
-                <th>Total Count</th>
-                <th>Total Amount</th>
+                <th>Converter</th>
+                <th>Count</th>
+                <th>Total</th>
                 <th>Paid</th>
                 <th>Pending</th>
               </tr>
             </ng-template>
             <ng-template pTemplate="body" let-r>
               <tr>
-                <td>{{ r.instructor_name || r.instructor_id }}</td>
-                <td>{{ r.total_count }}</td>
-                <td>{{ r.total_commissions | number:'1.0-0' }}</td>
-                <td class="text-green-600">{{ r.paid_amount | number:'1.0-0' }} ({{ r.paid_count }})</td>
-                <td class="text-amber-600">{{ r.pending_amount | number:'1.0-0' }} ({{ r.pending_count }})</td>
+                <td>{{ r.converter_name || r.converter_id }}</td>
+                <td>{{ r.count }}</td>
+                <td>{{ r.total_commission | number:'1.0-0' }}</td>
+                <td class="text-green-600">{{ r.total_paid | number:'1.0-0' }}</td>
+                <td class="text-amber-600">{{ r.total_pending | number:'1.0-0' }}</td>
               </tr>
             </ng-template>
           </p-table>
@@ -143,29 +154,54 @@
 
 <!-- Rate Dialog -->
 <p-dialog [(visible)]="showRateDialog" [header]="editingRate() ? 'Edit Rate' : 'New Rate'"
-  [modal]="true" [closable]="true" appendTo="body" [style]="{ width: '450px' }">
+  [modal]="true" [closable]="true" appendTo="body" [style]="{ width: '520px' }">
   <div class="flex flex-col gap-4 p-4">
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Rate Name *</label>
-      <input pInputText [(ngModel)]="rateForm.name" placeholder="e.g., Standard Driving" class="w-full" />
+      <label class="block text-sm font-medium text-gray-700 mb-1">Packages *</label>
+      <p-multiSelect [(ngModel)]="rateForm.package_ids" [options]="packages()" optionLabel="name" optionValue="id"
+        placeholder="Search and select packages..." appendTo="body" [filter]="true" filterBy="name"
+        [showClear]="true" class="w-full" />
     </div>
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
-      <p-inputNumber [(ngModel)]="rateForm.amount" placeholder="Enter amount per session" mode="decimal" [min]="0" class="w-full" />
+      <label class="block text-sm font-medium text-gray-700 mb-1">Total Amount *</label>
+      <p-inputNumber [(ngModel)]="rateForm.total_amount" placeholder="Total commission amount" mode="decimal" [min]="0" class="w-full" />
     </div>
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Lesson Type</label>
-      <input pInputText [(ngModel)]="rateForm.lesson_type" placeholder="e.g., driving, theory (leave blank for all)" class="w-full" />
+    <div class="flex flex-col gap-2">
+      <label class="block text-sm font-medium text-gray-700">Split Percentages</label>
+      <div class="grid grid-cols-3 gap-2">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Converter % *</label>
+          <p-inputNumber [(ngModel)]="rateForm.converter_pct" placeholder="%" [min]="0" [max]="100" class="w-full" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Primary %</label>
+          <p-inputNumber [(ngModel)]="rateForm.primary_recommender_pct" placeholder="%" [min]="0" [max]="100" class="w-full" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Secondary %</label>
+          <p-inputNumber [(ngModel)]="rateForm.secondary_recommender_pct" placeholder="%" [min]="0" [max]="100" class="w-full" />
+        </div>
+      </div>
+      <div class="text-sm" [class.text-red-600]="getTotalPct() !== 100" [class.text-green-600]="getTotalPct() === 100">
+        Total: {{ getTotalPct() }}% {{ getTotalPct() !== 100 ? '(must equal 100%)' : '' }}
+      </div>
     </div>
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">Transmission</label>
-      <input pInputText [(ngModel)]="rateForm.transmission_type" placeholder="e.g., manual, automatic (leave blank for all)" class="w-full" />
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Active From *</label>
+        <p-datepicker [(ngModel)]="rateForm.active_from" dateFormat="yy-mm-dd" placeholder="Start date" appendTo="body" class="w-full" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Active Until</label>
+        <p-datepicker [(ngModel)]="rateForm.active_until" dateFormat="yy-mm-dd" placeholder="End date (optional)" appendTo="body" class="w-full" />
+      </div>
     </div>
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
       <textarea pTextarea [(ngModel)]="rateForm.notes" placeholder="Optional notes" rows="3" class="w-full"></textarea>
     </div>
-    <p-button label="Save" icon="pi pi-check" (click)="saveRate()" [disabled]="!rateForm.name || !rateForm.amount" />
+    <p-button label="Save" icon="pi pi-check" (click)="saveRate()"
+      [disabled]="!rateForm.package_ids?.length || !rateForm.total_amount || getTotalPct() !== 100 || !rateForm.active_from" />
   </div>
 </p-dialog>
 

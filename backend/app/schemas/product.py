@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -35,6 +35,17 @@ class PackageUpdate(BaseModel):
     permit_processing_duration_days: int | None = None
     is_extension: bool | None = None
     extension_days: int | None = None
+
+
+class PackageWithRateCreate(PackageCreate):
+    """Extends PackageCreate with optional commission rate fields."""
+    rate_total_amount: Decimal | None = None
+    rate_converter_pct: Decimal | None = None
+    rate_primary_recommender_pct: Decimal = 0
+    rate_secondary_recommender_pct: Decimal = 0
+    rate_active_from: date | None = None
+    rate_active_until: date | None = None
+    rate_notes: str | None = None
 
 
 class PackageRead(BaseModel):

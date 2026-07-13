@@ -88,12 +88,6 @@
       <!-- COMMISSIONS REPORT -->
       <p-tabpanel value="commissions">
         <div class="mt-4">
-          <div class="flex flex-wrap items-center gap-3 mb-4">
-            <p-datepicker [(ngModel)]="commDateFrom" dateFormat="yy-mm-dd" placeholder="From" appendTo="body" />
-            <p-datepicker [(ngModel)]="commDateTo" dateFormat="yy-mm-dd" placeholder="To" appendTo="body" />
-            <p-button label="Generate" icon="pi pi-search" (click)="loadCommissionReport()" />
-          </div>
-
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             <div class="rounded-xl border bg-white p-4 shadow-sm">
               <p class="text-sm text-gray-500">Total Commissions</p>
@@ -112,8 +106,8 @@
           <p-table [value]="commissionReport()" [loading]="loading()">
             <ng-template pTemplate="header">
               <tr>
-                <th>Instructor</th>
-                <th>Sessions</th>
+                <th>Converter</th>
+                <th>Count</th>
                 <th>Total</th>
                 <th>Paid</th>
                 <th>Pending</th>
@@ -121,11 +115,11 @@
             </ng-template>
             <ng-template pTemplate="body" let-r>
               <tr>
-                <td>{{ r.instructor_name || r.instructor_id }}</td>
-                <td>{{ r.total_count }}</td>
-                <td>{{ r.total_commissions | number:'1.0-0' }}</td>
-                <td class="text-green-600">{{ r.paid_amount | number:'1.0-0' }} ({{ r.paid_count }})</td>
-                <td class="text-amber-600">{{ r.pending_amount | number:'1.0-0' }} ({{ r.pending_count }})</td>
+                <td>{{ r.converter_name || r.converter_id }}</td>
+                <td>{{ r.count }}</td>
+                <td>{{ r.total_commission | number:'1.0-0' }}</td>
+                <td class="text-green-600">{{ r.total_paid | number:'1.0-0' }}</td>
+                <td class="text-amber-600">{{ r.total_pending | number:'1.0-0' }}</td>
               </tr>
             </ng-template>
           </p-table>

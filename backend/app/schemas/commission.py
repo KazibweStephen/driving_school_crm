@@ -7,7 +7,7 @@ from typing import Optional
 
 
 class CommissionRateCreate(BaseModel):
-    package_id: UUID
+    package_ids: list[UUID]
     total_amount: Decimal
     converter_pct: Decimal
     primary_recommender_pct: Decimal = 0
@@ -18,7 +18,7 @@ class CommissionRateCreate(BaseModel):
 
 
 class CommissionRateUpdate(BaseModel):
-    package_id: Optional[UUID] = None
+    package_ids: Optional[list[UUID]] = None
     total_amount: Optional[Decimal] = None
     converter_pct: Optional[Decimal] = None
     primary_recommender_pct: Optional[Decimal] = None
@@ -32,7 +32,7 @@ class CommissionRateRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     company_id: UUID
-    package_id: UUID
+    package_ids: list[UUID] = []
     total_amount: Decimal
     converter_pct: Decimal
     primary_recommender_pct: Decimal
@@ -43,6 +43,7 @@ class CommissionRateRead(BaseModel):
     notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    package_names: list[str] = []
 
 
 class CommissionMaturity(BaseModel):

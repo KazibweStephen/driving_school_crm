@@ -57,6 +57,16 @@ export interface ProductListResponse {
   total_pages: number;
 }
 
+export interface PackageWithRateCreate extends PackageCreate {
+  rate_total_amount?: number;
+  rate_converter_pct?: number;
+  rate_primary_recommender_pct?: number;
+  rate_secondary_recommender_pct?: number;
+  rate_active_from?: string;
+  rate_active_until?: string;
+  rate_notes?: string;
+}
+
 export interface PackageCreate {
   product_id: string;
   name: string;
@@ -125,6 +135,10 @@ export class ProductService {
 
   createPackage(data: PackageCreate) {
     return this.http.post<Package>('/api/v1/packages/', data);
+  }
+
+  createPackageWithRate(data: PackageWithRateCreate) {
+    return this.http.post<Package>('/api/v1/packages/with-rate', data);
   }
 
   updatePackage(id: string, data: PackageUpdate) {

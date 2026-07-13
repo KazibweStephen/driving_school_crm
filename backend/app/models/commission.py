@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, date
 
-from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, DateTime, Date, Enum, ForeignKey
+from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, DateTime, Date, Enum, ForeignKey, Table
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -21,12 +21,18 @@ class ContestStatus(str, enum.Enum):
     RESOLVED = "resolved"
 
 
+commission_rate_packages = Table(
+    "commission_rate_packages", Base.metadata,
+    Column("commission_rate_id", UUID(as_uuid=True), ForeignKey("commission_rates.id", ondelete="CASCADE"), primary_key=True),
+    Column("package_id", UUID(as_uuid=True), ForeignKey("packages.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
 class CommissionRate(Base):
     __tablename__ = "commission_rates"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
-    package_id = Column(UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True)
     total_amount = Column(Numeric(10, 2), nullable=False)
     converter_pct = Column(Numeric(5, 2), nullable=False)
     primary_recommender_pct = Column(Numeric(5, 2), nullable=False, default=0)
@@ -39,7 +45,7 @@ class CommissionRate(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     company = relationship("Company", backref="commission_rates")
-    package = relationship("Package", backref="commission_rates")
+    packages = relationship("Package", secondary=commission_rate_packages, backref="commission_rates")
 
 
 class Commission(Base):

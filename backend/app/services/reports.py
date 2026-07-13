@@ -30,10 +30,10 @@ async def get_dashboard_summary(
     today_payments = select(func.coalesce(func.sum(Payment.total_paid), 0))
     month_payments = select(func.coalesce(func.sum(Payment.total_paid), 0))
 
-    today_commissions = select(func.coalesce(func.sum(Commission.amount), 0)).where(
+    today_commissions = select(func.coalesce(func.sum(Commission.total_amount), 0)).where(
         Commission.created_at >= today_start
     )
-    month_commissions = select(func.coalesce(func.sum(Commission.amount), 0)).where(
+    month_commissions = select(func.coalesce(func.sum(Commission.total_amount), 0)).where(
         Commission.created_at >= month_start
     )
     pending_commissions = select(func.count()).select_from(Commission).where(

@@ -13,6 +13,7 @@ import { SelectModule } from 'primeng/select';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { TableModule } from 'primeng/table';
+import { DatePickerModule } from 'primeng/datepicker';
 import { ProductService, Product, Package } from '../../core/services/product.service';
 import { LessonPlanService, LessonPlanTemplate, LessonPlanTemplateCreate, LessonTemplateItem } from '../../core/services/lesson-plan.service';
 import { LessonLibraryService, LessonLibrary } from '../../core/services/lesson-library.service';
@@ -33,6 +34,7 @@ import { LessonLibraryService, LessonLibrary } from '../../core/services/lesson-
     SelectModule,
     ConfirmDialogModule,
     TableModule,
+    DatePickerModule,
   ],
   providers: [ConfirmationService, MessageService],
   templateUrl: './products.html',
@@ -52,6 +54,19 @@ export class Products implements OnInit {
   showEditProductDialog = signal(false);
   showCreatePackageDialog = signal(false);
   showEditPackageDialog = signal(false);
+  createPackageStep = signal(0);
+  cs = this.createPackageStep;
+
+  // Commission rate form (Step 2 of Package creation)
+  rateForm = {
+    total_amount: null as number | null,
+    converter_pct: 0,
+    primary_recommender_pct: 0,
+    secondary_recommender_pct: 0,
+    active_from: null as string | null,
+    active_until: null as string | null,
+    notes: '',
+  };
 
   expandedProducts = signal<Set<string>>(new Set());
   editingProduct = signal<Product | null>(null);
@@ -285,7 +300,37 @@ export class Products implements OnInit {
       theory_training_hours: null,
       permit_processing_duration_days: null,
     };
+    this.rateForm = {
+      total_amount: null,
+      converter_pct: 0,
+      primary_recommender_pct: 0,
+      secondary_recommender_pct: 0,
+      active_from: null,
+      active_until: null,
+      notes: '',
+    };
+    this.createPackageStep.set(0);
     this.showCreatePackageDialog.set(true);
+  }
+
+  private toDateStr(d: any): string | undefined {
+    if (!d) return undefined;
+    if (typeof d === 'string') return d;
+    if (d instanceof Date) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+    return undefined;
+  }
+
+  goToStep(step: number) {
+    this.createPackageStep.set(step);
+  }
+
+  getRateTotalPct(): number {
+    return this.rateForm.converter_pct + this.rateForm.primary_recommender_pct + this.rateForm.secondary_recommender_pct;
   }
 
   async createPackage() {
@@ -294,7 +339,7 @@ export class Products implements OnInit {
     this.loading.set(true);
     try {
       await this.productService
-        .createPackage({
+        .createPackageWithRate({
           product_id: product.id,
           name: this.packageForm.name,
           price: this.packageForm.price,
@@ -305,6 +350,13 @@ export class Products implements OnInit {
           driving_training_duration_days: this.packageForm.driving_training_duration_days,
           theory_training_hours: this.packageForm.theory_training_hours,
           permit_processing_duration_days: this.packageForm.permit_processing_duration_days,
+          rate_total_amount: this.rateForm.total_amount ?? undefined,
+          rate_converter_pct: this.rateForm.converter_pct || undefined,
+          rate_primary_recommender_pct: this.rateForm.primary_recommender_pct || undefined,
+          rate_secondary_recommender_pct: this.rateForm.secondary_recommender_pct || undefined,
+          rate_active_from: this.toDateStr(this.rateForm.active_from),
+          rate_active_until: this.toDateStr(this.rateForm.active_until) || undefined,
+          rate_notes: this.rateForm.notes || undefined,
         })
         .toPromise();
       this.showCreatePackageDialog.set(false);

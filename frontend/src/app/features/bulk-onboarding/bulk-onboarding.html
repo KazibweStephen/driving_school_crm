@@ -1,0 +1,256 @@
+<p-toast />
+<p-confirmDialog />
+
+<!-- Draft Restore Banner -->
+@if (draftRestored()) {
+  <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <i class="pi pi-info-circle text-blue-500 text-lg"></i>
+      <div>
+        <span class="font-medium text-blue-800">Draft restored from local storage</span>
+        @if (draftSavedAt()) {
+          <span class="text-blue-600 text-sm ml-2">Saved {{ draftSavedAt() | date:'medium' }}</span>
+        }
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <p-button label="Keep" severity="success" size="small" (click)="dismissDraftRestore()" />
+      <p-button label="Clear" severity="warn" size="small" (click)="clearDraft()" />
+    </div>
+  </div>
+}
+
+<!-- Header -->
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-800">Bulk Client Onboarding</h1>
+    <p class="text-gray-500 text-sm mt-1">Add multiple existing clients with their payment and lesson history</p>
+  </div>
+  <div class="flex gap-2">
+    <p-button label="Save Draft" icon="pi pi-save" severity="secondary" (click)="saveDraft()"
+      [disabled]="clients().length === 0" pTooltip="Save form to browser storage" />
+    <p-button label="Add Client" icon="pi pi-plus" (click)="addClient()" />
+  </div>
+</div>
+
+<!-- Summary Bar -->
+@if (clients().length > 0) {
+  <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 flex gap-6 text-sm">
+    <span><strong>{{ totalClients() }}</strong> client(s)</span>
+    <span><strong>{{ totalPackages() }}</strong> package(s)</span>
+    <span><strong>{{ totalInstallments() }}</strong> installment(s)</span>
+    <span><strong>{{ totalLessons() }}</strong> lesson(s) (after 30-min split)</span>
+  </div>
+}
+
+<!-- Client Cards -->
+@for (client of clients(); track $index; let ci = $index) {
+  <div class="border border-gray-200 rounded-lg mb-6 bg-white shadow-sm">
+    <!-- Client Header -->
+    <div class="flex items-center justify-between bg-gray-50 rounded-t-lg px-4 py-3 border-b">
+      <h3 class="font-semibold text-gray-700">Client {{ ci + 1 }}</h3>
+      <p-button icon="pi pi-trash" severity="danger" size="small" (click)="removeClient(ci)"
+        [style]="{ 'padding': '0.25rem 0.5rem' }" />
+    </div>
+
+    <!-- Client Info -->
+    <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+        <input pInputText [ngModel]="client.phone"
+          (ngModelChange)="client.phone = $event; checkPhone(ci, $event)"
+          placeholder="Phone number" class="w-full" />
+        @if (phoneWarnings()[ci]) {
+          <div class="text-xs text-amber-600 mt-1 flex items-center gap-1">
+            <i class="pi pi-exclamation-triangle"></i>
+            {{ phoneWarnings()[ci] }}
+          </div>
+        }
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+        <input pInputText [(ngModel)]="client.first_name" placeholder="First name" class="w-full" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+        <input pInputText [(ngModel)]="client.last_name" placeholder="Last name" class="w-full" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
+        <input pInputText [(ngModel)]="client.middle_name" placeholder="Middle name" class="w-full" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Location</label>
+        <input pInputText [(ngModel)]="client.location" placeholder="Location" class="w-full" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Document Date</label>
+        <p-datepicker [(ngModel)]="client.document_date" dateFormat="yy-mm-dd"
+          placeholder="Select date" appendTo="body" class="w-full" />
+      </div>
+    </div>
+
+    <!-- Packages -->
+    <div class="px-4 pb-4">
+      <div class="flex items-center justify-between mb-3">
+        <h4 class="font-medium text-gray-600">Packages</h4>
+        <p-button label="Add Package" icon="pi pi-plus" size="small" severity="secondary"
+          (click)="addPackage(ci)" />
+      </div>
+
+      @for (pkg of client.packages; track $index; let pi = $index) {
+        <div class="border border-gray-200 rounded-lg mb-4 bg-gray-50">
+          <!-- Package Header -->
+          <div class="flex items-center justify-between px-4 py-2 border-b border-gray-200">
+            <span class="text-sm font-medium text-gray-600">Package {{ pi + 1 }}</span>
+            <p-button icon="pi pi-trash" severity="danger" size="small" (click)="removePackage(ci, pi)"
+              [style]="{ 'padding': '0.15rem 0.4rem' }" />
+          </div>
+
+          <!-- Package Selection -->
+          <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Product *</label>
+              <p-select [options]="productOptions()" [(ngModel)]="pkg.product_id"
+                placeholder="Select Product" appendTo="body" class="w-full" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Package</label>
+              <p-select [options]="getPackagesForProduct(pkg.product_id)" [(ngModel)]="pkg.package_id"
+                placeholder="Select Package" appendTo="body" class="w-full" />
+            </div>
+          </div>
+
+          <!-- Installments -->
+          <div class="px-4 pb-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-medium text-gray-600">Payment Installments</span>
+              <p-button label="Add Installment" icon="pi pi-plus" size="small" severity="secondary"
+                (click)="addInstallment(ci, pi)" [style]="{ 'padding': '0.2rem 0.5rem', 'font-size': '0.75rem' }" />
+            </div>
+            @if (pkg.installments.length === 0) {
+              <p class="text-xs text-gray-400 italic mb-2">No installments added</p>
+            }
+            @for (inst of pkg.installments; track $index; let ii = $index) {
+              <div class="grid grid-cols-12 gap-1.5 items-end mb-2">
+                <div class="col-span-2">
+                  <label class="block text-xs text-gray-500 mb-0.5">Receipt # *</label>
+                  <input pInputText [(ngModel)]="inst.receipt_number" placeholder="Receipt" class="w-full" />
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-xs text-gray-500 mb-0.5">Date *</label>
+                  <p-datepicker [(ngModel)]="inst.document_date" dateFormat="yy-mm-dd"
+                    placeholder="Date" appendTo="body" class="w-full" />
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-xs text-gray-500 mb-0.5">Amount *</label>
+                  <p-inputNumber [(ngModel)]="inst.amount" mode="decimal" [min]="0"
+                    placeholder="Amount" [style]="{ width: '100%' }" />
+                </div>
+                <div class="col-span-5">
+                  <label class="block text-xs text-gray-500 mb-0.5">Received By *</label>
+                  <p-select [options]="userOptions()" [(ngModel)]="inst.received_by_phone"
+                    placeholder="Select user" appendTo="body" class="w-full" />
+                </div>
+                <div class="col-span-1">
+                  <p-button icon="pi pi-trash" severity="danger" size="small"
+                    (click)="removeInstallment(ci, pi, ii)" [style]="{ 'padding': '0.2rem 0.4rem' }" />
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- Lessons -->
+          <div class="px-4 pb-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-medium text-gray-600">Lessons Taken</span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-400">Practical &gt;30min auto-split</span>
+                <p-button label="Add Lesson" icon="pi pi-plus" size="small" severity="secondary"
+                  (click)="addLesson(ci, pi)" [style]="{ 'padding': '0.2rem 0.5rem', 'font-size': '0.75rem' }" />
+              </div>
+            </div>
+            @if (pkg.lessons.length === 0) {
+              <p class="text-xs text-gray-400 italic">No lessons added</p>
+            }
+            @for (lesson of pkg.lessons; track $index; let li = $index) {
+              <div class="grid grid-cols-12 gap-2 items-end mb-2">
+                <div class="col-span-3">
+                  <label class="block text-xs text-gray-500 mb-0.5">Date</label>
+                  <p-datepicker [(ngModel)]="lesson.date" dateFormat="yy-mm-dd"
+                    placeholder="Date" appendTo="body" class="w-full" />
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-xs text-gray-500 mb-0.5">Duration (min)</label>
+                  <p-inputNumber [(ngModel)]="lesson.duration_minutes" [min]="1" [max]="480"
+                    placeholder="Min" [style]="{ width: '100%' }" />
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-xs text-gray-500 mb-0.5">Type</label>
+                  <p-select [options]="[{label:'Practical',value:'practical'},{label:'Theory',value:'theory'}]"
+                    [ngModel]="lesson.lesson_type"
+                    (ngModelChange)="onLessonTypeChange(ci, pi, li, $event)"
+                    appendTo="body" class="w-full" />
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-xs text-gray-500 mb-0.5">Instructor</label>
+                  <p-select [options]="userOptions()" [(ngModel)]="lesson.instructor_id"
+                    placeholder="Optional" appendTo="body" class="w-full" />
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-xs text-gray-500 mb-0.5">Vehicle</label>
+                  <p-select [options]="vehicleOptions()" [(ngModel)]="lesson.vehicle_id"
+                    placeholder="Optional" appendTo="body" class="w-full" />
+                </div>
+                <div class="col-span-1">
+                  <p-button icon="pi pi-trash" severity="danger" size="small"
+                    (click)="removeLesson(ci, pi, li)" [style]="{ 'padding': '0.2rem 0.4rem' }" />
+                </div>
+              </div>
+              @if (lesson.duration_minutes && lesson.duration_minutes > 30) {
+                <div class="text-xs text-blue-500 ml-1 mb-1">
+                  <i class="pi pi-info-circle"></i>
+                  Will be split into {{ countExpandedLessons([lesson]) }} lesson(s) of 30min each
+                </div>
+              }
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+}
+
+<!-- Empty State -->
+@if (clients().length === 0 && !draftRestored()) {
+  <div class="text-center py-16 text-gray-400">
+    <i class="pi pi-users text-5xl mb-4"></i>
+    <p class="text-lg mb-2">No clients added yet</p>
+    <p class="text-sm mb-4">Click "Add Client" to start onboarding existing clients</p>
+    <p-button label="Add First Client" icon="pi pi-plus" (click)="addClient()" />
+  </div>
+}
+
+<!-- Bottom Actions -->
+@if (clients().length > 0) {
+  <div class="flex justify-end gap-3 mt-6 mb-8 sticky bottom-4 bg-white border-t border-gray-200 pt-4 px-4 -mx-4 rounded-b-lg shadow-lg">
+    <p-button label="Save Draft" icon="pi pi-save" severity="secondary" (click)="saveDraft()" />
+    <p-button label="Submit All" icon="pi pi-check" (click)="submit()"
+      [disabled]="!canSubmit() || submitting()" [loading]="submitting()" />
+  </div>
+}
+
+<!-- Success Dialog -->
+<p-dialog [(visible)]="showSuccessDialog" header="Onboarding Complete" [modal]="true"
+  [closable]="false" [style]="{ width: '400px' }">
+  <div class="text-center p-4">
+    <i class="pi pi-check-circle text-green-500 text-5xl mb-4"></i>
+    <p class="text-lg font-medium mb-2">Successfully onboarded {{ successResult()?.created }} client(s)</p>
+  </div>
+  <ng-template pTemplate="footer">
+    <div class="flex justify-center gap-3">
+      <p-button label="View Consultations" severity="secondary" (click)="goToConsultations()" />
+      <p-button label="View First Client" (click)="goToFirstConsultation()" />
+    </div>
+  </ng-template>
+</p-dialog>

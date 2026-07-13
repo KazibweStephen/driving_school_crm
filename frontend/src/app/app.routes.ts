@@ -104,6 +104,11 @@ export const routes: Routes = [
           import('./features/fuel-tracking/fuel-tracking').then((c) => c.FuelTrackingCmp),
       },
       {
+        path: 'bulk-onboarding',
+        loadComponent: () =>
+          import('./features/bulk-onboarding/bulk-onboarding').then((c) => c.BulkOnboardingCmp),
+      },
+      {
         path: 'reports',
         loadComponent: () =>
           import('./features/reports/reports').then((c) => c.ReportsCmp),

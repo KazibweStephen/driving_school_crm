@@ -130,6 +130,49 @@ export interface FollowUpUpdate {
   cart_item_ids?: string[];
 }
 
+export interface BulkOnboardingLesson {
+  date: string;
+  duration_minutes: number;
+  lesson_type: string;
+  instructor_id?: string;
+  vehicle_id?: string;
+  notes?: string;
+}
+
+export interface BulkOnboardingInstallment {
+  receipt_number: string;
+  document_date: string;
+  amount: number;
+  received_by_phone: string;
+}
+
+export interface BulkOnboardingPackage {
+  product_id: string;
+  package_id?: string;
+  installments: BulkOnboardingInstallment[];
+  lessons: BulkOnboardingLesson[];
+}
+
+export interface BulkOnboardingClient {
+  phone: string;
+  first_name: string;
+  middle_name?: string;
+  last_name?: string;
+  location?: string;
+  branch_id?: string;
+  document_date?: string;
+  packages: BulkOnboardingPackage[];
+}
+
+export interface BulkOnboardingRequest {
+  clients: BulkOnboardingClient[];
+}
+
+export interface BulkOnboardingResponse {
+  created: number;
+  consultation_ids: string[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ConsultationService {
   constructor(private http: HttpClient) {}
@@ -180,5 +223,9 @@ export class ConsultationService {
 
   deactivateFollowUp(id: string) {
     return this.http.delete<FollowUp>(`/api/v1/consultations/follow-ups/${id}`);
+  }
+
+  bulkOnboard(data: BulkOnboardingRequest) {
+    return this.http.post<BulkOnboardingResponse>('/api/v1/bulk-onboarding', data);
   }
 }

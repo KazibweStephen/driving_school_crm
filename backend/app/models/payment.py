@@ -70,6 +70,7 @@ class Installment(Base):
     )
     paid_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     paid_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    receipt_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

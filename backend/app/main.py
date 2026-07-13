@@ -5,6 +5,7 @@ from app.api.v1 import (
     auth, cart, clients, commission, companies, consultations, finance,
     fuel,
     instructor_qualifications,
+    lead,
     lesson_plan, lesson_execution, library, packages, payments, permit,
     products, receipts, reports, schedule_breaks, scheduling, training, users,
     vehicle_assignments, vehicle_schedule, vehicles, video_library,
@@ -47,6 +48,7 @@ app.include_router(scheduling.router)
 app.include_router(instructor_qualifications.router)
 app.include_router(companies.router)
 app.include_router(commission.router, prefix="/api/v1")
+app.include_router(lead.router, prefix="/api/v1")
 app.include_router(finance.router, prefix="/api/v1")
 app.include_router(fuel.router, prefix="/api/v1")
 app.include_router(receipts.router)

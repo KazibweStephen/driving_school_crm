@@ -171,7 +171,7 @@ async def create_full_consultation(
             await db.refresh(payment, ["installments"])
             await payment_service._recompute_payment_totals(payment)
             await db.flush()
-            await update_cart_item(db, ci.id, status=cart_status, notes=None)
+            await update_cart_item(db, ci.id, status=cart_status, notes=None, converter_id=current_user.phone)
 
     # Reload with relationships
     from app.models.consultation import Consultation

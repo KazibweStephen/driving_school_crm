@@ -78,6 +78,8 @@ async def update_cart_item(
     recovery_reason: str | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
+    converter_id: str | None = None,
+    recommender_id: str | None = None,
 ) -> CartItem | None:
     result = await db.execute(select(CartItem).where(CartItem.id == item_id))
     item = result.scalar_one_or_none()
@@ -114,11 +116,21 @@ async def update_cart_item(
     await db.flush()
 
     # Auto-close follow-ups based on status change
+    converted_statuses = (CartItemStatus.CONVERTED, CartItemStatus.CONVERTED_PAID, CartItemStatus.CONVERTED_PAYING)
     if status:
-        if item.status in (CartItemStatus.CONVERTED, CartItemStatus.CONVERTED_PAID, CartItemStatus.CONVERTED_PAYING):
+        if item.status in converted_statuses:
             await _complete_conversion_follow_ups(db, item_id)
         elif item.status == CartItemStatus.LOST:
             await _cancel_follow_ups(db, item_id)
+
+    # Auto-create commission on conversion
+    if status and item.status in converted_statuses and item.package_id:
+        from app.services.commission import create_commission_from_conversion
+        await create_commission_from_conversion(
+            db, item, company_id,
+            converter_id=converter_id,
+            recommender_id=recommender_id,
+        )
 
     await db.refresh(item)
     await _update_consultation_status(db, item.consultation_id)

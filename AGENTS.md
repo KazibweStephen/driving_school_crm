@@ -163,7 +163,24 @@ All endpoints have been fixed with multi-company scoping. Each endpoint verifies
 - `require_super_user` kept for truly cross-company operations (companies CRUD, approving accounts).
 - Frontend should show `company_super_user` option in role dropdown (only when current user is `super_user`), `PENDING_APPROVAL` status badge, and approve button.
 
+## Commission System (Complete — backend)
+- **CommissionRate** per Package: 3-way split (`converter_pct`, `primary_recommender_pct`, `secondary_recommender_pct` must sum to 100). Lifecycle dates: `active_from` (required), `active_until` (nullable), `deactivated_at` (nullable — soft deactivates).
+- **Commission** linked to `CartItem` (created on conversion). Stores denormalized amounts per role. Status: `pending` / `approved` / `paid` / `cancelled`.
+- **Commission maturity** computed on read: `total_paid_for_cart_item / package_price * 100`.
+- **CommissionContest**: dispute resolution with `reason`, `resolution`, resolved by `SUPERVISOR` role.
+- **Lead model**: any user can submit leads (client_name, client_phone, location, interested_product). Statuses: `new` → `contacted` → `converted` / `lost`. Admin notes field. Converted leads link to consultation.
+- **SUPERVISOR** role added (resolves contests).
+- Auto-commission creation hook: `update_cart_item()` in `cart.py` calls `create_commission_from_conversion()` when a cart item transitions to `converted`/`converted_paid`/`converted_paying`.
+- Migration `b219a06bb6d7` drops old `commission_rates`/`commissions` columns; adds new schema.
+- Commission rates CRUD at `/api/v1/commission/commission-rates`.
+- Commissions list/detail at `/api/v1/commission/commissions`.
+- Dashboard summary at `/api/v1/commission/my-dashboard/summary`.
+- Leads CRUD at `/api/v1/leads`.
+- Contests CRUD at `/api/v1/commission/contests`.
+- Frontend not yet built.
+
 ## Remaining
+- Build frontend for commission rates management, lead submission, commission dashboard, contests.
 - User creation API doesn't return the auto-generated initial PIN — frontend needs to call reset-pin to get a PIN, or the API should return it in the response.
 - Build frontend for `company_super_user` role assignment (role dropdown, warning dialog, approve button).
 - Build frontend Expense and Sale pages under branches.

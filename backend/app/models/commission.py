@@ -1,7 +1,8 @@
 import enum
 import uuid
+from datetime import datetime, date
 
-from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, String, Text, Boolean, Integer, Numeric, DateTime, Date, Enum, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -11,7 +12,13 @@ from app.core.database import Base
 
 class CommissionStatus(str, enum.Enum):
     PENDING = "pending"
-    PAID = "paid"
+    PARTIALLY_MATURED = "partially_matured"
+    FULLY_MATURED = "fully_matured"
+
+
+class ContestStatus(str, enum.Enum):
+    OPEN = "open"
+    RESOLVED = "resolved"
 
 
 class CommissionRate(Base):
@@ -19,16 +26,20 @@ class CommissionRate(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
-    name = Column(String(200), nullable=False)
-    amount = Column(Numeric(10, 2), nullable=False)
-    lesson_type = Column(String(50), nullable=True)
-    transmission_type = Column(String(20), nullable=True)
-    is_active = Column(Boolean, default=True)
+    package_id = Column(UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True)
+    total_amount = Column(Numeric(10, 2), nullable=False)
+    converter_pct = Column(Numeric(5, 2), nullable=False)
+    primary_recommender_pct = Column(Numeric(5, 2), nullable=False, default=0)
+    secondary_recommender_pct = Column(Numeric(5, 2), nullable=False, default=0)
+    active_from = Column(Date, nullable=False)
+    active_until = Column(Date, nullable=True)
+    deactivated_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     company = relationship("Company", backref="commission_rates")
+    package = relationship("Package", backref="commission_rates")
 
 
 class Commission(Base):
@@ -36,20 +47,41 @@ class Commission(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
-    instructor_id = Column(String(20), ForeignKey("users.phone"), nullable=False, index=True)
-    client_lesson_id = Column(UUID(as_uuid=True), ForeignKey("client_lessons.id"), nullable=True, index=True)
-    training_session_id = Column(UUID(as_uuid=True), ForeignKey("training_sessions.id"), nullable=True, index=True)
+    cart_item_id = Column(UUID(as_uuid=True), ForeignKey("cart_items.id"), nullable=False, index=True)
     commission_rate_id = Column(UUID(as_uuid=True), ForeignKey("commission_rates.id"), nullable=True)
-    amount = Column(Numeric(10, 2), nullable=False)
+    converter_id = Column(String(20), ForeignKey("users.phone"), nullable=False, index=True)
+    primary_recommender_id = Column(String(20), ForeignKey("users.phone"), nullable=True, index=True)
+    secondary_recommender_id = Column(String(20), ForeignKey("users.phone"), nullable=True, index=True)
+    total_amount = Column(Numeric(10, 2), nullable=False)
+    converter_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    primary_recommender_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    secondary_recommender_amount = Column(Numeric(10, 2), nullable=False, default=0)
     status = Column(Enum(CommissionStatus, values_callable=lambda obj: [e.value for e in obj]), default=CommissionStatus.PENDING)
-    paid_at = Column(DateTime(timezone=True), nullable=True)
-    paid_by = Column(String(20), ForeignKey("users.phone"), nullable=True)
+    contest_status = Column(Enum(ContestStatus, values_callable=lambda obj: [e.value for e in obj]), nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    company = relationship("Company", backref="commissions")
-    instructor = relationship("User", foreign_keys=[instructor_id], backref="commissions")
-    client_lesson = relationship("ClientLesson", backref="commissions")
-    training_session = relationship("TrainingSession", backref="commissions")
+    company = relationship("Company", backref="commissions_new")
+    cart_item = relationship("CartItem", backref="commissions")
     commission_rate = relationship("CommissionRate", backref="commissions")
-    paid_by_user = relationship("User", foreign_keys=[paid_by], backref="paid_commissions")
+    converter = relationship("User", foreign_keys=[converter_id], backref="converted_commissions")
+    primary_recommender = relationship("User", foreign_keys=[primary_recommender_id], backref="primary_recommended_commissions")
+    secondary_recommender = relationship("User", foreign_keys=[secondary_recommender_id], backref="secondary_recommended_commissions")
+
+
+class CommissionContest(Base):
+    __tablename__ = "commission_contests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    commission_id = Column(UUID(as_uuid=True), ForeignKey("commissions.id"), nullable=False, index=True)
+    contested_by_id = Column(String(20), ForeignKey("users.phone"), nullable=False, index=True)
+    reason = Column(Text, nullable=False)
+    status = Column(Enum(ContestStatus, values_callable=lambda obj: [e.value for e in obj]), default=ContestStatus.OPEN)
+    resolution = Column(Text, nullable=True)
+    resolved_by_id = Column(String(20), ForeignKey("users.phone"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    commission = relationship("Commission", backref="contests")
+    contested_by = relationship("User", foreign_keys=[contested_by_id], backref="submitted_contests")
+    resolved_by = relationship("User", foreign_keys=[resolved_by_id], backref="resolved_contests")

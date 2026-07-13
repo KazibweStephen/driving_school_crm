@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 export interface FuelRate {
@@ -83,7 +83,10 @@ export class FuelService {
   constructor(private http: HttpClient) {}
 
   listRates(params?: { vehicle_id?: string; active_only?: boolean }): Observable<FuelRate[]> {
-    return this.http.get<FuelRate[]>('/api/v1/fuel/rates', { params: params as any });
+    let p = new HttpParams();
+    if (params?.vehicle_id) p = p.set('vehicle_id', params.vehicle_id);
+    if (params?.active_only) p = p.set('active_only', 'true');
+    return this.http.get<FuelRate[]>('/api/v1/fuel/rates', { params: p });
   }
 
   getActiveRate(vehicle_id: string): Observable<FuelRate> {
@@ -103,7 +106,11 @@ export class FuelService {
   }
 
   listRefuelings(params?: { vehicle_id?: string; page?: number; page_size?: number }): Observable<FuelRefuelingListResponse> {
-    return this.http.get<FuelRefuelingListResponse>('/api/v1/fuel/refuelings', { params: params as any });
+    let p = new HttpParams();
+    if (params?.vehicle_id) p = p.set('vehicle_id', params.vehicle_id);
+    if (params?.page) p = p.set('page', params.page);
+    if (params?.page_size) p = p.set('page_size', params.page_size);
+    return this.http.get<FuelRefuelingListResponse>('/api/v1/fuel/refuelings', { params: p });
   }
 
   createRefueling(data: Partial<FuelRefueling>): Observable<FuelRefueling> {
@@ -123,6 +130,10 @@ export class FuelService {
   }
 
   getReport(params?: { vehicle_id?: string; date_from?: string; date_to?: string }): Observable<FuelReportResponse> {
-    return this.http.get<FuelReportResponse>('/api/v1/fuel/report', { params: params as any });
+    let p = new HttpParams();
+    if (params?.vehicle_id) p = p.set('vehicle_id', params.vehicle_id);
+    if (params?.date_from) p = p.set('date_from', params.date_from);
+    if (params?.date_to) p = p.set('date_to', params.date_to);
+    return this.http.get<FuelReportResponse>('/api/v1/fuel/report', { params: p });
   }
 }

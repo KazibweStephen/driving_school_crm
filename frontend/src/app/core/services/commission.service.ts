@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 export interface CommissionRate {
@@ -79,7 +79,12 @@ export class CommissionService {
   }
 
   list(params?: { instructor_id?: string; status?: string; page?: number; page_size?: number }): Observable<CommissionListResponse> {
-    return this.http.get<CommissionListResponse>('/api/v1/commission', { params: params as any });
+    let p = new HttpParams();
+    if (params?.instructor_id) p = p.set('instructor_id', params.instructor_id);
+    if (params?.status) p = p.set('status', params.status);
+    if (params?.page) p = p.set('page', params.page);
+    if (params?.page_size) p = p.set('page_size', params.page_size);
+    return this.http.get<CommissionListResponse>('/api/v1/commission', { params: p });
   }
 
   create(data: Partial<Commission>): Observable<Commission> {
@@ -91,6 +96,10 @@ export class CommissionService {
   }
 
   getReport(params?: { instructor_id?: string; date_from?: string; date_to?: string }): Observable<CommissionReportResponse> {
-    return this.http.get<CommissionReportResponse>('/api/v1/commission/report', { params: params as any });
+    let p = new HttpParams();
+    if (params?.instructor_id) p = p.set('instructor_id', params.instructor_id);
+    if (params?.date_from) p = p.set('date_from', params.date_from);
+    if (params?.date_to) p = p.set('date_to', params.date_to);
+    return this.http.get<CommissionReportResponse>('/api/v1/commission/report', { params: p });
   }
 }

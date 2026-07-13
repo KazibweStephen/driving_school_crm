@@ -40,7 +40,7 @@ export class FuelTrackingCmp implements OnInit {
   showRefuelDialog = signal(false);
   editingRate = signal<FuelRate | null>(null);
 
-  rateForm = { vehicle_id: '', rate_per_lesson: 0, notes: '' };
+  rateForm = { vehicle_id: '', rate_per_lesson: null as number | null, effective_from: null as string | null, notes: '' };
   refuelForm = { vehicle_id: '', amount: 0, liters: null as number | null, notes: '' };
 
   filterVehicle = signal<string>('');
@@ -83,7 +83,7 @@ export class FuelTrackingCmp implements OnInit {
 
   openNewRate() {
     this.editingRate.set(null);
-    this.rateForm = { vehicle_id: '', rate_per_lesson: 0, notes: '' };
+    this.rateForm = { vehicle_id: '', rate_per_lesson: null, effective_from: null, notes: '' };
     this.showRateDialog.set(true);
   }
 
@@ -92,26 +92,39 @@ export class FuelTrackingCmp implements OnInit {
     this.rateForm = {
       vehicle_id: rate.vehicle_id,
       rate_per_lesson: Number(rate.rate_per_lesson),
+      effective_from: rate.effective_from,
       notes: rate.notes || '',
     };
     this.showRateDialog.set(true);
   }
 
   saveRate() {
-    const data = { ...this.rateForm, is_active: true };
-    if (this.editingRate()) {
-      this.svc.updateRate(this.editingRate()!.id, data).subscribe(() => {
-        this.msg.add({ severity: 'success', summary: 'Rate updated' });
+    const data: any = {
+      vehicle_id: this.rateForm.vehicle_id,
+      rate_per_lesson: this.rateForm.rate_per_lesson ?? 0,
+      effective_from: this.rateForm.effective_from,
+      notes: this.rateForm.notes || undefined,
+    };
+    if (!data.effective_from) delete data.effective_from;
+    if (!this.editingRate()) data.is_active = true;
+    const obs = this.editingRate()
+      ? this.svc.updateRate(this.editingRate()!.id, data)
+      : this.svc.createRate(data);
+    obs.subscribe({
+      next: () => {
+        this.msg.add({ severity: 'success', summary: this.editingRate() ? 'Rate updated' : 'Rate created' });
         this.showRateDialog.set(false);
         this.loadRates();
-      });
-    } else {
-      this.svc.createRate(data).subscribe(() => {
-        this.msg.add({ severity: 'success', summary: 'Rate created' });
-        this.showRateDialog.set(false);
-        this.loadRates();
-      });
-    }
+      },
+      error: (err) => this.msg.add({ severity: 'error', summary: 'Error', detail: err.error?.detail || 'Failed to save rate' }),
+    });
+  }
+
+  toggleActive(rate: FuelRate) {
+    this.svc.updateRate(rate.id, { is_active: !rate.is_active }).subscribe(() => {
+      this.msg.add({ severity: 'success', summary: rate.is_active ? 'Rate deactivated' : 'Rate activated' });
+      this.loadRates();
+    });
   }
 
   deleteRate(rate: FuelRate) {

@@ -13,6 +13,7 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { TabsModule } from 'primeng/tabs';
 import { DatePickerModule } from 'primeng/datepicker';
+import { TooltipModule } from 'primeng/tooltip';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { CommissionService, CommissionRate, Commission, CommissionReportItem } from '../../core/services/commission.service';
 
@@ -21,7 +22,7 @@ import { CommissionService, CommissionRate, Commission, CommissionReportItem } f
   imports: [
     CommonModule, FormsModule, ButtonModule, DialogModule,
     InputTextModule, InputNumberModule, TextareaModule, ToastModule,
-    SelectModule, ConfirmDialogModule, TableModule, TagModule, TabsModule, DatePickerModule,
+    SelectModule, ConfirmDialogModule, TableModule, TagModule, TabsModule, DatePickerModule, TooltipModule,
   ],
   providers: [ConfirmationService, MessageService],
   templateUrl: './commissions.html',
@@ -37,7 +38,7 @@ export class CommissionsCmp implements OnInit {
   editingRate = signal<CommissionRate | null>(null);
   editingCommission = signal<Commission | null>(null);
 
-  rateForm = { name: '', amount: 0, lesson_type: '', transmission_type: '', notes: '' };
+  rateForm = { name: '', amount: null as number | null, lesson_type: '', transmission_type: '', notes: '' };
   commissionForm = { instructor_id: '', amount: 0, notes: '' };
 
   filterStatus = signal<string>('');
@@ -88,7 +89,7 @@ export class CommissionsCmp implements OnInit {
 
   openNewRate() {
     this.editingRate.set(null);
-    this.rateForm = { name: '', amount: 0, lesson_type: '', transmission_type: '', notes: '' };
+    this.rateForm = { name: '', amount: null, lesson_type: '', transmission_type: '', notes: '' };
     this.showRateDialog.set(true);
   }
 
@@ -105,19 +106,31 @@ export class CommissionsCmp implements OnInit {
   }
 
   saveRate() {
-    if (this.editingRate()) {
-      this.svc.updateRate(this.editingRate()!.id, this.rateForm).subscribe(() => {
-        this.msg.add({ severity: 'success', summary: 'Rate updated' });
+    const data = {
+      name: this.rateForm.name,
+      amount: this.rateForm.amount ?? 0,
+      lesson_type: this.rateForm.lesson_type || undefined,
+      transmission_type: this.rateForm.transmission_type || undefined,
+      notes: this.rateForm.notes || undefined,
+    };
+    const obs = this.editingRate()
+      ? this.svc.updateRate(this.editingRate()!.id, data)
+      : this.svc.createRate(data);
+    obs.subscribe({
+      next: () => {
+        this.msg.add({ severity: 'success', summary: this.editingRate() ? 'Rate updated' : 'Rate created' });
         this.showRateDialog.set(false);
         this.loadRates();
-      });
-    } else {
-      this.svc.createRate(this.rateForm).subscribe(() => {
-        this.msg.add({ severity: 'success', summary: 'Rate created' });
-        this.showRateDialog.set(false);
-        this.loadRates();
-      });
-    }
+      },
+      error: (err) => this.msg.add({ severity: 'error', summary: 'Error', detail: err.error?.detail || 'Failed to save' }),
+    });
+  }
+
+  toggleActive(rate: CommissionRate) {
+    this.svc.updateRate(rate.id, { is_active: !rate.is_active }).subscribe(() => {
+      this.msg.add({ severity: 'success', summary: rate.is_active ? 'Rate deactivated' : 'Rate activated' });
+      this.loadRates();
+    });
   }
 
   deleteRate(rate: CommissionRate) {

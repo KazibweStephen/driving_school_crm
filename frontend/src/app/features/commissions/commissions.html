@@ -78,9 +78,12 @@
                   <p-tag [value]="r.is_active ? 'Active' : 'Inactive'"
                     [severity]="r.is_active ? 'success' : 'secondary'" />
                 </td>
-                <td>
-                  <p-button icon="pi pi-pencil" (click)="editRate(r)" severity="secondary" size="small" class="mr-1" />
-                  <p-button icon="pi pi-trash" (click)="deleteRate(r)" severity="danger" size="small" />
+                <td class="flex gap-1">
+                  <p-button icon="pi pi-pencil" (click)="editRate(r)" severity="secondary" size="small" pTooltip="Edit" />
+                  <p-button [icon]="r.is_active ? 'pi pi-ban' : 'pi pi-check-circle'"
+                    (click)="toggleActive(r)" [severity]="r.is_active ? 'warn' : 'success'" size="small"
+                    [pTooltip]="r.is_active ? 'Deactivate' : 'Activate'" />
+                  <p-button icon="pi pi-trash" (click)="deleteRate(r)" severity="danger" size="small" pTooltip="Delete" />
                 </td>
               </tr>
             </ng-template>
@@ -140,14 +143,29 @@
 
 <!-- Rate Dialog -->
 <p-dialog [(visible)]="showRateDialog" [header]="editingRate() ? 'Edit Rate' : 'New Rate'"
-  [modal]="true" [closable]="true" appendTo="body">
-  <div class="flex flex-col gap-3 p-4">
-    <input pInputText [(ngModel)]="rateForm.name" placeholder="Rate Name" />
-    <p-inputNumber [(ngModel)]="rateForm.amount" placeholder="Amount" mode="decimal" [min]="0" class="w-full" />
-    <input pInputText [(ngModel)]="rateForm.lesson_type" placeholder="Lesson Type (optional, e.g. driving, theory)" />
-    <input pInputText [(ngModel)]="rateForm.transmission_type" placeholder="Transmission (optional, e.g. manual, automatic)" />
-    <textarea pTextarea [(ngModel)]="rateForm.notes" placeholder="Notes" rows="3"></textarea>
-    <p-button label="Save" icon="pi pi-check" (click)="saveRate()" />
+  [modal]="true" [closable]="true" appendTo="body" [style]="{ width: '450px' }">
+  <div class="flex flex-col gap-4 p-4">
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Rate Name *</label>
+      <input pInputText [(ngModel)]="rateForm.name" placeholder="e.g., Standard Driving" class="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
+      <p-inputNumber [(ngModel)]="rateForm.amount" placeholder="Enter amount per session" mode="decimal" [min]="0" class="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Lesson Type</label>
+      <input pInputText [(ngModel)]="rateForm.lesson_type" placeholder="e.g., driving, theory (leave blank for all)" class="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Transmission</label>
+      <input pInputText [(ngModel)]="rateForm.transmission_type" placeholder="e.g., manual, automatic (leave blank for all)" class="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+      <textarea pTextarea [(ngModel)]="rateForm.notes" placeholder="Optional notes" rows="3" class="w-full"></textarea>
+    </div>
+    <p-button label="Save" icon="pi pi-check" (click)="saveRate()" [disabled]="!rateForm.name || !rateForm.amount" />
   </div>
 </p-dialog>
 

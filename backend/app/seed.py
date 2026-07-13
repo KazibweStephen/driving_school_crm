@@ -26,6 +26,7 @@ async def seed():
         )
         db.add(user)
         await db.flush()
+        await db.commit()
         print("Created super user: 256700000000 / PIN: 1234")
 
 

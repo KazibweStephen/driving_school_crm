@@ -2,7 +2,7 @@
 set -e
 
 echo "Running database migrations..."
-PYTHONPATH=/app alembic upgrade head
+PYTHONPATH=/app alembic upgrade heads
 
 echo "Running seed data..."
 python -m app.seed

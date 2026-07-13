@@ -16,6 +16,7 @@ from app.schemas.fuel import (
 )
 from app.schemas.reports import FuelReportResponse, FuelReportItem
 from app.services import fuel as fuel_service
+from app.utils.tenant import resolve_company_id
 
 router = APIRouter(prefix="/fuel", tags=["fuel"])
 
@@ -58,10 +59,11 @@ async def get_active_rate(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.company_id:
-        raise HTTPException(status_code=400, detail="User has no company")
+    company_id = await resolve_company_id(db, current_user)
+    if not company_id:
+        raise HTTPException(status_code=400, detail="No company configured")
     rate = await fuel_service.get_active_fuel_rate_for_vehicle(
-        db, vehicle_id, current_user.company_id
+        db, vehicle_id, company_id
     )
     if not rate:
         raise HTTPException(status_code=404, detail="No active fuel rate for this vehicle")
@@ -86,12 +88,17 @@ async def create_fuel_rate(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.company_id:
-        raise HTTPException(status_code=400, detail="User has no company")
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"create_fuel_rate data: vehicle_id={data.vehicle_id}, rate_per_lesson={data.rate_per_lesson}, effective_from={data.effective_from}, is_active={data.is_active}")
+    company_id = await resolve_company_id(db, current_user)
+    if not company_id:
+        raise HTTPException(status_code=400, detail="No company configured")
+    logger.info(f"create_fuel_rate company_id={company_id}")
     rate = await fuel_service.create_fuel_rate(
-        db, current_user.company_id, data.model_dump()
+        db, company_id, data.model_dump()
     )
-    return await fuel_service.get_fuel_rate_by_id(db, rate.id, current_user.company_id)
+    return await fuel_service.get_fuel_rate_by_id(db, rate.id, company_id)
 
 
 @router.patch("/rates/{rate_id}", response_model=FuelRateRead)
@@ -176,12 +183,13 @@ async def create_refueling(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.company_id:
-        raise HTTPException(status_code=400, detail="User has no company")
+    company_id = await resolve_company_id(db, current_user)
+    if not company_id:
+        raise HTTPException(status_code=400, detail="No company configured")
     refueling = await fuel_service.create_fuel_refueling(
-        db, current_user.company_id, data.model_dump()
+        db, company_id, data.model_dump()
     )
-    return await fuel_service.get_fuel_refueling_by_id(db, refueling.id, current_user.company_id)
+    return await fuel_service.get_fuel_refueling_by_id(db, refueling.id, company_id)
 
 
 @router.delete("/refuelings/{refueling_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -215,10 +223,11 @@ async def get_vehicle_fuel_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.company_id:
-        raise HTTPException(status_code=400, detail="User has no company")
+    company_id = await resolve_company_id(db, current_user)
+    if not company_id:
+        raise HTTPException(status_code=400, detail="No company configured")
     status_data = await fuel_service.get_vehicle_fuel_status(
-        db, vehicle_id, current_user.company_id
+        db, vehicle_id, company_id
     )
     if not status_data:
         raise HTTPException(status_code=404, detail="No fuel data for this vehicle")

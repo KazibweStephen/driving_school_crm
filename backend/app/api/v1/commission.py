@@ -15,6 +15,7 @@ from app.schemas.commission import (
 )
 from app.schemas.reports import CommissionReportResponse, CommissionReportItem
 from app.services import commission as commission_service
+from app.utils.tenant import resolve_company_id
 
 router = APIRouter(prefix="/commission", tags=["commission"])
 
@@ -52,12 +53,13 @@ async def create_rate(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.company_id:
-        raise HTTPException(status_code=400, detail="User has no company")
+    company_id = await resolve_company_id(db, current_user)
+    if not company_id:
+        raise HTTPException(status_code=400, detail="No company configured")
     rate = await commission_service.create_commission_rate(
-        db, current_user.company_id, data.model_dump()
+        db, company_id, data.model_dump()
     )
-    return await commission_service.get_commission_rate_by_id(db, rate.id, current_user.company_id)
+    return await commission_service.get_commission_rate_by_id(db, rate.id, company_id)
 
 
 @router.patch("/rates/{rate_id}", response_model=CommissionRateRead)
@@ -141,12 +143,13 @@ async def create_commission(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.company_id:
-        raise HTTPException(status_code=400, detail="User has no company")
+    company_id = await resolve_company_id(db, current_user)
+    if not company_id:
+        raise HTTPException(status_code=400, detail="No company configured")
     commission = await commission_service.create_commission(
-        db, current_user.company_id, data.model_dump()
+        db, company_id, data.model_dump()
     )
-    return await commission_service.get_commission_by_id(db, commission.id, current_user.company_id)
+    return await commission_service.get_commission_by_id(db, commission.id, company_id)
 
 
 @router.patch("/{commission_id}", response_model=CommissionRead)

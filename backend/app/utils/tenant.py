@@ -3,10 +3,10 @@
 import uuid
 from typing import TypeVar
 
-from sqlalchemy import Select, select, join
-from sqlalchemy.orm import joinedload
+from sqlalchemy import Select, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.company import Branch
+from app.models.company import Branch, Company
 from app.models.user import User, UserRole
 
 M = TypeVar("M")
@@ -93,3 +93,21 @@ def company_id_column(user: User) -> uuid.UUID | None:
     if user.role == UserRole.SUPER_USER:
         return None
     return user.company_id
+
+
+async def resolve_company_id(db: AsyncSession, user: User) -> uuid.UUID | None:
+    """Resolve a company_id for create operations.
+
+    For regular users returns their own company_id.
+    For super_users (who have no company_id) looks up the first company
+    so they can create tenant-scoped records.
+    Returns None only if no company exists at all.
+    """
+    if user.company_id is not None:
+        return user.company_id
+    if user.role == UserRole.SUPER_USER:
+        result = await db.execute(select(Company.id).limit(1))
+        company = result.scalar_one_or_none()
+        if company is not None:
+            return company
+    return None

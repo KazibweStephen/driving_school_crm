@@ -24,8 +24,8 @@ set +a
 echo "=== Pulling latest code ==="
 git pull origin main || true
 
-echo "=== Checking for port conflicts on 80/443 ==="
-for port in 80 443; do
+echo "=== Checking for port conflicts on 80 ==="
+for port in 80; do
     if ss -tlnp | grep -q ":$port "; then
         echo "WARNING: port $port is already in use on the host. Stopping host nginx if running..."
         systemctl stop nginx || true

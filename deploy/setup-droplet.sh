@@ -21,9 +21,7 @@ apt-get install -y \
     git \
     nginx \
     ufw \
-    fail2ban \
-    certbot \
-    python3-certbot-nginx
+    fail2ban
 
 echo "=== Installing Docker ==="
 install -m 0755 -d /etc/apt/keyrings

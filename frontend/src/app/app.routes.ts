@@ -114,6 +114,11 @@ export const routes: Routes = [
           import('./features/reports/reports').then((c) => c.ReportsCmp),
       },
       {
+        path: 'company-settings',
+        loadComponent: () =>
+          import('./features/company-settings/company-settings').then((c) => c.CompanySettingsCmp),
+      },
+      {
         path: 'consultations',
         loadComponent: () =>
           import('./features/clients/clients').then((c) => c.Clients),

@@ -50,6 +50,12 @@ class Company(Base):
     branches: Mapped[list["Branch"]] = relationship(
         "Branch", back_populates="company", cascade="all, delete-orphan"
     )
+    sms_settings: Mapped["CompanySmsSettings | None"] = relationship(
+        "CompanySmsSettings", back_populates="company", uselist=False, cascade="all, delete-orphan"
+    )
+    sms_templates: Mapped[list["SmsTemplate"]] = relationship(
+        "SmsTemplate", back_populates="company", cascade="all, delete-orphan"
+    )
 
 
 class Branch(Base):
@@ -271,3 +277,36 @@ class Collection(Base):
 
     installment: Mapped["Installment"] = relationship("Installment")
     consultation: Mapped["Consultation"] = relationship("Consultation")
+
+
+class CompanySmsSettings(Base):
+    __tablename__ = "company_sms_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), unique=True, nullable=False, index=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    provider: Mapped[str] = mapped_column(String(20), default="logging", nullable=False)
+
+    # egoSMS credentials
+    egosms_api_url: Mapped[str] = mapped_column(
+        String(500), default="https://www.egosms.co/api/v1/plain/", nullable=False
+    )
+    egosms_username: Mapped[str] = mapped_column(String(100), default="", nullable=False)
+    egosms_password: Mapped[str] = mapped_column(String(100), default="", nullable=False)
+    egosms_sender: Mapped[str] = mapped_column(String(20), default="", nullable=False)
+
+    # Twilio credentials
+    twilio_account_sid: Mapped[str] = mapped_column(String(100), default="", nullable=False)
+    twilio_auth_token: Mapped[str] = mapped_column(String(100), default="", nullable=False)
+    twilio_phone_number: Mapped[str] = mapped_column(String(20), default="", nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    company: Mapped["Company"] = relationship("Company", back_populates="sms_settings")

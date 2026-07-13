@@ -1,7 +1,14 @@
 import logging
 from enum import Enum
 
-from app.core.config import settings
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.company import CompanySmsSettings
+from app.services.notification.providers import (
+    LoggingProvider,
+    get_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -12,54 +19,61 @@ class NotificationChannel(str, Enum):
     TELEGRAM = "telegram"
 
 
-class NotificationService:
-    """Sends notifications via configured provider (Twilio, logging stub, etc.)."""
+async def _get_provider_for_company(db: AsyncSession, company_id):
+    """Look up company SMS settings and return the appropriate provider."""
+    result = await db.execute(
+        select(CompanySmsSettings).where(CompanySmsSettings.company_id == company_id)
+    )
+    settings = result.scalar_one_or_none()
 
-    def __init__(self) -> None:
-        self.provider = settings.sms_provider
+    if not settings or not settings.is_active:
+        return LoggingProvider()
 
-    async def send_sms(self, to: str, message: str) -> bool:
-        if self.provider == "twilio":
-            return await self._send_twilio(to, message)
-        logger.info("[SMS] To=%s | %s", to, message)
-        return True
-
-    async def send_whatsapp(self, to: str, message: str) -> bool:
-        if self.provider == "twilio":
-            return await self._send_twilio_whatsapp(to, message)
-        logger.info("[WhatsApp] To=%s | %s", to, message)
-        return True
-
-    async def _send_twilio(self, to: str, message: str) -> bool:
-        try:
-            from twilio.rest import Client
-            client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
-            client.messages.create(
-                body=message,
-                from_=settings.twilio_phone_number,
-                to=to,
-            )
-            return True
-        except Exception as e:
-            logger.error("Twilio SMS failed: %s", e)
-            return False
-
-    async def _send_twilio_whatsapp(self, to: str, message: str) -> bool:
-        try:
-            from twilio.rest import Client
-            client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
-            client.messages.create(
-                body=message,
-                from_=f"whatsapp:{settings.twilio_phone_number}",
-                to=f"whatsapp:{to}",
-            )
-            return True
-        except Exception as e:
-            logger.error("Twilio WhatsApp failed: %s", e)
-            return False
+    return get_provider(
+        settings.provider,
+        egosms_api_url=settings.egosms_api_url,
+        egosms_username=settings.egosms_username,
+        egosms_password=settings.egosms_password,
+        egosms_sender=settings.egosms_sender,
+        twilio_account_sid=settings.twilio_account_sid,
+        twilio_auth_token=settings.twilio_auth_token,
+        twilio_phone_number=settings.twilio_phone_number,
+    )
 
 
-_notifier = NotificationService()
+async def send_sms(
+    db: AsyncSession,
+    company_id,
+    phone: str,
+    message: str,
+) -> bool:
+    """Send an SMS using the company's configured provider."""
+    provider = await _get_provider_for_company(db, company_id)
+    return await provider.send(phone, message)
+
+
+async def send_template_sms(
+    db: AsyncSession,
+    company_id,
+    phone: str,
+    category: str,
+    variables: dict[str, str],
+) -> bool:
+    """Look up the active template for a category, render variables, and send."""
+    from app.services.sms import resolve_template, render_template
+
+    template = await resolve_template(db, company_id, category)
+    if not template:
+        logger.warning(
+            "[SMS] No active template for category=%s company=%s, skipping",
+            category, company_id,
+        )
+        return False
+    message = render_template(template.body, variables)
+    return await send_sms(db, company_id, phone, message)
+
+
+# ── Pre-built message helpers (backward-compatible) ──
 
 
 async def send_payment_receipt(
@@ -68,15 +82,21 @@ async def send_payment_receipt(
     receipt_number: str,
     amount: str,
     download_url: str,
+    *,
+    db: AsyncSession | None = None,
+    company_id=None,
 ) -> bool:
     msg = (
         f"Dear {client_name},\n\n"
         f"Thank you for your payment of UGX {amount}.\n"
         f"Receipt: {receipt_number}\n\n"
         f"Download receipt: {download_url}\n\n"
-        f"Drive Safe! 🚗"
+        f"Drive Safe!"
     )
-    return await _notifier.send_sms(phone, msg)
+    if db and company_id:
+        return await send_sms(db, company_id, phone, msg)
+    logger.info("[SMS] To=%s | %s", phone, msg)
+    return True
 
 
 async def send_installment_reminder(
@@ -85,6 +105,9 @@ async def send_installment_reminder(
     due_date: str,
     amount: str,
     balance: str,
+    *,
+    db: AsyncSession | None = None,
+    company_id=None,
 ) -> bool:
     msg = (
         f"Dear {client_name},\n\n"
@@ -93,7 +116,10 @@ async def send_installment_reminder(
         f"Please make payment to avoid interruption of lessons.\n"
         f"Thank you!"
     )
-    return await _notifier.send_sms(phone, msg)
+    if db and company_id:
+        return await send_sms(db, company_id, phone, msg)
+    logger.info("[SMS] To=%s | %s", phone, msg)
+    return True
 
 
 async def send_dunning_notice(
@@ -102,6 +128,9 @@ async def send_dunning_notice(
     overdue_amount: str,
     days_overdue: int,
     total_balance: str,
+    *,
+    db: AsyncSession | None = None,
+    company_id=None,
 ) -> bool:
     msg = (
         f"Dear {client_name},\n\n"
@@ -111,7 +140,10 @@ async def send_dunning_notice(
         f"Please clear the balance to continue your training.\n"
         f"Contact us for payment options."
     )
-    return await _notifier.send_sms(phone, msg)
+    if db and company_id:
+        return await send_sms(db, company_id, phone, msg)
+    logger.info("[SMS] To=%s | %s", phone, msg)
+    return True
 
 
 async def send_expense_approved(
@@ -119,6 +151,9 @@ async def send_expense_approved(
     employee_name: str,
     description: str,
     amount: str,
+    *,
+    db: AsyncSession | None = None,
+    company_id=None,
 ) -> bool:
     msg = (
         f"Dear {employee_name},\n\n"
@@ -127,15 +162,27 @@ async def send_expense_approved(
         f"Finance will process the payment shortly.\n\n"
         f"Thank you."
     )
-    return await _notifier.send_sms(phone, msg)
+    if db and company_id:
+        return await send_sms(db, company_id, phone, msg)
+    logger.info("[SMS] To=%s | %s", phone, msg)
+    return True
 
 
-async def send_welcome_message(phone: str, client_name: str) -> bool:
+async def send_welcome_message(
+    phone: str,
+    client_name: str,
+    *,
+    db: AsyncSession | None = None,
+    company_id=None,
+) -> bool:
     msg = (
-        f"Welcome to Driving School, {client_name}! 🎉\n\n"
+        f"Welcome to Driving School, {client_name}!\n\n"
         f"We're excited to have you on board.\n"
         f"Your consultation has been scheduled.\n"
         f"We'll be in touch shortly.\n\n"
         f"Drive Safe!"
     )
-    return await _notifier.send_sms(phone, msg)
+    if db and company_id:
+        return await send_sms(db, company_id, phone, msg)
+    logger.info("[SMS] To=%s | %s", phone, msg)
+    return True

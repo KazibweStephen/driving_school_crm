@@ -20,7 +20,7 @@ services:
       - crm-network
 
   backend:
-    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_IMAGE_PREFIX:-kstephen3}/crm-backend:${BACKEND_TAG:-latest}
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_IMAGE_PREFIX:-kstephen3}/crm_backend:${BACKEND_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -47,7 +47,7 @@ services:
       start_period: 40s
 
   frontend:
-    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_IMAGE_PREFIX:-kstephen3}/crm-frontend:${FRONTEND_TAG:-latest}
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_IMAGE_PREFIX:-kstephen3}/crm_frontend:${FRONTEND_TAG:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile

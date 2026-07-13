@@ -2,6 +2,7 @@ from app.models.cart import CartItem, CartItemStatus, follow_up_cart_items
 from app.models.company import (
     Branch,
     Company,
+    CompanySmsSettings,
     Expense,
     Sale,
     UserBranchAssignment,
@@ -59,6 +60,7 @@ from app.models.commission import Commission, CommissionRate, CommissionStatus, 
 from app.models.lead import Lead, LeadStatus
 from app.models.fuel import FuelRate, FuelRefueling
 from app.models.schedule_break import ScheduleBreak
+from app.models.sms import SmsTemplate, SmsTemplateCategory
 from app.models.training import TrainingSession
 from app.models.user import User, UserRole, UserStatus
 
@@ -86,4 +88,5 @@ __all__ = [
     "Commission", "CommissionRate", "CommissionStatus", "CommissionContest", "ContestStatus",
     "Lead", "LeadStatus",
     "FuelRate", "FuelRefueling",
+    "CompanySmsSettings", "SmsTemplate", "SmsTemplateCategory",
 ]

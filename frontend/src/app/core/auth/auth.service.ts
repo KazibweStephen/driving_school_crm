@@ -20,6 +20,7 @@ export class AuthService {
 
   currentUser = signal<string | null>(null);
   currentUserRole = signal<string | null>(null);
+  currentUserCompanyId = signal<string | null>(null);
   currentUserCanBackdate = signal(false);
   currencyCode = signal('USD');
   isAuthenticated = signal(false);
@@ -39,6 +40,7 @@ export class AuthService {
       const phone = this.decodePhoneFromToken(token);
       this.currentUser.set(phone);
       this.currentUserRole.set(this.decodeRoleFromToken(token));
+      this.currentUserCompanyId.set(this.decodeCompanyId(token));
       this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
       this.currencyCode.set(this.decodeCurrency(token));
       this.startSessionTimer();
@@ -55,6 +57,7 @@ export class AuthService {
     this.isAuthenticated.set(true);
     this.currentUser.set(this.decodePhoneFromToken(token));
     this.currentUserRole.set(this.decodeRoleFromToken(token));
+    this.currentUserCompanyId.set(this.decodeCompanyId(token));
     this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
     this.currencyCode.set(this.decodeCurrency(token));
     this.startSessionTimer();
@@ -174,5 +177,10 @@ export class AuthService {
   private decodeCurrency(token: string): string {
     const payload = this.decodeToken(token);
     return (payload?.['currency'] as string) || 'USD';
+  }
+
+  private decodeCompanyId(token: string): string | null {
+    const payload = this.decodeToken(token);
+    return (payload?.['company_id'] as string) || null;
   }
 }

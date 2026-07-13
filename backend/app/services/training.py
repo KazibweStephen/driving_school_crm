@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.models.cart import CartItem
 from app.models.company import Branch
 from app.models.consultation import Consultation
+from app.models.lesson_plan import Vehicle
 from app.models.product import Package, Product
 from app.models.training import Skill, TrainingSession
 from app.models.user import UserRole
@@ -457,7 +458,7 @@ async def get_daily_schedule(
             veh_ids.add(row.vehicle_id)
         if veh_ids:
             veh_result = await db.execute(
-                select(VehicleModel).where(VehicleModel.id.in_(veh_ids))
+                select(Vehicle).where(Vehicle.id.in_(veh_ids))
             )
             vehicles = {v.id: v for v in veh_result.scalars().all()}
             for plan_id, veh_id in cl_vehicle_map.items():

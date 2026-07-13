@@ -28,26 +28,29 @@ export class MainLayout {
 
   topItems: NavItem[] = [
     { path: '/dashboard', label: 'Dashboard', icon: 'pi pi-home' },
-    { path: '/consultations', label: 'Consultations', icon: 'pi pi-phone' },
     { path: '/reports', label: 'Reports', icon: 'pi pi-chart-bar' },
   ];
 
   navGroups: NavGroup[] = [
     {
-      label: 'Management', icon: 'pi pi-cog', expanded: false,
+      label: 'Sales & Expenses', icon: 'pi pi-dollar', expanded: false,
       children: [
-        { path: '/users', label: 'Users', icon: 'pi pi-users' },
-        { path: '/branches', label: 'Branches', icon: 'pi pi-sitemap' },
-        { path: '/companies', label: 'Companies', icon: 'pi pi-building' },
-        { path: '/products', label: 'Products', icon: 'pi pi-box' },
-        { path: '/company-settings', label: 'Company Settings', icon: 'pi pi-cog' },
-        { path: '/expenses', label: 'Expenses', icon: 'pi pi-dollar' },
+        { path: '/consultations', label: 'Consultations', icon: 'pi pi-phone' },
+        { path: '/bulk-onboarding', label: 'Bulk Onboarding', icon: 'pi pi-upload' },
+        { path: '/expenses', label: 'Expenses', icon: 'pi pi-minus-circle' },
         { path: '/payments', label: 'Payments', icon: 'pi pi-credit-card' },
-        { path: '/commissions', label: 'Commissions', icon: 'pi pi-dollar' },
+        { path: '/collections-sheet', label: 'Collections Sheet', icon: 'pi pi-file-invoice' },
+      ],
+    },
+    {
+      label: 'Fleet', icon: 'pi pi-truck', expanded: false,
+      children: [
+        { path: '/vehicles', label: 'Vehicles', icon: 'pi pi-truck' },
+        { path: '/vehicle-schedule', label: 'Vehicle Schedule', icon: 'pi pi-calendar-clock' },
+        { path: '/weekly-schedule', label: 'Weekly Schedule', icon: 'pi pi-calendar' },
+        { path: '/schedule-breaks', label: 'Schedule Breaks', icon: 'pi pi-clock' },
         { path: '/fuel-tracking', label: 'Fuel Tracking', icon: 'pi pi-car' },
         { path: '/training-schedule', label: 'Training Schedule', icon: 'pi pi-calendar-clock' },
-        { path: '/collections-sheet', label: 'Collections Sheet', icon: 'pi pi-file-invoice' },
-        { path: '/bulk-onboarding', label: 'Bulk Onboarding', icon: 'pi pi-upload' },
       ],
     },
     {
@@ -59,12 +62,14 @@ export class MainLayout {
       ],
     },
     {
-      label: 'Fleet', icon: 'pi pi-truck', expanded: false,
+      label: 'Management', icon: 'pi pi-cog', expanded: false,
       children: [
-        { path: '/vehicles', label: 'Vehicles', icon: 'pi pi-truck' },
-        { path: '/vehicle-schedule', label: 'Vehicle Schedule', icon: 'pi pi-calendar-clock' },
-        { path: '/weekly-schedule', label: 'Weekly Schedule', icon: 'pi pi-calendar' },
-        { path: '/schedule-breaks', label: 'Schedule Breaks', icon: 'pi pi-clock' },
+        { path: '/users', label: 'Users', icon: 'pi pi-users' },
+        { path: '/branches', label: 'Branches', icon: 'pi pi-sitemap' },
+        { path: '/companies', label: 'Companies', icon: 'pi pi-building' },
+        { path: '/products', label: 'Products', icon: 'pi pi-box' },
+        { path: '/commissions', label: 'Commissions', icon: 'pi pi-dollar' },
+        { path: '/company-settings', label: 'Company Settings', icon: 'pi pi-cog' },
       ],
     },
   ];

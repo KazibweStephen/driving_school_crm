@@ -23,6 +23,7 @@ import {
   SMS_TEMPLATE_CATEGORIES,
   TEMPLATE_PLACEHOLDERS,
 } from '../../core/services/sms.service';
+import { CompanyService, Company } from '../../core/services/company.service';
 
 @Component({
   selector: 'app-company-settings',
@@ -39,9 +40,22 @@ import {
     <div class="p-4">
       <h1 class="text-2xl font-bold mb-4">Company Settings</h1>
 
-      @if (!companyId()) {
+      @if (isSuperUser() && companies().length > 0) {
+        <div class="mb-4">
+          <label class="mb-1 block text-sm font-medium text-gray-700">Select Company</label>
+          <p-select [(ngModel)]="selectedCompanyId" [options]="companies()" optionLabel="name"
+            optionValue="id" placeholder="Choose a company" styleClass="w-80" appendTo="body"
+            (onChange)="onCompanyChange()" />
+        </div>
+      }
+
+      @if (!selectedCompanyId) {
         <div class="p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
-          You are not associated with any company. SMS settings are not available.
+          @if (isSuperUser()) {
+            Select a company above to configure its SMS settings.
+          } @else {
+            You are not associated with any company. SMS settings are not available.
+          }
         </div>
       } @else {
         <p-tabs [value]="0">
@@ -66,7 +80,7 @@ import {
                   <label class="mb-1 block text-sm font-medium text-gray-700">Provider</label>
                   <p-select [(ngModel)]="settingsForm.provider" [options]="providerOptions"
                     optionLabel="label" optionValue="value" placeholder="Select provider"
-                    styleClass="w-full" appendTo="body" (onChange)="onProviderChange()" />
+                    styleClass="w-full" appendTo="body" />
                 </div>
 
                 @if (settingsForm.provider === 'egosms') {
@@ -197,7 +211,7 @@ import {
           <label class="mb-1 block text-sm font-medium text-gray-700">Category</label>
           <p-select [(ngModel)]="templateForm.category" [options]="categoryOptions"
             optionLabel="label" optionValue="value" placeholder="Select category"
-            styleClass="w-full" appendTo="body" (onChange)="onCategoryChange()" />
+            styleClass="w-full" appendTo="body" />
         </div>
         @if (templateForm.category) {
           <div class="p-3 bg-gray-50 rounded border text-xs text-gray-600">
@@ -225,7 +239,10 @@ import {
   `,
 })
 export class CompanySettingsCmp implements OnInit {
-  companyId = signal<string | null>(null);
+  isSuperUser = signal(false);
+  companies = signal<Company[]>([]);
+  selectedCompanyId: string | null = null;
+
   settingsForm: SmsSettingsUpdate & { provider: string; is_active: boolean } = {
     provider: 'logging',
     is_active: false,
@@ -268,21 +285,43 @@ export class CompanySettingsCmp implements OnInit {
   constructor(
     private smsService: SmsService,
     private authService: AuthService,
+    private companyService: CompanyService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
   ) {}
 
   ngOnInit() {
+    const role = this.authService.currentUserRole();
+    this.isSuperUser.set(role === 'super_user');
+
     const cid = this.authService.currentUserCompanyId();
-    this.companyId.set(cid);
     if (cid) {
+      this.selectedCompanyId = cid;
+      this.loadSettings();
+      this.loadTemplates();
+    } else if (this.isSuperUser()) {
+      this.loadCompanies();
+    }
+  }
+
+  async loadCompanies() {
+    try {
+      const res = await this.companyService.list().toPromise();
+      this.companies.set(res || []);
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load companies' });
+    }
+  }
+
+  onCompanyChange() {
+    if (this.selectedCompanyId) {
       this.loadSettings();
       this.loadTemplates();
     }
   }
 
   async loadSettings() {
-    const cid = this.companyId();
+    const cid = this.selectedCompanyId;
     if (!cid) return;
     try {
       const res = await this.smsService.getSettings(cid).toPromise();
@@ -298,14 +337,30 @@ export class CompanySettingsCmp implements OnInit {
           twilio_auth_token: '',
           twilio_phone_number: res.twilio_phone_number,
         };
+      } else {
+        this.resetSettingsForm();
       }
     } catch {
-      // No settings yet, use defaults
+      this.resetSettingsForm();
     }
   }
 
+  resetSettingsForm() {
+    this.settingsForm = {
+      provider: 'logging',
+      is_active: false,
+      egosms_api_url: 'https://www.egosms.co/api/v1/plain/',
+      egosms_username: '',
+      egosms_password: '',
+      egosms_sender: '',
+      twilio_account_sid: '',
+      twilio_auth_token: '',
+      twilio_phone_number: '',
+    };
+  }
+
   async loadTemplates() {
-    const cid = this.companyId();
+    const cid = this.selectedCompanyId;
     if (!cid) return;
     this.loadingTemplates.set(true);
     try {
@@ -318,12 +373,8 @@ export class CompanySettingsCmp implements OnInit {
     }
   }
 
-  onProviderChange() {
-    // Reset credentials when switching providers
-  }
-
   async saveSettings() {
-    const cid = this.companyId();
+    const cid = this.selectedCompanyId;
     if (!cid) return;
     this.savingSettings.set(true);
     try {
@@ -342,7 +393,7 @@ export class CompanySettingsCmp implements OnInit {
   }
 
   async sendTestSms() {
-    const cid = this.companyId();
+    const cid = this.selectedCompanyId;
     if (!cid || !this.testPhone) return;
     this.testingSms.set(true);
     try {
@@ -368,10 +419,6 @@ export class CompanySettingsCmp implements OnInit {
     this.templateDialogVisible = true;
   }
 
-  onCategoryChange() {
-    // Category changed, placeholders will update reactively
-  }
-
   getPlaceholders(category: string): string[] {
     return TEMPLATE_PLACEHOLDERS[category] || [];
   }
@@ -381,7 +428,7 @@ export class CompanySettingsCmp implements OnInit {
   }
 
   async saveTemplate() {
-    const cid = this.companyId();
+    const cid = this.selectedCompanyId;
     if (!cid || !this.templateForm.name || !this.templateForm.category || !this.templateForm.body) return;
     this.savingTemplate.set(true);
     try {

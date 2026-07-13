@@ -47,6 +47,7 @@ export class MainLayout {
         { path: '/fuel-tracking', label: 'Fuel Tracking', icon: 'pi pi-car' },
         { path: '/training-schedule', label: 'Training Schedule', icon: 'pi pi-calendar-clock' },
         { path: '/collections-sheet', label: 'Collections Sheet', icon: 'pi pi-file-invoice' },
+        { path: '/bulk-onboarding', label: 'Bulk Onboarding', icon: 'pi pi-upload' },
       ],
     },
     {

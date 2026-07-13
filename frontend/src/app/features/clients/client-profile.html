@@ -434,7 +434,7 @@
                 <td class="text-sm text-green-600 font-medium">{{ paymentPaidAmount(pay) | number:'1.0-0' }}</td>
                 <td class="text-sm" [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</td>
                 <td><p-tag [value]="paymentStatus(pay)" [severity]="paymentSeverity(paymentStatus(pay))" /></td>
-                <td class="text-sm text-gray-500">{{ pay.created_at | date:'shortDate' }}</td>
+                <td class="text-sm text-gray-500">{{ paymentDate(pay) | date:'shortDate' }}</td>
                 <td class="text-sm text-gray-500">{{ pay.installments.length }}</td>
                 <td>
                   <div class="flex items-center gap-1">
@@ -456,7 +456,7 @@
               </div>
               <div class="space-y-1 text-xs text-gray-500">
                 <p>Paid: <span class="text-green-600 font-medium">{{ paymentPaidAmount(pay) | number:'1.0-0' }}</span> | Balance: <span [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</span></p>
-                <p>{{ pay.created_at | date:'shortDate' }}</p>
+                <p>{{ paymentDate(pay) | date:'shortDate' }}</p>
               </div>
               <div class="mt-2 flex items-center gap-1">
                 <p-button icon="pi pi-eye" severity="info" (onClick)="openReceipt(pay.id)" styleClass="p-button-sm p-button-text" label="View" />
@@ -1177,7 +1177,7 @@
                       <td class="text-sm text-green-600 font-medium">{{ paymentPaidAmount(pay) | number:'1.0-0' }}</td>
                       <td class="text-sm" [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</td>
                       <td><p-tag [value]="paymentStatus(pay)" [severity]="paymentSeverity(paymentStatus(pay))" /></td>
-                      <td class="text-sm text-gray-500">{{ pay.created_at | date:'shortDate' }}</td>
+                      <td class="text-sm text-gray-500">{{ paymentDate(pay) | date:'shortDate' }}</td>
                       <td class="text-sm text-gray-500">{{ pay.installments.length }}</td>
                       <td>
                         <p-button icon="pi pi-receipt" severity="info" (onClick)="openReceipt(pay.id)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="View Receipt" />
@@ -1195,7 +1195,7 @@
                     </div>
                     <div class="space-y-1 text-xs text-gray-500">
                       <p>Paid: <span class="text-green-600 font-medium">{{ paymentPaidAmount(pay) | number:'1.0-0' }}</span> | Balance: <span [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</span></p>
-                      <p>{{ pay.created_at | date:'shortDate' }}</p>
+                      <p>{{ paymentDate(pay) | date:'shortDate' }}</p>
                     </div>
                     <div class="mt-2">
                       <p-button icon="pi pi-receipt" severity="info" (onClick)="openReceipt(pay.id)" styleClass="p-button-sm p-button-text" label="Receipt" />

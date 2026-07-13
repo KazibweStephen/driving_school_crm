@@ -3124,9 +3124,13 @@ export class ClientProfile implements OnInit {
     return Math.max(0, this.totalForProduct(ci) - this.paidForProduct(ci));
   }
 
+  paymentDate(pay: PaymentRead): Date {
+    return new Date(pay.document_date || pay.created_at);
+  }
+
   sortedPayments(): PaymentRead[] {
     return [...this.payments()].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      (a, b) => this.paymentDate(a).getTime() - this.paymentDate(b).getTime()
     );
   }
 
@@ -3274,8 +3278,9 @@ export class ClientProfile implements OnInit {
     );
     if (!ci) return 0;
     const originalTotal = this.totalForProduct(ci);
+    const payTime = this.paymentDate(pay).getTime();
     const paysUpTo = this.paymentsForProduct(ci).filter(p =>
-      new Date(p.created_at).getTime() <= new Date(pay.created_at).getTime()
+      this.paymentDate(p).getTime() <= payTime
     );
     const totalPaid = paysUpTo.reduce((s, p) => s + parseFloat(p.total_paid), 0);
     return Math.max(0, originalTotal - totalPaid);

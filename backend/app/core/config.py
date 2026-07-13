@@ -1,17 +1,14 @@
 import json
-import logging
 from typing import Any
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, EnvSettingsSource, SettingsConfigDict
 
-logger = logging.getLogger(__name__)
-
 _DEFAULT_CORS = ["http://localhost:80", "http://localhost:4200"]
 
 
-class _SafeEnvSettingsSource(EnvSettingsSource):
-    """EnvSettingsSource that catches JSON decode errors for complex fields."""
+class _LenientEnvSettingsSource(EnvSettingsSource):
+    """EnvSettingsSource that doesn't crash on non-JSON complex fields."""
 
     def prepare_field_value(
         self, field_name: str, field: Any, field_value: Any, value_is_complex: bool
@@ -19,11 +16,6 @@ class _SafeEnvSettingsSource(EnvSettingsSource):
         try:
             return super().prepare_field_value(field_name, field, field_value, value_is_complex)
         except Exception:
-            if isinstance(field_value, str) and field_value.strip():
-                logger.warning(
-                    "Could not parse env var %s=%r, falling back to default",
-                    field_name, field_value,
-                )
             return field_value
 
 
@@ -59,7 +51,7 @@ class Settings(BaseSettings):
     # App URL for SMS links
     app_url: str = "http://localhost:80"
 
-    # Security
+    # Security — accepts JSON array, comma-separated, or single URL
     cors_origins: list[str] = _DEFAULT_CORS
 
     # App
@@ -69,6 +61,8 @@ class Settings(BaseSettings):
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _parse_cors_origins(cls, v):
+        if isinstance(v, list):
+            return v
         if isinstance(v, str):
             v = v.strip()
             if not v:
@@ -78,14 +72,15 @@ class Settings(BaseSettings):
                 if isinstance(parsed, list):
                     return parsed
             except (json.JSONDecodeError, ValueError):
-                return [o.strip() for o in v.split(",") if o.strip()] or _DEFAULT_CORS
-        return v
+                pass
+            return [o.strip() for o in v.split(",") if o.strip()] or _DEFAULT_CORS
+        return _DEFAULT_CORS
 
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):
         return (
             init_settings,
-            _SafeEnvSettingsSource(settings_cls),
+            _LenientEnvSettingsSource(settings_cls),
             dotenv_settings,
             file_secret_settings,
         )

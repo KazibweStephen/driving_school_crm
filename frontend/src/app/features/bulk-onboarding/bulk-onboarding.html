@@ -33,6 +33,14 @@
   </div>
 </div>
 
+<!-- Validation Banner -->
+@if (hasReceiptWarnings() || hasDateErrors()) {
+  <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-center gap-3 text-sm">
+    <i class="pi pi-exclamation-triangle text-red-500"></i>
+    <span class="text-red-700 font-medium">Please fix validation errors before submitting</span>
+  </div>
+}
+
 <!-- Summary Bar -->
 @if (clients().length > 0) {
   <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 flex gap-6 text-sm">
@@ -132,15 +140,32 @@
               <p class="text-xs text-gray-400 italic mb-2">No installments added</p>
             }
             @for (inst of pkg.installments; track $index; let ii = $index) {
-              <div class="grid grid-cols-12 gap-1.5 items-end mb-2">
+              <div class="grid grid-cols-12 gap-1.5 items-end mb-1">
                 <div class="col-span-2">
                   <label class="block text-xs text-gray-500 mb-0.5">Receipt # *</label>
-                  <input pInputText [(ngModel)]="inst.receipt_number" placeholder="Receipt" class="w-full" />
+                  <input pInputText [ngModel]="inst.receipt_number"
+                    (ngModelChange)="inst.receipt_number = $event; checkReceipt(ci, pi, ii, $event)"
+                    placeholder="Receipt" class="w-full"
+                    [style]="{ 'border-color': receiptWarnings()[receiptKey(ci, pi, ii)] ? '#f59e0b' : '' }" />
+                  @if (receiptWarnings()[receiptKey(ci, pi, ii)]) {
+                    <div class="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
+                      <i class="pi pi-exclamation-triangle" style="font-size: 0.65rem"></i>
+                      {{ receiptWarnings()[receiptKey(ci, pi, ii)] }}
+                    </div>
+                  }
                 </div>
                 <div class="col-span-2">
                   <label class="block text-xs text-gray-500 mb-0.5">Date *</label>
-                  <p-datepicker [(ngModel)]="inst.document_date" dateFormat="yy-mm-dd"
-                    placeholder="Date" appendTo="body" class="w-full" />
+                  <p-datepicker [ngModel]="inst.document_date"
+                    (ngModelChange)="inst.document_date = $event; validateInstallmentDate(ci, pi, ii)"
+                    dateFormat="yy-mm-dd" placeholder="Date" appendTo="body" class="w-full"
+                    [style]="{ 'border-color': dateErrors()[dateKey(ci, pi, 'inst', ii)] ? '#ef4444' : '' }" />
+                  @if (dateErrors()[dateKey(ci, pi, 'inst', ii)]) {
+                    <div class="text-xs text-red-500 mt-0.5 flex items-center gap-1">
+                      <i class="pi pi-times-circle" style="font-size: 0.65rem"></i>
+                      {{ dateErrors()[dateKey(ci, pi, 'inst', ii)] }}
+                    </div>
+                  }
                 </div>
                 <div class="col-span-2">
                   <label class="block text-xs text-gray-500 mb-0.5">Amount *</label>
@@ -174,11 +199,19 @@
               <p class="text-xs text-gray-400 italic">No lessons added</p>
             }
             @for (lesson of pkg.lessons; track $index; let li = $index) {
-              <div class="grid grid-cols-12 gap-2 items-end mb-2">
+              <div class="grid grid-cols-12 gap-2 items-end mb-1">
                 <div class="col-span-3">
                   <label class="block text-xs text-gray-500 mb-0.5">Date</label>
-                  <p-datepicker [(ngModel)]="lesson.date" dateFormat="yy-mm-dd"
-                    placeholder="Date" appendTo="body" class="w-full" />
+                  <p-datepicker [ngModel]="lesson.date"
+                    (ngModelChange)="lesson.date = $event; validateLessonDate(ci, pi, li)"
+                    dateFormat="yy-mm-dd" placeholder="Date" appendTo="body" class="w-full"
+                    [style]="{ 'border-color': dateErrors()[dateKey(ci, pi, 'lesson', li)] ? '#ef4444' : '' }" />
+                  @if (dateErrors()[dateKey(ci, pi, 'lesson', li)]) {
+                    <div class="text-xs text-red-500 mt-0.5 flex items-center gap-1">
+                      <i class="pi pi-times-circle" style="font-size: 0.65rem"></i>
+                      {{ dateErrors()[dateKey(ci, pi, 'lesson', li)] }}
+                    </div>
+                  }
                 </div>
                 <div class="col-span-2">
                   <label class="block text-xs text-gray-500 mb-0.5">Duration (min)</label>

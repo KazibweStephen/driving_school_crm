@@ -228,4 +228,10 @@ export class ConsultationService {
   bulkOnboard(data: BulkOnboardingRequest) {
     return this.http.post<BulkOnboardingResponse>('/api/v1/bulk-onboarding', data);
   }
+
+  checkBulkReceipts(receiptNumbers: string[]) {
+    return this.http.post<{ existing: string[] }>('/api/v1/bulk-onboarding/check-receipts', {
+      receipt_numbers: receiptNumbers,
+    });
+  }
 }

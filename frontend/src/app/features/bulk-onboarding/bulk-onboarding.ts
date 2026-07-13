@@ -76,7 +76,10 @@ export class BulkOnboardingCmp implements OnInit {
   showSuccessDialog = signal(false);
   successResult = signal<{ created: number; ids: string[] } | null>(null);
   phoneWarnings = signal<Record<number, string>>({});
+  receiptWarnings = signal<Record<string, string>>({});
+  dateErrors = signal<Record<string, string>>({});
   private phoneTimers: Record<number, ReturnType<typeof setTimeout>> = {};
+  private receiptTimers: ReturnType<typeof setTimeout>[] = [];
 
   totalClients = computed(() => this.clients().length);
   totalPackages = computed(() =>
@@ -159,6 +162,14 @@ export class BulkOnboardingCmp implements OnInit {
     return this.auth.currentUser() || '';
   }
 
+  receiptKey(ci: number, pi: number, ii: number): string {
+    return `${ci}-${pi}-${ii}`;
+  }
+
+  dateKey(ci: number, pi: number, type: string, idx: number): string {
+    return `${ci}-${pi}-${type}-${idx}`;
+  }
+
   checkPhone(clientIndex: number, phone: string) {
     if (this.phoneTimers[clientIndex]) {
       clearTimeout(this.phoneTimers[clientIndex]);
@@ -177,6 +188,25 @@ export class BulkOnboardingCmp implements OnInit {
     }, 500);
   }
 
+  checkReceipt(ci: number, pi: number, ii: number, receiptNumber: string) {
+    const key = this.receiptKey(ci, pi, ii);
+    const timerIdx = ci * 1000 + pi * 100 + ii;
+    if (this.receiptTimers[timerIdx]) {
+      clearTimeout(this.receiptTimers[timerIdx]);
+    }
+    this.receiptWarnings.update(w => { const n = { ...w }; delete n[key]; return n; });
+    if (!receiptNumber || receiptNumber.length < 2) return;
+    this.receiptTimers[timerIdx] = setTimeout(() => {
+      this.consultationService.checkBulkReceipts([receiptNumber]).subscribe({
+        next: (res) => {
+          if (res.existing.includes(receiptNumber)) {
+            this.receiptWarnings.update(w => ({ ...w, [key]: `Receipt "${receiptNumber}" already exists` }));
+          }
+        },
+      });
+    }, 400);
+  }
+
   onLessonTypeChange(clientIndex: number, pkgIndex: number, lessonIndex: number, newType: string) {
     const defaultDuration = newType === 'theory' ? 120 : 30;
     this.clients.update(clients => {
@@ -188,6 +218,38 @@ export class BulkOnboardingCmp implements OnInit {
       updated[clientIndex] = { ...updated[clientIndex], packages: pkgs };
       return updated;
     });
+  }
+
+  validateInstallmentDate(ci: number, pi: number, ii: number) {
+    const key = this.dateKey(ci, pi, 'inst', ii);
+    this.dateErrors.update(e => { const n = { ...e }; delete n[key]; return n; });
+    const client = this.clients()[ci];
+    if (!client?.document_date) return;
+    const inst = client.packages[pi]?.installments[ii];
+    if (!inst?.document_date) return;
+    if (inst.document_date < client.document_date) {
+      this.dateErrors.update(e => ({ ...e, [key]: `Date cannot be before client document date (${client.document_date!.toISOString().split('T')[0]})` }));
+    }
+  }
+
+  validateLessonDate(ci: number, pi: number, li: number) {
+    const key = this.dateKey(ci, pi, 'lesson', li);
+    this.dateErrors.update(e => { const n = { ...e }; delete n[key]; return n; });
+    const client = this.clients()[ci];
+    if (!client?.document_date) return;
+    const lesson = client.packages[pi]?.lessons[li];
+    if (!lesson?.date) return;
+    if (lesson.date < client.document_date) {
+      this.dateErrors.update(e => ({ ...e, [key]: `Date cannot be before client document date (${client.document_date!.toISOString().split('T')[0]})` }));
+    }
+  }
+
+  hasDateErrors(): boolean {
+    return Object.keys(this.dateErrors()).length > 0;
+  }
+
+  hasReceiptWarnings(): boolean {
+    return Object.keys(this.receiptWarnings()).length > 0;
   }
 
   restoreDraft() {
@@ -347,6 +409,10 @@ export class BulkOnboardingCmp implements OnInit {
   }
 
   removeInstallment(clientIndex: number, pkgIndex: number, instIndex: number) {
+    const key = this.receiptKey(clientIndex, pkgIndex, instIndex);
+    this.receiptWarnings.update(w => { const n = { ...w }; delete n[key]; return n; });
+    const dkey = this.dateKey(clientIndex, pkgIndex, 'inst', instIndex);
+    this.dateErrors.update(e => { const n = { ...e }; delete n[dkey]; return n; });
     this.clients.update(clients => {
       const updated = [...clients];
       const pkgs = [...updated[clientIndex].packages];
@@ -379,6 +445,8 @@ export class BulkOnboardingCmp implements OnInit {
   }
 
   removeLesson(clientIndex: number, pkgIndex: number, lessonIndex: number) {
+    const dkey = this.dateKey(clientIndex, pkgIndex, 'lesson', lessonIndex);
+    this.dateErrors.update(e => { const n = { ...e }; delete n[dkey]; return n; });
     this.clients.update(clients => {
       const updated = [...clients];
       const pkgs = [...updated[clientIndex].packages];
@@ -420,6 +488,7 @@ export class BulkOnboardingCmp implements OnInit {
 
   canSubmit(): boolean {
     if (this.clients().length === 0) return false;
+    if (this.hasReceiptWarnings() || this.hasDateErrors()) return false;
     for (const client of this.clients()) {
       if (!client.phone || !client.first_name) return false;
       for (const pkg of client.packages) {

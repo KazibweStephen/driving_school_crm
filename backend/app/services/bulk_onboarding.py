@@ -70,22 +70,22 @@ async def bulk_onboard_clients(
             db.add(cart_item)
             await db.flush()
 
-            payment = Payment(
-                consultation_id=consultation.id,
-                created_by_phone=pkg_data.installments[0].received_by_phone if pkg_data.installments else user.phone,
-                product_id=pkg_data.product_id,
-                package_id=pkg_data.package_id,
-                total_amount=package_price,
-                total_paid=total_paid,
-                balance=balance,
-                document_date=pkg_data.installments[0].document_date if pkg_data.installments else client_data.document_date,
-                receipt_number=pkg_data.installments[0].receipt_number if pkg_data.installments else None,
-                system_receipt_number=_generate_system_receipt_number(),
-            )
-            db.add(payment)
-            await db.flush()
-
             for inst_data in pkg_data.installments:
+                payment = Payment(
+                    consultation_id=consultation.id,
+                    created_by_phone=inst_data.received_by_phone,
+                    product_id=pkg_data.product_id,
+                    package_id=pkg_data.package_id,
+                    total_amount=package_price,
+                    total_paid=inst_data.amount,
+                    balance=package_price - inst_data.amount,
+                    document_date=inst_data.document_date,
+                    receipt_number=inst_data.receipt_number,
+                    system_receipt_number=_generate_system_receipt_number(),
+                )
+                db.add(payment)
+                await db.flush()
+
                 installment = Installment(
                     payment_id=payment.id,
                     due_date=inst_data.document_date,

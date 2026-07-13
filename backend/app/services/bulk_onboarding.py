@@ -137,6 +137,7 @@ async def bulk_onboard_clients(
                         duration_minutes=original.duration_minutes,
                         driving_minutes=original.duration_minutes if original.lesson_type == "practical" else 0,
                         theory_minutes=original.duration_minutes if original.lesson_type == "theory" else 0,
+                        started_at=datetime.combine(original.date, time.min),
                     )
                     db.add(session)
 

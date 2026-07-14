@@ -22,7 +22,7 @@ export class AuthService {
   currentUserRole = signal<string | null>(null);
   currentUserCompanyId = signal<string | null>(null);
   currentUserCanBackdate = signal(false);
-  currencyCode = signal('USD');
+  currencyCode = signal('UGX');
   isAuthenticated = signal(false);
   sessionExpired = signal(false);
   sessionCountdown = signal(160);
@@ -176,7 +176,7 @@ export class AuthService {
 
   private decodeCurrency(token: string): string {
     const payload = this.decodeToken(token);
-    return (payload?.['currency'] as string) || 'USD';
+    return (payload?.['currency'] as string) || 'UGX';
   }
 
   private decodeCompanyId(token: string): string | null {

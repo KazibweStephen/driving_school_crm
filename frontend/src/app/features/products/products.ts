@@ -13,6 +13,7 @@ import { SelectModule } from 'primeng/select';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { TableModule } from 'primeng/table';
+import { CurrencyService } from '../../core/services/currency.service';
 import { DatePickerModule } from 'primeng/datepicker';
 import { ProductService, Product, Package } from '../../core/services/product.service';
 import { LessonPlanService, LessonPlanTemplate, LessonPlanTemplateCreate, LessonTemplateItem } from '../../core/services/lesson-plan.service';
@@ -120,6 +121,7 @@ export class Products implements OnInit {
     private lessonLibraryService: LessonLibraryService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
+    public currencyService: CurrencyService,
   ) {}
 
   ngOnInit() {

@@ -15,7 +15,7 @@ class CompanyCreate(BaseModel):
     address: str | None = None
     phone: str | None = None
     email: str | None = None
-    currency: str = "USD"
+    currency: str = "UGX"
 
 
 class CompanyUpdate(BaseModel):

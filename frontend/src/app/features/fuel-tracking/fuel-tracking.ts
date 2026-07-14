@@ -17,6 +17,7 @@ import { TooltipModule } from 'primeng/tooltip';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { FuelService, FuelRate, FuelRefueling, FuelAlert, FuelVehicleStatus } from '../../core/services/fuel.service';
 import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
+import { CurrencyService } from '../../core/services/currency.service';
 
 @Component({
   selector: 'app-fuel-tracking',
@@ -55,6 +56,7 @@ export class FuelTrackingCmp implements OnInit {
     private vehicleSvc: VehicleService,
     private msg: MessageService,
     private confirm: ConfirmationService,
+    public currencyService: CurrencyService,
   ) {}
 
   ngOnInit() {

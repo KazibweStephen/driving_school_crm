@@ -17,6 +17,7 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import { FinanceService, Expense, ExpenseCreate } from '../../core/services/finance.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
+import { CurrencyService } from '../../core/services/currency.service';
 import { UserDisplayCmp } from '../../shared/components/user-display';
 
 @Component({
@@ -83,6 +84,7 @@ export class ExpensesCmp implements OnInit {
     private vehicleService: VehicleService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
+    public currencyService: CurrencyService,
   ) {}
 
   ngOnInit() {
@@ -102,21 +104,7 @@ export class ExpensesCmp implements OnInit {
     });
   }
 
-  currencySymbol = '$';
-
-  private async loadCompanyCurrency() {
-    try {
-      const companies = await this.companyService.list().toPromise();
-      if (companies?.length) {
-        const cur = companies[0].currency;
-        const symbols: Record<string, string> = { USD: '$', UGX: 'Sh', EUR: '€', GBP: '£', KES: 'KSh', TZS: 'TSh', RWF: 'FRw' };
-        this.currencySymbol = symbols[cur] || cur;
-      }
-    } catch {}
-  }
-
   async loadExpenses() {
-    await this.loadCompanyCurrency();
     this.loading.set(true);
     try {
       const res = await this.financeService.listExpenses({

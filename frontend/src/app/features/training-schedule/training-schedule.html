@@ -68,7 +68,7 @@
     </div>
     <div class="bg-surface-card p-3 rounded-lg border border-gray-100">
       <div class="text-xs text-gray-500 font-medium">Balance</div>
-      <div class="text-lg font-bold" [class.text-red-600]="totalBalance() > 0" [class.text-green-600]="totalBalance() === 0">{{ totalBalance() | currency:authService.currencyCode():'symbol':'1.0-0' }}</div>
+      <div class="text-lg font-bold" [class.text-red-600]="totalBalance() > 0" [class.text-green-600]="totalBalance() === 0">{{ totalBalance() | currency:currencyService.code():'symbol':'1.0-0' }}</div>
     </div>
   </div>
 
@@ -146,7 +146,7 @@
           </td>
           <td class="py-1">
             <span class="text-sm font-semibold" [class.text-red-600]="s.balance > 0" [class.text-green-600]="s.balance === 0">
-              {{ s.balance | currency:authService.currencyCode():'symbol':'1.0-0' }}
+              {{ s.balance | currency:currencyService.code():'symbol':'1.0-0' }}
             </span>
           </td>
           <td class="py-1">
@@ -205,7 +205,7 @@
                   @if (lp2.total > 0) { Lessons: {{ lp2.trained }}/{{ lp2.total }} } @else { — }
                 </span>
                 <span class="text-xs font-bold" [class.text-red-600]="s.balance > 0" [class.text-green-600]="s.balance === 0">
-                  {{ s.balance | currency:authService.currencyCode():'symbol':'1.0-0' }}
+                  {{ s.balance | currency:currencyService.code():'symbol':'1.0-0' }}
                 </span>
                 <p-button
                   label="Manage"
@@ -309,15 +309,15 @@
           <div class="grid grid-cols-3 gap-2 mb-3 text-xs">
             <div class="bg-gray-50 rounded p-2 text-center">
               <div class="text-gray-500">Total</div>
-              <div class="font-bold">{{ target.total_amount | currency:authService.currencyCode():'symbol':'1.0-0' }}</div>
+              <div class="font-bold">{{ target.total_amount | currency:currencyService.code():'symbol':'1.0-0' }}</div>
             </div>
             <div class="bg-green-50 rounded p-2 text-center">
               <div class="text-green-600">Paid</div>
-              <div class="font-bold text-green-700">{{ target.total_paid | currency:authService.currencyCode():'symbol':'1.0-0' }}</div>
+              <div class="font-bold text-green-700">{{ target.total_paid | currency:currencyService.code():'symbol':'1.0-0' }}</div>
             </div>
             <div class="bg-red-50 rounded p-2 text-center">
               <div class="text-red-600">Balance</div>
-              <div class="font-bold text-red-700">{{ target.balance | currency:authService.currencyCode():'symbol':'1.0-0' }}</div>
+              <div class="font-bold text-red-700">{{ target.balance | currency:currencyService.code():'symbol':'1.0-0' }}</div>
             </div>
           </div>
 
@@ -392,7 +392,7 @@
               />
             </div>
             @if (payTotalBalance > 0) {
-              <div class="text-xs text-gray-500 mb-1">Remaining: {{ payTotalBalance | currency:authService.currencyCode():'symbol':'1.0-0' }}</div>
+              <div class="text-xs text-gray-500 mb-1">Remaining: {{ payTotalBalance | currency:currencyService.code():'symbol':'1.0-0' }}</div>
             }
             @for (inst of payInstallments; track $index) {
               <div class="flex items-center gap-2 mb-1">
@@ -421,7 +421,7 @@
             }
             @if (payInstallments.length > 0 && !payInstallmentBalanceMatch) {
               <div class="text-xs text-amber-600 mt-1">
-                Installment total ({{ payInstallmentSum | currency:authService.currencyCode():'symbol':'1.0-0' }}) does not cover remaining balance ({{ payTotalBalance | currency:authService.currencyCode():'symbol':'1.0-0' }})
+                Installment total ({{ payInstallmentSum | currency:currencyService.code():'symbol':'1.0-0' }}) does not cover remaining balance ({{ payTotalBalance | currency:currencyService.code():'symbol':'1.0-0' }})
               </div>
             }
           </div>
@@ -435,7 +435,7 @@
           }
 
           <p-button
-            label="Pay {{ payTotalNow | currency:authService.currencyCode():'symbol':'1.0-0' }}"
+            label="Pay {{ payTotalNow | currency:currencyService.code():'symbol':'1.0-0' }}"
             [loading]="paymentProcessing()"
             (onClick)="doPay()"
             styleClass="w-full justify-center mt-1"

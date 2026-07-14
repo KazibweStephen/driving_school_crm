@@ -23,6 +23,7 @@ import { CartItemService, CartItemRead, CartItemCreate } from '../../core/servic
 import { ProductService, Product } from '../../core/services/product.service';
 import { PaymentService, PaymentRead } from '../../core/services/payment.service';
 import { AuthService } from '../../core/auth/auth.service';
+import { CurrencyService } from '../../core/services/currency.service';
 import { TrainingService, TrainingSession, TrainingSummary, Skill, SkillCreate } from '../../core/services/training.service';
 import { PermitProgressService, PermitProgress } from '../../core/services/permit-progress.service';
 import { OrderListModule } from 'primeng/orderlist';
@@ -33,7 +34,6 @@ import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
 import { UserService, User } from '../../core/services/user.service';
 import { SchedulingService, ClientAvailability, FindAndLockResult } from '../../core/services/scheduling.service';
 import { VehicleScheduleService } from '../../core/services/vehicle-schedule.service';
-import { APP_CONFIG } from '../../core/config';
 
 @Component({
   selector: 'app-client-profile',
@@ -63,7 +63,6 @@ import { APP_CONFIG } from '../../core/config';
   templateUrl: './client-profile.html',
 })
 export class ClientProfile implements OnInit {
-  readonly config = APP_CONFIG;
   consultation = signal<Consultation | null>(null);
   loading = signal(false);
 
@@ -270,6 +269,7 @@ export class ClientProfile implements OnInit {
     private confirmationService: ConfirmationService,
     private sanitizer: DomSanitizer,
     public authService: AuthService,
+    public currencyService: CurrencyService,
   ) {}
 
   async ngOnInit() {

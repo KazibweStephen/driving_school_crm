@@ -11,14 +11,14 @@ from app.models.user import User, UserRole, UserStatus
 async def seed():
     async with async_session() as db:
         result = await db.execute(
-            select(User).where(User.phone == "256700000000")
+            select(User).where(User.phone == "0782832711")
         )
         if result.scalar_one_or_none():
             print("Super user already exists, skipping seed.")
             return
 
         user = User(
-            phone="256700000000",
+            phone="0782832711",
             name="Super Admin",
             role=UserRole.SUPER_USER,
             status=UserStatus.ACTIVE,
@@ -27,7 +27,7 @@ async def seed():
         db.add(user)
         await db.flush()
         await db.commit()
-        print("Created super user: 256700000000 / PIN: 1234")
+        print("Created super user: 0782832711 / PIN: 1234")
 
 
 if __name__ == "__main__":

@@ -51,11 +51,11 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     await db.flush()
 
     company_id_str = str(user.company_id) if user.company_id else None
-    currency = None
+    currency = "UGX"
     if user.company_id:
         company_result = await db.execute(select(Company).where(Company.id == user.company_id))
         company = company_result.scalar_one_or_none()
-        currency = company.currency if company else None
+        currency = company.currency if company else "UGX"
     return TokenResponse(
         access_token=create_access_token(
             user.phone, role=user.role.value,
@@ -84,11 +84,11 @@ async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
     user = await get_user_by_phone(db, phone)
     role = user.role.value if user else None
     company_id_str = str(user.company_id) if user and user.company_id else None
-    currency = None
+    currency = "UGX"
     if user and user.company_id:
         company_result = await db.execute(select(Company).where(Company.id == user.company_id))
         company = company_result.scalar_one_or_none()
-        currency = company.currency if company else None
+        currency = company.currency if company else "UGX"
     return TokenResponse(
         access_token=create_access_token(
             phone, role=role,

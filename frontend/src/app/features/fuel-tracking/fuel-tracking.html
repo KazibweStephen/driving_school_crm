@@ -152,7 +152,7 @@
       <p-inputNumber [(ngModel)]="rateForm.rate_per_lesson" placeholder="Enter amount per lesson"
         mode="decimal" [min]="0" class="w-full" />
       @if (!rateForm.rate_per_lesson) {
-        <p class="text-xs text-gray-400 mt-1">e.g., 5000 = 5000 UGX per practical lesson</p>
+        <p class="text-xs text-gray-400 mt-1">e.g., 5000 = 5000 {{ currencyService.code() }} per practical lesson</p>
       }
     </div>
     <div>

@@ -40,7 +40,7 @@
     <ng-template pTemplate="body" let-e>
       <tr>
         <td class="text-sm">{{ formatDate(e.expense_date) }}</td>
-        <td class="font-medium whitespace-nowrap">{{ currencySymbol }}{{ e.amount.toFixed(2) }}</td>
+        <td class="font-medium whitespace-nowrap">{{ currencyService.symbol() }} {{ e.amount.toFixed(2) }}</td>
         <td>
           <span class="text-sm">{{ e.category || '-' }}</span>
           @if (e.description) {

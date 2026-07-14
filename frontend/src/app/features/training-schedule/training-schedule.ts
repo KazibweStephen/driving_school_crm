@@ -20,6 +20,7 @@ import { MessageService } from 'primeng/api';
 import { TrainingService } from '../../core/services/training.service';
 import { PaymentService } from '../../core/services/payment.service';
 import { AuthService } from '../../core/auth/auth.service';
+import { CurrencyService } from '../../core/services/currency.service';
 
 type Period = 'today' | 'this_week' | 'this_month' | 'last_month';
 
@@ -58,6 +59,7 @@ export class TrainingScheduleCmp implements OnInit, OnDestroy {
   private paymentService = inject(PaymentService);
   private messageService = inject(MessageService);
   authService = inject(AuthService);
+  currencyService = inject(CurrencyService);
 
   sessions = signal<any[]>([]);
   loading = signal(false);

@@ -31,11 +31,11 @@ _CODE128_PATTERNS = [
 ]
 
 
-def format_currency(amount: Decimal | float | int | None) -> str:
-    """Format with UGX prefix and no decimals."""
+def format_currency(amount: Decimal | float | int | None, currency: str = "UGX") -> str:
+    """Format with currency prefix and no decimals."""
     if amount is None:
         amount = Decimal("0")
-    return f"UGX {Decimal(str(amount)):,.0f}"
+    return f"{currency} {Decimal(str(amount)):,.0f}"
 
 
 def format_amount(amount: Decimal | float | int | None) -> str:

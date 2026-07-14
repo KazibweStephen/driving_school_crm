@@ -423,7 +423,7 @@
                 <th>Paid</th>
                 <th>Balance</th>
                 <th>Status</th>
-                <th>Date</th>
+                <th>Transaction Date</th>
                 <th>Installments</th>
                 <th>Receipt</th>
               </tr>
@@ -1166,7 +1166,7 @@
                       <th>Paid</th>
                       <th>Balance</th>
                       <th>Status</th>
-                      <th>Date</th>
+                      <th>Transaction Date</th>
                       <th>Installments</th>
                       <th>Receipt</th>
                     </tr>
@@ -1663,12 +1663,14 @@
             </label>
           </div>
           <div class="overflow-auto border rounded-lg bg-white" style="max-height: 70vh;">
+            @if (getPrintPreviewSafeUrl(); as safeUrl) {
             <iframe
-              [src]="getPrintPreviewSafeUrl()"
+              [src]="safeUrl"
               class="w-full border-0"
               style="min-height: 80vh;"
               title="Print Preview"
             ></iframe>
+            }
           </div>
           <div class="flex justify-end gap-2">
             <p-button label="Cancel" severity="secondary" (onClick)="closePrintPreview()" />

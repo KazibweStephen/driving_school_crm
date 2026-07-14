@@ -1043,7 +1043,7 @@ export class ClientProfile implements OnInit {
         vehicle_id: this.scheduleVehicleId() || undefined,
         instructor_id_auto: this.scheduleInstructorIdAuto() || undefined,
         vehicle_id_auto: this.scheduleVehicleIdAuto() || undefined,
-        start_date: this.scheduleDate()!.toISOString().split('T')[0],
+        start_date: this.formatDate(this.scheduleDate()!),
         preferred_times: times.length > 0 ? times : ['17:00'],
         manual_days: this.scheduleManualDays(),
       }).toPromise();
@@ -1078,7 +1078,7 @@ export class ClientProfile implements OnInit {
         vehicle_id: this.scheduleVehicleId() || undefined,
         instructor_id_auto: this.scheduleInstructorIdAuto() || undefined,
         vehicle_id_auto: this.scheduleVehicleIdAuto() || undefined,
-        start_date: this.scheduleDate()!.toISOString().split('T')[0],
+        start_date: this.formatDate(this.scheduleDate()!),
         manual_days: this.scheduleManualDays(),
       }).toPromise();
       await this.loadLessonPlans();
@@ -2174,7 +2174,7 @@ export class ClientProfile implements OnInit {
                 .toPromise();
             }
           } else {
-            const followUpDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const followUpDate = this.formatDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
             await this.consultationService
               .createFollowUp(c.id, {
                 follow_up_date: followUpDate,
@@ -2557,7 +2557,7 @@ export class ClientProfile implements OnInit {
           notes: `Paid: ${paid}, Balance: ${remaining}`,
           receipt_number: this.completeSaleReceiptNumber() || undefined,
           installments,
-          document_date: this.completeSaleDocumentDate()?.toISOString().split('T')[0] || undefined,
+          document_date: this.completeSaleDocumentDate() ? this.formatDate(this.completeSaleDocumentDate()!) : undefined,
         })
         .toPromise();
 
@@ -2628,7 +2628,7 @@ export class ClientProfile implements OnInit {
           notes: `Additional payment of ${amount}`,
           receipt_number: this.makePaymentReceiptNumber() || undefined,
           installments,
-          document_date: this.makePaymentDocumentDate()?.toISOString().split('T')[0] || undefined,
+          document_date: this.makePaymentDocumentDate() ? this.formatDate(this.makePaymentDocumentDate()!) : undefined,
         })
         .toPromise();
 
@@ -2870,7 +2870,7 @@ export class ClientProfile implements OnInit {
             notes: `Bulk payment of ${amount}`,
             receipt_number: receipt || undefined,
             installments,
-            document_date: this.payAllDocumentDate()?.toISOString().split('T')[0] || undefined,
+            document_date: this.payAllDocumentDate() ? this.formatDate(this.payAllDocumentDate()!) : undefined,
           })
           .toPromise();
 
@@ -3081,7 +3081,10 @@ export class ClientProfile implements OnInit {
   }
 
   private formatDate(d: Date): string {
-    return d.toISOString().split('T')[0];
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 
   relativeDuration(from: Date, to: Date): string {
@@ -3321,7 +3324,9 @@ export class ClientProfile implements OnInit {
   }
 
   paymentPaidAmount(pay: PaymentRead): number {
-    return parseFloat(pay.total_paid);
+    return pay.installments
+      .filter(i => i.status === 'paid')
+      .reduce((s, i) => s + parseFloat(i.paid_amount || i.amount), 0);
   }
 
   paymentBalanceAfter(pay: PaymentRead): number {

@@ -424,7 +424,7 @@
                 <th>Balance</th>
                 <th>Status</th>
                 <th>Transaction Date</th>
-                <th>Installments</th>
+                <th>Receipt No.</th>
                 <th>Receipt</th>
               </tr>
             </ng-template>
@@ -435,7 +435,7 @@
                 <td class="text-sm" [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</td>
                 <td><p-tag [value]="paymentStatus(pay)" [severity]="paymentSeverity(paymentStatus(pay))" /></td>
                 <td class="text-sm text-gray-500">{{ paymentDate(pay) | date:'shortDate' }}</td>
-                <td class="text-sm text-gray-500">{{ pay.installments.length }}</td>
+                <td class="text-sm text-gray-500">{{ pay.receipt_number || pay.system_receipt_number }}</td>
                 <td>
                   <div class="flex items-center gap-1">
                     <p-button icon="pi pi-eye" severity="info" (onClick)="openReceipt(pay.id)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="View" />
@@ -1167,7 +1167,7 @@
                       <th>Balance</th>
                       <th>Status</th>
                       <th>Transaction Date</th>
-                      <th>Installments</th>
+                      <th>Receipt No.</th>
                       <th>Receipt</th>
                     </tr>
                   </ng-template>
@@ -1178,7 +1178,7 @@
                       <td class="text-sm" [class.text-green-600]="paymentBalanceAfter(pay) === 0" [class.text-amber-600]="paymentBalanceAfter(pay) > 0">{{ paymentBalanceAfter(pay) | number:'1.0-0' }}</td>
                       <td><p-tag [value]="paymentStatus(pay)" [severity]="paymentSeverity(paymentStatus(pay))" /></td>
                       <td class="text-sm text-gray-500">{{ paymentDate(pay) | date:'shortDate' }}</td>
-                      <td class="text-sm text-gray-500">{{ pay.installments.length }}</td>
+                      <td class="text-sm text-gray-500">{{ pay.receipt_number || pay.system_receipt_number }}</td>
                       <td>
                         <p-button icon="pi pi-receipt" severity="info" (onClick)="openReceipt(pay.id)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="View Receipt" />
                       </td>

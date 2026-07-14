@@ -533,7 +533,7 @@ export class Clients implements OnInit, OnDestroy {
         // Distribute global installments proportionally across unpaid items
         const totalRemaining = this.unallocatedAmount;
         const insts = totalRemaining > 0 ? this.paymentInstallments().map(inst => ({
-          due_date: inst.due_date ? inst.due_date.toISOString().split('T')[0] : '',
+          due_date: inst.due_date ? this.formatDate(inst.due_date) : '',
           amount: Math.round(inst.amount * (remaining / totalRemaining)),
         })) : [];
         return {
@@ -553,8 +553,8 @@ export class Clients implements OnInit, OnDestroy {
       if (this.form.location) payload.location = this.form.location;
       if (this.form.how_they_knew_us) payload.how_they_knew_us = this.form.how_they_knew_us;
       if (this.form.interest_level) payload.interest_level = this.form.interest_level;
-      if (this.form.start_date) payload.start_date = this.form.start_date.toISOString().split('T')[0];
-      if (this.form.document_date) payload.document_date = this.form.document_date.toISOString().split('T')[0];
+      if (this.form.start_date) payload.start_date = this.formatDate(this.form.start_date);
+      if (this.form.document_date) payload.document_date = this.formatDate(this.form.document_date);
       if (this.form.notes) payload.notes = this.form.notes;
       if (this.form.branch_id) payload.branch_id = this.form.branch_id;
       payload.items = items;
@@ -632,8 +632,8 @@ export class Clients implements OnInit, OnDestroy {
       if (this.form.location) payload.location = this.form.location;
       if (this.form.how_they_knew_us) payload.how_they_knew_us = this.form.how_they_knew_us;
       if (this.form.interest_level) payload.interest_level = this.form.interest_level;
-      if (this.form.start_date) payload.start_date = this.form.start_date.toISOString().split('T')[0];
-      if (this.form.document_date) payload.document_date = this.form.document_date.toISOString().split('T')[0];
+      if (this.form.start_date) payload.start_date = this.formatDate(this.form.start_date);
+      if (this.form.document_date) payload.document_date = this.formatDate(this.form.document_date);
       if (this.form.notes) payload.notes = this.form.notes;
       if (this.form.branch_id) payload.branch_id = this.form.branch_id;
       const c = await this.consultationService.create(payload).toPromise();
@@ -843,5 +843,12 @@ export class Clients implements OnInit, OnDestroy {
   displayedResults() {
     if (this.isSearching()) return this.clientResults();
     return this.consultations();
+  }
+
+  private formatDate(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 }

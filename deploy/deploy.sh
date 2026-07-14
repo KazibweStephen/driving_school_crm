@@ -16,6 +16,14 @@ if [ ! -f "./backend/.env.prod" ]; then
     exit 1
 fi
 
+# Validate .env.prod has the critical postgres vars
+for var in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB; do
+    if ! grep -qE "^${var}=.+" ./backend/.env.prod; then
+        echo "ERROR: $var is missing or empty in backend/.env.prod"
+        exit 1
+    fi
+done
+
 # Load backend environment variables for use by docker compose
 set -a
 source ./backend/.env.prod
@@ -41,12 +49,26 @@ echo "=== Building and starting services ==="
 docker compose -f "$COMPOSE_FILE" pull
 docker compose -f "$COMPOSE_FILE" up -d --build
 
+echo "=== Waiting for backend to be healthy ==="
+MAX_WAIT=60
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+    if docker compose -f "$COMPOSE_FILE" exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" 2>/dev/null; then
+        echo "Backend is healthy after ${WAITED}s"
+        break
+    fi
+    sleep 2
+    WAITED=$((WAITED + 2))
+done
+if [ $WAITED -ge $MAX_WAIT ]; then
+    echo "WARNING: Backend health check timed out after ${MAX_WAIT}s. Proceeding anyway..."
+fi
+
 echo "=== Running database migrations ==="
-sleep 5
-docker compose -f "$COMPOSE_FILE" exec -T backend bash -c 'PYTHONPATH=/app alembic upgrade head'
+docker compose -f "$COMPOSE_FILE" exec -T -e PYTHONPATH=/app backend alembic upgrade head
 
 echo "=== Seeding default data (safe to re-run) ==="
-docker compose -f "$COMPOSE_FILE" exec -T backend bash -c 'PYTHONPATH=/app python app/seed.py' || true
+docker compose -f "$COMPOSE_FILE" exec -T -e PYTHONPATH=/app backend python -m app.seed || true
 
 echo "=== Restarting frontend to pick up latest build ==="
 docker compose -f "$COMPOSE_FILE" restart frontend

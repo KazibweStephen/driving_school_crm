@@ -59,17 +59,24 @@ async def create_template(
         for item in items_data:
             lo = item.get("lesson_objectives", [])
             po = item.get("practical_objectives", [])
+            comps = item.get("competencies", [])
+            prereq_comps = item.get("prerequisite_competencies", [])
+            diff_str = item.get("difficulty", "beginner")
+            training_cat = item.get("training_category", "driving")
             lib_id = item.get("lesson_library_id")
             if lib_id is None:
                 # Auto-create a LessonLibrary entry so every template item links back
                 lib = LessonLibrary(
                     title=item["title"],
+                    description=item.get("description", ""),
                     lesson_objectives=lo if isinstance(lo, list) else [lo] if lo else [],
                     practical_objectives=po if isinstance(po, list) else [po] if po else [],
-                    competencies=item.get("competencies", []),
+                    competencies=comps if isinstance(comps, list) else [comps] if comps else [],
                     estimated_minutes=item.get("estimated_minutes", 30),
                     estimated_distance_km=item.get("estimated_distance_km", 3.0),
-                    difficulty=LessonDifficulty.BEGINNER,
+                    difficulty=LessonDifficulty(diff_str) if diff_str in ("beginner", "intermediate", "advanced") else LessonDifficulty.BEGINNER,
+                    training_category=training_cat,
+                    prerequisite_competencies=prereq_comps if isinstance(prereq_comps, list) else [prereq_comps] if prereq_comps else [],
                     is_theory=item.get("is_theory", False),
                 )
                 db.add(lib)
@@ -1100,23 +1107,44 @@ async def get_lesson_history(
 async def export_template_json(
     db: AsyncSession, template_id: uuid.UUID, company_id: uuid.UUID | None = None
 ) -> dict:
-    template = await get_template_by_id(db, template_id, company_id=company_id)
+    query = (
+        select(LessonPlanTemplate)
+        .where(LessonPlanTemplate.id == template_id)
+        .options(
+            selectinload(LessonPlanTemplate.lesson_items)
+            .selectinload(LessonTemplateItem.lesson_library)
+        )
+    )
+    if company_id:
+        query = query.where(LessonPlanTemplate.company_id == company_id)
+    result = await db.execute(query)
+    template = result.scalar_one_or_none()
     if not template:
         raise ValueError("Template not found")
 
     weeks_map: dict[int, list[dict]] = {}
     for item in template.lesson_items:
+        lib = item.lesson_library
         w = item.week_number
         if w not in weeks_map:
             weeks_map[w] = []
-        weeks_map[w].append({
+        day_entry = {
             "day_number": item.day_number,
             "title": item.title,
             "lesson_objectives": item.lesson_objectives or [],
             "practical_objectives": item.practical_objectives or [],
-            "preferred_location": item.preferred_location,
+            "estimated_minutes": item.estimated_minutes,
+            "estimated_distance_km": item.estimated_distance_km,
+            "preferred_location": item.preferred_location or "",
             "enforce_prerequisites": item.enforce_prerequisites,
-        })
+            "is_theory": item.is_theory,
+            "competencies": lib.competencies if lib and lib.competencies else [],
+            "difficulty": (lib.difficulty.value if hasattr(lib.difficulty, 'value') else lib.difficulty) if lib else "beginner",
+            "training_category": lib.training_category if lib else "driving",
+            "prerequisite_competencies": lib.prerequisite_competencies if lib and lib.prerequisite_competencies else [],
+            "description": lib.description if lib and lib.description else "",
+        }
+        weeks_map[w].append(day_entry)
 
     weeks = []
     for w in sorted(weeks_map.keys()):
@@ -1126,11 +1154,12 @@ async def export_template_json(
         })
 
     return {
-        "version": "1.0",
+        "version": "2.0",
         "title": template.name,
         "transmission_type": template.transmission_type.value if hasattr(template.transmission_type, 'value') else template.transmission_type,
         "total_days": template.total_days,
         "total_weeks": template.total_weeks,
+        "template_type": template.template_type,
         "description": template.description or "",
         "weeks": weeks,
     }
@@ -1156,6 +1185,7 @@ async def import_template_json(
         transmission = data.get("transmission_type", "manual")
         total_days = data.get("total_days", 20)
         total_weeks = data.get("total_weeks", 4)
+        template_type = data.get("template_type", "practical")
         description = data.get("description", "")
 
         items_data = []
@@ -1168,8 +1198,15 @@ async def import_template_json(
                     "title": day.get("title", f"Day {day.get('day_number', 1)}"),
                     "lesson_objectives": day.get("lesson_objectives", []),
                     "practical_objectives": day.get("practical_objectives", []),
-                    "preferred_location": day.get("preferred_location"),
+                    "estimated_minutes": day.get("estimated_minutes", 30),
+                    "estimated_distance_km": day.get("estimated_distance_km", 3.0),
+                    "preferred_location": day.get("preferred_location", ""),
                     "enforce_prerequisites": day.get("enforce_prerequisites", True),
+                    "is_theory": day.get("is_theory", False),
+                    "competencies": day.get("competencies", []),
+                    "difficulty": day.get("difficulty", "beginner"),
+                    "training_category": day.get("training_category", "driving"),
+                    "prerequisite_competencies": day.get("prerequisite_competencies", []),
                     "order": len(items_data) + 1,
                 })
 
@@ -1178,6 +1215,7 @@ async def import_template_json(
             description=description,
             total_days=total_days,
             total_weeks=total_weeks,
+            template_type=template_type,
             items_data=items_data,
             created_by_phone=created_by_phone,
             company_id=company_id,
@@ -1207,6 +1245,13 @@ async def validate_import_json(data: dict) -> dict:
     if transmission not in ("manual", "automatic", "both"):
         errors.append({"field": "transmission_type", "message": f"Invalid transmission type: {transmission}"})
 
+    template_type = data.get("template_type", "practical")
+    if template_type not in ("practical", "theory", "combined"):
+        warnings.append({"field": "template_type", "message": f"Unexpected template_type '{template_type}', expected 'practical', 'theory', or 'combined'"})
+
+    valid_difficulties = {"beginner", "intermediate", "advanced"}
+    valid_categories = {"driving", "motorcycle", "truck", "bus"}
+
     seen_days: set[int] = set()
     for week in data.get("weeks", []):
         for day in week.get("days", []):
@@ -1217,6 +1262,21 @@ async def validate_import_json(data: dict) -> dict:
 
             if not day.get("title"):
                 errors.append({"field": f"day_{dn}_title", "message": f"Day {dn} is missing a title"})
+
+            diff = day.get("difficulty")
+            if diff and diff not in valid_difficulties:
+                warnings.append({"field": f"day_{dn}_difficulty", "message": f"Day {dn}: unknown difficulty '{diff}', expected one of {sorted(valid_difficulties)}"})
+
+            cat = day.get("training_category")
+            if cat and cat not in valid_categories:
+                warnings.append({"field": f"day_{dn}_training_category", "message": f"Day {dn}: unknown training_category '{cat}', expected one of {sorted(valid_categories)}"})
+
+            mins = day.get("estimated_minutes")
+            if mins is not None and (not isinstance(mins, (int, float)) or mins < 1):
+                warnings.append({"field": f"day_{dn}_estimated_minutes", "message": f"Day {dn}: estimated_minutes should be a positive integer"})
+
+    if not data.get("weeks"):
+        warnings.append({"field": "weeks", "message": "No weeks provided — template will have no lessons"})
 
     return {"valid": len(errors) == 0, "errors": errors, "warnings": warnings}
 

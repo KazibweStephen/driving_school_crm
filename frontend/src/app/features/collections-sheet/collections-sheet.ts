@@ -10,6 +10,7 @@ import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 import { DatePickerModule } from 'primeng/datepicker';
 import { FinanceService } from '../../core/services/finance.service';
+import { CurrencyService } from '../../core/services/currency.service';
 
 type Period = 'daily' | 'weekly' | 'monthly';
 
@@ -32,13 +33,14 @@ type Period = 'daily' | 'weekly' | 'monthly';
 export class CollectionsSheetCmp implements OnInit {
   private financeService = inject(FinanceService);
   private messageService = inject(MessageService);
+  currencyService = inject(CurrencyService);
   items = signal<any[]>([]);
   loading = signal(false);
   period = signal<Period>('daily');
   startDate = signal<string>(
-    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    this.formatDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
   );
-  endDate = signal<string>(new Date().toISOString().split('T')[0]);
+  endDate = signal<string>(this.formatDate(new Date()));
 
   periodOptions = [
     { label: 'Daily', value: 'daily' },
@@ -87,5 +89,12 @@ export class CollectionsSheetCmp implements OnInit {
   onPeriodChange(p: Period) {
     this.period.set(p);
     this.loadSheet();
+  }
+
+  private formatDate(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 }

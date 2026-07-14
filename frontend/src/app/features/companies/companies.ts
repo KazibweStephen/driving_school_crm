@@ -122,7 +122,7 @@ export class CompaniesCmp implements OnInit {
     { label: 'RWF (FRw)', value: 'RWF' },
   ];
 
-  form: CompanyCreate & { is_active?: boolean } = { name: '', code: '', address: '', phone: '', email: '', currency: 'USD', is_active: true };
+  form: CompanyCreate & { is_active?: boolean } = { name: '', code: '', address: '', phone: '', email: '', currency: 'UGX', is_active: true };
 
   constructor(
     private service: CompanyService,
@@ -148,7 +148,7 @@ export class CompaniesCmp implements OnInit {
 
   showCreate() {
     this.editId = null;
-    this.form = { name: '', code: '', address: '', phone: '', email: '', currency: 'USD', is_active: true };
+    this.form = { name: '', code: '', address: '', phone: '', email: '', currency: 'UGX', is_active: true };
     this.dialogVisible = true;
   }
 

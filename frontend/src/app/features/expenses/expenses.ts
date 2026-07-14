@@ -195,7 +195,7 @@ export class ExpensesCmp implements OnInit {
 
   confirmApprove(e: Expense) {
     this.confirmationService.confirm({
-      message: `Approve expense "${e.description || e.category || 'Untitled'}" for $${e.amount}?`,
+      message: `Approve expense "${e.description || e.category || 'Untitled'}" for ${this.currencyService.symbol()} ${e.amount}?`,
       header: 'Approve Expense',
       icon: 'pi pi-check-circle',
       acceptButtonStyleClass: 'p-button-success',

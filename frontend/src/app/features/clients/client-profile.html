@@ -2260,7 +2260,7 @@
             <div class="rounded-lg bg-gray-50 p-3 text-sm">
               <div class="flex justify-between">
                 <span class="text-gray-600">Total Price</span>
-                <span class="font-semibold">{{ completeSaleTotal() | currency:currencyService.symbol():'symbol':'1.0-0' }}</span>
+                <span class="font-semibold">{{ completeSaleTotal() | currency:currencyService.code():'symbol':'1.0-0' }}</span>
               </div>
             </div>
 
@@ -2316,7 +2316,7 @@
                 <div class="rounded-lg bg-amber-50 p-3 text-sm">
                   <div class="flex justify-between">
                     <span class="text-gray-600">Remaining Balance</span>
-                    <span class="font-semibold text-amber-700">{{ balance | currency:currencyService.symbol():'symbol':'1.0-0' }}</span>
+                    <span class="font-semibold text-amber-700">{{ balance | currency:currencyService.code():'symbol':'1.0-0' }}</span>
                   </div>
                 </div>
 

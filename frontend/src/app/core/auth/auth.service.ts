@@ -111,7 +111,7 @@ export class AuthService {
       this.sessionCountdown.update((v) => {
         if (v <= 1) {
           this.clearSession();
-          this.router.navigate(['/login']);
+          setTimeout(() => this.router.navigate(['/login']), 0);
           return 0;
         }
         return v - 1;

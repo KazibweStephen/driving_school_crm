@@ -7,6 +7,7 @@ import { AuthService } from '../auth/auth.service';
   selector: 'app-session-expired',
   imports: [DialogModule, ButtonModule],
   template: `
+    @if (auth.isAuthenticated()) {
     <p-dialog
       [(visible)]="auth.sessionExpired"
       [modal]="true"
@@ -26,6 +27,7 @@ import { AuthService } from '../auth/auth.service';
         <p-button label="Refresh" (onClick)="onRefresh()" />
       </div>
     </p-dialog>
+    }
   `,
 })
 export class SessionExpired {

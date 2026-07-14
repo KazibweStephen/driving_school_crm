@@ -13,6 +13,9 @@ import { ToastModule } from 'primeng/toast';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
+import { StepperModule } from 'primeng/stepper';
+import { StepsModule } from 'primeng/steps';
+import { MenuItem } from 'primeng/api';
 import { ConsultationService } from '../../core/services/consultation.service';
 import { ProductService } from '../../core/services/product.service';
 import { UserService } from '../../core/services/user.service';
@@ -61,6 +64,7 @@ const STORAGE_KEY = 'bulk_onboarding_draft';
     CommonModule, FormsModule, ButtonModule, DialogModule,
     InputTextModule, InputNumberModule, TextareaModule, ToastModule,
     SelectModule, ConfirmDialogModule, DatePickerModule, TooltipModule,
+    StepperModule, StepsModule,
   ],
   providers: [ConfirmationService, MessageService],
   templateUrl: './bulk-onboarding.html',
@@ -80,6 +84,7 @@ export class BulkOnboardingCmp implements OnInit {
   dateErrors = signal<Record<string, string>>({});
   private phoneTimers: Record<number, ReturnType<typeof setTimeout>> = {};
   private receiptTimers: ReturnType<typeof setTimeout>[] = [];
+  clientStepIndex = signal<Record<number, number>>({});
 
   totalClients = computed(() => this.clients().length);
   totalPackages = computed(() =>
@@ -261,6 +266,9 @@ export class BulkOnboardingCmp implements OnInit {
         const restored = draft.clients.map((c: any) => this.restoreClientDraft(c));
         this.clients.set(restored);
         this.draftRestored.set(true);
+        const stepIdx: Record<number, number> = {};
+        restored.forEach((_: any, i: number) => { stepIdx[i] = 0; });
+        this.clientStepIndex.set(stepIdx);
       } catch {
         localStorage.removeItem(STORAGE_KEY);
       }
@@ -365,10 +373,34 @@ export class BulkOnboardingCmp implements OnInit {
         packages: [],
       },
     ]);
+    const idx = this.clients().length - 1;
+    this.clientStepIndex.update(s => ({ ...s, [idx]: 0 }));
+  }
+
+  onStepChange(clientIndex: number, stepIndex: number) {
+    this.clientStepIndex.update(s => ({ ...s, [clientIndex]: stepIndex }));
+  }
+
+  getStepItems(): MenuItem[] {
+    return [
+      { label: 'Info', icon: 'pi pi-user' },
+      { label: 'Payments', icon: 'pi pi-wallet' },
+      { label: 'Lessons', icon: 'pi pi-book' },
+    ];
   }
 
   removeClient(index: number) {
     this.clients.update(clients => clients.filter((_, i) => i !== index));
+    this.clientStepIndex.update(s => {
+      const n: Record<number, number> = {};
+      let newIdx = 0;
+      for (let i = 0; i < this.clients().length + 1; i++) {
+        if (i === index) continue;
+        n[newIdx] = s[i] ?? 0;
+        newIdx++;
+      }
+      return n;
+    });
   }
 
   addPackage(clientIndex: number) {

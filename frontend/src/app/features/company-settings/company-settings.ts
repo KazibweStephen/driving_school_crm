@@ -193,7 +193,7 @@ import { CompanyService, Company } from '../../core/services/company.service';
         <p class="text-sm text-gray-600">Send a test SMS to verify your provider configuration.</p>
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">Phone Number</label>
-          <input pInputText [(ngModel)]="testPhone" class="w-full" placeholder="e.g. 256700000000" />
+          <input pInputText [(ngModel)]="testPhone" class="w-full" placeholder="e.g. 0782832711" />
         </div>
         <p-button label="Send Test" [loading]="testingSms()" (onClick)="sendTestSms()" styleClass="w-full justify-center" />
       </div>

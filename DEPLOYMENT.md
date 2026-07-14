@@ -101,7 +101,7 @@ This will:
 
 Visit `http://your-domain.com` or `http://YOUR_DROPLET_IP` and log in with the seeded super admin:
 
-- Phone: `256700000000`
+- Phone: `0782832711`
 - PIN: `1234`
 
 **Change the default PIN immediately.**

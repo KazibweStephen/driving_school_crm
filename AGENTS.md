@@ -187,7 +187,7 @@ All endpoints have been fixed with multi-company scoping. Each endpoint verifies
 - Add `appendTo="body"` to remaining `p-select` and `p-datepicker` dropdowns for mobile.
 
 ## Test Credentials
-Super Admin `256700000000`, pin=`1234`
+Super Admin `0782832711`, pin=`1234`
 
 ## Docker
 Postgres `:5433` (external), backend `:8000`, frontend `:80`

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const SUPER_PHONE = '256700000000';
+const SUPER_PHONE = '0782832711';
 const SUPER_PIN = '1234';
 
 test.describe('Vehicle & Dual-Phase Scheduling', () => {
@@ -18,7 +18,7 @@ test.describe('Vehicle & Dual-Phase Scheduling', () => {
       const res = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: '256700000000', pin: '1234' }),
+        body: JSON.stringify({ phone: '0782832711', pin: '1234' }),
       });
       return (await res.json()).access_token;
     });

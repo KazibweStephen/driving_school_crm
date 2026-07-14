@@ -10,14 +10,14 @@ test.describe('Login Flow', () => {
   });
 
   test('shows error for invalid credentials', async ({ page }) => {
-    await page.fill('#phone', '256700000000');
+    await page.fill('#phone', '0782832711');
     await page.fill('input[type="password"]', '9999');
     await page.click('button[type="submit"]');
     await expect(page.getByText('Invalid phone or PIN.')).toBeVisible({ timeout: 5000 });
   });
 
   test('successful login redirects to dashboard', async ({ page }) => {
-    await page.fill('#phone', '256700000000');
+    await page.fill('#phone', '0782832711');
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
@@ -27,7 +27,7 @@ test.describe('Login Flow', () => {
   test('sidebar shows navigation on desktop after login', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '256700000000');
+    await page.fill('#phone', '0782832711');
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
@@ -40,7 +40,7 @@ test.describe('Login Flow', () => {
   test('mobile viewport has hamburger and sidebar is hidden', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/login');
-    await page.fill('#phone', '256700000000');
+    await page.fill('#phone', '0782832711');
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
@@ -50,7 +50,7 @@ test.describe('Login Flow', () => {
   test('opens sidebar on mobile and navigates to users', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/login');
-    await page.fill('#phone', '256700000000');
+    await page.fill('#phone', '0782832711');
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
@@ -64,7 +64,7 @@ test.describe('Login Flow', () => {
   test('users page shows existing users in table', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '256700000000');
+    await page.fill('#phone', '0782832711');
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
@@ -73,16 +73,16 @@ test.describe('Login Flow', () => {
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
     // Search for the seeded super admin instead of assuming first page
     const searchInput = page.getByPlaceholder('Search name or phone...');
-    await searchInput.fill('256700000000');
+    await searchInput.fill('0782832711');
     await searchInput.press('Enter');
     await expect(page.getByRole('cell', { name: 'Super Admin' })).toBeVisible({ timeout: 5000 });
-    await expect(page.getByRole('cell', { name: '256700000000' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: '0782832711' })).toBeVisible();
   });
 
   test('create user dialog opens and can be dismissed', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '256700000000');
+    await page.fill('#phone', '0782832711');
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
@@ -98,7 +98,7 @@ test.describe('Login Flow', () => {
     const phone = `2567000${Date.now().toString().slice(-6)}`;
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '256700000000');
+    await page.fill('#phone', '0782832711');
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
@@ -115,7 +115,7 @@ test.describe('Login Flow', () => {
   test('can search users by name', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '256700000000');
+    await page.fill('#phone', '0782832711');
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
@@ -131,7 +131,7 @@ test.describe('Login Flow', () => {
   test('can open change PIN dialog', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '256700000000');
+    await page.fill('#phone', '0782832711');
     await page.fill('input[type="password"]', '1234');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });

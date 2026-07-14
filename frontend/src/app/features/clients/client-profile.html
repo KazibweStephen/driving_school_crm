@@ -2380,8 +2380,41 @@
 
             <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">Amount to Pay</label>
-              <p-inputNumber [(ngModel)]="makePaymentAmount" [min]="0" [max]="makePaymentBalance()" [placeholder]="'0'" class="w-full" inputStyleClass="w-full px-3 py-2 text-sm" />
+              <p-inputNumber [(ngModel)]="makePaymentAmount" (onInput)="onMakePaymentAmountChange()" [min]="0" [max]="makePaymentBalance()" [placeholder]="'0'" class="w-full" inputStyleClass="w-full px-3 py-2 text-sm" />
             </div>
+
+            @if (makePaymentRemainingBalance > 0) {
+              <div class="rounded-lg border p-3">
+                <label class="mb-2 block text-sm font-semibold text-gray-700">Future Installments (up to 2)</label>
+                @if (makePaymentInstallments.length === 0) {
+                  <p class="mb-2 text-xs text-gray-400">Enter a partial "Amount to Pay" above, then add installments for the balance.</p>
+                }
+                @for (inst of makePaymentInstallments; track $index; let i = $index) {
+                  <div class="mb-2 flex items-center gap-2">
+                    <div class="flex-1">
+                      <label class="mb-0.5 block text-xs text-gray-500">Due Date</label>
+                      <p-datepicker [(ngModel)]="inst.due_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                    </div>
+                    <div class="flex-1">
+                      <label class="mb-0.5 block text-xs text-gray-500">Amount</label>
+                      <p-inputNumber [(ngModel)]="inst.amount" [min]="0" placeholder="0" styleClass="w-full" />
+                    </div>
+                    <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="removeMakePaymentInstallment(i)" styleClass="mt-5" />
+                  </div>
+                }
+                @if (makePaymentInstallments.length < 2 && makePaymentRemainingBalance > 0) {
+                  <p-button label="Add Installment" icon="pi pi-plus" severity="secondary" (onClick)="addMakePaymentInstallment()" size="small" styleClass="w-full justify-center" />
+                }
+                @if (makePaymentInstallments.length > 0) {
+                  <div class="mt-2 border-t pt-2 text-xs text-gray-500">
+                    <div class="flex justify-between"><span>Total installments</span><span>{{ makePaymentInstallmentTotal | number:'1.0-0' }}</span></div>
+                    @if (!makePaymentInstallmentBalanceMatch) {
+                      <p class="mt-1 text-amber-600">Installment total does not cover remaining balance ({{ makePaymentRemainingBalance | number:'1.0-0' }})</p>
+                    }
+                  </div>
+                }
+              </div>
+            }
 
             <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">Receipt Number (optional)</label>

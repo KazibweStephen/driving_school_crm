@@ -136,6 +136,7 @@ export class ClientProfile implements OnInit {
   makePaymentBalance = signal<number>(0);
   makePaymentReceiptNumber = signal('');
   makePaymentDocumentDate = signal<Date | null>(null);
+  makePaymentInstallments: { due_date: Date | null; amount: number }[] = [];
 
   showPayAllDialog = signal(false);
   payAllItems = signal<{ cartItem: CartItemRead; payNow: number; balance: number; productName: string; packageName: string }[]>([]);
@@ -2594,6 +2595,7 @@ export class ClientProfile implements OnInit {
     this.makePaymentBalance.set(balance);
     this.makePaymentReceiptNumber.set('');
     this.makePaymentDocumentDate.set(null);
+    this.makePaymentInstallments = [];
     this.receiptChecking.set(false);
     this.receiptAvailable.set(null);
     this.showMakePaymentDialog.set(true);
@@ -2608,16 +2610,24 @@ export class ClientProfile implements OnInit {
 
     this.loading.set(true);
     try {
+      const installments = [
+        { due_date: this.formatDate(new Date()), amount },
+        ...this.makePaymentInstallments
+          .filter(inst => inst.amount > 0 && inst.due_date)
+          .map(inst => ({
+            due_date: this.formatDate(inst.due_date!),
+            amount: inst.amount,
+          })),
+      ];
+
       const paymentResult = await this.paymentService
         .createPayment(c.id, {
           product_id: ci.product_id,
           package_id: ci.package_id || undefined,
-          total_amount: amount,
+          total_amount: amount + this.makePaymentInstallmentTotal,
           notes: `Additional payment of ${amount}`,
           receipt_number: this.makePaymentReceiptNumber() || undefined,
-          installments: [
-            { due_date: this.formatDate(new Date()), amount },
-          ],
+          installments,
           document_date: this.makePaymentDocumentDate()?.toISOString().split('T')[0] || undefined,
         })
         .toPromise();
@@ -2634,6 +2644,7 @@ export class ClientProfile implements OnInit {
 
       this.showMakePaymentDialog.set(false);
       this.makePaymentTarget.set(null);
+      this.makePaymentInstallments = [];
       await this.loadConsultation(c.id);
 
       // Check if fully paid after refresh
@@ -2666,6 +2677,48 @@ export class ClientProfile implements OnInit {
   closeMakePaymentDialog() {
     this.showMakePaymentDialog.set(false);
     this.makePaymentTarget.set(null);
+    this.makePaymentInstallments = [];
+  }
+
+  get makePaymentRemainingBalance(): number {
+    return Math.max(0, this.makePaymentBalance() - (this.makePaymentAmount() || 0));
+  }
+
+  get makePaymentInstallmentTotal(): number {
+    return this.makePaymentInstallments.reduce((s, inst) => s + (inst.amount || 0), 0);
+  }
+
+  get makePaymentInstallmentBalanceMatch(): boolean {
+    return this.makePaymentInstallmentTotal >= this.makePaymentRemainingBalance;
+  }
+
+  onMakePaymentAmountChange() {
+    this.makePaymentInstallments = [];
+    if (this.makePaymentRemainingBalance > 0) {
+      this.addMakePaymentInstallment();
+    }
+  }
+
+  addMakePaymentInstallment() {
+    const balance = this.makePaymentRemainingBalance;
+    const sumExisting = this.makePaymentInstallments.reduce((s, inst) => s + (inst.amount || 0), 0);
+    const prefill = Math.max(0, balance - sumExisting);
+    const last = this.makePaymentInstallments[this.makePaymentInstallments.length - 1];
+    const base = last?.due_date ? new Date(last.due_date) : new Date();
+    const nextDate = new Date(base.getTime() + 7 * 24 * 60 * 60 * 1000);
+    this.makePaymentInstallments = [...this.makePaymentInstallments, { due_date: nextDate, amount: prefill }];
+  }
+
+  removeMakePaymentInstallment(index: number) {
+    const removed = this.makePaymentInstallments[index];
+    const rest = this.makePaymentInstallments.filter((_, i) => i !== index);
+    if (rest.length && removed) {
+      const balance = this.makePaymentRemainingBalance;
+      const sumRest = rest.reduce((s, inst) => s + (inst.amount || 0), 0);
+      const lastIdx = rest.length - 1;
+      rest[lastIdx] = { ...rest[lastIdx], amount: Math.max(0, balance - (sumRest - (rest[lastIdx].amount || 0))) };
+    }
+    this.makePaymentInstallments = [...rest];
   }
 
   async validateMakePaymentReceipt() {

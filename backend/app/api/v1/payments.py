@@ -7,8 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
-from app.models.company import Branch, UserBranchAssignment
+from app.models.company import Branch, Company, UserBranchAssignment
 from app.models.product import Product
 from app.models.user import User, UserRole
 from app.schemas.company import BranchRead
@@ -165,6 +166,12 @@ async def payments_report(
     current_user: User = Depends(get_current_user),
 ) -> str:
     resolved = await _resolve_branch_ids(db, current_user, branch_ids.split(",") if branch_ids else None)
+
+    company_name = settings.app_name
+    if current_user.company_id:
+        co_result = await db.execute(select(Company.name).where(Company.id == current_user.company_id))
+        company_name = co_result.scalar_one() or settings.app_name
+
     payments, total, total_amount_sum, total_paid_sum, total_balance_sum = await payment_service.list_payments(
         db, search=search, date_from=date_from, date_to=date_to,
         client_type=client_type, branch_ids=resolved, page=1, page_size=10000,
@@ -255,7 +262,7 @@ async def payments_report(
     </tbody>
   </table>
 
-  <div class="footer">Driving School CRM — Payments Report</div>
+    <div class="footer">{company_name} — Payments Report</div>
 </body>
 </html>"""
     return html

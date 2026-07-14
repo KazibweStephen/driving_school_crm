@@ -93,6 +93,7 @@ async def generate_receipt_html(
     db: AsyncSession,
     payment_id: uuid.UUID,
     served_by_name: str | None = None,
+    company_name: str | None = None,
 ) -> str:
     result = await db.execute(
         select(Payment)
@@ -429,7 +430,7 @@ async def generate_receipt_html(
 <body>
 
 <div class="header">
-    <h1>{settings.app_name}</h1>
+    <h1>{company_name or settings.app_name}</h1>
     <p>OFFICIAL RECEIPT</p>
 </div>
 
@@ -522,7 +523,7 @@ async def generate_receipt_html(
 <hr>
 
 <div class="footer">
-    <p>Thank you for choosing {settings.app_name}!</p>
+    <p>Thank you for choosing {company_name or settings.app_name}!</p>
 </div>
 
 <div class="no-print" style="text-align:center;margin-top:6mm;">
@@ -545,6 +546,7 @@ async def generate_consolidated_receipt_html(
     receipt_number: str,
     consultation_id: uuid.UUID,
     served_by_name: str | None = None,
+    company_name: str | None = None,
 ) -> str:
     """Generate a consolidated receipt for all payments sharing the same manual receipt_number."""
     from sqlalchemy import and_
@@ -877,7 +879,7 @@ async def generate_consolidated_receipt_html(
 <body>
 
 <div class="header">
-    <h1>{settings.app_name}</h1>
+    <h1>{company_name or settings.app_name}</h1>
     <p>OFFICIAL RECEIPT</p>
 </div>
 
@@ -942,7 +944,7 @@ async def generate_consolidated_receipt_html(
 <hr>
 
 <div class="footer">
-    <p>Thank you for choosing {settings.app_name}!</p>
+    <p>Thank you for choosing {company_name or settings.app_name}!</p>
 </div>
 
 <div class="no-print" style="text-align:center;margin-top:6mm;">

@@ -55,7 +55,7 @@ class Commission(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
     cart_item_id = Column(UUID(as_uuid=True), ForeignKey("cart_items.id"), nullable=False, index=True)
     commission_rate_id = Column(UUID(as_uuid=True), ForeignKey("commission_rates.id"), nullable=True)
-    converter_id = Column(String(20), ForeignKey("users.phone"), nullable=False, index=True)
+    converter_id = Column(String(20), ForeignKey("users.phone"), nullable=True, index=True)
     primary_recommender_id = Column(String(20), ForeignKey("users.phone"), nullable=True, index=True)
     secondary_recommender_id = Column(String(20), ForeignKey("users.phone"), nullable=True, index=True)
     total_amount = Column(Numeric(10, 2), nullable=False)

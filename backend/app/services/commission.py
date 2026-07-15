@@ -1,4 +1,5 @@
 import uuid
+import logging
 from datetime import datetime, timezone, date
 from decimal import Decimal
 from typing import Optional
@@ -6,6 +7,8 @@ from typing import Optional
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
+
+logger = logging.getLogger(__name__)
 
 from app.models.commission import Commission, CommissionRate, CommissionStatus, CommissionContest, ContestStatus, commission_rate_packages
 from app.models.cart import CartItem, CartItemStatus
@@ -179,6 +182,43 @@ async def create_commission_from_conversion(
     if not package_id:
         return None
 
+    if not company_id:
+        from app.models.company import Branch
+        from app.models.product import Product
+        res = await db.execute(
+            select(Branch.company_id)
+            .join(Consultation, Consultation.branch_id == Branch.id)
+            .where(Consultation.id == cart_item.consultation_id)
+            .limit(1)
+        )
+        row = res.first()
+        if row and row[0]:
+            company_id = row[0]
+
+    if not company_id and cart_item.product_id:
+        from app.models.product import Product
+        res = await db.execute(
+            select(Product.company_id).where(Product.id == cart_item.product_id).limit(1)
+        )
+        row = res.first()
+        if row and row[0]:
+            company_id = row[0]
+
+    if not company_id:
+        res = await db.execute(
+            select(CommissionRate.company_id)
+            .join(commission_rate_packages, CommissionRate.id == commission_rate_packages.c.commission_rate_id)
+            .where(commission_rate_packages.c.package_id == package_id)
+            .limit(1)
+        )
+        row = res.first()
+        if row and row[0]:
+            company_id = row[0]
+
+    if not company_id:
+        print(f"[COMMISSION] No company_id resolvable for cart_item {cart_item.id}, skipping", flush=True)
+        return None
+
     rate_query = (
         select(CommissionRate)
         .join(commission_rate_packages, CommissionRate.id == commission_rate_packages.c.commission_rate_id)
@@ -200,9 +240,11 @@ async def create_commission_from_conversion(
     result = await db.execute(rate_query)
     rate = result.scalars().first()
     if not rate:
+        print(f"[COMMISSION] No active rate for company={company_id} package={package_id}, skipping", flush=True)
         return None
 
     total = rate.total_amount
+    print(f"[COMMISSION] Creating commission: rate={rate.id} total={total} package={package_id}", flush=True)
     converter_amt = total * rate.converter_pct / Decimal("100")
     primary_amt = total * rate.primary_recommender_pct / Decimal("100")
     secondary_amt = total * rate.secondary_recommender_pct / Decimal("100")

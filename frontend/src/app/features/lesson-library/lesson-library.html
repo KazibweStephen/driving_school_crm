@@ -129,13 +129,18 @@
     </div>
     <div>
       <label class="block text-sm font-medium mb-1">Competencies</label>
-      @for (comp of form.competencies ?? []; track $index) {
-        <div class="flex gap-2 mb-1">
-          <input pInputText [(ngModel)]="form.competencies[$index]" class="flex-1" placeholder="Competency" />
-          <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeArrayItem('competencies', $index)" [disabled]="form.competencies.length <= 1"></button>
-        </div>
-      }
-      <button pButton icon="pi pi-plus" label="Add Competency" class="p-button-sm p-button-outlined mt-1" (click)="addArrayItem('competencies')"></button>
+      <p-multiSelect [ngModel]="selectedCompetencyIds()" (ngModelChange)="selectedCompetencyIds.set($event)"
+        [options]="availableCompetencies()" optionLabel="displayLabel" optionValue="id"
+        appendTo="body" [filter]="true" filterBy="code,name,categoryName"
+        [showClear]="true" [maxSelectedLabels]="3" class="w-full"
+        placeholder="Select competencies from the catalogue...">
+        <ng-template let-comp pTemplate="item">
+          <div class="flex items-center gap-2 py-1">
+            <span class="font-mono font-bold text-sm">{{ comp.code }}</span>
+            <span class="text-sm">{{ comp.name }}</span>
+          </div>
+        </ng-template>
+      </p-multiSelect>
     </div>
     <div class="flex gap-4">
       <div class="flex-1">
@@ -149,13 +154,19 @@
     </div>
     <div>
       <label class="block text-sm font-medium mb-1">Prerequisite Competencies</label>
-      @for (pc of form.prerequisite_competencies ?? []; track $index) {
-        <div class="flex gap-2 mb-1">
-          <input pInputText [(ngModel)]="form.prerequisite_competencies[$index]" class="flex-1" placeholder="Prerequisite competency" />
-          <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeArrayItem('prerequisite_competencies', $index)" [disabled]="form.prerequisite_competencies.length <= 1"></button>
-        </div>
-      }
-      <button pButton icon="pi pi-plus" label="Add Prerequisite" class="p-button-sm p-button-outlined mt-1" (click)="addArrayItem('prerequisite_competencies')"></button>
+      <p class="text-xs text-gray-400 mb-1">Select competencies a student should have before attempting this lesson.</p>
+      <p-multiSelect [ngModel]="selectedCompetencyIds()" (ngModelChange)="selectedCompetencyIds.set($event)"
+        [options]="availableCompetencies()" optionLabel="displayLabel" optionValue="id"
+        appendTo="body" [filter]="true" filterBy="code,name,categoryName"
+        [showClear]="true" [maxSelectedLabels]="3" class="w-full"
+        placeholder="Select prerequisite competencies...">
+        <ng-template let-comp pTemplate="item">
+          <div class="flex items-center gap-2 py-1">
+            <span class="font-mono font-bold text-sm">{{ comp.code }}</span>
+            <span class="text-sm">{{ comp.name }}</span>
+          </div>
+        </ng-template>
+      </p-multiSelect>
     </div>
     <div class="flex items-center gap-2">
       <p-checkbox [(ngModel)]="form.is_theory" [binary]="true" inputId="lib_is_theory" />

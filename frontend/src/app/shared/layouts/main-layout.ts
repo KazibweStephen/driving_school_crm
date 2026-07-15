@@ -59,6 +59,7 @@ export class MainLayout {
         { path: '/lesson-plans', label: 'Lesson Plans', icon: 'pi pi-book' },
         { path: '/lesson-library', label: 'Lesson Library', icon: 'pi pi-list' },
         { path: '/video-library', label: 'Video Library', icon: 'pi pi-video' },
+        { path: '/competency-catalogue', label: 'Competency Catalogue', icon: 'pi pi-check-circle' },
       ],
     },
     {

@@ -59,8 +59,6 @@ async def create_template(
         for item in items_data:
             lo = item.get("lesson_objectives", [])
             po = item.get("practical_objectives", [])
-            comps = item.get("competencies", [])
-            prereq_comps = item.get("prerequisite_competencies", [])
             diff_str = item.get("difficulty", "beginner")
             training_cat = item.get("training_category", "driving")
             lib_id = item.get("lesson_library_id")
@@ -71,17 +69,25 @@ async def create_template(
                     description=item.get("description", ""),
                     lesson_objectives=lo if isinstance(lo, list) else [lo] if lo else [],
                     practical_objectives=po if isinstance(po, list) else [po] if po else [],
-                    competencies=comps if isinstance(comps, list) else [comps] if comps else [],
                     estimated_minutes=item.get("estimated_minutes", 30),
                     estimated_distance_km=item.get("estimated_distance_km", 3.0),
                     difficulty=LessonDifficulty(diff_str) if diff_str in ("beginner", "intermediate", "advanced") else LessonDifficulty.BEGINNER,
                     training_category=training_cat,
-                    prerequisite_competencies=prereq_comps if isinstance(prereq_comps, list) else [prereq_comps] if prereq_comps else [],
                     is_theory=item.get("is_theory", False),
                 )
                 db.add(lib)
                 await db.flush()
                 lib_id = lib.id
+                # Resolve competency strings to IDs and create M2M links
+                comp_strings = item.get("competencies", [])
+                if comp_strings and company_id:
+                    from app.services.competency_catalogue import resolve_competency_strings, set_lesson_competencies
+                    matched_ids, missing = await resolve_competency_strings(db, company_id, comp_strings)
+                    if missing:
+                        raise ValueError(f"Lesson '{item['title']}': Missing competencies: {', '.join(missing)}")
+                    if matched_ids:
+                        links = [{"competency_id": cid, "order": idx} for idx, cid in enumerate(matched_ids)]
+                        await set_lesson_competencies(db, lib_id, links)
             elif isinstance(lib_id, str):
                 lib_id = uuid.UUID(lib_id)
             template_item = LessonTemplateItem(
@@ -1107,12 +1113,17 @@ async def get_lesson_history(
 async def export_template_json(
     db: AsyncSession, template_id: uuid.UUID, company_id: uuid.UUID | None = None
 ) -> dict:
+    from app.models.competency_catalogue import LessonCompetencyLink, Competency
+    from sqlalchemy.orm import selectinload
+
     query = (
         select(LessonPlanTemplate)
         .where(LessonPlanTemplate.id == template_id)
         .options(
             selectinload(LessonPlanTemplate.lesson_items)
             .selectinload(LessonTemplateItem.lesson_library)
+            .selectinload(LessonLibrary.competency_links)
+            .selectinload(LessonCompetencyLink.competency)
         )
     )
     if company_id:
@@ -1128,6 +1139,13 @@ async def export_template_json(
         w = item.week_number
         if w not in weeks_map:
             weeks_map[w] = []
+        # Export competency codes from M2M links
+        competency_codes = []
+        if lib and lib.competency_links:
+            competency_codes = [
+                link.competency.code for link in sorted(lib.competency_links, key=lambda l: l.order)
+                if link.competency
+            ]
         day_entry = {
             "day_number": item.day_number,
             "title": item.title,
@@ -1138,10 +1156,9 @@ async def export_template_json(
             "preferred_location": item.preferred_location or "",
             "enforce_prerequisites": item.enforce_prerequisites,
             "is_theory": item.is_theory,
-            "competencies": lib.competencies if lib and lib.competencies else [],
+            "competencies": competency_codes,
             "difficulty": (lib.difficulty.value if hasattr(lib.difficulty, 'value') else lib.difficulty) if lib else "beginner",
             "training_category": lib.training_category if lib else "driving",
-            "prerequisite_competencies": lib.prerequisite_competencies if lib and lib.prerequisite_competencies else [],
             "description": lib.description if lib and lib.description else "",
         }
         weeks_map[w].append(day_entry)

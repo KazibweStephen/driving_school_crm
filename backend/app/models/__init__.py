@@ -1,3 +1,13 @@
+from app.models.competency_catalogue import (
+    Competency,
+    CompetencyCategory,
+    CompetencyDifficulty,
+    CompetencyPrerequisite,
+    CompetencyTrainingCategory,
+    CompetencyVersion,
+    CompetencyVersionStatus,
+    LessonCompetencyLink,
+)
 from app.models.cart import CartItem, CartItemStatus, follow_up_cart_items
 from app.models.company import (
     Branch,
@@ -68,6 +78,9 @@ __all__ = [
     "User", "UserRole", "UserStatus",
     "Company", "Branch", "UserBranchAssignment", "VehicleBranchAssignment",
     "Expense", "Sale",
+    "CompetencyVersion", "CompetencyCategory", "Competency",
+    "CompetencyDifficulty", "CompetencyTrainingCategory", "CompetencyVersionStatus",
+    "CompetencyPrerequisite", "LessonCompetencyLink",
     "EntityStatus", "Package", "Product",
     "Consultation", "ConsultationStatus", "FollowUp", "FollowUpStatus", "FollowUpType", "InterestLevel",
     "Payment", "Installment", "InstallmentStatus", "NotificationPreference", "NotificationChannel",

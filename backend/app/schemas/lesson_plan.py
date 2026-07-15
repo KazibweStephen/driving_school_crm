@@ -50,7 +50,6 @@ class LessonLibraryCreate(BaseModel):
     transmission_type: str | None = None
     lesson_objectives: list[str] = []
     practical_objectives: list[str] = []
-    competencies: list[str] = []
     estimated_minutes: int = 30
     estimated_distance_km: float = 3.0
     required_vehicle: str | None = None
@@ -62,9 +61,9 @@ class LessonLibraryCreate(BaseModel):
     video_ids: list[uuid.UUID] = []
     preferred_location: str | None = None
     training_category: str = "driving"
-    prerequisite_competencies: list[str] = []
     prerequisite_lesson_ids: list[uuid.UUID] = []
     is_theory: bool = False
+    competency_ids: list[uuid.UUID] = []
 
 
 class LessonLibraryUpdate(BaseModel):
@@ -73,7 +72,6 @@ class LessonLibraryUpdate(BaseModel):
     transmission_type: str | None = None
     lesson_objectives: list[str] | None = None
     practical_objectives: list[str] | None = None
-    competencies: list[str] | None = None
     estimated_minutes: int | None = None
     estimated_distance_km: float | None = None
     required_vehicle: str | None = None
@@ -85,9 +83,9 @@ class LessonLibraryUpdate(BaseModel):
     order: int | None = None
     preferred_location: str | None = None
     training_category: str | None = None
-    prerequisite_competencies: list[str] | None = None
     prerequisite_lesson_ids: list[uuid.UUID] | None = None
     is_theory: bool | None = None
+    competency_ids: list[uuid.UUID] | None = None
 
 
 class LessonLibraryRead(BaseModel):
@@ -97,7 +95,6 @@ class LessonLibraryRead(BaseModel):
     transmission_type: str | None
     lesson_objectives: list[str]
     practical_objectives: list[str]
-    competencies: list[str]
     estimated_minutes: int
     estimated_distance_km: float
     required_vehicle: str | None
@@ -110,9 +107,9 @@ class LessonLibraryRead(BaseModel):
     videos: list[VideoLibraryRead] = []
     preferred_location: str | None
     training_category: str
-    prerequisite_competencies: list[str]
     is_theory: bool
     prerequisite_lessons: list["LessonLibraryPrerequisiteRead"] = []
+    competency_links: list = []
     created_by_phone: str | None
     created_at: datetime
     updated_at: datetime

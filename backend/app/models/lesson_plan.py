@@ -366,7 +366,6 @@ class LessonLibrary(Base):
     )
     lesson_objectives: Mapped[list | None] = mapped_column(JSONB, nullable=True, default=list)
     practical_objectives: Mapped[list | None] = mapped_column(JSONB, nullable=True, default=list)
-    competencies: Mapped[list | None] = mapped_column(JSONB, nullable=True, default=list)
     estimated_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
     estimated_distance_km: Mapped[float] = mapped_column(Float, default=3.0, nullable=False)
     required_vehicle: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -384,7 +383,6 @@ class LessonLibrary(Base):
     order: Mapped[int | None] = mapped_column(Integer, nullable=True)
     preferred_location: Mapped[str | None] = mapped_column(String(300), nullable=True)
     training_category: Mapped[str] = mapped_column(String(50), default="driving", nullable=False)
-    prerequisite_competencies: Mapped[list | None] = mapped_column(JSONB, nullable=True, default=list)
     is_theory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     company_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("companies.id", ondelete="CASCADE"), nullable=True, index=True
@@ -409,6 +407,10 @@ class LessonLibrary(Base):
         primaryjoin="LessonLibrary.id == lesson_prerequisites.c.lesson_id",
         secondaryjoin="LessonLibrary.id == lesson_prerequisites.c.prerequisite_lesson_id",
         backref="required_by",
+    )
+    competency_links: Mapped[list["LessonCompetencyLink"]] = relationship(
+        "LessonCompetencyLink", back_populates="lesson",
+        cascade="all, delete-orphan", order_by="LessonCompetencyLink.order"
     )
 
 

@@ -44,6 +44,11 @@ export const routes: Routes = [
           import('./features/video-library/video-library').then((c) => c.VideoLibraryCmp),
       },
       {
+        path: 'competency-catalogue',
+        loadComponent: () =>
+          import('./features/competency-catalogue/competency-catalogue').then((c) => c.CompetencyCatalogueCmp),
+      },
+      {
         path: 'expenses',
         loadComponent: () =>
           import('./features/expenses/expenses').then((c) => c.ExpensesCmp),

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import (
-    auth, bulk_onboarding, cart, clients, commission, companies, consultations,
+    auth, bulk_onboarding, cart, clients, commission, competency_catalogue, companies, consultations,
     finance, fuel, instructor_qualifications, lead, lesson_plan, lesson_execution,
     library, packages, payments, permit, products, receipts, reports,
     schedule_breaks, scheduling, sms, training, users, vehicle_assignments,
@@ -39,6 +39,7 @@ app.include_router(lesson_plan.router)
 app.include_router(library.router)
 app.include_router(video_library.router)
 app.include_router(lesson_execution.router)
+app.include_router(competency_catalogue.router)
 app.include_router(vehicles.router)
 app.include_router(vehicle_assignments.router)
 app.include_router(vehicle_schedule.router)

@@ -1,0 +1,323 @@
+<p-toast></p-toast>
+<p-confirmdialog></p-confirmdialog>
+
+<div class="p-4">
+  <div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold">Competency Catalogue</h1>
+    <div class="flex gap-3 items-center">
+      @if (isSuperUser() && companies().length > 0) {
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-gray-600">Company:</label>
+          <p-select [(ngModel)]="selectedCompanyId" [options]="companyOptions()" optionLabel="label" optionValue="value"
+            placeholder="Select company" appendTo="body" [showClear]="false" class="w-56"
+            (onChange)="onCompanyChange()"></p-select>
+        </div>
+      }
+      @if (isAdmin()) {
+        <button pButton label="Bulk Import" icon="pi pi-upload" class="p-button-outlined" (click)="openImport()"></button>
+      }
+    </div>
+  </div>
+
+  <p-tabs [value]="activeTab()">
+    <p-tablist>
+      <p-tab value="versions">Versions</p-tab>
+      <p-tab value="categories">Categories</p-tab>
+      <p-tab value="competencies">Competencies</p-tab>
+    </p-tablist>
+    <p-tabpanels>
+      <!-- Versions Tab -->
+      <p-tabpanel value="versions">
+        <div class="flex justify-between items-center mb-3">
+          <span class="text-sm text-gray-500">{{ versions().length }} version(s)</span>
+          @if (isAdmin()) {
+            <button pButton label="Create Version" icon="pi pi-plus" class="p-button-sm" (click)="openCreateVersion()"></button>
+          }
+        </div>
+        <p-table [value]="versions()" [loading]="loading()">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Version</th>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Competencies</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-v>
+            <tr>
+              <td class="font-mono font-bold">{{ v.version }}</td>
+              <td>{{ v.name }}</td>
+              <td><p-tag [value]="v.status" [severity]="versionStatusColor(v.status)"></p-tag></td>
+              <td>{{ v.competency_count }}</td>
+              <td class="text-sm text-gray-500">{{ v.created_at | date:'medium' }}</td>
+              <td>
+                @if (isAdmin()) {
+                  <div class="flex gap-1">
+                    <button pButton icon="pi pi-pencil" class="p-button-sm p-button-text" (click)="openEditVersion(v)" pTooltip="Edit"></button>
+                    @if (v.status === 'draft') {
+                      <button pButton icon="pi pi-check-circle" class="p-button-sm p-button-text p-button-success" (click)="activateVersion(v)" pTooltip="Activate"></button>
+                      <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger" (click)="confirmDeleteVersion(v)" pTooltip="Delete"></button>
+                    }
+                    @if (v.status === 'active') {
+                      <button pButton icon="pi pi-check-circle" class="p-button-sm p-button-text" disabled pTooltip="Already Active"></button>
+                    }
+                  </div>
+                }
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr><td colspan="6" class="text-center py-4 text-gray-400">No versions found.</td></tr>
+          </ng-template>
+        </p-table>
+      </p-tabpanel>
+
+      <!-- Categories Tab -->
+      <p-tabpanel value="categories">
+        <div class="flex justify-between items-center mb-3">
+          <span class="text-sm text-gray-500">{{ categories().length }} category/ies</span>
+          @if (isAdmin()) {
+            <button pButton label="Create Category" icon="pi pi-plus" class="p-button-sm" (click)="openCreateCategory()"></button>
+          }
+        </div>
+        <p-table [value]="categories()">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Order</th>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Competencies</th>
+              <th>Active</th>
+              <th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-c>
+            <tr>
+              <td>{{ c.display_order }}</td>
+              <td class="font-medium">{{ c.name }}</td>
+              <td class="text-sm text-gray-600">{{ c.description || '-' }}</td>
+              <td>{{ c.competency_count }}</td>
+              <td><p-tag [value]="c.is_active ? 'Active' : 'Inactive'" [severity]="c.is_active ? 'success' : 'secondary'" /></td>
+              <td>
+                @if (isAdmin()) {
+                  <div class="flex gap-1">
+                    <button pButton icon="pi pi-pencil" class="p-button-sm p-button-text" (click)="openEditCategory(c)" pTooltip="Edit"></button>
+                    <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger" (click)="confirmDeleteCategory(c)" pTooltip="Delete"></button>
+                  </div>
+                }
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr><td colspan="6" class="text-center py-4 text-gray-400">No categories found.</td></tr>
+          </ng-template>
+        </p-table>
+      </p-tabpanel>
+
+      <!-- Competencies Tab -->
+      <p-tabpanel value="competencies">
+        <div class="flex flex-wrap gap-2 mb-3">
+          <input pInputText [(ngModel)]="search" (keyup.enter)="onSearchCompetencies()" placeholder="Search code or name..." class="w-48" />
+          <p-select [(ngModel)]="filterCategory" [options]="categoryOptions()" optionLabel="label" optionValue="value" placeholder="Category" appendTo="body" [showClear]="true" class="w-48" (onChange)="onSearchCompetencies()"></p-select>
+          <p-select [(ngModel)]="filterDifficulty" [options]="difficultyOptions" optionLabel="label" optionValue="value" placeholder="Difficulty" appendTo="body" [showClear]="true" class="w-40" (onChange)="onSearchCompetencies()"></p-select>
+          <p-select [(ngModel)]="filterTrainingCategory" [options]="trainingCategoryOptions" optionLabel="label" optionValue="value" placeholder="Training" appendTo="body" [showClear]="true" class="w-40" (onChange)="onSearchCompetencies()"></p-select>
+          <p-select [(ngModel)]="filterVersion" [options]="versionOptions()" optionLabel="label" optionValue="value" placeholder="Version" appendTo="body" [showClear]="true" class="w-44" (onChange)="onSearchCompetencies()"></p-select>
+          <button pButton icon="pi pi-search" class="p-button-sm" (click)="onSearchCompetencies()"></button>
+          @if (isAdmin()) {
+            <button pButton label="Create Competency" icon="pi pi-plus" class="p-button-sm ml-auto" (click)="openCreateCompetency()"></button>
+          }
+        </div>
+
+        <p-table [value]="competencies()" [loading]="loading()" [paginator]="false" [rows]="pageSize"
+          [totalRecords]="totalCompetencies()" [lazy]="true" (onLazyLoad)="onPageChange(($any($event).first / $any($event).rows) + 1)"
+          sortField="code" [sortOrder]="1">
+          <ng-template pTemplate="header">
+            <tr>
+              <th pSortableColumn="code">Code <p-sortIcon field="code"></p-sortIcon></th>
+              <th pSortableColumn="name">Name <p-sortIcon field="name"></p-sortIcon></th>
+              <th>Category</th>
+              <th pSortableColumn="difficulty">Difficulty <p-sortIcon field="difficulty"></p-sortIcon></th>
+              <th>Training</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-c>
+            <tr>
+              <td class="font-mono font-bold text-sm">{{ c.code }}</td>
+              <td>{{ c.name }}</td>
+              <td><p-tag [value]="c.category?.name || '-'" severity="info" /></td>
+              <td><p-tag [value]="c.difficulty" [severity]="difficultyColor(c.difficulty)" /></td>
+              <td class="text-sm">{{ trainingCategoryLabel(c.training_category) }}</td>
+              <td><p-tag [value]="c.is_active ? 'Active' : 'Inactive'" [severity]="c.is_active ? 'success' : 'secondary'" /></td>
+              <td>
+                @if (isAdmin()) {
+                  <div class="flex gap-1">
+                    <button pButton icon="pi pi-pencil" class="p-button-sm p-button-text" (click)="openEditCompetency(c)" pTooltip="Edit"></button>
+                    @if (c.is_active) {
+                      <button pButton icon="pi pi-ban" class="p-button-sm p-button-text p-button-danger" (click)="confirmDeactivateCompetency(c)" pTooltip="Deactivate"></button>
+                    }
+                  </div>
+                }
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr><td colspan="7" class="text-center py-4 text-gray-400">No competencies found.</td></tr>
+          </ng-template>
+        </p-table>
+
+        <div class="flex justify-between items-center mt-3">
+          <span class="text-sm text-gray-500">Showing {{ (page()-1)*pageSize+1 }}-{{ min(page()*pageSize, totalCompetencies()) }} of {{ totalCompetencies() }}</span>
+          <div class="flex gap-1">
+            <button pButton icon="pi pi-chevron-left" class="p-button-sm p-button-text" [disabled]="page() <= 1" (click)="onPageChange(page()-1)"></button>
+            <span class="text-sm py-1 px-2">Page {{ page() }} of {{ totalPages }}</span>
+            <button pButton icon="pi pi-chevron-right" class="p-button-sm p-button-text" [disabled]="page() >= totalPages" (click)="onPageChange(page()+1)"></button>
+          </div>
+        </div>
+      </p-tabpanel>
+    </p-tabpanels>
+  </p-tabs>
+</div>
+
+<!-- Version Dialog -->
+<p-dialog [header]="editingVersion() ? 'Edit Version' : 'Create Version'" [(visible)]="showVersionDialog"
+  [modal]="true" [style]="{ width: '450px' }" appendTo="body">
+  <div class="flex flex-col gap-3 pt-2">
+    <div>
+      <label class="block text-sm font-medium mb-1">Version *</label>
+      <input pInputText [(ngModel)]="versionForm.version" class="w-full" placeholder="e.g. 1.0, 2026" [disabled]="!!editingVersion()" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Name *</label>
+      <input pInputText [(ngModel)]="versionForm.name" class="w-full" placeholder="e.g. Competency Catalogue v1.0" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Description</label>
+      <textarea [(ngModel)]="versionForm.description" class="w-full border rounded p-2 text-sm" rows="3"></textarea>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <button pButton label="Cancel" class="p-button-text" (click)="showVersionDialog.set(false)"></button>
+    <button pButton [label]="editingVersion() ? 'Update' : 'Create'" [disabled]="!versionForm.version || !versionForm.name" (click)="saveVersion()"></button>
+  </ng-template>
+</p-dialog>
+
+<!-- Category Dialog -->
+<p-dialog [header]="editingCategory() ? 'Edit Category' : 'Create Category'" [(visible)]="showCategoryDialog"
+  [modal]="true" [style]="{ width: '450px' }" appendTo="body">
+  <div class="flex flex-col gap-3 pt-2">
+    <div>
+      <label class="block text-sm font-medium mb-1">Name *</label>
+      <input pInputText [(ngModel)]="categoryForm.name" class="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium mb-1">Description</label>
+      <textarea [(ngModel)]="categoryForm.description" class="w-full border rounded p-2 text-sm" rows="3"></textarea>
+    </div>
+    <div class="flex gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1">Display Order</label>
+        <p-inputNumber [(ngModel)]="categoryForm.display_order" [min]="0" styleClass="w-full" inputStyleClass="w-24 text-sm" />
+      </div>
+      <div class="flex items-center gap-2 mt-5">
+        <p-checkbox [(ngModel)]="categoryForm.is_active" [binary]="true" inputId="cat_active" />
+        <label for="cat_active" class="text-sm">Active</label>
+      </div>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <button pButton label="Cancel" class="p-button-text" (click)="showCategoryDialog.set(false)"></button>
+    <button pButton [label]="editingCategory() ? 'Update' : 'Create'" [disabled]="!categoryForm.name" (click)="saveCategory()"></button>
+  </ng-template>
+</p-dialog>
+
+<!-- Competency Dialog -->
+<p-dialog [header]="editingCompetency() ? 'Edit Competency' : 'Create Competency'" [(visible)]="showCompetencyDialog"
+  [modal]="true" [style]="{ width: '700px' }" appendTo="body">
+  <div class="flex flex-col gap-4 pt-2 max-h-[70vh] overflow-y-auto">
+    <!-- General -->
+    <div class="border-b pb-3">
+      <h3 class="text-sm font-semibold text-gray-600 mb-2">General</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-medium mb-1">Code *</label>
+          <input pInputText [(ngModel)]="compForm.code" class="w-full" [disabled]="!!editingCompetency()" placeholder="e.g. VF001" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Name *</label>
+          <input pInputText [(ngModel)]="compForm.name" class="w-full" />
+        </div>
+      </div>
+      <div class="mt-2">
+        <label class="block text-sm font-medium mb-1">Description</label>
+        <textarea [(ngModel)]="compForm.description" class="w-full border rounded p-2 text-sm" rows="2"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-2">
+        <div>
+          <label class="block text-sm font-medium mb-1">Version *</label>
+          <p-select [(ngModel)]="compForm.version_id" [options]="versionOptions()" optionLabel="label" optionValue="value" class="w-full" appendTo="body" [disabled]="!!editingCompetency()"></p-select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Category *</label>
+          <p-select [(ngModel)]="compForm.category_id" [options]="categoryOptions()" optionLabel="label" optionValue="value" class="w-full" appendTo="body"></p-select>
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-3 mt-2">
+        <div>
+          <label class="block text-sm font-medium mb-1">Difficulty</label>
+          <p-select [(ngModel)]="compForm.difficulty" [options]="difficultyOptions" optionLabel="label" optionValue="value" class="w-full" appendTo="body"></p-select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Training Category</label>
+          <p-select [(ngModel)]="compForm.training_category" [options]="trainingCategoryOptions" optionLabel="label" optionValue="value" class="w-full" appendTo="body"></p-select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Display Order</label>
+          <p-inputNumber [(ngModel)]="compForm.display_order" [min]="0" styleClass="w-full" inputStyleClass="w-full text-sm" />
+        </div>
+      </div>
+      <div class="mt-2">
+        <label class="block text-sm font-medium mb-1">Estimated Practice Time (minutes)</label>
+        <p-inputNumber [(ngModel)]="compForm.estimated_practice_minutes" [min]="0" styleClass="w-48" inputStyleClass="w-full text-sm" />
+      </div>
+    </div>
+
+    <!-- Learning Outcome -->
+    <div class="border-b pb-3">
+      <h3 class="text-sm font-semibold text-gray-600 mb-2">Learning Outcome</h3>
+      <textarea [(ngModel)]="compForm.learning_outcome" class="w-full border rounded p-2 text-sm" rows="3"
+        placeholder="e.g. Student correctly performs the cockpit drill independently before every drive."></textarea>
+    </div>
+
+    <!-- Assessment Criteria -->
+    <div class="border-b pb-3">
+      <h3 class="text-sm font-semibold text-gray-600 mb-2">Assessment Criteria</h3>
+      @for (item of compForm.assessment_criteria ?? []; track $index) {
+        <div class="flex gap-2 mb-1">
+          <input pInputText [(ngModel)]="compForm.assessment_criteria[$index]" class="flex-1" placeholder="Assessment criterion" />
+          <button pButton icon="pi pi-minus" class="p-button-sm p-button-text p-button-danger" (click)="removeAssessmentItem($index)" [disabled]="compForm.assessment_criteria.length <= 1"></button>
+        </div>
+      }
+      <button pButton icon="pi pi-plus" label="Add Criterion" class="p-button-sm p-button-outlined mt-1" (click)="addAssessmentItem()"></button>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <button pButton label="Cancel" class="p-button-text" (click)="showCompetencyDialog.set(false)"></button>
+    <button pButton [label]="editingCompetency() ? 'Update' : 'Create'" [disabled]="!compForm.code || !compForm.name || !compForm.version_id || !compForm.category_id" (click)="saveCompetency()"></button>
+  </ng-template>
+</p-dialog>
+
+<!-- Bulk Import Dialog -->
+<p-dialog header="Bulk Import Competencies" [(visible)]="showImportDialog" [modal]="true" [style]="{ width: '600px' }" appendTo="body">
+  <div class="flex flex-col gap-3 pt-2">
+    <p class="text-sm text-gray-600">Paste a JSON array of competency objects. Each object should include: <code>version_id</code>, <code>category_id</code>, <code>code</code>, <code>name</code>, and optional fields.</p>
+    <textarea [(ngModel)]="importData" class="w-full border rounded p-2 text-sm font-mono" rows="10" placeholder='[{"version_id":"...","category_id":"...","code":"VF001","name":"Cockpit Drill"}]'></textarea>
+  </div>
+  <ng-template pTemplate="footer">
+    <button pButton label="Cancel" class="p-button-text" (click)="showImportDialog.set(false)"></button>
+    <button pButton label="Import" [disabled]="!importData" (click)="runImport()"></button>
+  </ng-template>
+</p-dialog>

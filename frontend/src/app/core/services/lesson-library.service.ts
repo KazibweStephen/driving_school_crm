@@ -17,6 +17,17 @@ export interface VideoLibrary {
   updated_at: string;
 }
 
+export interface LessonLibraryCompetency {
+  lesson_competency_id: string;
+  competency_id: string;
+  code: string;
+  name: string;
+  category_name: string | null;
+  difficulty: string;
+  training_category: string;
+  order: number;
+}
+
 export interface LessonLibrary {
   id: string;
   title: string;
@@ -24,7 +35,6 @@ export interface LessonLibrary {
   transmission_type: string | null;
   lesson_objectives: string[];
   practical_objectives: string[];
-  competencies: string[];
   estimated_minutes: number;
   estimated_distance_km: number;
   required_vehicle: string | null;
@@ -36,9 +46,9 @@ export interface LessonLibrary {
   order: number | null;
   preferred_location: string | null;
   training_category: string;
-  prerequisite_competencies: string[];
   is_theory: boolean;
   prerequisite_lessons: { id: string; title: string; lesson_number: number }[];
+  competency_links: LessonLibraryCompetency[];
   videos: VideoLibrary[];
   created_by_phone: string | null;
   created_at: string;
@@ -51,7 +61,6 @@ export interface LessonLibraryCreate {
   transmission_type?: string;
   lesson_objectives?: string[];
   practical_objectives?: string[];
-  competencies?: string[];
   estimated_minutes?: number;
   estimated_distance_km?: number;
   required_vehicle?: string;
@@ -62,10 +71,10 @@ export interface LessonLibraryCreate {
   order?: number;
   preferred_location?: string;
   training_category?: string;
-  prerequisite_competencies?: string[];
   prerequisite_lesson_ids?: string[];
   video_ids?: string[];
   is_theory?: boolean;
+  competency_ids?: string[];
 }
 
 
@@ -75,7 +84,6 @@ export interface LessonLibraryUpdate {
   transmission_type?: string;
   lesson_objectives?: string[];
   practical_objectives?: string[];
-  competencies?: string[];
   estimated_minutes?: number;
   estimated_distance_km?: number;
   required_vehicle?: string;
@@ -87,9 +95,9 @@ export interface LessonLibraryUpdate {
   order?: number;
   preferred_location?: string;
   training_category?: string;
-  prerequisite_competencies?: string[];
   prerequisite_lesson_ids?: string[];
   is_theory?: boolean;
+  competency_ids?: string[];
 }
 
 @Injectable({ providedIn: 'root' })

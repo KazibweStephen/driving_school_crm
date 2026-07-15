@@ -1,6 +1,6 @@
 # AGENTS.md — Driving School CRM Anchored Summary
 
-**Goal:** Build a production-ready driving school CRM with **multi-company + branch hierarchy**. Each Company is a tenant with its own Products, Vehicles, Lesson Plans, Lesson Libraries, Video Libraries. Each Company has multiple Branches; Consultations, Expenses, Sales, Client Availabilities are branch-scoped. Users belong to a Company (nullable for super_admin) and can be assigned to Branches via `UserBranchAssignment`. Vehicles belong to a Company and can be shared across Branches via `VehicleBranchAssignment`. Unified consultation/client lifecycle, per-product-package workflow via CartItems + installments, receipt-numbered payments, derived consultation status, multi-step creation, stage-based filtering, training/permit progress tracking per cart item, backend-stored computed payment totals, auto-generated training sessions from package durations, competence-based skills per session, **comprehensive Lesson Planning & Training Management** module — including LessonLibrary (reusable lesson templates with JSONB objectives/competencies), VideoLibrary (upload + embed streaming), Vehicle management, Instructor qualification tracking, student plan generation from templates (lesson-level state machine with 10 states, lock/unlock, difficulty), lesson execution (checklists, competencies, live GPS distance tracking, timer with 30min/3km/competencies logic), TheorySession auto-generation on Saturdays, and instructor/vehicle assignment per lesson.
+**Goal:** Build a production-ready driving school CRM with **multi-company + branch hierarchy**. Each Company is a tenant with its own Products, Vehicles, Lesson Plans, Lesson Libraries, Video Libraries, **Competency Catalogue**. Each Company has multiple Branches; Consultations, Expenses, Sales, Client Availabilities are branch-scoped. Users belong to a Company (nullable for super_admin) and can be assigned to Branches via `UserBranchAssignment`. Vehicles belong to a Company and can be shared across Branches via `VehicleBranchAssignment`. Unified consultation/client lifecycle, per-product-package workflow via CartItems + installments, receipt-numbered payments, derived consultation status, multi-step creation, stage-based filtering, training/permit progress tracking per cart item, backend-stored computed payment totals, auto-generated training sessions from package durations, competence-based skills per session, **comprehensive Lesson Planning & Training Management** module — including LessonLibrary (reusable lesson templates with JSONB objectives/competencies), VideoLibrary (upload + embed streaming), Vehicle management, Instructor qualification tracking, student plan generation from templates (lesson-level state machine with 10 states, lock/unlock, difficulty), lesson execution (checklists, competencies, live GPS distance tracking, timer with 30min/3km/competencies logic), TheorySession auto-generation on Saturdays, and instructor/vehicle assignment per lesson. **Competency Catalogue** — company-scoped competency versions/categories/competencies with M2M links to LessonLibrary (replacing old JSONB competencies/prerequisite_competencies), bulk import, and seeded 106 competencies across 13 categories.
 
 ## Constraints & Preferences
 - Lunch break 13:00-13:30 reserved in all vehicle schedules (max slots per vehicle per day = 6:00-19:00 30-min slots minus enforced breaks)
@@ -123,6 +123,7 @@
 - Backdating: `User.can_backdate`, `Consultation.document_date`, `Payment.document_date` columns + schemas + services + API + frontend date pickers
 - Alembic migrations `cc4d1dfb0f04` (add_created_by_phone_to_payments) and `0cedeb757155` (add_can_backdate_document_date)
 - Playwright tests updated: login tests navigate collapsed sidebar groups, lesson-plans API test sends JSONB arrays, consultation search test creates its own fixture, dialog Escape test focuses dialog first
+- **Competency Catalogue Module**: company-scoped `CompetencyVersion`, `CompetencyCategory`, `Competency`, `CompetencyPrerequisite`, `LessonCompetencyLink` models; 3 enums (`CompetencyDifficulty`, `CompetencyTrainingCategory`, `CompetencyVersionStatus`); full CRUD + search + bulk import API (17 endpoints); frontend 3-tab page with versions, categories, competencies (filter/pagination/bulk import/assessment criteria); reusable `competency-picker` component; lesson-library and lesson-plans pages now use `p-multiSelect` with `competency_ids` instead of free-text arrays; old JSONB `competencies`/`prerequisite_competencies` columns dropped from `lesson_library`; Alembic migration `d4e5f6a7b8c9` (chains from `j2k3l4m5n6o7`); seed data: 1 version, 13 categories, 106 competencies, 44 prerequisite links
 
 ## Multi-Company Architecture
 - **Company** (`companies`): Top-level tenant with `id`, `name`, `code` (unique), `address`, `phone`, `email`, `is_active`
@@ -200,12 +201,13 @@ Postgres `:5433` (external), backend `:8000`, frontend `:80`
 If migration files are missing from container: `docker cp backend/alembic/versions/<file> crm-backend:/app/alembic/versions/`
 
 ## Migration Heads
-`7fdead775930` (branch A) and `b219a06bb6d7` (branch B — commission_and_lead_redesign, parent `b4c5d6e7f8a0`)
+`d4e5f6a7b8c9` (head — competency catalogue, chains from `j2k3l4m5n6o7`)
 
 ## Known Backend Fixes Applied
 - `reports.py:33,36` — `Commission.amount` → `Commission.total_amount` (dashboard 500 error)
 - `cart.py:72` — `update_cart_item()` accepts `converter_id`/`recommender_id`; auto-creates commission on conversion
 - `fuel.service.ts` + `commission.service.ts` — switched from `params as any` to `HttpParams` builder to avoid literal `"undefined"` strings
+- `competency_catalogue.py` model — added missing `Enum` import from `sqlalchemy`
 
 ## Test Files
 - `e2e/login.spec.ts` (11 tests): login, sidebar navigation through collapsed groups, user CRUD/search/PIN

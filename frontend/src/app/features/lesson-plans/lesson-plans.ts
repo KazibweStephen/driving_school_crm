@@ -18,6 +18,7 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import { LessonPlanService, LessonPlanTemplate, LessonTemplateItem } from '../../core/services/lesson-plan.service';
 import { LessonLibraryService, LessonLibrary } from '../../core/services/lesson-library.service';
 import { VideoLibraryService, VideoLibraryItem } from '../../core/services/video-library.service';
+import { CompetencyCatalogueService, CompetencySearchResult } from '../../core/services/competency-catalogue.service';
 
 @Component({
   selector: 'app-lesson-plans',
@@ -63,7 +64,6 @@ export class LessonPlans implements OnInit {
       transmission_type?: string | null;
       lesson_objectives: string[];
       practical_objectives: string[];
-      competencies?: string[];
       estimated_minutes: number;
       estimated_distance_km: number;
       difficulty?: string;
@@ -72,7 +72,6 @@ export class LessonPlans implements OnInit {
       preferred_location?: string;
       enforce_prerequisites?: boolean;
       training_category?: string;
-      prerequisite_competencies?: string[];
       prerequisite_lesson_ids?: string[];
       is_theory?: boolean;
     }[];
@@ -85,6 +84,10 @@ export class LessonPlans implements OnInit {
   libraryLessons = signal<LessonLibrary[]>([]);
   librarySearch = signal('');
   libraryLoading = signal(false);
+
+  // Competency picker
+  availableCompetencies = signal<CompetencySearchResult[]>([]);
+  selectedCompetencyIds = signal<string[]>([]);
 
   // Filter out lessons already added to the template
   availableLibraryLessons = computed(() => {
@@ -105,7 +108,6 @@ export class LessonPlans implements OnInit {
     transmission_type: string | null;
     lesson_objectives: string[];
     practical_objectives: string[];
-    competencies: string[];
     estimated_minutes: number;
     estimated_distance_km: number;
     difficulty: string;
@@ -114,15 +116,14 @@ export class LessonPlans implements OnInit {
     preferred_location: string;
     enforce_prerequisites: boolean;
     training_category: string;
-    prerequisite_competencies: string[];
     prerequisite_lesson_ids: string[];
     is_theory: boolean;
   } = {
     day_number: 1, week_number: 1, title: '', description: '', transmission_type: null,
-    lesson_objectives: [''], practical_objectives: [''], competencies: [''],
+    lesson_objectives: [''], practical_objectives: [''],
     estimated_minutes: 30, estimated_distance_km: 3, difficulty: 'beginner',
     order: 1, lesson_library_id: null, preferred_location: '', enforce_prerequisites: true,
-    training_category: 'driving', prerequisite_competencies: [''], prerequisite_lesson_ids: [],
+    training_category: 'driving', prerequisite_lesson_ids: [],
     is_theory: false,
   };
 
@@ -338,6 +339,7 @@ export class LessonPlans implements OnInit {
     private lessonPlanService: LessonPlanService,
     private lessonLibraryService: LessonLibraryService,
     private videoLibraryService: VideoLibraryService,
+    private competencyService: CompetencyCatalogueService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private sanitizer: DomSanitizer,
@@ -345,6 +347,19 @@ export class LessonPlans implements OnInit {
 
   ngOnInit() {
     this.loadTemplates();
+    this.loadCompetencies();
+  }
+
+  async loadCompetencies() {
+    try {
+      const results = await this.competencyService.searchCompetencies({}).toPromise();
+      const mapped = (results || []).map(c => ({
+        ...c,
+        displayLabel: `${c.code} - ${c.name}`,
+        categoryName: c.category_name || '',
+      }));
+      this.availableCompetencies.set(mapped);
+    } catch {}
   }
 
   async loadTemplates() {
@@ -397,7 +412,6 @@ export class LessonPlans implements OnInit {
         transmission_type: (i as any).transmission_type ?? null,
         lesson_objectives: i.lesson_objectives?.length ? [...i.lesson_objectives] : [''],
         practical_objectives: i.practical_objectives?.length ? [...i.practical_objectives] : [''],
-        competencies: (i as any).competencies?.length ? [...(i as any).competencies] : [''],
         estimated_minutes: i.estimated_minutes ?? 30,
         estimated_distance_km: i.estimated_distance_km ?? 3,
         difficulty: (i as any).difficulty ?? 'beginner',
@@ -406,7 +420,6 @@ export class LessonPlans implements OnInit {
         preferred_location: i.preferred_location ?? undefined,
         enforce_prerequisites: i.enforce_prerequisites ?? true,
         training_category: (i as any).training_category ?? 'driving',
-        prerequisite_competencies: (i as any).prerequisite_competencies?.length ? [...(i as any).prerequisite_competencies] : [''],
         prerequisite_lesson_ids: (i as any).prerequisite_lesson_ids ?? [],
         is_theory: (i as any).is_theory ?? false,
       })),
@@ -437,7 +450,6 @@ export class LessonPlans implements OnInit {
       transmission_type: item.transmission_type ?? null,
       lesson_objectives: item.lesson_objectives?.length ? [...item.lesson_objectives] : [''],
       practical_objectives: item.practical_objectives?.length ? [...item.practical_objectives] : [''],
-      competencies: item.competencies?.length ? [...item.competencies] : [''],
       estimated_minutes: item.estimated_minutes ?? 30,
       estimated_distance_km: item.estimated_distance_km ?? 3,
       difficulty: item.difficulty ?? 'beginner',
@@ -446,10 +458,10 @@ export class LessonPlans implements OnInit {
       preferred_location: item.preferred_location ?? '',
       enforce_prerequisites: item.enforce_prerequisites ?? true,
       training_category: item.training_category ?? 'driving',
-      prerequisite_competencies: item.prerequisite_competencies?.length ? [...item.prerequisite_competencies] : [''],
       prerequisite_lesson_ids: item.prerequisite_lesson_ids ?? [],
       is_theory: item.is_theory ?? false,
     };
+    this.selectedCompetencyIds.set(item.competency_ids || []);
     this.pickerMode = 'create';
     this.showPicker.set(true);
     // Load videos if lesson_library_id exists
@@ -463,13 +475,14 @@ export class LessonPlans implements OnInit {
   resetItemForm() {
     this.itemForm = {
       day_number: 1, week_number: 1, title: '', description: '', transmission_type: null,
-      lesson_objectives: [''], practical_objectives: [''], competencies: [''],
+      lesson_objectives: [''], practical_objectives: [''],
       estimated_minutes: 30, estimated_distance_km: 3, difficulty: 'beginner',
       order: this.form.items.length + 1, lesson_library_id: null,
       preferred_location: '', enforce_prerequisites: true,
-      training_category: 'driving', prerequisite_competencies: [''], prerequisite_lesson_ids: [],
+      training_category: 'driving', prerequisite_lesson_ids: [],
       is_theory: false,
     };
+    this.selectedCompetencyIds.set([]);
     this.currentItemVideos.set([]);
   }
 
@@ -482,7 +495,6 @@ export class LessonPlans implements OnInit {
       transmission_type: lesson.transmission_type,
       lesson_objectives: lesson.lesson_objectives?.length ? [...lesson.lesson_objectives] : [''],
       practical_objectives: lesson.practical_objectives?.length ? [...lesson.practical_objectives] : [''],
-      competencies: lesson.competencies?.length ? [...lesson.competencies] : [''],
       estimated_minutes: lesson.estimated_minutes,
       estimated_distance_km: lesson.estimated_distance_km,
       difficulty: lesson.difficulty,
@@ -491,10 +503,10 @@ export class LessonPlans implements OnInit {
       preferred_location: lesson.preferred_location || '',
       enforce_prerequisites: true,
       training_category: lesson.training_category || 'driving',
-      prerequisite_competencies: lesson.prerequisite_competencies?.length ? [...lesson.prerequisite_competencies] : [''],
       prerequisite_lesson_ids: lesson.prerequisite_lessons?.map(p => p.id) || [],
       is_theory: lesson.is_theory || false,
     };
+    this.selectedCompetencyIds.set(lesson.competency_links?.map(c => c.competency_id) || []);
     this.pickerMode = 'create';
     this.currentItemVideos.set(lesson.videos || []);
   }
@@ -528,7 +540,7 @@ export class LessonPlans implements OnInit {
       transmission_type: this.itemForm.transmission_type || undefined,
       lesson_objectives: this.itemForm.lesson_objectives.filter(s => s.trim()),
       practical_objectives: this.itemForm.practical_objectives.filter(s => s.trim()),
-      competencies: this.itemForm.competencies.filter(s => s.trim()),
+      competency_ids: this.selectedCompetencyIds(),
       estimated_minutes: this.itemForm.estimated_minutes,
       estimated_distance_km: this.itemForm.estimated_distance_km,
       difficulty: this.itemForm.difficulty,
@@ -537,7 +549,6 @@ export class LessonPlans implements OnInit {
       preferred_location: this.itemForm.preferred_location || undefined,
       enforce_prerequisites: this.itemForm.enforce_prerequisites,
       training_category: this.itemForm.training_category,
-      prerequisite_competencies: this.itemForm.prerequisite_competencies.filter(s => s.trim()),
       prerequisite_lesson_ids: this.itemForm.prerequisite_lesson_ids,
       is_theory: this.itemForm.is_theory ?? false,
     };
@@ -574,7 +585,7 @@ export class LessonPlans implements OnInit {
             transmission_type: i.transmission_type || undefined,
             lesson_objectives: i.lesson_objectives?.filter((s: string) => s.trim()) || undefined,
             practical_objectives: i.practical_objectives?.filter((s: string) => s.trim()) || undefined,
-            competencies: i.competencies?.filter((s: string) => s.trim()) || undefined,
+            competency_ids: i.competency_ids || undefined,
             estimated_minutes: i.estimated_minutes,
             estimated_distance_km: i.estimated_distance_km,
             difficulty: i.difficulty || 'beginner',
@@ -583,7 +594,6 @@ export class LessonPlans implements OnInit {
             preferred_location: i.preferred_location || undefined,
             enforce_prerequisites: i.enforce_prerequisites,
             training_category: i.training_category || 'driving',
-            prerequisite_competencies: i.prerequisite_competencies?.filter((s: string) => s.trim()) || undefined,
             prerequisite_lesson_ids: i.prerequisite_lesson_ids || undefined,
             is_theory: i.is_theory || false,
           })),
@@ -605,7 +615,7 @@ export class LessonPlans implements OnInit {
             transmission_type: i.transmission_type || undefined,
             lesson_objectives: i.lesson_objectives?.filter((s: string) => s.trim()) || undefined,
             practical_objectives: i.practical_objectives?.filter((s: string) => s.trim()) || undefined,
-            competencies: i.competencies?.filter((s: string) => s.trim()) || undefined,
+            competency_ids: i.competency_ids || undefined,
             estimated_minutes: i.estimated_minutes,
             estimated_distance_km: i.estimated_distance_km,
             difficulty: i.difficulty || 'beginner',
@@ -614,7 +624,6 @@ export class LessonPlans implements OnInit {
             preferred_location: i.preferred_location || undefined,
             enforce_prerequisites: i.enforce_prerequisites,
             training_category: i.training_category || 'driving',
-            prerequisite_competencies: i.prerequisite_competencies?.filter((s: string) => s.trim()) || undefined,
             prerequisite_lesson_ids: i.prerequisite_lesson_ids || undefined,
             is_theory: i.is_theory || false,
           })),
@@ -755,16 +764,16 @@ export class LessonPlans implements OnInit {
       "$schema": "https://json-schema.org/draft-07/schema#",
       "$id": "https://drivingschoolcrm.example/lesson-plan-template-schema.json",
       "title": "Driving School CRM — Lesson Plan Template Import",
-      "description": "Full JSON Schema (draft-07) for importing lesson plan templates into the Driving School CRM. Each week has 6 lessons: 5 practical days (Mon–Fri, 30 min each) and 1 theory class (Saturday, 120 min). A 4-week curriculum has 24 lessons total (20 practical + 4 theory).",
-      "version": "2.0",
+      "description": "Full JSON Schema (draft-07) for importing lesson plan templates. Each week has 6 lessons: 5 practical days (Mon–Fri, 30 min each) and 1 theory class (Saturday, 120 min). A 4-week curriculum has 24 lessons total (20 practical + 4 theory). Competencies can be linked by text name (resolved against the active Competency Catalogue) or by UUID via competency_ids.",
+      "version": "3.0",
       "type": "object",
       "required": ["title", "transmission_type", "weeks"],
       "properties": {
         "version": {
           "type": "string",
           "description": "Schema version for forward compatibility",
-          "default": "2.0",
-          "examples": ["2.0"]
+          "default": "3.0",
+          "examples": ["3.0"]
         },
         "title": {
           "type": "string",
@@ -898,10 +907,10 @@ export class LessonPlans implements OnInit {
                     },
                     "competencies": {
                       "type": "array",
-                      "description": "Skills/competencies the student must demonstrate to pass this lesson",
+                      "description": "Competency codes or names to link to this lesson. Codes (e.g. 'VF001') are matched first, then names. Resolved against the active Competency Catalogue on import.",
                       "items": { "type": "string", "maxLength": 200 },
                       "default": [],
-                      "examples": [["Cockpit drill", "Controls familiarisation"]]
+                      "examples": [["VF001", "VF002", "VO001"]]
                     },
                     "difficulty": {
                       "type": "string",
@@ -919,10 +928,10 @@ export class LessonPlans implements OnInit {
                     },
                     "prerequisite_competencies": {
                       "type": "array",
-                      "description": "Competencies that must be achieved before starting this lesson",
+                      "description": "Competency codes or names that must be achieved before starting this lesson. Codes matched first, then names.",
                       "items": { "type": "string", "maxLength": 200 },
                       "default": [],
-                      "examples": [["Moving off", "Stopping"]]
+                      "examples": [["VF001"]]
                     }
                   },
                   "additionalProperties": false
@@ -958,7 +967,7 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Parking lot",
                   "enforce_prerequisites": false,
                   "is_theory": false,
-                  "competencies": ["Cockpit drill", "Controls familiarisation"],
+                  "competencies": ["VF001", "VF006"],
                   "difficulty": "beginner",
                   "training_category": "driving",
                   "prerequisite_competencies": []
@@ -974,10 +983,10 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Quiet residential road",
                   "enforce_prerequisites": true,
                   "is_theory": false,
-                  "competencies": ["Moving off", "Controlled stopping"],
+                  "competencies": ["VO004", "VO007"],
                   "difficulty": "beginner",
                   "training_category": "driving",
-                  "prerequisite_competencies": ["Cockpit drill"]
+                  "prerequisite_competencies": ["VF001"]
                 },
                 {
                   "day_number": 3,
@@ -990,10 +999,10 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Quiet residential area",
                   "enforce_prerequisites": true,
                   "is_theory": false,
-                  "competencies": ["Push-pull steering", "Gear change"],
+                  "competencies": ["SC001", "MT007"],
                   "difficulty": "beginner",
                   "training_category": "driving",
-                  "prerequisite_competencies": ["Moving off"]
+                  "prerequisite_competencies": ["VO004"]
                 },
                 {
                   "day_number": 4,
@@ -1006,10 +1015,10 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Residential junctions",
                   "enforce_prerequisites": true,
                   "is_theory": false,
-                  "competencies": ["Left turns", "MSM routine"],
+                  "competencies": ["JN002", "JN001"],
                   "difficulty": "beginner",
                   "training_category": "driving",
-                  "prerequisite_competencies": ["Gear change"]
+                  "prerequisite_competencies": ["MT007"]
                 },
                 {
                   "day_number": 5,
@@ -1022,10 +1031,10 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Residential junctions",
                   "enforce_prerequisites": true,
                   "is_theory": false,
-                  "competencies": ["Right turns", "Gap judgement"],
+                  "competencies": ["JN003", "JN007"],
                   "difficulty": "beginner",
                   "training_category": "driving",
-                  "prerequisite_competencies": ["Left turns"]
+                  "prerequisite_competencies": ["JN002"]
                 },
                 {
                   "day_number": 6,
@@ -1038,7 +1047,7 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Classroom",
                   "enforce_prerequisites": false,
                   "is_theory": true,
-                  "competencies": ["Road sign recognition", "Road marking knowledge", "Speed limit awareness"],
+                  "competencies": ["TR005", "DD001", "SC004"],
                   "difficulty": "beginner",
                   "training_category": "driving",
                   "prerequisite_competencies": []
@@ -1059,10 +1068,10 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Residential area",
                   "enforce_prerequisites": true,
                   "is_theory": false,
-                  "competencies": ["Crossroads navigation", "T-junction rules"],
+                  "competencies": ["JN004", "JN005"],
                   "difficulty": "beginner",
                   "training_category": "driving",
-                  "prerequisite_competencies": ["Right turns"]
+                  "prerequisite_competencies": ["JN003"]
                 },
                 {
                   "day_number": 8,
@@ -1075,10 +1084,10 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Area with roundabouts",
                   "enforce_prerequisites": true,
                   "is_theory": false,
-                  "competencies": ["Roundabout navigation", "Lane discipline"],
+                  "competencies": ["RB001", "SC003"],
                   "difficulty": "beginner",
                   "training_category": "driving",
-                  "prerequisite_competencies": ["Crossroads navigation"]
+                  "prerequisite_competencies": ["JN004"]
                 },
                 {
                   "day_number": 9,
@@ -1091,10 +1100,10 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Urban area",
                   "enforce_prerequisites": true,
                   "is_theory": false,
-                  "competencies": ["Crossing response", "Traffic light compliance"],
+                  "competencies": ["TM002", "TM001"],
                   "difficulty": "beginner",
                   "training_category": "driving",
-                  "prerequisite_competencies": ["Roundabout navigation"]
+                  "prerequisite_competencies": ["RB001"]
                 },
                 {
                   "day_number": 10,
@@ -1107,10 +1116,10 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Quiet road",
                   "enforce_prerequisites": true,
                   "is_theory": false,
-                  "competencies": ["Left reverse", "Rear observation"],
+                  "competencies": ["PK002", "VO005"],
                   "difficulty": "intermediate",
                   "training_category": "driving",
-                  "prerequisite_competencies": ["Gear change"]
+                  "prerequisite_competencies": ["MT007"]
                 },
                 {
                   "day_number": 11,
@@ -1123,10 +1132,10 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Car park",
                   "enforce_prerequisites": true,
                   "is_theory": false,
-                  "competencies": ["Right reverse", "Bay parking"],
+                  "competencies": ["PK003", "PK004"],
                   "difficulty": "intermediate",
                   "training_category": "driving",
-                  "prerequisite_competencies": ["Left reverse"]
+                  "prerequisite_competencies": ["PK002"]
                 },
                 {
                   "day_number": 12,
@@ -1139,7 +1148,7 @@ export class LessonPlans implements OnInit {
                   "preferred_location": "Classroom",
                   "enforce_prerequisites": false,
                   "is_theory": true,
-                  "competencies": ["Hazard perception", "Mirror routine knowledge", "Defensive driving awareness"],
+                  "competencies": ["DD001", "VF004", "DD002"],
                   "difficulty": "beginner",
                   "training_category": "driving",
                   "prerequisite_competencies": []
@@ -1207,10 +1216,10 @@ You are generating a **lesson plan template** for a driving school CRM system. T
           "preferred_location": "Location or area type",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Skill name 1", "Skill name 2"],
+          "competencies": ["VF001", "VF006"],
           "difficulty": "beginner" | "intermediate" | "advanced",
           "training_category": "driving" | "motorcycle" | "truck" | "bus",
-          "prerequisite_competencies": ["Previously achieved skill 1"]
+          "prerequisite_competencies": ["VF001"]
         }
       ]
     }
@@ -1254,10 +1263,10 @@ You are generating a **lesson plan template** for a driving school CRM system. T
 | preferred_location | string | No | "" | **"Classroom"** for theory; parking lot, road type, etc. for practical |
 | enforce_prerequisites | boolean | No | true | Whether prerequisite lessons must be completed first |
 | is_theory | boolean | No | false | **true** for Saturday theory classes, **false** for practical driving |
-| competencies | string[] | No | [] | Skills the student must demonstrate |
+| competencies | string[] | No | [] | Competency codes or names linked to this lesson (resolved against active catalogue) |
 | difficulty | string | No | "beginner" | "beginner", "intermediate", or "advanced" |
 | training_category | string | No | "driving" | "driving", "motorcycle", "truck", or "bus" |
-| prerequisite_competencies | string[] | No | [] | Skills that must be achieved before this lesson |
+| prerequisite_competencies | string[] | No | [] | Competency codes or names that must be achieved before this lesson |
 
 ---
 
@@ -1323,16 +1332,16 @@ When generating a manual transmission driving curriculum, follow this progressio
 
 ### Competency Examples by Skill Area
 
-- **Cockpit drill**: "DSSSM routine", "Seat adjustment", "Mirror adjustment", "Steering wheel position"
-- **Moving off**: "POM routine", "Clutch control", "Handbrake release", "Observation checks"
-- **Steering**: "Push-pull steering", "Positioning for turns", "Lane discipline"
-- **Gear changes**: "1st to 2nd upshift", "2nd to 1st downshift", "Rev matching"
-- **Junctions**: "MSM routine", "Left turn emerge", "Right turn emerge", "Give way rules"
-- **Roundabouts**: "Approach and select lane", "Exit signal", "Mini-roundabout rules"
-- **Reversing**: "Left reverse", "Right reverse", "Reverse parking", "Rear observation"
-- **Manoeuvres**: "Three-point turn", "Turn in the road", "Bay parking"
-- **Hazard awareness**: "Anticipation", "Reaction to hazards", "Road sign recognition"
-- **Theory knowledge**: "Road sign identification", "Hazard perception technique", "Test preparation"
+- **VF001 - Cockpit drill**: "DSSSM routine", "Seat adjustment", "Mirror adjustment", "Steering wheel position"
+- **VO004 - Moving off**: "POM routine", "Clutch control", "Handbrake release", "Observation checks"
+- **SC001 - Steering**: "Push-pull steering", "Positioning for turns", "Lane discipline"
+- **MT007 - Gear changes**: "1st to 2nd upshift", "2nd to 1st downshift", "Rev matching"
+- **JN001/JN002/JN003 - Junctions**: "MSM routine", "Left turn emerge", "Right turn emerge", "Give way rules"
+- **RB001 - Roundabouts**: "Approach and select lane", "Exit signal", "Mini-roundabout rules"
+- **PK002/PK003 - Reversing**: "Left reverse", "Right reverse", "Reverse parking", "Rear observation"
+- **PK007 - Manoeuvres**: "Three-point turn", "Turn in the road", "Bay parking"
+- **DD001 - Hazard awareness**: "Anticipation", "Reaction to hazards", "Road sign recognition"
+- **TR005/TR003 - Theory knowledge**: "Road sign identification", "Hazard perception technique", "Test preparation"
 
 ### Difficulty Progression Rules
 
@@ -1392,7 +1401,7 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Parking lot",
           "enforce_prerequisites": false,
           "is_theory": false,
-          "competencies": ["DSSSM cockpit drill", "Controls familiarisation", "Mirror adjustment"],
+          "competencies": ["VF001", "VF006", "VF004"],
           "difficulty": "beginner",
           "training_category": "driving",
           "prerequisite_competencies": []
@@ -1416,10 +1425,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Quiet residential road",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["POM routine", "Controlled stopping", "Observation checks"],
+          "competencies": ["VO004", "VO007", "VO005"],
           "difficulty": "beginner",
           "training_category": "driving",
-          "prerequisite_competencies": ["DSSSM cockpit drill"]
+          "prerequisite_competencies": ["VF001"]
         },
         {
           "day_number": 3,
@@ -1440,10 +1449,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Quiet residential area",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Push-pull steering", "1st-2nd gear change", "Clutch control"],
+          "competencies": ["SC001", "MT004", "MT002"],
           "difficulty": "beginner",
           "training_category": "driving",
-          "prerequisite_competencies": ["POM routine", "Controlled stopping"]
+          "prerequisite_competencies": ["VO004", "VO007"]
         },
         {
           "day_number": 4,
@@ -1464,10 +1473,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Residential junctions",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Left turn emerge", "MSM routine", "Junction approach"],
+          "competencies": ["JN002", "JN001", "JN006"],
           "difficulty": "beginner",
           "training_category": "driving",
-          "prerequisite_competencies": ["Push-pull steering", "1st-2nd gear change"]
+          "prerequisite_competencies": ["SC001", "MT004"]
         },
         {
           "day_number": 5,
@@ -1488,10 +1497,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Residential junctions",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Right turn emerge", "Gap judgement", "Centre line positioning"],
+          "competencies": ["JN003", "JN007", "SC003"],
           "difficulty": "beginner",
           "training_category": "driving",
-          "prerequisite_competencies": ["Left turn emerge", "MSM routine"]
+          "prerequisite_competencies": ["JN002", "JN001"]
         },
         {
           "day_number": 6,
@@ -1509,7 +1518,7 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Classroom",
           "enforce_prerequisites": false,
           "is_theory": true,
-          "competencies": ["Road sign recognition", "Road marking knowledge", "Speed limit awareness"],
+          "competencies": ["TR005", "DD001", "SC004"],
           "difficulty": "beginner",
           "training_category": "driving",
           "prerequisite_competencies": []
@@ -1538,10 +1547,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Residential area with crossroads",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Crossroads navigation", "T-junction rules", "Multi-stream assessment"],
+          "competencies": ["JN004", "JN005", "JN008"],
           "difficulty": "beginner",
           "training_category": "driving",
-          "prerequisite_competencies": ["Right turn emerge", "Gap judgement"]
+          "prerequisite_competencies": ["JN003", "JN007"]
         },
         {
           "day_number": 8,
@@ -1562,10 +1571,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Area with mini-roundabouts",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Mini-roundabout navigation", "Roundabout lane discipline", "Exit signalling"],
+          "competencies": ["RB001", "SC003", "RB004"],
           "difficulty": "beginner",
           "training_category": "driving",
-          "prerequisite_competencies": ["Crossroads navigation", "MSM routine"]
+          "prerequisite_competencies": ["JN004", "JN001"]
         },
         {
           "day_number": 9,
@@ -1586,10 +1595,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Urban area with crossings",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Pedestrian crossing response", "Traffic light compliance", "Amber light judgement"],
+          "competencies": ["TM002", "TM001", "TM003"],
           "difficulty": "beginner",
           "training_category": "driving",
-          "prerequisite_competencies": ["Mini-roundabout navigation"]
+          "prerequisite_competencies": ["RB001"]
         },
         {
           "day_number": 10,
@@ -1610,10 +1619,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Quiet road with reference points",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Left reverse", "Rear observation", "Speed control while reversing"],
+          "competencies": ["PK002", "VO005", "SC004"],
           "difficulty": "intermediate",
           "training_category": "driving",
-          "prerequisite_competencies": ["Clutch control", "1st-2nd gear change"]
+          "prerequisite_competencies": ["MT002", "MT004"]
         },
         {
           "day_number": 11,
@@ -1634,10 +1643,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Car park",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Right reverse", "Reverse bay parking", "All-round observation"],
+          "competencies": ["PK003", "PK004", "VO005"],
           "difficulty": "intermediate",
           "training_category": "driving",
-          "prerequisite_competencies": ["Left reverse", "Rear observation"]
+          "prerequisite_competencies": ["PK002", "VO005"]
         },
         {
           "day_number": 12,
@@ -1655,7 +1664,7 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Classroom",
           "enforce_prerequisites": false,
           "is_theory": true,
-          "competencies": ["Hazard perception technique", "Mirror routine knowledge", "Defensive driving awareness"],
+          "competencies": ["DD001", "VF004", "DD002"],
           "difficulty": "beginner",
           "training_category": "driving",
           "prerequisite_competencies": []
@@ -1684,10 +1693,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Quiet wide road",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Three-point turn", "Full lock steering", "Low-speed control"],
+          "competencies": ["PK007", "SC001", "SC004"],
           "difficulty": "intermediate",
           "training_category": "driving",
-          "prerequisite_competencies": ["Right reverse", "All-round observation"]
+          "prerequisite_competencies": ["PK003", "VO005"]
         },
         {
           "day_number": 14,
@@ -1708,10 +1717,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Dual carriageway",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Dual carriageway joining", "High-speed lane discipline", "Speed matching"],
+          "competencies": ["RT005", "SC003", "SC004"],
           "difficulty": "intermediate",
           "training_category": "driving",
-          "prerequisite_competencies": ["MSM routine"]
+          "prerequisite_competencies": ["JN001"]
         },
         {
           "day_number": 15,
@@ -1732,10 +1741,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Country roads",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Rural road driving", "Bend negotiation", "Hazard anticipation"],
+          "competencies": ["RT003", "SC006", "DD001"],
           "difficulty": "intermediate",
           "training_category": "driving",
-          "prerequisite_competencies": ["High-speed lane discipline"]
+          "prerequisite_competencies": ["SC003"]
         },
         {
           "day_number": 16,
@@ -1756,10 +1765,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Mixed roads with signage",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Independent navigation", "Road sign interpretation", "Decision making"],
+          "competencies": ["TR001", "TR005", "DD001"],
           "difficulty": "intermediate",
           "training_category": "driving",
-          "prerequisite_competencies": ["Roundabout lane discipline", "Junction approach"]
+          "prerequisite_competencies": ["SC003", "JN006"]
         },
         {
           "day_number": 17,
@@ -1780,10 +1789,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Urban roads",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Adverse condition awareness", "Light usage", "Speed adjustment"],
+          "competencies": ["DD005", "VF007", "SC004"],
           "difficulty": "intermediate",
           "training_category": "driving",
-          "prerequisite_competencies": ["Speed matching"]
+          "prerequisite_competencies": ["SC004"]
         },
         {
           "day_number": 18,
@@ -1801,7 +1810,7 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Classroom",
           "enforce_prerequisites": false,
           "is_theory": true,
-          "competencies": ["Vehicle maintenance knowledge", "Documentation awareness", "Test format understanding"],
+          "competencies": ["TR005", "TR004", "TR006"],
           "difficulty": "intermediate",
           "training_category": "driving",
           "prerequisite_competencies": []
@@ -1829,10 +1838,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Test route — urban",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Test standard driving", "Manoeuvre execution", "Route confidence"],
+          "competencies": ["TR007", "TR003", "TR001"],
           "difficulty": "advanced",
           "training_category": "driving",
-          "prerequisite_competencies": ["Independent navigation"]
+          "prerequisite_competencies": ["TR001"]
         },
         {
           "day_number": 20,
@@ -1852,10 +1861,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Test route — rural + urban mix",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Complex junction handling", "Consistent safe driving", "Mock test performance"],
+          "competencies": ["JN004", "TR007", "TR003"],
           "difficulty": "advanced",
           "training_category": "driving",
-          "prerequisite_competencies": ["Test standard driving"]
+          "prerequisite_competencies": ["TR007"]
         },
         {
           "day_number": 21,
@@ -1875,10 +1884,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Varies based on weak areas",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Weak area improvement", "Error correction", "Confidence building"],
+          "competencies": ["TR008", "TR007", "TR006"],
           "difficulty": "advanced",
           "training_category": "driving",
-          "prerequisite_competencies": ["Complex junction handling"]
+          "prerequisite_competencies": ["JN004"]
         },
         {
           "day_number": 22,
@@ -1898,10 +1907,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Full test route",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Full test standard", "Safe independent driving", "All-round observation"],
+          "competencies": ["TR008", "TR001", "VO005"],
           "difficulty": "advanced",
           "training_category": "driving",
-          "prerequisite_competencies": ["Weak area improvement"]
+          "prerequisite_competencies": ["TR008"]
         },
         {
           "day_number": 23,
@@ -1921,10 +1930,10 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Familiar area near test centre",
           "enforce_prerequisites": true,
           "is_theory": false,
-          "competencies": ["Confident driving", "All-round observation", "Calm decision making"],
+          "competencies": ["TR007", "VO005", "DD001"],
           "difficulty": "advanced",
           "training_category": "driving",
-          "prerequisite_competencies": ["Full test standard"]
+          "prerequisite_competencies": ["TR008"]
         },
         {
           "day_number": 24,
@@ -1942,7 +1951,7 @@ When generating a manual transmission driving curriculum, follow this progressio
           "preferred_location": "Classroom",
           "enforce_prerequisites": false,
           "is_theory": true,
-          "competencies": ["Test day preparation", "Show me/tell me knowledge", "Theory test readiness"],
+          "competencies": ["TR006", "TR005", "TR001"],
           "difficulty": "advanced",
           "training_category": "driving",
           "prerequisite_competencies": []

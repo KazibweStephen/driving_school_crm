@@ -13,6 +13,7 @@ from app.models.lesson_plan import (
     TransmissionType,
     VideoLibrary,
 )
+from app.services.competency_catalogue import set_lesson_competencies, get_lesson_competencies
 
 
 async def create_lesson(
@@ -22,7 +23,6 @@ async def create_lesson(
     transmission_type: str | None = None,
     lesson_objectives: list[str] | None = None,
     practical_objectives: list[str] | None = None,
-    competencies: list[str] | None = None,
     estimated_minutes: int = 30,
     estimated_distance_km: float = 3.0,
     required_vehicle: str | None = None,
@@ -35,10 +35,10 @@ async def create_lesson(
     created_by_phone: str | None = None,
     preferred_location: str | None = None,
     training_category: str = "driving",
-    prerequisite_competencies: list[str] | None = None,
     prerequisite_lesson_ids: list[uuid.UUID] | None = None,
     is_theory: bool = False,
     company_id: uuid.UUID | None = None,
+    competency_ids: list[uuid.UUID] | None = None,
 ) -> LessonLibrary:
     lesson = LessonLibrary(
         title=title,
@@ -46,7 +46,6 @@ async def create_lesson(
         transmission_type=TransmissionType(transmission_type) if transmission_type else None,
         lesson_objectives=lesson_objectives or [],
         practical_objectives=practical_objectives or [],
-        competencies=competencies or [],
         estimated_minutes=estimated_minutes,
         estimated_distance_km=estimated_distance_km,
         required_vehicle=required_vehicle,
@@ -58,7 +57,6 @@ async def create_lesson(
         created_by_phone=created_by_phone,
         preferred_location=preferred_location,
         training_category=training_category,
-        prerequisite_competencies=prerequisite_competencies or [],
         is_theory=is_theory,
         company_id=company_id,
     )
@@ -77,19 +75,33 @@ async def create_lesson(
             db.add(p)
         await db.flush()
 
+    if competency_ids:
+        links = [{"competency_id": cid, "order": idx} for idx, cid in enumerate(competency_ids)]
+        await set_lesson_competencies(db, lesson.id, links)
+
     result = await db.execute(
         select(LessonLibrary)
         .where(LessonLibrary.id == lesson.id)
-        .options(selectinload(LessonLibrary.videos), selectinload(LessonLibrary.prerequisite_lessons))
+        .options(
+            selectinload(LessonLibrary.videos),
+            selectinload(LessonLibrary.prerequisite_lessons),
+            selectinload(LessonLibrary.competency_links).selectinload(
+                __import__('app.models.competency_catalogue', fromlist=['LessonCompetencyLink']).LessonCompetencyLink.competency
+            ),
+        )
     )
     return result.scalar_one()
 
 
 async def get_lesson_by_id(db: AsyncSession, lesson_id: uuid.UUID, company_id: uuid.UUID | None = None) -> LessonLibrary | None:
+    from app.models.competency_catalogue import LessonCompetencyLink, Competency, CompetencyCategory
     query = (
         select(LessonLibrary)
         .where(LessonLibrary.id == lesson_id)
-        .options(selectinload(LessonLibrary.videos), selectinload(LessonLibrary.prerequisite_lessons))
+        .options(
+            selectinload(LessonLibrary.videos),
+            selectinload(LessonLibrary.prerequisite_lessons),
+        )
     )
     if company_id:
         query = query.where(LessonLibrary.company_id == company_id)
@@ -105,7 +117,10 @@ async def list_lessons(
     search: str | None = None,
     company_id: uuid.UUID | None = None,
 ) -> list[LessonLibrary]:
-    query = select(LessonLibrary).options(selectinload(LessonLibrary.videos), selectinload(LessonLibrary.prerequisite_lessons))
+    query = select(LessonLibrary).options(
+        selectinload(LessonLibrary.videos),
+        selectinload(LessonLibrary.prerequisite_lessons),
+    )
     if company_id:
         query = query.where(LessonLibrary.company_id == company_id)
     if transmission_type:
@@ -129,7 +144,6 @@ async def update_lesson(
     transmission_type: str | None = None,
     lesson_objectives: list[str] | None = None,
     practical_objectives: list[str] | None = None,
-    competencies: list[str] | None = None,
     estimated_minutes: int | None = None,
     estimated_distance_km: float | None = None,
     required_vehicle: str | None = None,
@@ -141,9 +155,9 @@ async def update_lesson(
     order: int | None = None,
     preferred_location: str | None = None,
     training_category: str | None = None,
-    prerequisite_competencies: list[str] | None = None,
     prerequisite_lesson_ids: list[uuid.UUID] | None = None,
     is_theory: bool | None = None,
+    competency_ids: list[uuid.UUID] | None = None,
 ) -> LessonLibrary:
     if title is not None:
         lesson.title = title
@@ -155,8 +169,6 @@ async def update_lesson(
         lesson.lesson_objectives = lesson_objectives
     if practical_objectives is not None:
         lesson.practical_objectives = practical_objectives
-    if competencies is not None:
-        lesson.competencies = competencies
     if estimated_minutes is not None:
         lesson.estimated_minutes = estimated_minutes
     if estimated_distance_km is not None:
@@ -179,8 +191,6 @@ async def update_lesson(
         lesson.preferred_location = preferred_location
     if training_category is not None:
         lesson.training_category = training_category
-    if prerequisite_competencies is not None:
-        lesson.prerequisite_competencies = prerequisite_competencies
     if prerequisite_lesson_ids is not None:
         await db.execute(
             delete(LessonPrerequisite).where(LessonPrerequisite.lesson_id == lesson.id)
@@ -190,6 +200,9 @@ async def update_lesson(
             db.add(p)
     if is_theory is not None:
         lesson.is_theory = is_theory
+    if competency_ids is not None:
+        links = [{"competency_id": cid, "order": idx} for idx, cid in enumerate(competency_ids)]
+        await set_lesson_competencies(db, lesson.id, links)
     await db.flush()
     await db.refresh(lesson)
     return lesson

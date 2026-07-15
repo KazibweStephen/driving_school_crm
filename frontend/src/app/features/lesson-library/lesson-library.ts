@@ -17,6 +17,7 @@ import { TableModule } from 'primeng/table';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { LessonLibraryService, LessonLibrary } from '../../core/services/lesson-library.service';
 import { VideoLibraryService, VideoLibraryItem } from '../../core/services/video-library.service';
+import { CompetencyCatalogueService, CompetencySearchResult } from '../../core/services/competency-catalogue.service';
 
 @Component({
   selector: 'app-lesson-library',
@@ -36,13 +37,16 @@ export class LessonLibraryCmp implements OnInit {
   search = signal('');
   allLessons = signal<LessonLibrary[]>([]);
 
+  // Competency picker data
+  availableCompetencies = signal<CompetencySearchResult[]>([]);
+  selectedCompetencyIds = signal<string[]>([]);
+
   form: any = {
     title: '',
     description: '',
     transmission_type: null,
     lesson_objectives: [''] as string[],
     practical_objectives: [''] as string[],
-    competencies: [''] as string[],
     estimated_minutes: 30,
     estimated_distance_km: 3.0,
     difficulty: 'beginner',
@@ -51,7 +55,6 @@ export class LessonLibraryCmp implements OnInit {
     order: null,
     preferred_location: '',
     training_category: 'driving',
-    prerequisite_competencies: [''] as string[],
     prerequisite_lesson_ids: [] as string[],
     is_theory: false,
   };
@@ -79,6 +82,7 @@ export class LessonLibraryCmp implements OnInit {
   constructor(
     private lessonLibraryService: LessonLibraryService,
     private videoLibraryService: VideoLibraryService,
+    private competencyService: CompetencyCatalogueService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private sanitizer: DomSanitizer,
@@ -86,6 +90,19 @@ export class LessonLibraryCmp implements OnInit {
 
   ngOnInit() {
     this.loadLessons();
+    this.loadCompetencies();
+  }
+
+  async loadCompetencies() {
+    try {
+      const results = await this.competencyService.searchCompetencies({}).toPromise();
+      const mapped = (results || []).map(c => ({
+        ...c,
+        displayLabel: `${c.code} - ${c.name}`,
+        categoryName: c.category_name || '',
+      }));
+      this.availableCompetencies.set(mapped);
+    } catch {}
   }
 
   async loadLessons() {
@@ -121,7 +138,6 @@ export class LessonLibraryCmp implements OnInit {
       transmission_type: lesson.transmission_type,
       lesson_objectives: lesson.lesson_objectives?.length ? [...lesson.lesson_objectives] : [''],
       practical_objectives: lesson.practical_objectives?.length ? [...lesson.practical_objectives] : [''],
-      competencies: lesson.competencies?.length ? [...lesson.competencies] : [''],
       estimated_minutes: lesson.estimated_minutes,
       estimated_distance_km: lesson.estimated_distance_km,
       difficulty: lesson.difficulty,
@@ -130,10 +146,10 @@ export class LessonLibraryCmp implements OnInit {
       order: lesson.order,
       preferred_location: lesson.preferred_location || '',
       training_category: lesson.training_category || 'driving',
-      prerequisite_competencies: lesson.prerequisite_competencies?.length ? [...lesson.prerequisite_competencies] : [''],
       prerequisite_lesson_ids: lesson.prerequisite_lessons?.map(p => p.id) || [],
       is_theory: lesson.is_theory,
     };
+    this.selectedCompetencyIds.set(lesson.competency_links?.map(c => c.competency_id) || []);
     this.currentVideos.set(lesson.videos || []);
     this.lessonIdForVideo = lesson.id;
     this.showDialog.set(true);
@@ -143,12 +159,13 @@ export class LessonLibraryCmp implements OnInit {
     this.form = {
       title: '', description: '', transmission_type: null,
       lesson_objectives: [''], practical_objectives: [''],
-      competencies: [''], estimated_minutes: 30, estimated_distance_km: 3.0,
+      estimated_minutes: 30, estimated_distance_km: 3.0,
       difficulty: 'beginner', day_number: null, week_number: null, order: null,
       preferred_location: '', training_category: 'driving',
-      prerequisite_competencies: [''], prerequisite_lesson_ids: [],
+      prerequisite_lesson_ids: [],
       is_theory: false,
     };
+    this.selectedCompetencyIds.set([]);
   }
 
   addArrayItem(key: string) {
@@ -168,7 +185,7 @@ export class LessonLibraryCmp implements OnInit {
         transmission_type: this.form.transmission_type || undefined,
         lesson_objectives: this.form.lesson_objectives.filter((s: string) => s.trim()),
         practical_objectives: this.form.practical_objectives.filter((s: string) => s.trim()),
-        competencies: this.form.competencies.filter((s: string) => s.trim()),
+        competency_ids: this.selectedCompetencyIds(),
         estimated_minutes: this.form.estimated_minutes,
         estimated_distance_km: this.form.estimated_distance_km,
         difficulty: this.form.difficulty,
@@ -177,7 +194,6 @@ export class LessonLibraryCmp implements OnInit {
         order: this.form.order || undefined,
         preferred_location: this.form.preferred_location || undefined,
         training_category: this.form.training_category || undefined,
-        prerequisite_competencies: this.form.prerequisite_competencies.filter((s: string) => s.trim()),
         prerequisite_lesson_ids: this.form.prerequisite_lesson_ids || undefined,
         is_theory: this.form.is_theory || false,
       };

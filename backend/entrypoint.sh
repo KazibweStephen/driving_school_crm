@@ -8,4 +8,4 @@ echo "Running seed data..."
 python -m app.seed || echo "WARNING: Seed script failed. Continuing startup..."
 
 echo "Starting application..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+PYTHONPATH=/app exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level info

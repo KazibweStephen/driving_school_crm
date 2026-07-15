@@ -1,10 +1,14 @@
-import html
 import logging
 from typing import Protocol, runtime_checkable
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+def _log_sms(msg: str) -> None:
+    """Print to stdout so it shows in docker logs regardless of log config."""
+    print(f"[SMS] {msg}", flush=True)
 
 
 @runtime_checkable
@@ -38,21 +42,23 @@ class EgoSmsProvider:
     async def send(self, phone: str, message: str) -> bool:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(
-                    self.api_url,
-                    data={
-                        "username": html.escape(self.username),
-                        "password": html.escape(self.password),
-                        "number": html.escape(phone),
-                        "message": html.escape(message),
-                        "sender": html.escape(self.sender),
-                    },
-                )
-                resp.raise_for_status()
-                logger.info("[SMS:egoSMS] Sent to %s OK", phone)
+                params = {
+                    "username": self.username,
+                    "password": self.password,
+                    "number": phone,
+                    "message": message,
+                    "sender": self.sender,
+                }
+                resp = await client.get(self.api_url, params=params)
+                body = resp.text
+                _log_sms(f"egoSMS response {resp.status_code}: {body}")
+                if "error" in body.lower() or "empty" in body.lower() or "wrong" in body.lower():
+                    _log_sms(f"egoSMS error: {body}")
+                    return False
+                _log_sms(f"egoSMS sent to {phone} OK")
                 return True
         except Exception as e:
-            logger.error("[SMS:egoSMS] Failed to send to %s: %s", phone, e)
+            _log_sms(f"egoSMS FAILED to {phone}: {e}")
             return False
 
 

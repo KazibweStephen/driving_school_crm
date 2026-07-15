@@ -1,10 +1,12 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select as sa_select, func as sqlfunc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin_access
 from app.core.database import get_db
+from app.models.sms import SmsLog
 from app.models.user import User
 from app.schemas.sms import (
     CompanySmsSettingsRead,
@@ -219,11 +221,8 @@ async def list_sms_logs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin_access),
 ):
-    from sqlalchemy import func as sqlfunc
-    from app.models.sms import SmsLog
-
-    query = select(SmsLog).where(SmsLog.company_id == company_id)
-    count_query = select(sqlfunc.count(SmsLog.id)).where(SmsLog.company_id == company_id)
+    query = sa_select(SmsLog).where(SmsLog.company_id == company_id)
+    count_query = sa_select(sqlfunc.count(SmsLog.id)).where(SmsLog.company_id == company_id)
 
     if phone:
         query = query.where(SmsLog.phone.ilike(f"%{phone}%"))

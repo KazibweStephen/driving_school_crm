@@ -12,7 +12,7 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.services import user as user_service
-from app.services.notification.service import send_template_sms
+from app.services.notification.service import on_user_created, on_pin_reset
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -42,9 +42,8 @@ async def create_user(
     )
     target_company_id = data.company_id or current_user.company_id
     if target_company_id:
-        await send_template_sms(
-            db, target_company_id, data.phone, "pin_creation_reset",
-            {"name": data.name, "pin": initial_pin},
+        await on_user_created(
+            db, target_company_id, data.phone, data.name, initial_pin,
         )
     return UserRead.model_validate(user)
 
@@ -195,9 +194,8 @@ async def reset_user_pin(
         )
     user, new_pin = await user_service.reset_user_pin(db, user)
     if user.company_id:
-        await send_template_sms(
-            db, user.company_id, phone, "pin_creation_reset",
-            {"name": user.name, "pin": new_pin},
+        await on_pin_reset(
+            db, user.company_id, phone, user.name, new_pin,
         )
     return {"message": "PIN reset successfully", "new_pin": new_pin}
 

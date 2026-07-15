@@ -33,6 +33,7 @@ export interface SmsTemplate {
   company_id: string;
   name: string;
   category: string;
+  trigger_event: string;
   body: string;
   is_active: boolean;
   created_at: string;
@@ -42,6 +43,7 @@ export interface SmsTemplate {
 export interface SmsTemplateCreate {
   name: string;
   category: string;
+  trigger_event?: string;
   body: string;
   is_active?: boolean;
 }
@@ -49,6 +51,7 @@ export interface SmsTemplateCreate {
 export interface SmsTemplateUpdate {
   name?: string;
   category?: string;
+  trigger_event?: string;
   body?: string;
   is_active?: boolean;
 }
@@ -66,16 +69,33 @@ export const SMS_TEMPLATE_CATEGORIES = [
   { label: 'Custom', value: 'custom' },
 ];
 
+export const SMS_TRIGGERS = [
+  { label: 'Manual (No auto-trigger)', value: 'manual' },
+  { label: 'User Created (sends PIN)', value: 'user_created' },
+  { label: 'PIN Reset', value: 'pin_reset' },
+  { label: 'Consultation Created', value: 'consultation_created' },
+  { label: 'Payment Received', value: 'payment_received' },
+  { label: 'Installment Due (reminder)', value: 'installment_due' },
+  { label: 'Installment Overdue (dunning)', value: 'installment_overdue' },
+  { label: 'Cart Item Converted', value: 'cart_item_converted' },
+  { label: 'Expense Approved', value: 'expense_approved' },
+  { label: 'Lesson Scheduled', value: 'lesson_scheduled' },
+  { label: 'Lesson Cancelled', value: 'lesson_cancelled' },
+  { label: 'Lesson Reminder', value: 'lesson_reminder' },
+  { label: 'Training Completed', value: 'training_completed' },
+  { label: 'Permit Expiring', value: 'permit_expiring' },
+];
+
 export const TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
   pin_creation_reset: ['name', 'pin'],
-  training_cancellation: ['name', 'time', 'reason'],
+  training_cancellation: ['name', 'date', 'time', 'reason'],
   lesson_reminder: ['name', 'date', 'time', 'instructor'],
   lesson_scheduling: ['name', 'date', 'time', 'instructor'],
   branch_visit: ['name', 'date', 'time', 'branch', 'address'],
   payment_receipt: ['name', 'amount', 'receipt_number', 'download_url'],
-  payment_installment: ['name', 'amount', 'due_date', 'balance'],
+  payment_installment: ['name', 'amount', 'due_date', 'balance', 'overdue_amount', 'days_overdue', 'total_balance'],
   permit_expiring: ['name', 'expiry_date', 'days_remaining'],
-  general: ['name', 'message'],
+  general: ['name', 'message', 'description', 'amount'],
   custom: [],
 };
 

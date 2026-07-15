@@ -86,10 +86,11 @@ async def test_sms(
 async def list_templates(
     company_id: uuid.UUID,
     category: str | None = None,
+    trigger_event: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin_access),
 ):
-    templates = await sms_service.list_sms_templates(db, company_id, category=category)
+    templates = await sms_service.list_sms_templates(db, company_id, category=category, trigger_event=trigger_event)
     return [SmsTemplateRead.model_validate(t) for t in templates]
 
 
@@ -120,6 +121,7 @@ async def create_template(
         company_id,
         name=data.name,
         category=data.category,
+        trigger_event=data.trigger_event,
         body=data.body,
         is_active=data.is_active,
     )
@@ -144,6 +146,7 @@ async def update_template(
         template,
         name=data.name,
         category=data.category,
+        trigger_event=data.trigger_event,
         body=data.body,
         is_active=data.is_active,
     )

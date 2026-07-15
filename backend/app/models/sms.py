@@ -22,6 +22,23 @@ class SmsTemplateCategory(str, enum.Enum):
     CUSTOM = "custom"
 
 
+class SmsTrigger(str, enum.Enum):
+    USER_CREATED = "user_created"
+    PIN_RESET = "pin_reset"
+    CONSULTATION_CREATED = "consultation_created"
+    PAYMENT_RECEIVED = "payment_received"
+    INSTALLMENT_DUE = "installment_due"
+    INSTALLMENT_OVERDUE = "installment_overdue"
+    CART_ITEM_CONVERTED = "cart_item_converted"
+    EXPENSE_APPROVED = "expense_approved"
+    LESSON_SCHEDULED = "lesson_scheduled"
+    LESSON_CANCELLED = "lesson_cancelled"
+    LESSON_REMINDER = "lesson_reminder"
+    TRAINING_COMPLETED = "training_completed"
+    PERMIT_EXPIRING = "permit_expiring"
+    MANUAL = "manual"
+
+
 _values_callable = lambda x: [e.value for e in x]
 
 
@@ -36,6 +53,11 @@ class SmsTemplate(Base):
     category: Mapped[SmsTemplateCategory] = mapped_column(
         Enum(SmsTemplateCategory, values_callable=_values_callable),
         nullable=False,
+    )
+    trigger_event: Mapped[SmsTrigger] = mapped_column(
+        Enum(SmsTrigger, values_callable=_values_callable),
+        nullable=False,
+        default=SmsTrigger.MANUAL,
     )
     body: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

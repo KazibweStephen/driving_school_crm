@@ -12,6 +12,7 @@ import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { SelectModule } from 'primeng/select';
 import { TabsModule } from 'primeng/tabs';
+import { TooltipModule } from 'primeng/tooltip';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { AuthService } from '../../core/auth/auth.service';
 import {
@@ -21,6 +22,7 @@ import {
   SmsTemplate,
   SmsTemplateCreate,
   SMS_TEMPLATE_CATEGORIES,
+  SMS_TRIGGERS,
   TEMPLATE_PLACEHOLDERS,
 } from '../../core/services/sms.service';
 import { CompanyService, Company } from '../../core/services/company.service';
@@ -30,7 +32,7 @@ import { CompanyService, Company } from '../../core/services/company.service';
   imports: [
     CommonModule, FormsModule, ButtonModule, TableModule, DialogModule,
     InputTextModule, TextareaModule, ToggleSwitchModule, TagModule, ToastModule,
-    ConfirmDialogModule, SelectModule, TabsModule,
+    ConfirmDialogModule, SelectModule, TabsModule, TooltipModule,
   ],
   providers: [ConfirmationService, MessageService],
   template: `
@@ -97,7 +99,8 @@ import { CompanyService, Company } from '../../core/services/company.service';
                       </div>
                       <div>
                         <label class="mb-1 block text-xs font-medium text-gray-600">Password</label>
-                        <input pInputText [(ngModel)]="settingsForm.egosms_password" class="w-full" type="password" />
+                        <input pInputText [(ngModel)]="egosmsPasswordInput" class="w-full" type="password"
+                          placeholder="{{ egosmsPasswordPlaceholder }}" />
                       </div>
                     </div>
                     <div>
@@ -116,7 +119,8 @@ import { CompanyService, Company } from '../../core/services/company.service';
                     </div>
                     <div>
                       <label class="mb-1 block text-xs font-medium text-gray-600">Auth Token</label>
-                      <input pInputText [(ngModel)]="settingsForm.twilio_auth_token" class="w-full" type="password" />
+                      <input pInputText [(ngModel)]="twilioTokenInput" class="w-full" type="password"
+                        placeholder="{{ twilioTokenPlaceholder }}" />
                     </div>
                     <div>
                       <label class="mb-1 block text-xs font-medium text-gray-600">Phone Number</label>
@@ -149,9 +153,14 @@ import { CompanyService, Company } from '../../core/services/company.service';
               </ng-template>
 
               <div class="flex items-center justify-between mb-4">
-                <p-select [(ngModel)]="filterCategory" [options]="categoryOptions"
-                  optionLabel="label" optionValue="value" placeholder="All categories"
-                  styleClass="w-64" appendTo="body" (onChange)="loadTemplates()" [showClear]="true" />
+                <div class="flex gap-2">
+                  <p-select [(ngModel)]="filterCategory" [options]="categoryOptions"
+                    optionLabel="label" optionValue="value" placeholder="All categories"
+                    styleClass="w-64" appendTo="body" (onChange)="loadTemplates()" [showClear]="true" />
+                  <p-select [(ngModel)]="filterTrigger" [options]="triggerOptions"
+                    optionLabel="label" optionValue="value" placeholder="All triggers"
+                    styleClass="w-64" appendTo="body" (onChange)="loadTemplates()" [showClear]="true" />
+                </div>
                 <p-button label="New Template" icon="pi pi-plus" (onClick)="showCreateTemplate()" />
               </div>
 
@@ -161,6 +170,7 @@ import { CompanyService, Company } from '../../core/services/company.service';
                   <tr>
                     <th>Name</th>
                     <th>Category</th>
+                    <th>Trigger</th>
                     <th>Preview</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -170,6 +180,13 @@ import { CompanyService, Company } from '../../core/services/company.service';
                   <tr>
                     <td class="font-medium">{{ t.name }}</td>
                     <td><p-tag [value]="getCategoryLabel(t.category)" severity="info" /></td>
+                    <td>
+                      @if (t.trigger_event !== 'manual') {
+                        <p-tag [value]="getTriggerLabel(t.trigger_event)" severity="warn" />
+                      } @else {
+                        <span class="text-gray-400 text-sm">Manual</span>
+                      }
+                    </td>
                     <td class="text-sm text-gray-600 max-w-md truncate">{{ t.body }}</td>
                     <td><p-tag [value]="t.is_active ? 'Active' : 'Inactive'" [severity]="t.is_active ? 'success' : 'warn'" /></td>
                     <td>
@@ -201,18 +218,33 @@ import { CompanyService, Company } from '../../core/services/company.service';
 
     <!-- Template Dialog -->
     <p-dialog [(visible)]="templateDialogVisible" [header]="editingTemplateId ? 'Edit Template' : 'New Template'"
-      [modal]="true" [style]="{ width: '550px' }" appendTo="body">
+      [modal]="true" [style]="{ width: '600px' }" appendTo="body">
       <div class="flex flex-col gap-3">
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">Name</label>
-          <input pInputText [(ngModel)]="templateForm.name" class="w-full" placeholder="e.g. Training Cancellation" />
+          <input pInputText [(ngModel)]="templateForm.name" class="w-full" placeholder="e.g. Payment Receipt" />
         </div>
-        <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700">Category</label>
-          <p-select [(ngModel)]="templateForm.category" [options]="categoryOptions"
-            optionLabel="label" optionValue="value" placeholder="Select category"
-            styleClass="w-full" appendTo="body" />
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Category</label>
+            <p-select [(ngModel)]="templateForm.category" [options]="categoryOptions"
+              optionLabel="label" optionValue="value" placeholder="Select category"
+              styleClass="w-full" appendTo="body" />
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Auto-Trigger</label>
+            <p-select [(ngModel)]="templateForm.trigger_event" [options]="triggerOptions"
+              optionLabel="label" optionValue="value" placeholder="Select trigger"
+              styleClass="w-full" appendTo="body" pTooltip="Which system event fires this template automatically" />
+          </div>
         </div>
+        @if (templateForm.trigger_event && templateForm.trigger_event !== 'manual') {
+          <div class="p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+            <i class="pi pi-info-circle mr-1"></i>
+            This template will be sent automatically when <strong>{{ getTriggerLabel(templateForm.trigger_event) }}</strong> occurs.
+            Only one active template per trigger is used.
+          </div>
+        }
         @if (templateForm.category) {
           <div class="p-3 bg-gray-50 rounded border text-xs text-gray-600">
             <span class="font-medium">Available placeholders:</span>
@@ -248,12 +280,15 @@ export class CompanySettingsCmp implements OnInit {
     is_active: false,
     egosms_api_url: 'https://www.egosms.co/api/v1/plain/',
     egosms_username: '',
-    egosms_password: '',
     egosms_sender: '',
     twilio_account_sid: '',
-    twilio_auth_token: '',
     twilio_phone_number: '',
   };
+
+  egosmsPasswordInput = '';
+  egosmsPasswordPlaceholder = 'Enter to change';
+  twilioTokenInput = '';
+  twilioTokenPlaceholder = 'Enter to change';
 
   templates = signal<SmsTemplate[]>([]);
   loadingTemplates = signal(false);
@@ -266,10 +301,12 @@ export class CompanySettingsCmp implements OnInit {
   templateDialogVisible = false;
   editingTemplateId: string | null = null;
   filterCategory: string | null = null;
+  filterTrigger: string | null = null;
 
   templateForm: SmsTemplateCreate & { is_active: boolean } = {
     name: '',
     category: '',
+    trigger_event: 'manual',
     body: '',
     is_active: true,
   };
@@ -281,6 +318,7 @@ export class CompanySettingsCmp implements OnInit {
   ];
 
   categoryOptions = SMS_TEMPLATE_CATEGORIES;
+  triggerOptions = SMS_TRIGGERS;
 
   constructor(
     private smsService: SmsService,
@@ -314,6 +352,10 @@ export class CompanySettingsCmp implements OnInit {
   }
 
   onCompanyChange() {
+    this.egosmsPasswordInput = '';
+    this.twilioTokenInput = '';
+    this.egosmsPasswordPlaceholder = 'Enter to change';
+    this.twilioTokenPlaceholder = 'Enter to change';
     if (this.selectedCompanyId) {
       this.loadSettings();
       this.loadTemplates();
@@ -331,12 +373,14 @@ export class CompanySettingsCmp implements OnInit {
           is_active: res.is_active,
           egosms_api_url: res.egosms_api_url,
           egosms_username: res.egosms_username,
-          egosms_password: '',
           egosms_sender: res.egosms_sender,
           twilio_account_sid: res.twilio_account_sid,
-          twilio_auth_token: '',
           twilio_phone_number: res.twilio_phone_number,
         };
+        this.egosmsPasswordInput = '';
+        this.twilioTokenInput = '';
+        this.egosmsPasswordPlaceholder = 'Enter to change';
+        this.twilioTokenPlaceholder = 'Enter to change';
       } else {
         this.resetSettingsForm();
       }
@@ -351,12 +395,12 @@ export class CompanySettingsCmp implements OnInit {
       is_active: false,
       egosms_api_url: 'https://www.egosms.co/api/v1/plain/',
       egosms_username: '',
-      egosms_password: '',
       egosms_sender: '',
       twilio_account_sid: '',
-      twilio_auth_token: '',
       twilio_phone_number: '',
     };
+    this.egosmsPasswordInput = '';
+    this.twilioTokenInput = '';
   }
 
   async loadTemplates() {
@@ -365,7 +409,11 @@ export class CompanySettingsCmp implements OnInit {
     this.loadingTemplates.set(true);
     try {
       const res = await this.smsService.listTemplates(cid, this.filterCategory || undefined).toPromise();
-      this.templates.set(res || []);
+      let filtered = res || [];
+      if (this.filterTrigger) {
+        filtered = filtered.filter(t => t.trigger_event === this.filterTrigger);
+      }
+      this.templates.set(filtered);
     } catch {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load templates' });
     } finally {
@@ -378,7 +426,24 @@ export class CompanySettingsCmp implements OnInit {
     if (!cid) return;
     this.savingSettings.set(true);
     try {
-      await this.smsService.upsertSettings(cid, this.settingsForm).toPromise();
+      const payload: SmsSettingsUpdate = {
+        is_active: this.settingsForm.is_active,
+        provider: this.settingsForm.provider,
+        egosms_api_url: this.settingsForm.egosms_api_url,
+        egosms_username: this.settingsForm.egosms_username,
+        egosms_sender: this.settingsForm.egosms_sender,
+        twilio_account_sid: this.settingsForm.twilio_account_sid,
+        twilio_phone_number: this.settingsForm.twilio_phone_number,
+      };
+      if (this.egosmsPasswordInput) {
+        payload.egosms_password = this.egosmsPasswordInput;
+      }
+      if (this.twilioTokenInput) {
+        payload.twilio_auth_token = this.twilioTokenInput;
+      }
+      await this.smsService.upsertSettings(cid, payload).toPromise();
+      this.egosmsPasswordInput = '';
+      this.twilioTokenInput = '';
       this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'SMS settings updated' });
     } catch (e: any) {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to save' });
@@ -409,13 +474,13 @@ export class CompanySettingsCmp implements OnInit {
 
   showCreateTemplate() {
     this.editingTemplateId = null;
-    this.templateForm = { name: '', category: '', body: '', is_active: true };
+    this.templateForm = { name: '', category: '', trigger_event: 'manual', body: '', is_active: true };
     this.templateDialogVisible = true;
   }
 
   showEditTemplate(t: SmsTemplate) {
     this.editingTemplateId = t.id;
-    this.templateForm = { name: t.name, category: t.category, body: t.body, is_active: t.is_active };
+    this.templateForm = { name: t.name, category: t.category, trigger_event: t.trigger_event, body: t.body, is_active: t.is_active };
     this.templateDialogVisible = true;
   }
 
@@ -425,6 +490,10 @@ export class CompanySettingsCmp implements OnInit {
 
   getCategoryLabel(category: string): string {
     return SMS_TEMPLATE_CATEGORIES.find(c => c.value === category)?.label || category;
+  }
+
+  getTriggerLabel(trigger: string): string {
+    return SMS_TRIGGERS.find(t => t.value === trigger)?.label || trigger;
   }
 
   async saveTemplate() {

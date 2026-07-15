@@ -27,6 +27,7 @@ from app.schemas.consultation import (
 )
 from app.services import consultation as consultation_service
 from app.services import payment as payment_service
+from app.services.notification import on_consultation_created
 
 router = APIRouter(prefix="/consultations", tags=["consultations"])
 
@@ -62,6 +63,13 @@ async def create_consultation(
         branch_id=data.branch_id,
         created_by_phone=current_user.phone,
     )
+
+    if current_user.company_id:
+        await on_consultation_created(
+            db, current_user.company_id, consultation.phone,
+            consultation.first_name,
+        )
+
     return ConsultationRead.from_orm_with_cart(consultation)
 
 
@@ -185,6 +193,12 @@ async def create_full_consultation(
         )
     )
     consultation = result.scalar_one()
+
+    if current_user.company_id:
+        await on_consultation_created(
+            db, current_user.company_id, consultation.phone,
+            consultation.first_name,
+        )
 
     return ConsultationRead.from_orm_with_cart(consultation)
 

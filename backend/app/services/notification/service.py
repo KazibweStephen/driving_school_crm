@@ -27,8 +27,10 @@ async def _get_provider_for_company(db: AsyncSession, company_id):
     settings = result.scalar_one_or_none()
 
     if not settings or not settings.is_active:
+        logger.info("[SMS] SMS disabled or not configured for company %s, logging only", company_id)
         return LoggingProvider()
 
+    logger.info("[SMS] Using provider '%s' for company %s", settings.provider, company_id)
     return get_provider(
         settings.provider,
         egosms_api_url=settings.egosms_api_url,
@@ -58,131 +60,188 @@ async def send_template_sms(
     phone: str,
     category: str,
     variables: dict[str, str],
+    *,
+    trigger_event: str | None = None,
 ) -> bool:
-    """Look up the active template for a category, render variables, and send."""
+    """Look up the active template for a trigger/category, render variables, and send."""
     from app.services.sms import resolve_template, render_template
 
-    template = await resolve_template(db, company_id, category)
+    template = await resolve_template(db, company_id, category, trigger_event=trigger_event)
     if not template:
         logger.warning(
-            "[SMS] No active template for category=%s company=%s, skipping",
-            category, company_id,
+            "[SMS] No active template for trigger=%s category=%s company=%s, skipping",
+            trigger_event, category, company_id,
         )
         return False
     message = render_template(template.body, variables)
     return await send_sms(db, company_id, phone, message)
 
 
-# ── Pre-built message helpers (backward-compatible) ──
+# ── Event-driven SMS helpers ──
 
 
-async def send_payment_receipt(
+async def on_user_created(
+    db: AsyncSession,
+    company_id,
     phone: str,
-    client_name: str,
+    name: str,
+    pin: str,
+) -> bool:
+    return await send_template_sms(
+        db, company_id, phone, "pin_creation_reset",
+        {"name": name, "pin": pin},
+        trigger_event="user_created",
+    )
+
+
+async def on_pin_reset(
+    db: AsyncSession,
+    company_id,
+    phone: str,
+    name: str,
+    pin: str,
+) -> bool:
+    return await send_template_sms(
+        db, company_id, phone, "pin_creation_reset",
+        {"name": name, "pin": pin},
+        trigger_event="pin_reset",
+    )
+
+
+async def on_consultation_created(
+    db: AsyncSession,
+    company_id,
+    phone: str,
+    name: str,
+) -> bool:
+    return await send_template_sms(
+        db, company_id, phone, "branch_visit",
+        {"name": name},
+        trigger_event="consultation_created",
+    )
+
+
+async def on_payment_received(
+    db: AsyncSession,
+    company_id,
+    phone: str,
+    name: str,
+    amount: str,
     receipt_number: str,
-    amount: str,
-    download_url: str,
-    *,
-    db: AsyncSession | None = None,
-    company_id=None,
+    download_url: str = "",
 ) -> bool:
-    msg = (
-        f"Dear {client_name},\n\n"
-        f"Thank you for your payment of UGX {amount}.\n"
-        f"Receipt: {receipt_number}\n\n"
-        f"Download receipt: {download_url}\n\n"
-        f"Drive Safe!"
+    return await send_template_sms(
+        db, company_id, phone, "payment_receipt",
+        {"name": name, "amount": amount, "receipt_number": receipt_number, "download_url": download_url},
+        trigger_event="payment_received",
     )
-    if db and company_id:
-        return await send_sms(db, company_id, phone, msg)
-    logger.info("[SMS] To=%s | %s", phone, msg)
-    return True
 
 
-async def send_installment_reminder(
+async def on_installment_due(
+    db: AsyncSession,
+    company_id,
     phone: str,
-    client_name: str,
+    name: str,
+    amount: str,
     due_date: str,
-    amount: str,
     balance: str,
-    *,
-    db: AsyncSession | None = None,
-    company_id=None,
 ) -> bool:
-    msg = (
-        f"Dear {client_name},\n\n"
-        f"Reminder: Installment of UGX {amount} is due on {due_date}.\n"
-        f"Outstanding balance: UGX {balance}\n\n"
-        f"Please make payment to avoid interruption of lessons.\n"
-        f"Thank you!"
+    return await send_template_sms(
+        db, company_id, phone, "payment_installment",
+        {"name": name, "amount": amount, "due_date": due_date, "balance": balance},
+        trigger_event="installment_due",
     )
-    if db and company_id:
-        return await send_sms(db, company_id, phone, msg)
-    logger.info("[SMS] To=%s | %s", phone, msg)
-    return True
 
 
-async def send_dunning_notice(
+async def on_installment_overdue(
+    db: AsyncSession,
+    company_id,
     phone: str,
-    client_name: str,
+    name: str,
     overdue_amount: str,
     days_overdue: int,
     total_balance: str,
-    *,
-    db: AsyncSession | None = None,
-    company_id=None,
 ) -> bool:
-    msg = (
-        f"Dear {client_name},\n\n"
-        f"Friendly reminder: Your payment of UGX {overdue_amount} "
-        f"is {days_overdue} day(s) overdue.\n"
-        f"Total outstanding: UGX {total_balance}\n\n"
-        f"Please clear the balance to continue your training.\n"
-        f"Contact us for payment options."
+    return await send_template_sms(
+        db, company_id, phone, "payment_installment",
+        {"name": name, "overdue_amount": overdue_amount, "days_overdue": str(days_overdue), "total_balance": total_balance},
+        trigger_event="installment_overdue",
     )
-    if db and company_id:
-        return await send_sms(db, company_id, phone, msg)
-    logger.info("[SMS] To=%s | %s", phone, msg)
-    return True
 
 
-async def send_expense_approved(
+async def on_expense_approved(
+    db: AsyncSession,
+    company_id,
     phone: str,
-    employee_name: str,
+    name: str,
     description: str,
     amount: str,
-    *,
-    db: AsyncSession | None = None,
-    company_id=None,
 ) -> bool:
-    msg = (
-        f"Dear {employee_name},\n\n"
-        f"Your expense request '{description}' for UGX {amount} "
-        f"has been approved.\n"
-        f"Finance will process the payment shortly.\n\n"
-        f"Thank you."
+    return await send_template_sms(
+        db, company_id, phone, "general",
+        {"name": name, "description": description, "amount": amount},
+        trigger_event="expense_approved",
     )
-    if db and company_id:
-        return await send_sms(db, company_id, phone, msg)
-    logger.info("[SMS] To=%s | %s", phone, msg)
-    return True
 
 
-async def send_welcome_message(
+async def on_lesson_scheduled(
+    db: AsyncSession,
+    company_id,
     phone: str,
-    client_name: str,
-    *,
-    db: AsyncSession | None = None,
-    company_id=None,
+    name: str,
+    date: str,
+    time: str,
+    instructor: str,
 ) -> bool:
-    msg = (
-        f"Welcome to Driving School, {client_name}!\n\n"
-        f"We're excited to have you on board.\n"
-        f"Your consultation has been scheduled.\n"
-        f"We'll be in touch shortly.\n\n"
-        f"Drive Safe!"
+    return await send_template_sms(
+        db, company_id, phone, "lesson_scheduling",
+        {"name": name, "date": date, "time": time, "instructor": instructor},
+        trigger_event="lesson_scheduled",
     )
-    if db and company_id:
-        return await send_sms(db, company_id, phone, msg)
-    logger.info("[SMS] To=%s | %s", phone, msg)
-    return True
+
+
+async def on_lesson_cancelled(
+    db: AsyncSession,
+    company_id,
+    phone: str,
+    name: str,
+    date: str,
+    time: str,
+    reason: str = "",
+) -> bool:
+    return await send_template_sms(
+        db, company_id, phone, "training_cancellation",
+        {"name": name, "date": date, "time": time, "reason": reason},
+        trigger_event="lesson_cancelled",
+    )
+
+
+async def on_lesson_reminder(
+    db: AsyncSession,
+    company_id,
+    phone: str,
+    name: str,
+    date: str,
+    time: str,
+    instructor: str,
+) -> bool:
+    return await send_template_sms(
+        db, company_id, phone, "lesson_reminder",
+        {"name": name, "date": date, "time": time, "instructor": instructor},
+        trigger_event="lesson_reminder",
+    )
+
+
+async def on_permit_expiring(
+    db: AsyncSession,
+    company_id,
+    phone: str,
+    name: str,
+    expiry_date: str,
+    days_remaining: int,
+) -> bool:
+    return await send_template_sms(
+        db, company_id, phone, "permit_expiring",
+        {"name": name, "expiry_date": expiry_date, "days_remaining": str(days_remaining)},
+        trigger_event="permit_expiring",
+    )

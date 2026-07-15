@@ -83,10 +83,13 @@ async def list_sms_templates(
     db: AsyncSession,
     company_id: uuid.UUID,
     category: str | None = None,
+    trigger_event: str | None = None,
 ) -> list[SmsTemplate]:
     query = select(SmsTemplate).where(SmsTemplate.company_id == company_id)
     if category:
         query = query.where(SmsTemplate.category == category)
+    if trigger_event:
+        query = query.where(SmsTemplate.trigger_event == trigger_event)
     query = query.order_by(SmsTemplate.created_at.desc())
     result = await db.execute(query)
     return list(result.scalars().all())
@@ -107,6 +110,7 @@ async def create_sms_template(
     *,
     name: str,
     category: str,
+    trigger_event: str = "manual",
     body: str,
     is_active: bool = True,
 ) -> SmsTemplate:
@@ -114,6 +118,7 @@ async def create_sms_template(
         company_id=company_id,
         name=name,
         category=category,
+        trigger_event=trigger_event,
         body=body,
         is_active=is_active,
     )
@@ -129,6 +134,7 @@ async def update_sms_template(
     *,
     name: str | None = None,
     category: str | None = None,
+    trigger_event: str | None = None,
     body: str | None = None,
     is_active: bool | None = None,
 ) -> SmsTemplate:
@@ -136,6 +142,8 @@ async def update_sms_template(
         template.name = name
     if category is not None:
         template.category = category
+    if trigger_event is not None:
+        template.trigger_event = trigger_event
     if body is not None:
         template.body = body
     if is_active is not None:
@@ -157,8 +165,21 @@ async def resolve_template(
     db: AsyncSession,
     company_id: uuid.UUID,
     category: str,
+    trigger_event: str | None = None,
 ) -> SmsTemplate | None:
-    """Get the first active template for a category."""
+    """Get the first active template matching a trigger_event, falling back to category."""
+    if trigger_event:
+        result = await db.execute(
+            select(SmsTemplate).where(
+                SmsTemplate.company_id == company_id,
+                SmsTemplate.trigger_event == trigger_event,
+                SmsTemplate.is_active == True,
+            ).limit(1)
+        )
+        template = result.scalar_one_or_none()
+        if template:
+            return template
+
     result = await db.execute(
         select(SmsTemplate).where(
             SmsTemplate.company_id == company_id,
@@ -175,3 +196,30 @@ def render_template(body: str, variables: dict[str, str]) -> str:
         key = match.group(1)
         return variables.get(key, match.group(0))
     return re.sub(r"\{(\w+)\}", _replace, body)
+
+
+# ── Default template seeding ──
+
+
+async def seed_default_templates(db: AsyncSession, company_id: uuid.UUID) -> None:
+    """Create default SMS templates for a company, skipping triggers that already have templates."""
+    from app.schemas.sms import DEFAULT_TEMPLATES
+
+    result = await db.execute(
+        select(SmsTemplate.trigger_event).where(SmsTemplate.company_id == company_id)
+    )
+    existing_triggers = {row[0] for row in result.fetchall()}
+
+    for trigger_event, tmpl_data in DEFAULT_TEMPLATES.items():
+        if trigger_event in existing_triggers:
+            continue
+        template = SmsTemplate(
+            company_id=company_id,
+            name=tmpl_data["name"],
+            category=tmpl_data["category"],
+            trigger_event=trigger_event,
+            body=tmpl_data["body"],
+            is_active=True,
+        )
+        db.add(template)
+    await db.flush()

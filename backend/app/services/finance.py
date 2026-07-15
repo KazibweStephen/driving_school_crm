@@ -18,7 +18,7 @@ from app.models.company import (
 from app.models.consultation import Consultation
 from app.models.payment import Installment, InstallmentStatus
 from app.models.user import UserRole
-from app.services.notification import send_dunning_notice, send_expense_approved
+from app.services.notification import on_installment_overdue, on_expense_approved
 
 
 # ── Expenses ──
@@ -475,6 +475,7 @@ async def get_dunning_list(
 
 
 async def send_dunning_notifications(db: AsyncSession) -> int:
+    from app.models.branch import Branch
     today = date.today()
     result = await db.execute(
         select(Installment)
@@ -492,13 +493,22 @@ async def send_dunning_notifications(db: AsyncSession) -> int:
     for inst in installments:
         consultation = inst.payment.consultation
         days_overdue = (today - inst.due_date).days
-        ok = await send_dunning_notice(
+
+        company_id = None
+        if consultation.branch_id:
+            branch = await db.get(Branch, consultation.branch_id)
+            if branch:
+                company_id = branch.company_id
+
+        ok = await on_installment_overdue(
+            db=db,
+            company_id=company_id,
             phone=consultation.phone,
-            client_name=consultation.first_name,
+            name=consultation.first_name,
             overdue_amount=str(inst.amount),
             days_overdue=days_overdue,
             total_balance=str(inst.payment.balance),
-        )
+        ) if company_id else False
         if ok:
             sent_count += 1
             inst.status = InstallmentStatus.OVERDUE

@@ -52,6 +52,12 @@ async def create_company(
         email=data.email,
     )
     db.add(company)
+    await db.flush()
+    await db.refresh(company)
+
+    from app.services.sms import seed_default_templates
+    await seed_default_templates(db, company.id)
+
     await db.commit()
     await db.refresh(company)
     return CompanyRead.model_validate(company)

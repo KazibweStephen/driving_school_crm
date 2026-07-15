@@ -41,7 +41,7 @@
   <!-- Totals Card -->
   <div class="bg-surface-card p-4 rounded shadow-sm mb-4">
     <div class="text-sm text-muted">Total Collected</div>
-    <div class="text-2xl font-bold">{{ totalAmount() | currency:currencyService.code():'symbol':'1.0-0' }}</div>
+    <div class="text-2xl font-bold">{{ totalAmount() | number:'1.0-0' }} {{ currencyService.symbol() }}</div>
     <div class="text-sm text-muted mt-1">{{ items().length }} period(s)</div>
   </div>
 
@@ -50,7 +50,7 @@
     <div class="bg-surface-card rounded shadow-sm mb-4 overflow-hidden">
       <div class="flex items-center justify-between p-4 bg-primary text-primary-contrast font-bold">
         <span>{{ group.period_label }}</span>
-        <span>{{ group.total_collected | currency:currencyService.code():'symbol':'1.0-0' }}</span>
+        <span>{{ group.total_collected | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
       </div>
       <p-table [value]="group.items" stripedRows>
         <ng-template pTemplate="header">
@@ -73,8 +73,8 @@
               </a>
             </td>
             <td>{{ item.client_phone }}</td>
-            <td>{{ item.amount_due | currency:currencyService.code():'symbol':'1.0-0' }}</td>
-            <td>{{ item.amount_collected | currency:currencyService.code():'symbol':'1.0-0' }}</td>
+            <td>{{ item.amount_due | number:'1.0-0' }} {{ currencyService.symbol() }}</td>
+            <td>{{ item.amount_collected | number:'1.0-0' }} {{ currencyService.symbol() }}</td>
             <td>{{ item.status }}</td>
             <td>{{ item.notes || '-' }}</td>
           </tr>

@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal, computed, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DatePipe, CurrencyPipe } from '@angular/common';
+import { DatePipe, CurrencyPipe, DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
@@ -36,6 +36,7 @@ interface PaymentSession {
     FormsModule,
     DatePipe,
     CurrencyPipe,
+    DecimalPipe,
     RouterLink,
     ButtonModule,
     SelectModule,

@@ -144,9 +144,12 @@ async def list_commissions(
                 select(Consultation).where(Consultation.id == c.cart_item.consultation_id)
             )
             client = cons.scalar_one_or_none()
-            client_name = client.client_name if client else None
-        if c.commission_rate and c.commission_rate.package:
-            pkg_name = c.commission_rate.package.name
+            client_name = " ".join(filter(None, [client.first_name, client.middle_name, client.last_name])) if client else None
+        if c.cart_item and c.cart_item.package_id:
+            from app.models.product import Package
+            pkg_res = await db.execute(select(Package).where(Package.id == c.cart_item.package_id))
+            pkg = pkg_res.scalar_one_or_none()
+            pkg_name = pkg.name if pkg else None
 
         commission_list.append(CommissionRead(
             id=c.id, company_id=c.company_id, cart_item_id=c.cart_item_id,

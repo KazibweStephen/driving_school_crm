@@ -62,7 +62,7 @@ class CommissionRead(BaseModel):
     company_id: UUID
     cart_item_id: UUID
     commission_rate_id: Optional[UUID] = None
-    converter_id: str
+    converter_id: Optional[str] = None
     primary_recommender_id: Optional[str] = None
     secondary_recommender_id: Optional[str] = None
     total_amount: Decimal

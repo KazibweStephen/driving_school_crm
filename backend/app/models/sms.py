@@ -69,3 +69,25 @@ class SmsTemplate(Base):
     )
 
     company: Mapped["Company"] = relationship("Company", back_populates="sms_templates")
+
+
+class SmsLog(Base):
+    __tablename__ = "sms_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    phone: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    message_length: Mapped[int] = mapped_column(nullable=False)
+    provider: Mapped[str] = mapped_column(String(20), nullable=False, default="logging")
+    trigger_event: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    template_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("sms_templates.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="sent")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

@@ -178,3 +178,26 @@ class SendTemplateSmsRequest(BaseModel):
     phone: str = Field(..., min_length=7, max_length=15)
     category: str
     variables: dict[str, str] = {}
+
+
+# ── SMS Logs ──
+
+class SmsLogRead(BaseModel):
+    id: uuid.UUID
+    company_id: uuid.UUID
+    phone: str
+    message: str
+    message_length: int
+    provider: str
+    trigger_event: str | None
+    template_id: uuid.UUID | None
+    status: str
+    error_message: str | None
+    sent_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SmsLogListResponse(BaseModel):
+    logs: list[SmsLogRead]
+    total: int

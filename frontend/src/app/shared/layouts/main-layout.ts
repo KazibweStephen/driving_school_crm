@@ -70,6 +70,7 @@ export class MainLayout {
         { path: '/products', label: 'Products', icon: 'pi pi-box' },
         { path: '/commissions', label: 'Commissions', icon: 'pi pi-dollar' },
         { path: '/company-settings', label: 'Company Settings', icon: 'pi pi-cog' },
+        { path: '/sms-logs', label: 'SMS Logs', icon: 'pi pi-history' },
       ],
     },
   ];

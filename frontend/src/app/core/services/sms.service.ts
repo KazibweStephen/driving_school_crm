@@ -99,6 +99,25 @@ export const TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
   custom: [],
 };
 
+export interface SmsLog {
+  id: string;
+  company_id: string;
+  phone: string;
+  message: string;
+  message_length: number;
+  provider: string;
+  trigger_event: string | null;
+  template_id: string | null;
+  status: string;
+  error_message: string | null;
+  sent_at: string;
+}
+
+export interface SmsLogListResponse {
+  logs: SmsLog[];
+  total: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SmsService {
   private base = '/api/v1/sms';
@@ -145,5 +164,20 @@ export class SmsService {
 
   sendTemplateSms(companyId: string, phone: string, category: string, variables: Record<string, string> = {}): Observable<{ message: string }> {
     return this.http.post<{ message: string }>(`${this.base}/send-template/${companyId}`, { phone, category, variables });
+  }
+
+  listLogs(
+    companyId: string,
+    phone?: string,
+    status?: string,
+    triggerEvent?: string,
+    page = 1,
+    pageSize = 50,
+  ): Observable<SmsLogListResponse> {
+    const params: Record<string, string> = { page: String(page), page_size: String(pageSize) };
+    if (phone) params['phone'] = phone;
+    if (status) params['status'] = status;
+    if (triggerEvent) params['trigger_event'] = triggerEvent;
+    return this.http.get<SmsLogListResponse>(`${this.base}/logs/${companyId}`, { params });
   }
 }

@@ -11,6 +11,8 @@ from app.schemas.sms import (
     CompanySmsSettingsUpdate,
     SendSmsRequest,
     SendTemplateSmsRequest,
+    SmsLogListResponse,
+    SmsLogRead,
     SmsTemplateCreate,
     SmsTemplateRead,
     SmsTemplateUpdate,
@@ -201,3 +203,44 @@ async def send_from_template(
         status_code=status.HTTP_502_BAD_GATEWAY,
         detail="Failed to send template SMS. Check that an active template exists for this category.",
     )
+
+
+# ── Logs ──
+
+
+@router.get("/logs/{company_id}", response_model=SmsLogListResponse)
+async def list_sms_logs(
+    company_id: uuid.UUID,
+    phone: str | None = None,
+    status: str | None = None,
+    trigger_event: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_access),
+):
+    from sqlalchemy import func as sqlfunc
+    from app.models.sms import SmsLog
+
+    query = select(SmsLog).where(SmsLog.company_id == company_id)
+    count_query = select(sqlfunc.count(SmsLog.id)).where(SmsLog.company_id == company_id)
+
+    if phone:
+        query = query.where(SmsLog.phone.ilike(f"%{phone}%"))
+        count_query = count_query.where(SmsLog.phone.ilike(f"%{phone}%"))
+    if status:
+        query = query.where(SmsLog.status == status)
+        count_query = count_query.where(SmsLog.status == status)
+    if trigger_event:
+        query = query.where(SmsLog.trigger_event == trigger_event)
+        count_query = count_query.where(SmsLog.trigger_event == trigger_event)
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.order_by(SmsLog.sent_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    logs = [SmsLogRead.model_validate(row) for row in result.scalars().all()]
+
+    return SmsLogListResponse(logs=logs, total=total)

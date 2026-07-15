@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Company, CompanySmsSettings
+from app.models.sms import SmsLog
 from app.services.notification.providers import (
     LoggingProvider,
     get_provider,
@@ -55,16 +56,39 @@ async def send_sms(
     company_id,
     phone: str,
     message: str,
+    *,
+    trigger_event: str | None = None,
+    template_id=None,
 ) -> bool:
-    """Send an SMS using the company's configured provider."""
+    """Send an SMS using the company's configured provider and log it."""
     currency = "UGX"
+    provider_name = "logging"
     if company_id:
         company = await db.get(Company, company_id)
         if company:
             currency = company.currency
     phone = _normalize_phone(phone, currency)
+
     provider = await _get_provider_for_company(db, company_id)
-    return await provider.send(phone, message)
+    if not isinstance(provider, LoggingProvider):
+        provider_name = type(provider).__name__
+
+    ok = await provider.send(phone, message)
+
+    log = SmsLog(
+        company_id=company_id,
+        phone=phone,
+        message=message,
+        message_length=len(message),
+        provider=provider_name,
+        trigger_event=trigger_event,
+        template_id=template_id,
+        status="sent" if ok else "failed",
+        error_message=None if ok else "Provider returned false",
+    )
+    db.add(log)
+    await db.flush()
+    return ok
 
 
 async def send_template_sms(
@@ -87,7 +111,11 @@ async def send_template_sms(
         )
         return False
     message = render_template(template.body, variables)
-    return await send_sms(db, company_id, phone, message)
+    return await send_sms(
+        db, company_id, phone, message,
+        trigger_event=trigger_event or category,
+        template_id=template.id,
+    )
 
 
 # ── Event-driven SMS helpers ──

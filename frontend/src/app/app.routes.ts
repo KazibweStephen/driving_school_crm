@@ -119,6 +119,11 @@ export const routes: Routes = [
           import('./features/company-settings/company-settings').then((c) => c.CompanySettingsCmp),
       },
       {
+        path: 'sms-logs',
+        loadComponent: () =>
+          import('./features/sms-logs/sms-logs').then((c) => c.SmsLogsCmp),
+      },
+      {
         path: 'consultations',
         loadComponent: () =>
           import('./features/clients/clients').then((c) => c.Clients),

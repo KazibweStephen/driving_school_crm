@@ -264,6 +264,15 @@ import { CompanyService, Company } from '../../core/services/company.service';
           <label class="mb-1 block text-sm font-medium text-gray-700">Message Body</label>
           <textarea pInputTextarea [(ngModel)]="templateForm.body" class="w-full" rows="5"
             placeholder="Dear {name}, your training at {time} is cancelled..."></textarea>
+          <div class="mt-1 flex items-center gap-3 text-xs text-gray-500">
+            <span>{{ templateForm.body?.length || 0 }} characters</span>
+            <span class="text-gray-300">|</span>
+            <span>{{ getSmsUnits() }} SMS {{ getSmsUnits() === 1 ? 'unit' : 'units' }} <span class="text-gray-400">(160 chars/unit)</span></span>
+            @if (settingsForm.rate_per_sms && settingsForm.rate_per_sms > 0) {
+              <span class="text-gray-300">|</span>
+              <span>Est. cost: {{ (getSmsUnits() * settingsForm.rate_per_sms) | number:'1.2-2' }} {{ currencyService.symbol() }}</span>
+            }
+          </div>
         </div>
         <div class="flex items-center gap-2">
           <p-toggleswitch [(ngModel)]="templateForm.is_active" />
@@ -503,6 +512,11 @@ export class CompanySettingsCmp implements OnInit {
 
   getTriggerLabel(trigger: string): string {
     return SMS_TRIGGERS.find(t => t.value === trigger)?.label || trigger;
+  }
+
+  getSmsUnits(): number {
+    const len = this.templateForm.body?.length || 0;
+    return len === 0 ? 0 : Math.ceil(len / 160);
   }
 
   async saveTemplate() {

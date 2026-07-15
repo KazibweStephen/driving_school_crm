@@ -97,7 +97,7 @@ export const TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
   payment_receipt: ['name', 'amount', 'receipt_number', 'download_url'],
   payment_installment: ['name', 'amount', 'due_date', 'balance', 'overdue_amount', 'days_overdue', 'total_balance'],
   permit_expiring: ['name', 'expiry_date', 'days_remaining'],
-  general: ['name', 'message', 'description', 'amount'],
+  general: ['name', 'message', 'description', 'amount', 'package', 'total_sessions'],
   custom: [],
 };
 

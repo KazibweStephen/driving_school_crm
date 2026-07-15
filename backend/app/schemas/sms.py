@@ -98,6 +98,16 @@ DEFAULT_TEMPLATES = {
         "category": "permit_expiring",
         "body": "Dear {name},\n\nYour permit is expiring on {expiry_date} ({days_remaining} days remaining).\nPlease renew to avoid interruption.\n\nDrive Safe!",
     },
+    "cart_item_converted": {
+        "name": "Conversion Notification",
+        "category": "general",
+        "body": "Dear {name},\n\nCongratulations! Your registration is complete.\nPackage: {package}\nAmount: {amount}\n\nWe'll contact you shortly to schedule your first lesson.\n\nDrive Safe!",
+    },
+    "training_completed": {
+        "name": "Training Completed",
+        "category": "general",
+        "body": "Dear {name},\n\nCongratulations! You have completed your {package} training.\nTotal sessions: {total_sessions}\n\nPlease contact us for your next steps.\n\nDrive Safe!",
+    },
 }
 
 

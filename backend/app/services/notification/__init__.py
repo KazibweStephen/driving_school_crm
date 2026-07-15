@@ -13,6 +13,8 @@ from app.services.notification.service import (
     on_lesson_cancelled,
     on_lesson_reminder,
     on_permit_expiring,
+    on_cart_item_converted,
+    on_training_completed,
 )
 
 __all__ = [
@@ -30,4 +32,6 @@ __all__ = [
     "on_lesson_cancelled",
     "on_lesson_reminder",
     "on_permit_expiring",
+    "on_cart_item_converted",
+    "on_training_completed",
 ]

@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -20,6 +21,8 @@ from app.schemas.payment import (
     PaymentRead,
 )
 from app.services import payment as payment_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["clients"])
 
@@ -143,6 +146,28 @@ async def create_payment(
         created_by_phone=current_user.phone,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
+
+    # Send payment received SMS
+    if current_user.company_id:
+        try:
+            from app.services.notification.service import on_payment_received
+            from sqlalchemy import select as sa_select
+            consult_result = await db.execute(
+                sa_select(Consultation).where(Consultation.id == cid)
+            )
+            consultation = consult_result.scalar_one_or_none()
+            if consultation and consultation.phone:
+                client_name = " ".join(
+                    filter(None, [consultation.first_name, consultation.middle_name, consultation.last_name])
+                ) or "Client"
+                receipt = data.receipt_number or ""
+                await on_payment_received(
+                    db, current_user.company_id, consultation.phone, client_name,
+                    str(data.total_amount), receipt,
+                )
+        except Exception as e:
+            logger.warning("[SMS] Failed to send payment_received notification: %s", e)
+
     return PaymentRead.model_validate(payment)
 
 
@@ -187,4 +212,33 @@ async def update_installment(
     )
     if not inst:
         raise HTTPException(status_code=404, detail="Installment not found")
+
+    # Send payment received SMS on installment payment
+    if current_user.company_id:
+        try:
+            from app.services.notification.service import on_payment_received
+            from sqlalchemy import select as sa_select
+            from app.models.payment import Payment as PaymentModel
+            pay_result = await db.execute(
+                sa_select(PaymentModel).where(PaymentModel.id == inst.payment_id)
+            )
+            payment = pay_result.scalar_one_or_none()
+            if payment:
+                consult_result = await db.execute(
+                    sa_select(Consultation).where(Consultation.id == payment.consultation_id)
+                )
+                consultation = consult_result.scalar_one_or_none()
+                if consultation and consultation.phone:
+                    client_name = " ".join(
+                        filter(None, [consultation.first_name, consultation.middle_name, consultation.last_name])
+                    ) or "Client"
+                    paid_amount = str(data.paid_amount or inst.amount)
+                    receipt = payment.receipt_number or ""
+                    await on_payment_received(
+                        db, current_user.company_id, consultation.phone, client_name,
+                        paid_amount, receipt,
+                    )
+        except Exception as e:
+            logger.warning("[SMS] Failed to send payment_received notification: %s", e)
+
     return InstallmentRead.model_validate(inst)

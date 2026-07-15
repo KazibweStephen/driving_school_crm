@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from sqlalchemy import delete, select
@@ -9,6 +10,8 @@ from app.models.company import Branch
 from app.models.consultation import Consultation, FollowUp, FollowUpStatus, FollowUpType
 from app.models.product import Package
 from app.models.user import UserRole
+
+logger = logging.getLogger(__name__)
 
 
 async def add_cart_item(
@@ -131,6 +134,31 @@ async def update_cart_item(
             converter_id=converter_id,
             recommender_id=recommender_id,
         )
+
+    # Send SMS notification on cart item conversion
+    if status and item.status in converted_statuses and company_id:
+        try:
+            from app.services.notification.service import on_cart_item_converted
+            consult_result = await db.execute(
+                select(Consultation).where(Consultation.id == item.consultation_id)
+            )
+            consultation = consult_result.scalar_one_or_none()
+            if consultation and consultation.phone:
+                client_name = " ".join(
+                    filter(None, [consultation.first_name, consultation.middle_name, consultation.last_name])
+                ) or "Client"
+                pkg_name = "Product"
+                amount_str = "0"
+                if item.package_id:
+                    pkg = await db.get(Package, item.package_id)
+                    if pkg:
+                        pkg_name = pkg.name
+                        amount_str = str(pkg.price)
+                await on_cart_item_converted(
+                    db, company_id, consultation.phone, client_name, pkg_name, amount_str,
+                )
+        except Exception as e:
+            logger.warning("[SMS] Failed to send cart_item_converted notification: %s", e)
 
     await db.refresh(item)
     await _update_consultation_status(db, item.consultation_id)

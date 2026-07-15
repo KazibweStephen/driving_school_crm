@@ -197,6 +197,18 @@ async def reset_user_pin(
         await on_pin_reset(
             db, user.company_id, phone, user.name, new_pin,
         )
+    elif user.role.value == "super_user":
+        # Super users have no company; try to send via the default company
+        from sqlalchemy import select as sa_select
+        from app.models.company import Company
+        default_company_result = await db.execute(
+            sa_select(Company).where(Company.is_active == True).limit(1)
+        )
+        default_company = default_company_result.scalar_one_or_none()
+        if default_company:
+            await on_pin_reset(
+                db, default_company.id, phone, user.name, new_pin,
+            )
     return {"message": "PIN reset successfully", "new_pin": new_pin}
 
 

@@ -1,6 +1,8 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -24,6 +26,8 @@ from app.schemas.lesson_plan import (
     LessonTemplateItemUpdate,
 )
 from app.services import lesson_plan as lesson_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["lesson-plans"])
 
@@ -570,6 +574,45 @@ async def start_lesson(
     updated = await lesson_service.update_client_lesson(
         db, lesson, status="started", instructor_id=current_user.phone
     )
+
+    # Send lesson scheduled SMS
+    if current_user.company_id:
+        try:
+            from app.services.notification.service import on_lesson_scheduled
+            from app.models.lesson_plan import ClientLessonPlan
+            from app.models.cart import CartItem
+            from app.models.consultation import Consultation
+            from datetime import timedelta
+
+            plan_result = await db.execute(
+                select(ClientLessonPlan).where(ClientLessonPlan.id == lesson.lesson_plan_id)
+            )
+            plan = plan_result.scalar_one_or_none()
+            if plan and plan.start_date and plan.cart_item_id:
+                ci_result = await db.execute(
+                    select(CartItem).where(CartItem.id == plan.cart_item_id)
+                )
+                cart_item = ci_result.scalar_one_or_none()
+                if cart_item:
+                    consult_result = await db.execute(
+                        select(Consultation).where(Consultation.id == cart_item.consultation_id)
+                    )
+                    consultation = consult_result.scalar_one_or_none()
+                    if consultation and consultation.phone:
+                        client_name = " ".join(
+                            filter(None, [consultation.first_name, consultation.middle_name, consultation.last_name])
+                        ) or "Client"
+                        lesson_date = plan.start_date + timedelta(days=(lesson.day_number or 1) - 1)
+                        date_str = lesson_date.strftime("%Y-%m-%d")
+                        time_str = "10:00"
+                        instructor_name = current_user.name or current_user.phone
+                        await on_lesson_scheduled(
+                            db, current_user.company_id, consultation.phone, client_name,
+                            date_str, time_str, instructor_name,
+                        )
+        except Exception as e:
+            logger.warning("[SMS] Failed to send lesson_scheduled notification: %s", e)
+
     return ClientLessonRead.model_validate(updated)
 
 
@@ -593,6 +636,42 @@ async def complete_lesson(
     updated = await lesson_service.update_client_lesson(
         db, lesson, status="completed", outcome=outcome, notes=notes
     )
+
+    # Send training completed SMS
+    if current_user.company_id:
+        try:
+            from app.services.notification.service import on_training_completed
+            from app.models.lesson_plan import ClientLessonPlan
+            from app.models.cart import CartItem
+            from app.models.consultation import Consultation
+
+            plan_result = await db.execute(
+                select(ClientLessonPlan).where(ClientLessonPlan.id == lesson.lesson_plan_id)
+            )
+            plan = plan_result.scalar_one_or_none()
+            if plan and plan.cart_item_id:
+                ci_result = await db.execute(
+                    select(CartItem).where(CartItem.id == plan.cart_item_id)
+                )
+                cart_item = ci_result.scalar_one_or_none()
+                if cart_item:
+                    consult_result = await db.execute(
+                        select(Consultation).where(Consultation.id == cart_item.consultation_id)
+                    )
+                    consultation = consult_result.scalar_one_or_none()
+                    if consultation and consultation.phone:
+                        client_name = " ".join(
+                            filter(None, [consultation.first_name, consultation.middle_name, consultation.last_name])
+                        ) or "Client"
+                        training_type = "theory" if lesson.is_theory else "driving"
+                        lesson_num = str(lesson.day_number or "")
+                        await on_training_completed(
+                            db, current_user.company_id, consultation.phone, client_name,
+                            training_type, lesson_num,
+                        )
+        except Exception as e:
+            logger.warning("[SMS] Failed to send training_completed notification: %s", e)
+
     return ClientLessonRead.model_validate(updated)
 
 

@@ -320,3 +320,33 @@ async def on_permit_expiring(
         {"name": name, "expiry_date": expiry_date, "days_remaining": str(days_remaining)},
         trigger_event="permit_expiring",
     )
+
+
+async def on_cart_item_converted(
+    db: AsyncSession,
+    company_id,
+    phone: str,
+    name: str,
+    package_name: str,
+    amount: str,
+) -> bool:
+    return await send_template_sms(
+        db, company_id, phone, "general",
+        {"name": name, "package": package_name, "amount": amount},
+        trigger_event="cart_item_converted",
+    )
+
+
+async def on_training_completed(
+    db: AsyncSession,
+    company_id,
+    phone: str,
+    name: str,
+    training_type: str,
+    lesson_number: str,
+) -> bool:
+    return await send_template_sms(
+        db, company_id, phone, "training_completed",
+        {"name": name, "training_type": training_type, "lesson_number": lesson_number},
+        trigger_event="training_completed",
+    )

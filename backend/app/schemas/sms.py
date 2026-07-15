@@ -36,7 +36,7 @@ TRIGGER_CATEGORY_MAP = {
     "lesson_scheduled": "lesson_scheduling",
     "lesson_cancelled": "training_cancellation",
     "lesson_reminder": "lesson_reminder",
-    "training_completed": "general",
+    "training_completed": "training_completed",
     "permit_expiring": "permit_expiring",
     "manual": "custom",
 }
@@ -105,8 +105,8 @@ DEFAULT_TEMPLATES = {
     },
     "training_completed": {
         "name": "Training Completed",
-        "category": "general",
-        "body": "Dear {name},\n\nCongratulations! You have completed your {package} training.\nTotal sessions: {total_sessions}\n\nPlease contact us for your next steps.\n\nDrive Safe!",
+        "category": "training_completed",
+        "body": "Dear {name},\n\nCongratulations! You have completed your {training_type} lesson (Day {lesson_number}).\n\nKeep up the great work!\n\nDrive Safe!",
     },
 }
 

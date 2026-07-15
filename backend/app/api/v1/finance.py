@@ -1,9 +1,11 @@
+import logging
 import os
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -23,6 +25,8 @@ from app.schemas.company import (
     ExpenseUpdate,
 )
 from app.services import finance as finance_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -127,6 +131,24 @@ async def update_expense(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Expense not found",
         )
+
+    # Send expense approved SMS to the expense creator
+    if data.status == "approved" and current_user.company_id and expense.created_by_phone:
+        try:
+            from app.services.notification.service import on_expense_approved
+            creator_result = await db.execute(
+                select(User).where(User.phone == expense.created_by_phone)
+            )
+            creator = creator_result.scalar_one_or_none()
+            if creator and creator.phone:
+                creator_name = creator.name or "Staff"
+                await on_expense_approved(
+                    db, current_user.company_id, creator.phone, creator_name,
+                    expense.description or "Expense", str(expense.amount),
+                )
+        except Exception as e:
+            logger.warning("[SMS] Failed to send expense_approved notification: %s", e)
+
     return ExpenseRead.model_validate(expense)
 
 

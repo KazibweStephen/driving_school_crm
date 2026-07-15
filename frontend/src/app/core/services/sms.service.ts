@@ -67,6 +67,7 @@ export const SMS_TEMPLATE_CATEGORIES = [
   { label: 'Payment Receipt', value: 'payment_receipt' },
   { label: 'Payment Installment Reminder', value: 'payment_installment' },
   { label: 'Permit Expiring Soon', value: 'permit_expiring' },
+  { label: 'Training Completed', value: 'training_completed' },
   { label: 'General', value: 'general' },
   { label: 'Custom', value: 'custom' },
 ];
@@ -98,6 +99,7 @@ export const TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
   payment_installment: ['name', 'amount', 'due_date', 'balance', 'overdue_amount', 'days_overdue', 'total_balance'],
   permit_expiring: ['name', 'expiry_date', 'days_remaining'],
   general: ['name', 'message', 'description', 'amount', 'package', 'total_sessions'],
+  training_completed: ['name', 'training_type', 'lesson_number'],
   custom: [],
 };
 

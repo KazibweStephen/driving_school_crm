@@ -125,12 +125,19 @@ class CommissionSummaryItem(BaseModel):
     primary_recommender_amount: Decimal
     secondary_recommender_amount: Decimal
     maturity_pct: Decimal
-    matured_amount: Decimal
-    remaining_amount: Decimal
+    matured_converter_amount: Decimal
+    matured_primary_amount: Decimal
+    matured_secondary_amount: Decimal
+    remaining_converter_amount: Decimal
+    remaining_primary_amount: Decimal
+    remaining_secondary_amount: Decimal
     user_role: str
     user_share_total: Decimal
     user_share_matured: Decimal
     user_share_remaining: Decimal
+    converter_name: Optional[str] = None
+    primary_recommender_name: Optional[str] = None
+    secondary_recommender_name: Optional[str] = None
 
 
 class CommissionSummaryResponse(BaseModel):

@@ -24,7 +24,7 @@ export interface Commission {
   company_id: string;
   cart_item_id: string;
   commission_rate_id: string | null;
-  converter_id: string;
+  converter_id: string | null;
   primary_recommender_id: string | null;
   secondary_recommender_id: string | null;
   total_amount: number;
@@ -35,6 +35,7 @@ export interface Commission {
   contest_status: string | null;
   notes: string | null;
   created_at: string;
+  maturity: CommissionMaturity | null;
   converter_name: string | null;
   primary_recommender_name: string | null;
   secondary_recommender_name: string | null;
@@ -51,22 +52,43 @@ export interface CommissionListResponse {
 
 export interface CommissionMaturity {
   maturity_pct: number;
+  matured_converter_amount: number;
+  matured_primary_amount: number;
+  matured_secondary_amount: number;
+  remaining_converter_amount: number;
+  remaining_primary_amount: number;
+  remaining_secondary_amount: number;
 }
 
 export interface CommissionSummaryItem {
-  converter_id: string;
+  commission_id: string;
+  client_name: string;
+  package_name: string;
+  total_amount: number;
+  converter_amount: number;
+  primary_recommender_amount: number;
+  secondary_recommender_amount: number;
+  maturity_pct: number;
+  matured_converter_amount: number;
+  matured_primary_amount: number;
+  matured_secondary_amount: number;
+  remaining_converter_amount: number;
+  remaining_primary_amount: number;
+  remaining_secondary_amount: number;
+  user_role: string;
+  user_share_total: number;
+  user_share_matured: number;
+  user_share_remaining: number;
   converter_name: string | null;
-  total_commission: number;
-  total_paid: number;
-  total_pending: number;
-  count: number;
+  primary_recommender_name: string | null;
+  secondary_recommender_name: string | null;
 }
 
 export interface CommissionSummaryResponse {
   items: CommissionSummaryItem[];
-  grand_total: number;
-  grand_paid: number;
-  grand_pending: number;
+  total_commission: number;
+  total_matured: number;
+  total_remaining: number;
 }
 
 export interface Contest {

@@ -186,34 +186,19 @@ async def get_commission(
     maturity = await commission_service.compute_maturity(db, c)
     client_name = None
     pkg_name = None
-    if c.cart_item:
+    if c.cart_item and c.cart_item.consultation_id:
         from app.models.consultation import Consultation
         cons = await db.execute(
             select(Consultation).where(Consultation.id == c.cart_item.consultation_id)
         )
         client = cons.scalar_one_or_none()
-        client_name = client.client_name if client else None
-    if c.commission_rate and c.commission_rate.package:
-        pkg_name = c.commission_rate.package.name
-    return CommissionRead(
-        id=c.id, company_id=c.company_id, cart_item_id=c.cart_item_id,
-        commission_rate_id=c.commission_rate_id,
-        converter_id=c.converter_id,
-        primary_recommender_id=c.primary_recommender_id,
-        secondary_recommender_id=c.secondary_recommender_id,
-        total_amount=c.total_amount,
-        converter_amount=c.converter_amount,
-        primary_recommender_amount=c.primary_recommender_amount,
-        secondary_recommender_amount=c.secondary_recommender_amount,
-        status=c.status.value if hasattr(c.status, 'value') else str(c.status),
-        contest_status=c.contest_status.value if c.contest_status and hasattr(c.contest_status, 'value') else str(c.contest_status) if c.contest_status else None,
-        notes=c.notes, created_at=c.created_at,
-        maturity=CommissionMaturity(**maturity),
-        converter_name=c.converter.name if c.converter else None,
-        primary_recommender_name=c.primary_recommender.name if c.primary_recommender else None,
-        secondary_recommender_name=c.secondary_recommender.name if c.secondary_recommender else None,
-        client_name=client_name, package_name=pkg_name,
-    )
+        if client:
+            client_name = " ".join(filter(None, [client.first_name, client.middle_name, client.last_name]))
+    if c.cart_item and c.cart_item.package_id:
+        from app.models.product import Package
+        pkg_res = await db.execute(select(Package).where(Package.id == c.cart_item.package_id))
+        pkg = pkg_res.scalar_one_or_none()
+        pkg_name = pkg.name if pkg else None
     return CommissionRead(
         id=c.id, company_id=c.company_id, cart_item_id=c.cart_item_id,
         commission_rate_id=c.commission_rate_id,

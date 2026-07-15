@@ -30,7 +30,7 @@ export class ReportsCmp implements OnInit {
 
   // Commission report
   commissionReport = signal<CommissionSummaryItem[]>([]);
-  commissionTotals = signal<{ grand_total: number; grand_paid: number; grand_pending: number }>({ grand_total: 0, grand_paid: 0, grand_pending: 0 });
+  commissionTotals = signal<{ total_commission: number; total_matured: number; total_remaining: number }>({ total_commission: 0, total_matured: 0, total_remaining: 0 });
 
   // Fuel report
   fuelReport = signal<FuelReportItem[]>([]);
@@ -63,7 +63,7 @@ export class ReportsCmp implements OnInit {
     this.loading.set(true);
     this.commissionSvc.getSummary().subscribe(r => {
       this.commissionReport.set(r.items);
-      this.commissionTotals.set({ grand_total: r.grand_total, grand_paid: r.grand_paid, grand_pending: r.grand_pending });
+      this.commissionTotals.set({ total_commission: r.total_commission, total_matured: r.total_matured, total_remaining: r.total_remaining });
       this.loading.set(false);
     });
   }

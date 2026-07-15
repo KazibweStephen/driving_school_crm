@@ -132,7 +132,7 @@ async def list_commissions(
             joinedload(Commission.primary_recommender),
             joinedload(Commission.secondary_recommender),
             joinedload(Commission.cart_item),
-            joinedload(Commission.commission_rate),
+            joinedload(Commission.commission_rate).joinedload(CommissionRate.packages),
         )
     )
     if user_role != "super_user" and company_id is not None:
@@ -309,7 +309,10 @@ async def get_user_commission_summary(
         select(Commission)
         .options(
             joinedload(Commission.cart_item),
-            joinedload(Commission.commission_rate),
+            joinedload(Commission.commission_rate).joinedload(CommissionRate.packages),
+            joinedload(Commission.converter),
+            joinedload(Commission.primary_recommender),
+            joinedload(Commission.secondary_recommender),
         )
         .where(
             (Commission.converter_id == user_id) |
@@ -350,30 +353,45 @@ async def get_user_commission_summary(
         total_matured += share_matured
         total_remaining += share_remaining
 
-        consultation = await db.execute(
-            select(Consultation).where(Consultation.id == c.cart_item.consultation_id)
-        )
-        client = consultation.scalar_one_or_none()
+        client_name = None
+        if c.cart_item and c.cart_item.consultation_id:
+            cons_result = await db.execute(
+                select(Consultation).where(Consultation.id == c.cart_item.consultation_id)
+            )
+            client = cons_result.scalar_one_or_none()
+            if client:
+                client_name = " ".join(filter(None, [client.first_name, client.middle_name, client.last_name]))
 
         pkg_name = None
         if c.commission_rate and c.commission_rate.packages:
             pkg_name = ", ".join(p.name for p in c.commission_rate.packages)
 
+        converter_name = c.converter.name if c.converter else None
+        primary_name = c.primary_recommender.name if c.primary_recommender else None
+        secondary_name = c.secondary_recommender.name if c.secondary_recommender else None
+
         items.append({
             "commission_id": c.id,
-            "client_name": client.client_name if client else "Unknown",
+            "client_name": client_name or "Unknown",
             "package_name": pkg_name or "Unknown",
             "total_amount": c.total_amount,
             "converter_amount": c.converter_amount,
             "primary_recommender_amount": c.primary_recommender_amount,
             "secondary_recommender_amount": c.secondary_recommender_amount,
             "maturity_pct": maturity["maturity_pct"],
-            "matured_amount": share_matured,
-            "remaining_amount": share_remaining,
+            "matured_converter_amount": maturity["matured_converter_amount"],
+            "matured_primary_amount": maturity["matured_primary_amount"],
+            "matured_secondary_amount": maturity["matured_secondary_amount"],
+            "remaining_converter_amount": maturity["remaining_converter_amount"],
+            "remaining_primary_amount": maturity["remaining_primary_amount"],
+            "remaining_secondary_amount": maturity["remaining_secondary_amount"],
             "user_role": role,
             "user_share_total": share_total,
             "user_share_matured": share_matured,
             "user_share_remaining": share_remaining,
+            "converter_name": converter_name,
+            "primary_recommender_name": primary_name,
+            "secondary_recommender_name": secondary_name,
         })
 
     return {

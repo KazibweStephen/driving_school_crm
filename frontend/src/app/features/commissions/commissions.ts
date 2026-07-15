@@ -33,7 +33,7 @@ export class CommissionsCmp implements OnInit {
   rates = signal<CommissionRate[]>([]);
   commissions = signal<Commission[]>([]);
   summary = signal<CommissionSummaryItem[]>([]);
-  summaryTotals = signal<{ grand_total: number; grand_paid: number; grand_pending: number }>({ grand_total: 0, grand_paid: 0, grand_pending: 0 });
+  summaryTotals = signal<{ total_commission: number; total_matured: number; total_remaining: number }>({ total_commission: 0, total_matured: 0, total_remaining: 0 });
   packages = signal<Package[]>([]);
 
   showRateDialog = signal(false);
@@ -87,7 +87,7 @@ export class CommissionsCmp implements OnInit {
     this.loading.set(true);
     this.svc.getSummary().subscribe(r => {
       this.summary.set(r.items);
-      this.summaryTotals.set({ grand_total: r.grand_total, grand_paid: r.grand_paid, grand_pending: r.grand_pending });
+      this.summaryTotals.set({ total_commission: r.total_commission, total_matured: r.total_matured, total_remaining: r.total_remaining });
       this.loading.set(false);
     });
   }

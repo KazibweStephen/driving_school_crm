@@ -75,9 +75,11 @@
               <tr>
                 <th>Client</th>
                 <th>Package</th>
-                <th>Converter</th>
-                <th>Recommender</th>
                 <th>Total</th>
+                <th>Converter</th>
+                <th>Primary</th>
+                <th>Secondary</th>
+                <th>Paid %</th>
                 <th>Status</th>
                 <th>Date</th>
                 <th>Actions</th>
@@ -87,9 +89,28 @@
               <tr>
                 <td>{{ c.client_name || '-' }}</td>
                 <td>{{ c.package_name || '-' }}</td>
-                <td>{{ c.converter_name || c.converter_id }}</td>
-                <td>{{ c.primary_recommender_name || c.primary_recommender_id || '-' }}</td>
                 <td>{{ c.total_amount | number:'1.0-0' }}</td>
+                <td>
+                  <div class="text-sm">{{ c.converter_name || c.converter_id || '-' }}</div>
+                  <div class="text-xs text-gray-500">Full: {{ c.converter_amount | number:'1.0-0' }}</div>
+                  <div class="text-xs text-green-600">Earned: {{ c.maturity?.matured_converter_amount || 0 | number:'1.0-0' }}</div>
+                </td>
+                <td>
+                  <div class="text-sm">{{ c.primary_recommender_name || c.primary_recommender_id || '-' }}</div>
+                  <div class="text-xs text-gray-500">Full: {{ c.primary_recommender_amount | number:'1.0-0' }}</div>
+                  <div class="text-xs text-green-600">Earned: {{ c.maturity?.matured_primary_amount || 0 | number:'1.0-0' }}</div>
+                </td>
+                <td>
+                  <div class="text-sm">{{ c.secondary_recommender_name || c.secondary_recommender_id || '-' }}</div>
+                  <div class="text-xs text-gray-500">Full: {{ c.secondary_recommender_amount | number:'1.0-0' }}</div>
+                  <div class="text-xs text-green-600">Earned: {{ c.maturity?.matured_secondary_amount || 0 | number:'1.0-0' }}</div>
+                </td>
+                <td>
+                  <span class="font-semibold" [class.text-green-600]="c.maturity?.maturity_pct >= 100"
+                    [class.text-amber-600]="c.maturity?.maturity_pct > 0 && c.maturity?.maturity_pct < 100">
+                    {{ c.maturity?.maturity_pct || 0 | number:'1.0-0' }}%
+                  </span>
+                </td>
                 <td>
                   <p-tag [value]="c.status" [severity]="
                     c.status === 'paid' ? 'success' :
@@ -113,36 +134,67 @@
         <div class="mt-4">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             <div class="rounded-xl border bg-white p-4 shadow-sm">
-              <p class="text-sm text-gray-500">Grand Total</p>
-              <p class="text-2xl font-bold">{{ summaryTotals().grand_total | number:'1.0-0' }}</p>
+              <p class="text-sm text-gray-500">Total Commission</p>
+              <p class="text-2xl font-bold">{{ summaryTotals().total_commission | number:'1.0-0' }}</p>
             </div>
             <div class="rounded-xl border bg-white p-4 shadow-sm">
-              <p class="text-sm text-gray-500">Paid</p>
-              <p class="text-2xl font-bold text-green-600">{{ summaryTotals().grand_paid | number:'1.0-0' }}</p>
+              <p class="text-sm text-gray-500">Matured (Paid)</p>
+              <p class="text-2xl font-bold text-green-600">{{ summaryTotals().total_matured | number:'1.0-0' }}</p>
             </div>
             <div class="rounded-xl border bg-white p-4 shadow-sm">
-              <p class="text-sm text-gray-500">Pending</p>
-              <p class="text-2xl font-bold text-amber-600">{{ summaryTotals().grand_pending | number:'1.0-0' }}</p>
+              <p class="text-sm text-gray-500">Remaining (Pending)</p>
+              <p class="text-2xl font-bold text-amber-600">{{ summaryTotals().total_remaining | number:'1.0-0' }}</p>
             </div>
           </div>
 
           <p-table [value]="summary()" [loading]="loading()">
             <ng-template pTemplate="header">
               <tr>
-                <th>Converter</th>
-                <th>Count</th>
+                <th>Client</th>
+                <th>Package</th>
                 <th>Total</th>
-                <th>Paid</th>
-                <th>Pending</th>
+                <th>Converter (Full / Earned)</th>
+                <th>Primary (Full / Earned)</th>
+                <th>Secondary (Full / Earned)</th>
+                <th>Paid %</th>
+                <th>My Role</th>
+                <th>My Share</th>
               </tr>
             </ng-template>
             <ng-template pTemplate="body" let-r>
               <tr>
-                <td>{{ r.converter_name || r.converter_id }}</td>
-                <td>{{ r.count }}</td>
-                <td>{{ r.total_commission | number:'1.0-0' }}</td>
-                <td class="text-green-600">{{ r.total_paid | number:'1.0-0' }}</td>
-                <td class="text-amber-600">{{ r.total_pending | number:'1.0-0' }}</td>
+                <td>{{ r.client_name }}</td>
+                <td>{{ r.package_name }}</td>
+                <td>{{ r.total_amount | number:'1.0-0' }}</td>
+                <td>
+                  <div class="text-sm">{{ r.converter_name || '-' }}</div>
+                  <div class="text-xs text-gray-500">{{ r.converter_amount | number:'1.0-0' }}</div>
+                  <div class="text-xs text-green-600">Earned: {{ r.matured_converter_amount | number:'1.0-0' }}</div>
+                </td>
+                <td>
+                  <div class="text-sm">{{ r.primary_recommender_name || '-' }}</div>
+                  <div class="text-xs text-gray-500">{{ r.primary_recommender_amount | number:'1.0-0' }}</div>
+                  <div class="text-xs text-green-600">Earned: {{ r.matured_primary_amount | number:'1.0-0' }}</div>
+                </td>
+                <td>
+                  <div class="text-sm">{{ r.secondary_recommender_name || '-' }}</div>
+                  <div class="text-xs text-gray-500">{{ r.secondary_recommender_amount | number:'1.0-0' }}</div>
+                  <div class="text-xs text-green-600">Earned: {{ r.matured_secondary_amount | number:'1.0-0' }}</div>
+                </td>
+                <td>
+                  <span class="font-semibold" [class.text-green-600]="r.maturity_pct >= 100"
+                    [class.text-amber-600]="r.maturity_pct > 0 && r.maturity_pct < 100">
+                    {{ r.maturity_pct | number:'1.0-0' }}%
+                  </span>
+                </td>
+                <td>
+                  <p-tag [value]="r.user_role.replace('_', ' ')" severity="info" />
+                </td>
+                <td>
+                  <div class="font-semibold">{{ r.user_share_total | number:'1.0-0' }}</div>
+                  <div class="text-xs text-green-600">Earned: {{ r.user_share_matured | number:'1.0-0' }}</div>
+                  <div class="text-xs text-amber-600">Pending: {{ r.user_share_remaining | number:'1.0-0' }}</div>
+                </td>
               </tr>
             </ng-template>
           </p-table>

@@ -1,7 +1,7 @@
 import asyncio
 import sys
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.core.database import async_session
 from app.core.security import hash_pin
@@ -15,6 +15,16 @@ async def seed():
         )
         if result.scalar_one_or_none():
             print("Super user already exists, skipping seed.")
+            return
+
+        old = await db.execute(
+            select(User).where(User.phone == "256700000000", User.role == UserRole.SUPER_USER)
+        )
+        old_user = old.scalar_one_or_none()
+        if old_user:
+            old_user.phone = "0782832711"
+            await db.commit()
+            print("Updated super user phone from 256700000000 to 0782832711")
             return
 
         user = User(

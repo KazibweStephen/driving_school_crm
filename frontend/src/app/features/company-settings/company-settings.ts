@@ -12,9 +12,11 @@ import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { SelectModule } from 'primeng/select';
 import { TabsModule } from 'primeng/tabs';
+import { InputNumberModule } from 'primeng/inputnumber';
 import { TooltipModule } from 'primeng/tooltip';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { AuthService } from '../../core/auth/auth.service';
+import { CurrencyService } from '../../core/services/currency.service';
 import {
   SmsService,
   SmsSettings,
@@ -30,9 +32,9 @@ import { CompanyService, Company } from '../../core/services/company.service';
 @Component({
   selector: 'app-company-settings',
   imports: [
-    CommonModule, FormsModule, ButtonModule, TableModule, DialogModule,
-    InputTextModule, TextareaModule, ToggleSwitchModule, TagModule, ToastModule,
-    ConfirmDialogModule, SelectModule, TabsModule, TooltipModule,
+    CommonModule, FormsModule, ButtonModule, TableModule, DialogModule, InputTextModule,
+    TextareaModule, ToggleSwitchModule, TagModule, ToastModule, ConfirmDialogModule,
+    SelectModule, TabsModule, InputNumberModule, TooltipModule,
   ],
   providers: [ConfirmationService, MessageService],
   template: `
@@ -133,6 +135,16 @@ import { CompanyService, Company } from '../../core/services/company.service';
                     Logging mode: All SMS messages will be logged to the server console instead of being sent. No credentials needed.
                   </div>
                 }
+
+                <div class="mt-4 mb-4">
+                  <label class="mb-1 block text-sm font-medium text-gray-700">Rate per SMS</label>
+                  <div class="flex items-center gap-2">
+                    <p-inputNumber [(ngModel)]="settingsForm.rate_per_sms" [min]="0" [step]="0.01"
+                      mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="4"
+                      styleClass="w-40" inputStyleClass="w-full" />
+                    <span class="text-sm text-gray-500">Cost per 160-character SMS unit ({{ currencyService.symbol() }})</span>
+                  </div>
+                </div>
 
                 <div class="mt-4 flex gap-2">
                   <p-button label="Save Settings" [loading]="savingSettings()" (onClick)="saveSettings()" />
@@ -275,6 +287,7 @@ export class CompanySettingsCmp implements OnInit {
     egosms_sender: '',
     twilio_account_sid: '',
     twilio_phone_number: '',
+    rate_per_sms: 0,
   };
 
   egosmsPasswordInput = '';
@@ -318,6 +331,7 @@ export class CompanySettingsCmp implements OnInit {
     private companyService: CompanyService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
+    public currencyService: CurrencyService,
   ) {}
 
   ngOnInit() {
@@ -368,6 +382,7 @@ export class CompanySettingsCmp implements OnInit {
           egosms_sender: res.egosms_sender,
           twilio_account_sid: res.twilio_account_sid,
           twilio_phone_number: res.twilio_phone_number,
+          rate_per_sms: res.rate_per_sms || 0,
         };
         this.egosmsPasswordInput = '';
         this.twilioTokenInput = '';
@@ -390,6 +405,7 @@ export class CompanySettingsCmp implements OnInit {
       egosms_sender: '',
       twilio_account_sid: '',
       twilio_phone_number: '',
+      rate_per_sms: 0,
     };
     this.egosmsPasswordInput = '';
     this.twilioTokenInput = '';
@@ -426,6 +442,7 @@ export class CompanySettingsCmp implements OnInit {
         egosms_sender: this.settingsForm.egosms_sender,
         twilio_account_sid: this.settingsForm.twilio_account_sid,
         twilio_phone_number: this.settingsForm.twilio_phone_number,
+        rate_per_sms: this.settingsForm.rate_per_sms || 0,
       };
       if (this.egosmsPasswordInput) {
         payload.egosms_password = this.egosmsPasswordInput;

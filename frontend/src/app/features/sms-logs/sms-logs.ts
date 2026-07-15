@@ -1,5 +1,5 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
@@ -16,7 +16,7 @@ import { CurrencyService } from '../../core/services/currency.service';
 @Component({
   selector: 'app-sms-logs',
   imports: [
-    CommonModule, FormsModule, ButtonModule, TableModule, TagModule,
+    CommonModule, DecimalPipe, FormsModule, ButtonModule, TableModule, TagModule,
     ToastModule, InputTextModule, SelectModule, TooltipModule,
   ],
   providers: [MessageService],
@@ -38,6 +38,12 @@ import { CurrencyService } from '../../core/services/currency.service';
         <p-button label="Clear" severity="secondary" text (onClick)="clearFilters()" />
       </div>
 
+      <div class="flex gap-4 mb-4 text-sm">
+        <span class="px-3 py-1.5 bg-gray-100 rounded">Total SMS: <strong>{{ total() }}</strong></span>
+        <span class="px-3 py-1.5 bg-gray-100 rounded">Total Units: <strong>{{ totalUnits() }}</strong></span>
+        <span class="px-3 py-1.5 bg-gray-100 rounded">Total Cost: <strong>{{ currencyService.symbol() }} {{ totalCost() | number:'1.2-2' }}</strong></span>
+      </div>
+
       <p-table [value]="logs()" [loading]="loading()" dataKey="id"
         [rows]="10" [paginator]="true" [rowsPerPageOptions]="[10,25,50]"
         styleClass="p-datatable-sm" [totalRecords]="total()"
@@ -48,6 +54,8 @@ import { CurrencyService } from '../../core/services/currency.service';
             <th>Phone</th>
             <th>Message</th>
             <th>Length</th>
+            <th>Units</th>
+            <th>Cost</th>
             <th>Provider</th>
             <th>Trigger</th>
             <th>Status</th>
@@ -61,6 +69,8 @@ import { CurrencyService } from '../../core/services/currency.service';
               <span [pTooltip]="log.message" tooltipPosition="top" class="truncate block max-w-xs">{{ log.message }}</span>
             </td>
             <td class="text-center">{{ log.message_length }}</td>
+            <td class="text-center">{{ log.sms_units }}</td>
+            <td>{{ currencyService.symbol() }} {{ log.cost | number:'1.2-2' }}</td>
             <td><p-tag [value]="log.provider" severity="info" /></td>
             <td>
               @if (log.trigger_event) {
@@ -76,7 +86,7 @@ import { CurrencyService } from '../../core/services/currency.service';
         </ng-template>
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="7" class="text-center text-gray-500 py-8">No SMS logs found</td>
+            <td colspan="9" class="text-center text-gray-500 py-8">No SMS logs found</td>
           </tr>
         </ng-template>
       </p-table>
@@ -87,10 +97,13 @@ export class SmsLogsCmp implements OnInit {
   private smsService = inject(SmsService);
   private authService = inject(AuthService);
   private messageService = inject(MessageService);
+  currencyService = inject(CurrencyService);
 
   logs = signal<SmsLog[]>([]);
   loading = signal(false);
   total = signal(0);
+  totalUnits = signal(0);
+  totalCost = signal(0);
   companyId: string | null = null;
 
   filterPhone = '';
@@ -143,6 +156,8 @@ export class SmsLogsCmp implements OnInit {
       if (res) {
         this.logs.set(res.logs);
         this.total.set(res.total);
+        this.totalUnits.set(res.total_units);
+        this.totalCost.set(res.total_cost);
       }
     } catch {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load SMS logs' });

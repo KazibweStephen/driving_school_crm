@@ -63,6 +63,7 @@ async def upsert_sms_settings(
         twilio_account_sid=data.twilio_account_sid,
         twilio_auth_token=data.twilio_auth_token,
         twilio_phone_number=data.twilio_phone_number,
+        rate_per_sms=data.rate_per_sms,
     )
     return CompanySmsSettingsRead.model_validate(settings)
 
@@ -237,9 +238,21 @@ async def list_sms_logs(
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
+    units_query = sa_select(sqlfunc.coalesce(sqlfunc.sum(SmsLog.sms_units), 0)).where(SmsLog.company_id == company_id)
+    cost_query = sa_select(sqlfunc.coalesce(sqlfunc.sum(SmsLog.cost), 0.0)).where(SmsLog.company_id == company_id)
+    if status:
+        units_query = units_query.where(SmsLog.status == status)
+        cost_query = cost_query.where(SmsLog.status == status)
+    if trigger_event:
+        units_query = units_query.where(SmsLog.trigger_event == trigger_event)
+        cost_query = cost_query.where(SmsLog.trigger_event == trigger_event)
+
+    total_units = (await db.execute(units_query)).scalar() or 0
+    total_cost = float((await db.execute(cost_query)).scalar() or 0.0)
+
     query = query.order_by(SmsLog.sent_at.desc())
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     logs = [SmsLogRead.model_validate(row) for row in result.scalars().all()]
 
-    return SmsLogListResponse(logs=logs, total=total)
+    return SmsLogListResponse(logs=logs, total=total, total_units=total_units, total_cost=total_cost)

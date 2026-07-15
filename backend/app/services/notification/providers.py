@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 import httpx
@@ -11,17 +12,23 @@ def _log_sms(msg: str) -> None:
     print(f"[SMS] {msg}", flush=True)
 
 
+@dataclass
+class SmsSendResult:
+    success: bool
+    response: str = ""
+
+
 @runtime_checkable
 class SmsProvider(Protocol):
-    async def send(self, phone: str, message: str) -> bool: ...
+    async def send(self, phone: str, message: str) -> SmsSendResult: ...
 
 
 class LoggingProvider:
     """Default provider. Logs messages instead of sending. Used for testing."""
 
-    async def send(self, phone: str, message: str) -> bool:
-        logger.info("[SMS] To=%s | %s", phone, message)
-        return True
+    async def send(self, phone: str, message: str) -> SmsSendResult:
+        _log_sms(f"To={phone} | {message}")
+        return SmsSendResult(success=True, response="logged")
 
 
 class EgoSmsProvider:
@@ -39,7 +46,7 @@ class EgoSmsProvider:
         self.password = password
         self.sender = sender
 
-    async def send(self, phone: str, message: str) -> bool:
+    async def send(self, phone: str, message: str) -> SmsSendResult:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 params = {
@@ -54,12 +61,12 @@ class EgoSmsProvider:
                 _log_sms(f"egoSMS response {resp.status_code}: {body}")
                 if "error" in body.lower() or "empty" in body.lower() or "wrong" in body.lower():
                     _log_sms(f"egoSMS error: {body}")
-                    return False
+                    return SmsSendResult(success=False, response=body)
                 _log_sms(f"egoSMS sent to {phone} OK")
-                return True
+                return SmsSendResult(success=True, response=body)
         except Exception as e:
             _log_sms(f"egoSMS FAILED to {phone}: {e}")
-            return False
+            return SmsSendResult(success=False, response=str(e))
 
 
 class TwilioProvider:
@@ -75,20 +82,20 @@ class TwilioProvider:
         self.auth_token = auth_token
         self.phone_number = phone_number
 
-    async def send(self, phone: str, message: str) -> bool:
+    async def send(self, phone: str, message: str) -> SmsSendResult:
         try:
             from twilio.rest import Client
             client = Client(self.account_sid, self.auth_token)
-            client.messages.create(
+            msg = client.messages.create(
                 body=message,
                 from_=self.phone_number,
                 to=phone,
             )
-            logger.info("[SMS:Twilio] Sent to %s OK", phone)
-            return True
+            _log_sms(f"Twilio sent to {phone} OK sid={msg.sid}")
+            return SmsSendResult(success=True, response=f"sid={msg.sid}")
         except Exception as e:
-            logger.error("[SMS:Twilio] Failed to send to %s: %s", phone, e)
-            return False
+            _log_sms(f"Twilio FAILED to {phone}: {e}")
+            return SmsSendResult(success=False, response=str(e))
 
 
 def get_provider(

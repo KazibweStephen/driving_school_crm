@@ -111,6 +111,7 @@ class CompanySmsSettingsUpdate(BaseModel):
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     twilio_phone_number: str | None = None
+    rate_per_sms: float | None = None
 
 
 class CompanySmsSettingsRead(BaseModel):
@@ -123,6 +124,7 @@ class CompanySmsSettingsRead(BaseModel):
     egosms_sender: str
     twilio_account_sid: str
     twilio_phone_number: str
+    rate_per_sms: float
     created_at: datetime
     updated_at: datetime
 
@@ -193,6 +195,9 @@ class SmsLogRead(BaseModel):
     template_id: uuid.UUID | None
     status: str
     error_message: str | None
+    provider_response: str | None
+    sms_units: int
+    cost: float
     sent_at: datetime
 
     model_config = {"from_attributes": True}
@@ -201,3 +206,5 @@ class SmsLogRead(BaseModel):
 class SmsLogListResponse(BaseModel):
     logs: list[SmsLogRead]
     total: int
+    total_units: int
+    total_cost: float

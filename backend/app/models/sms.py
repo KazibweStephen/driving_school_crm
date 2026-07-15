@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -88,6 +88,9 @@ class SmsLog(Base):
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="sent")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sms_units: Mapped[int] = mapped_column(nullable=False, default=1)
+    cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     sent_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

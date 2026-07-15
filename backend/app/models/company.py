@@ -302,6 +302,9 @@ class CompanySmsSettings(Base):
     twilio_auth_token: Mapped[str] = mapped_column(String(100), default="", nullable=False)
     twilio_phone_number: Mapped[str] = mapped_column(String(20), default="", nullable=False)
 
+    # Cost tracking
+    rate_per_sms: Mapped[float] = mapped_column(default=0.0, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

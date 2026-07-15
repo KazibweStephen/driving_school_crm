@@ -1,10 +1,11 @@
 import logging
+import math
 from enum import Enum
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.company import Company, CompanySmsSettings
+from app.models.company import Branch, Company, CompanySmsSettings, Expense, ExpenseStatus
 from app.models.sms import SmsLog
 from app.services.notification.providers import (
     LoggingProvider,
@@ -51,6 +52,9 @@ def _normalize_phone(phone: str, currency: str) -> str:
     return phone
 
 
+SMS_CHARS_PER_UNIT = 160
+
+
 async def send_sms(
     db: AsyncSession,
     company_id,
@@ -63,32 +67,62 @@ async def send_sms(
     """Send an SMS using the company's configured provider and log it."""
     currency = "UGX"
     provider_name = "logging"
+    rate_per_sms = 0.0
     if company_id:
         company = await db.get(Company, company_id)
         if company:
             currency = company.currency
+        settings_result = await db.execute(
+            select(CompanySmsSettings).where(CompanySmsSettings.company_id == company_id)
+        )
+        sms_settings = settings_result.scalar_one_or_none()
+        if sms_settings:
+            rate_per_sms = sms_settings.rate_per_sms or 0.0
     phone = _normalize_phone(phone, currency)
 
     provider = await _get_provider_for_company(db, company_id)
     if not isinstance(provider, LoggingProvider):
         provider_name = type(provider).__name__
 
-    ok = await provider.send(phone, message)
+    result = await provider.send(phone, message)
+
+    message_length = len(message)
+    sms_units = math.ceil(message_length / SMS_CHARS_PER_UNIT) if message_length > 0 else 1
+    cost = round(sms_units * rate_per_sms, 2)
 
     log = SmsLog(
         company_id=company_id,
         phone=phone,
         message=message,
-        message_length=len(message),
+        message_length=message_length,
         provider=provider_name,
         trigger_event=trigger_event,
         template_id=template_id,
-        status="sent" if ok else "failed",
-        error_message=None if ok else "Provider returned false",
+        status="sent" if result.success else "failed",
+        error_message=None if result.success else result.response,
+        provider_response=result.response,
+        sms_units=sms_units,
+        cost=cost,
     )
     db.add(log)
+
+    if result.success and cost > 0 and company_id:
+        branch_result = await db.execute(
+            select(Branch.id).where(Branch.company_id == company_id, Branch.is_active == True).limit(1)
+        )
+        branch_row = branch_result.first()
+        if branch_row:
+            expense = Expense(
+                branch_id=branch_row[0],
+                amount=cost,
+                description=f"SMS: {sms_units} unit(s) to {phone} ({trigger_event or 'manual'})",
+                category="SMS",
+                status=ExpenseStatus.PENDING,
+            )
+            db.add(expense)
+
     await db.flush()
-    return ok
+    return result.success
 
 
 async def send_template_sms(

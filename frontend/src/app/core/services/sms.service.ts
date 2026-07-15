@@ -12,6 +12,7 @@ export interface SmsSettings {
   egosms_sender: string;
   twilio_account_sid: string;
   twilio_phone_number: string;
+  rate_per_sms: number;
   created_at: string;
   updated_at: string;
 }
@@ -26,6 +27,7 @@ export interface SmsSettingsUpdate {
   twilio_account_sid?: string;
   twilio_auth_token?: string;
   twilio_phone_number?: string;
+  rate_per_sms?: number;
 }
 
 export interface SmsTemplate {
@@ -110,12 +112,17 @@ export interface SmsLog {
   template_id: string | null;
   status: string;
   error_message: string | null;
+  provider_response: string | null;
+  sms_units: number;
+  cost: number;
   sent_at: string;
 }
 
 export interface SmsLogListResponse {
   logs: SmsLog[];
   total: number;
+  total_units: number;
+  total_cost: number;
 }
 
 @Injectable({ providedIn: 'root' })

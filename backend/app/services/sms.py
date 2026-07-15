@@ -33,6 +33,7 @@ async def upsert_company_sms_settings(
     twilio_account_sid: str | None = None,
     twilio_auth_token: str | None = None,
     twilio_phone_number: str | None = None,
+    rate_per_sms: float | None = None,
 ) -> CompanySmsSettings:
     existing = await get_company_sms_settings(db, company_id)
     if existing:
@@ -54,6 +55,8 @@ async def upsert_company_sms_settings(
             existing.twilio_auth_token = twilio_auth_token
         if twilio_phone_number is not None:
             existing.twilio_phone_number = twilio_phone_number
+        if rate_per_sms is not None:
+            existing.rate_per_sms = rate_per_sms
         await db.flush()
         await db.refresh(existing)
         return existing
@@ -69,6 +72,7 @@ async def upsert_company_sms_settings(
         twilio_account_sid=twilio_account_sid or "",
         twilio_auth_token=twilio_auth_token or "",
         twilio_phone_number=twilio_phone_number or "",
+        rate_per_sms=rate_per_sms or 0.0,
     )
     db.add(settings)
     await db.flush()

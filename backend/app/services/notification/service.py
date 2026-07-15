@@ -4,7 +4,7 @@ from enum import Enum
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.company import CompanySmsSettings
+from app.models.company import Company, CompanySmsSettings
 from app.services.notification.providers import (
     LoggingProvider,
     get_provider,
@@ -43,6 +43,13 @@ async def _get_provider_for_company(db: AsyncSession, company_id):
     )
 
 
+def _normalize_phone(phone: str, currency: str) -> str:
+    """Normalize phone number based on company currency/country."""
+    if currency == "UGX" and phone.startswith("0"):
+        return "256" + phone[1:]
+    return phone
+
+
 async def send_sms(
     db: AsyncSession,
     company_id,
@@ -50,6 +57,12 @@ async def send_sms(
     message: str,
 ) -> bool:
     """Send an SMS using the company's configured provider."""
+    currency = "UGX"
+    if company_id:
+        company = await db.get(Company, company_id)
+        if company:
+            currency = company.currency
+    phone = _normalize_phone(phone, currency)
     provider = await _get_provider_for_company(db, company_id)
     return await provider.send(phone, message)
 

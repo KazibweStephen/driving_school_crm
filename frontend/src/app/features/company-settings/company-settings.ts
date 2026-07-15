@@ -60,14 +60,14 @@ import { CompanyService, Company } from '../../core/services/company.service';
           }
         </div>
       } @else {
-        <p-tabs [value]="0">
+        <p-tabs value="provider">
           <p-tablist>
-            <p-tab value="0">SMS Provider</p-tab>
-            <p-tab value="1">SMS Templates</p-tab>
+            <p-tab value="provider">SMS Provider</p-tab>
+            <p-tab value="templates">SMS Templates</p-tab>
           </p-tablist>
           <p-tabpanels>
             <!-- SMS Provider Tab -->
-            <p-tabpanel [value]="0">
+            <p-tabpanel value="provider">
 
               <div class="max-w-2xl">
                 <div class="flex items-center gap-3 mb-6">
@@ -142,7 +142,7 @@ import { CompanyService, Company } from '../../core/services/company.service';
             </p-tabpanel>
 
             <!-- SMS Templates Tab -->
-            <p-tabpanel [value]="1">
+            <p-tabpanel value="templates">
 
               <div class="flex items-center justify-between mb-4">
                 <div class="flex gap-2">

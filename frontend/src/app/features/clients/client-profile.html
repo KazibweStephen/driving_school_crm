@@ -2308,20 +2308,23 @@
 
             <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">Amount Paid</label>
-              <p-inputNumber [(ngModel)]="completeSalePaidAmount" (onInput)="onCompleteSalePaidChange()" [min]="0" [max]="completeSaleTotal()" [placeholder]="'0'" class="w-full" inputStyleClass="w-full px-3 py-2 text-sm" />
+              <p-inputNumber [ngModel]="completeSalePaidAmount()" (onInput)="completeSalePaidAmount.set($event.value ?? 0); onCompleteSalePaidChange()" [min]="0" [max]="completeSaleTotal()" [placeholder]="'0'" class="w-full" inputStyleClass="w-full px-3 py-2 text-sm" />
             </div>
 
-            @if (completeSaleBalance(); as balance) {
-              @if (balance > 0) {
+            @if (completeSaleRemainingBalance(); as remaining) {
+              @if (remaining > 0) {
                 <div class="rounded-lg bg-amber-50 p-3 text-sm">
                   <div class="flex justify-between">
                     <span class="text-gray-600">Remaining Balance</span>
-                    <span class="font-semibold text-amber-700">{{ balance | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
+                    <span class="font-semibold text-amber-700">{{ remaining | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
                   </div>
                 </div>
 
                 <div class="flex flex-col gap-2">
                   <label class="mb-1 block text-sm font-medium text-gray-700">Installment Schedule</label>
+                  @if (completeSaleInstallments.length === 0) {
+                    <p class="text-xs text-gray-400">Enter a partial "Amount Paid" above, then add installments for the balance.</p>
+                  }
                   @for (inst of completeSaleInstallments; track $index) {
                     <div class="flex items-center gap-2">
                       <p-datepicker [(ngModel)]="inst.due_date" dateFormat="yy-mm-dd" appendTo="body" placeholder="Due date" inputStyleClass="px-3 py-2 text-sm w-full" />

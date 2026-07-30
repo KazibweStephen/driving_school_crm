@@ -125,6 +125,7 @@ export class ClientProfile implements OnInit {
   completeSaleInstallments: { due_date: Date | null; amount: number }[] = [];
   completeSaleTotal = signal<number>(0);
   completeSaleBalance = signal<number>(0);
+  completeSaleRemainingBalance = signal<number>(0);
   completeSaleReceiptNumber = signal('');
   completeSaleSystemReceiptNumber = signal('');
   completeSaleDocumentDate = signal<Date | null>(null);
@@ -2454,7 +2455,8 @@ export class ClientProfile implements OnInit {
     this.completeSaleTarget.set(ci);
     this.completeSaleTotal.set(total);
     this.completeSalePaidAmount.set(total);
-    this.completeSaleBalance.set(0);
+    this.completeSaleBalance.set(total);
+    this.completeSaleRemainingBalance.set(0);
     this.completeSaleInstallments = [];
     this.completeSaleReceiptNumber.set('');
     this.completeSaleSystemReceiptNumber.set('');
@@ -2467,18 +2469,17 @@ export class ClientProfile implements OnInit {
   onCompleteSalePaidChange() {
     const total = this.completeSaleTotal();
     const paid = this.completeSalePaidAmount();
-    const balance = Math.max(0, total - (paid || 0));
-    this.completeSaleBalance.set(balance);
+    const remaining = Math.max(0, total - (paid || 0));
+    this.completeSaleBalance.set(total);
+    this.completeSaleRemainingBalance.set(remaining);
 
     // Auto-suggest up to 2 future installments (split remaining balance, 1 week apart)
-    if (balance > 0) {
-      const splitAmount = Math.round((balance / 2) * 100) / 100;
-      const last = this.completeSaleInstallments[this.completeSaleInstallments.length - 1];
-      const base = last?.due_date ? new Date(last.due_date) : new Date();
-      const nextDate = new Date(base.getTime() + 7 * 24 * 60 * 60 * 1000);
+    if (remaining > 0) {
+      const half = Math.ceil(remaining / 2);
+      const now = new Date();
       this.completeSaleInstallments = [
-        { due_date: nextDate, amount: splitAmount },
-        { due_date: new Date(nextDate.getTime() + 7 * 24 * 60 * 60 * 1000), amount: balance - splitAmount },
+        { due_date: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), amount: half },
+        { due_date: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000), amount: remaining - half },
       ];
     } else {
       this.completeSaleInstallments = [];
@@ -2486,9 +2487,9 @@ export class ClientProfile implements OnInit {
   }
 
   addCompleteSaleInstallment() {
-    const balance = this.completeSaleBalance();
+    const remaining = this.completeSaleRemainingBalance();
     const sumExisting = this.completeSaleInstallments.reduce((s, inst) => s + (inst.amount || 0), 0);
-    const prefill = Math.max(0, balance - sumExisting);
+    const prefill = Math.max(0, remaining - sumExisting);
     const last = this.completeSaleInstallments[this.completeSaleInstallments.length - 1];
     const base = last?.due_date ? new Date(last.due_date) : new Date();
     const nextDate = new Date(base.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -2499,10 +2500,10 @@ export class ClientProfile implements OnInit {
     const removed = this.completeSaleInstallments[index];
     const rest = this.completeSaleInstallments.filter((_, i) => i !== index);
     if (rest.length && removed) {
-      const balance = this.completeSaleBalance();
+      const remaining = this.completeSaleRemainingBalance();
       const sumRest = rest.reduce((s, inst) => s + (inst.amount || 0), 0);
       const lastIdx = rest.length - 1;
-      rest[lastIdx] = { ...rest[lastIdx], amount: Math.max(0, balance - (sumRest - (rest[lastIdx].amount || 0))) };
+      rest[lastIdx] = { ...rest[lastIdx], amount: Math.max(0, remaining - (sumRest - (rest[lastIdx].amount || 0))) };
     }
     this.completeSaleInstallments = [...rest];
   }
@@ -2536,10 +2537,10 @@ export class ClientProfile implements OnInit {
   }
 
   canAddCompleteSaleInstallment(): boolean {
-    const balance = this.completeSaleBalance();
-    if (balance <= 0) return false;
+    const remaining = this.completeSaleRemainingBalance();
+    if (remaining <= 0) return false;
     const sum = this.completeSaleInstallments.reduce((s, i) => s + (i.amount || 0), 0);
-    return sum < balance;
+    return sum < remaining;
   }
 
   async completeSale() {

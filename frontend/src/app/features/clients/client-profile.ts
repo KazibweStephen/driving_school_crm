@@ -2594,18 +2594,7 @@ export class ClientProfile implements OnInit {
           .toPromise();
       }
 
-      // Re-fetch payment to get updated totals
-      const payments = await this.paymentService.listByConsultation(c.id).toPromise();
-      if (payments?.length) {
-        const updatedPayment = payments.find(p => p.id === paymentResult?.id);
-        if (updatedPayment) {
-          this.completeSaleSystemReceiptNumber.set(updatedPayment.system_receipt_number || 'N/A');
-        }
-      } else {
-        this.completeSaleSystemReceiptNumber.set(paymentResult?.system_receipt_number || 'N/A');
-      }
-
-      const systemReceipt = this.completeSaleSystemReceiptNumber();
+      const systemReceipt = paymentResult?.system_receipt_number || 'N/A';
       const receiptId = paymentResult?.id;
 
       await this.cartItemService.update(ci.id, { status }).toPromise();

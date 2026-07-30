@@ -2469,6 +2469,20 @@ export class ClientProfile implements OnInit {
     const paid = this.completeSalePaidAmount();
     const balance = Math.max(0, total - (paid || 0));
     this.completeSaleBalance.set(balance);
+
+    // Auto-suggest up to 2 future installments (split remaining balance, 1 week apart)
+    if (balance > 0) {
+      const splitAmount = Math.round((balance / 2) * 100) / 100;
+      const last = this.completeSaleInstallments[this.completeSaleInstallments.length - 1];
+      const base = last?.due_date ? new Date(last.due_date) : new Date();
+      const nextDate = new Date(base.getTime() + 7 * 24 * 60 * 60 * 1000);
+      this.completeSaleInstallments = [
+        { due_date: nextDate, amount: splitAmount },
+        { due_date: new Date(nextDate.getTime() + 7 * 24 * 60 * 60 * 1000), amount: balance - splitAmount },
+      ];
+    } else {
+      this.completeSaleInstallments = [];
+    }
   }
 
   addCompleteSaleInstallment() {
@@ -2542,12 +2556,20 @@ export class ClientProfile implements OnInit {
 
     this.loading.set(true);
     try {
-      const installments = this.completeSaleInstallments
+      const docDate = this.completeSaleDocumentDate() ? this.formatDate(this.completeSaleDocumentDate()!) : this.formatDate(new Date());
+
+      // Always include the paid-today amount as the first installment
+      const futureInstallments = this.completeSaleInstallments
         .filter(inst => inst.amount > 0 && inst.due_date)
         .map(inst => ({
           due_date: this.formatDate(inst.due_date!),
           amount: inst.amount,
         }));
+
+      const installments = [
+        { due_date: docDate, amount: paid },
+        ...futureInstallments,
+      ];
 
       const paymentResult = await this.paymentService
         .createPayment(c.id, {
@@ -2557,13 +2579,34 @@ export class ClientProfile implements OnInit {
           notes: `Paid: ${paid}, Balance: ${remaining}`,
           receipt_number: this.completeSaleReceiptNumber() || undefined,
           installments,
-          document_date: this.completeSaleDocumentDate() ? this.formatDate(this.completeSaleDocumentDate()!) : undefined,
+          document_date: this.completeSaleDocumentDate() ? docDate : undefined,
         })
         .toPromise();
 
-      const systemReceipt = paymentResult?.system_receipt_number || 'N/A';
+      // Mark the first installment (paid-today) as paid
+      if (paymentResult?.installments.length) {
+        await this.paymentService
+          .updateInstallment(paymentResult.id, paymentResult.installments[0].id, {
+            paid_date: docDate,
+            paid_amount: paid,
+            notes: 'Complete Sale',
+          })
+          .toPromise();
+      }
+
+      // Re-fetch payment to get updated totals
+      const payments = await this.paymentService.listByConsultation(c.id).toPromise();
+      if (payments?.length) {
+        const updatedPayment = payments.find(p => p.id === paymentResult?.id);
+        if (updatedPayment) {
+          this.completeSaleSystemReceiptNumber.set(updatedPayment.system_receipt_number || 'N/A');
+        }
+      } else {
+        this.completeSaleSystemReceiptNumber.set(paymentResult?.system_receipt_number || 'N/A');
+      }
+
+      const systemReceipt = this.completeSaleSystemReceiptNumber();
       const receiptId = paymentResult?.id;
-      this.completeSaleSystemReceiptNumber.set(systemReceipt);
 
       await this.cartItemService.update(ci.id, { status }).toPromise();
 

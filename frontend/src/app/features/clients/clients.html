@@ -20,6 +20,13 @@
     }
   </div>
 
+  @if (showBulkDelete()) {
+    <div class="mb-4 flex items-center gap-2">
+      <span class="text-sm text-gray-600">{{ selectedIds().size }} selected</span>
+      <p-button label="Delete Selected" icon="pi pi-trash" severity="danger" size="small" (onClick)="confirmBulkDelete()" />
+    </div>
+  }
+
   @if (isSearching()) {
     <div class="mb-4 flex items-center justify-between">
       <p class="text-sm text-gray-500">{{ clientResults().length }} person(s) found</p>
@@ -27,10 +34,22 @@
     <div class="hidden lg:block">
       <p-table [value]="clientResults()" dataKey="phone" [rowHover]="true" styleClass="p-datatable-sm">
         <ng-template pTemplate="header">
-          <tr><th>Name</th><th>Phone</th><th>Location</th><th>Status</th><th>Actions</th></tr>
+          <tr>
+            @if (authService.currentUserRole() === 'super_user') {
+              <th style="width:3rem">
+                <p-checkbox [binary]="true" [ngModel]="isAllSelected()" (onChange)="toggleSelectAll()" />
+              </th>
+            }
+            <th>Name</th><th>Phone</th><th>Location</th><th>Status</th><th>Actions</th>
+          </tr>
         </ng-template>
         <ng-template pTemplate="body" let-item>
           <tr class="cursor-pointer" [routerLink]="['/consultations', item.latest_consultation_id]">
+            @if (authService.currentUserRole() === 'super_user') {
+              <td (click)="$event.stopPropagation()">
+                <p-checkbox [binary]="true" [ngModel]="selectedIds().has(item.latest_consultation_id)" (onChange)="toggleSelect(item.latest_consultation_id!)" />
+              </td>
+            }
             <td class="font-medium text-blue-600 hover:text-blue-800 hover:underline">{{ fullName(item) }}</td>
             <td class="text-sm text-gray-600">{{ item.phone }}</td>
             <td class="text-sm text-gray-500">{{ item.location || '—' }}</td>
@@ -39,7 +58,7 @@
           </tr>
         </ng-template>
         <ng-template pTemplate="emptydata">
-          <tr><td colspan="5" class="py-8 text-center text-gray-400">
+          <tr><td [colSpan]="authService.currentUserRole() === 'super_user' ? 6 : 5" class="py-8 text-center text-gray-400">
             @if (loading()) { <p>Searching...</p> } @else { <p class="mb-2">No person found matching "<span class="font-medium">{{ search() }}</span>"</p><p-button label="Create Consultation" icon="pi pi-plus" severity="success" (onClick)="openCreate()" /> }
           </td></tr>
         </ng-template>
@@ -70,10 +89,22 @@
     <div class="hidden lg:block">
       <p-table [value]="consultations()" dataKey="id" [rowHover]="true" [paginator]="true" [rows]="pageSize()" [totalRecords]="total()" [lazy]="true" (onPage)="onPageChange($event)" [loading]="loading()" styleClass="p-datatable-sm">
         <ng-template pTemplate="header">
-          <tr><th>Name</th><th>Phone</th><th>Location</th><th>Status</th><th>Stage</th><th>Actions</th></tr>
+          <tr>
+            @if (authService.currentUserRole() === 'super_user') {
+              <th style="width:3rem">
+                <p-checkbox [binary]="true" [ngModel]="isAllSelected()" (onChange)="toggleSelectAll()" />
+              </th>
+            }
+            <th>Name</th><th>Phone</th><th>Location</th><th>Status</th><th>Stage</th><th>Actions</th>
+          </tr>
         </ng-template>
         <ng-template pTemplate="body" let-c>
           <tr>
+            @if (authService.currentUserRole() === 'super_user') {
+              <td>
+                <p-checkbox [binary]="true" [ngModel]="selectedIds().has(c.id)" (onChange)="toggleSelect(c.id)" />
+              </td>
+            }
             <td class="font-medium"><a [routerLink]="['/consultations', c.id]" class="text-blue-600 hover:text-blue-800 hover:underline">{{ fullName(c) }}</a></td>
             <td class="text-sm text-gray-600">{{ c.phone }}</td>
             <td class="text-sm text-gray-500">{{ c.location || '—' }}</td>
@@ -88,7 +119,7 @@
           </tr>
         </ng-template>
         <ng-template pTemplate="emptydata">
-          <tr><td colspan="6" class="py-8 text-center text-gray-400">@if (loading()) { <p>Loading...</p> } @else { <p>No consultations yet</p> }</td></tr>
+          <tr><td [colSpan]="authService.currentUserRole() === 'super_user' ? 7 : 6" class="py-8 text-center text-gray-400">@if (loading()) { <p>Loading...</p> } @else { <p>No consultations yet</p> }</td></tr>
         </ng-template>
       </p-table>
     </div>

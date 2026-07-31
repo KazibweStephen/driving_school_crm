@@ -1,0 +1,818 @@
+{
+  "version": "3.0",
+  "title": "01-class-b-manual",
+  "transmission_type": "manual",
+  "total_days": 24,
+  "total_weeks": 4,
+  "template_type": "combined",
+  "description": "Uganda Class B Manual Transmission Curriculum. Competency-based programme comprising 20 practical lessons (30 minutes each) and 4 theory lessons (120 minutes each). Designed around the Ministry of Works and Transport practical driving test.",
+  "weeks": [
+    {
+      "week_number": 1,
+      "days": [
+        {
+          "day_number": 1,
+          "title": "Cockpit Drill & Vehicle Familiarisation",
+          "description": "Introduction to the vehicle, cockpit drill, vehicle controls and pre-drive safety inspection.",
+          "lesson_objectives": [
+            "Understand the DSSSM/Cockpit Drill",
+            "Identify vehicle controls",
+            "Understand dashboard indicators",
+            "Understand pre-drive safety checks"
+          ],
+          "practical_objectives": [
+            "Adjust driving position",
+            "Adjust mirrors correctly",
+            "Fasten seat belt correctly",
+            "Identify all primary controls",
+            "Perform cockpit drill independently"
+          ],
+          "estimated_minutes": 30,
+          "estimated_distance_km": 0,
+          "preferred_location": "Driving School Yard",
+          "enforce_prerequisites": false,
+          "is_theory": false,
+          "competencies": [
+            "VF001",
+            "VF002",
+            "VF003",
+            "VF004",
+            "VF005",
+            "VF006",
+            "VF007",
+            "VF008"
+          ],
+          "difficulty": "beginner",
+          "training_category": "driving",
+          "prerequisite_competencies": []
+        },
+        {
+          "day_number": 2,
+          "title": "Clutch Bite Point & Engine Control",
+          "description": "Understanding clutch operation, engine start procedure and clutch bite point.",
+          "lesson_objectives": [
+            "Understand clutch operation",
+            "Understand engine start procedure",
+            "Locate clutch bite point",
+            "Understand parking brake usage"
+          ],
+          "practical_objectives": [
+            "Start engine safely",
+            "Find clutch bite point repeatedly",
+            "Coordinate clutch and brake",
+            "Recover from engine stall"
+          ],
+          "estimated_minutes": 30,
+          "estimated_distance_km": 1,
+          "preferred_location": "Driving School Yard",
+          "enforce_prerequisites": true,
+          "is_theory": false,
+          "competencies": [
+            "VO001",
+            "VO003",
+            "MT001",
+            "MT002",
+            "MT009",
+            "MT010"
+          ],
+          "difficulty": "beginner",
+          "training_category": "driving",
+          "prerequisite_competencies": [
+            "VF001"
+          ]
+        },
+        {
+          "day_number": 3,
+          "title": "Moving Off & Controlled Stopping",
+          "description": "Moving away safely using clutch control and stopping smoothly.",
+          "lesson_objectives": [
+            "Understand POM routine",
+            "Move off safely",
+            "Stop smoothly",
+            "Maintain clutch control"
+          ],
+          "practical_objectives": [
+            "Perform observation routine",
+            "Move off repeatedly",
+            "Stop under control",
+            "Recover from stalls confidently"
+          ],
+          "estimated_minutes": 30,
+          "estimated_distance_km": 2,
+          "preferred_location": "Quiet Residential Road",
+          "enforce_prerequisites": true,
+          "is_theory": false,
+          "competencies": [
+            "VO004",
+            "VO005",
+            "VO006",
+            "VO007",
+            "MT001",
+            "MT002",
+            "MT003"
+          ],
+          "difficulty": "beginner",
+          "training_category": "driving",
+          "prerequisite_competencies": [
+            "MT001",
+            "VO001"
+          ]
+        },
+        {
+          "day_number": 4,
+          "title": "Gear Changes & Steering Control",
+          "description": "Smooth gear changes, steering control and lane positioning.",
+          "lesson_objectives": [
+            "Understand gear selection",
+            "Perform smooth gear changes",
+            "Maintain lane discipline"
+          ],
+          "practical_objectives": [
+            "Change between first and second gear",
+            "Steer using push-pull technique",
+            "Maintain road position"
+          ],
+          "estimated_minutes": 30,
+          "estimated_distance_km": 3,
+          "preferred_location": "Quiet Residential Roads",
+          "enforce_prerequisites": true,
+          "is_theory": false,
+          "competencies": [
+            "MT003",
+            "MT004",
+            "MT007",
+            "SC001",
+            "SC002",
+            "SC003",
+            "SC004"
+          ],
+          "difficulty": "beginner",
+          "training_category": "driving",
+          "prerequisite_competencies": [
+            "VO006"
+          ]
+        },
+        {
+          "day_number": 5,
+          "title": "Basic Junctions & Left/Right Turns",
+          "description": "Applying MSM routine, approaching junctions and turning safely.",
+          "lesson_objectives": [
+            "Understand MSM routine",
+            "Approach junctions safely",
+            "Turn left and right safely"
+          ],
+          "practical_objectives": [
+            "Use mirrors appropriately",
+            "Signal correctly",
+            "Judge traffic gaps",
+            "Position correctly for turns"
+          ],
+          "estimated_minutes": 30,
+          "estimated_distance_km": 4,
+          "preferred_location": "Residential Roads",
+          "enforce_prerequisites": true,
+          "is_theory": false,
+          "competencies": [
+            "JN001",
+            "JN002",
+            "JN003",
+            "JN006",
+            "JN007",
+            "JN008"
+          ],
+          "difficulty": "beginner",
+          "training_category": "driving",
+          "prerequisite_competencies": [
+            "SC003",
+            "MT004"
+          ]
+        },
+        {
+          "day_number": 6,
+          "title": "Week 1 Theory - Highway Code & Vehicle Controls",
+          "description": "Introduction to Uganda Highway Code, road signs, vehicle controls and legal responsibilities.",
+          "lesson_objectives": [
+            "Interpret common road signs",
+            "Understand road markings",
+            "Understand driver responsibilities",
+            "Understand vehicle safety checks"
+          ],
+          "practical_objectives": [],
+          "estimated_minutes": 120,
+          "estimated_distance_km": 0,
+          "preferred_location": "Classroom",
+          "enforce_prerequisites": false,
+          "is_theory": true,
+          "competencies": [
+            "VF006",
+            "VF007",
+            "VF008",
+            "TR005"
+          ],
+          "difficulty": "beginner",
+          "training_category": "driving",
+          "prerequisite_competencies": []
+        }
+      ]
+    },
+    {
+    "week_number": 2,
+    "days": [
+        {
+        "day_number": 7,
+        "title": "Crossroads & T-Junctions",
+        "description": "Applying priority rules, observation and gear selection at crossroads and T-junctions.",
+        "lesson_objectives": [
+            "Understand priority rules",
+            "Negotiate crossroads safely",
+            "Use appropriate gears when approaching junctions",
+            "Improve traffic observation"
+        ],
+        "practical_objectives": [
+            "Approach crossroads safely",
+            "Stop and move off correctly",
+            "Select appropriate gears",
+            "Judge safe gaps in traffic"
+        ],
+        "estimated_minutes": 30,
+        "estimated_distance_km": 4,
+        "preferred_location": "Residential & Urban Roads",
+        "enforce_prerequisites": true,
+        "is_theory": false,
+        "competencies": [
+            "JN004",
+            "JN005",
+            "JN006",
+            "JN007",
+            "JN008",
+            "MT004",
+            "MT006",
+            "SC004"
+        ],
+        "difficulty": "beginner",
+        "training_category": "driving",
+        "prerequisite_competencies": [
+            "JN001",
+            "JN002",
+            "JN003"
+        ]
+        },
+        {
+        "day_number": 8,
+        "title": "Hill Starts & Clutch Control",
+        "description": "Mastering uphill starts, clutch control and rollback prevention.",
+        "lesson_objectives": [
+            "Understand hill-start procedure",
+            "Prevent vehicle rollback",
+            "Coordinate clutch, brake and accelerator",
+            "Develop confidence on gradients"
+        ],
+        "practical_objectives": [
+            "Perform uphill starts repeatedly",
+            "Recover from stalls safely",
+            "Control clutch smoothly",
+            "Move off without rollback"
+        ],
+        "estimated_minutes": 30,
+        "estimated_distance_km": 3,
+        "preferred_location": "Hill Section",
+        "enforce_prerequisites": true,
+        "is_theory": false,
+        "competencies": [
+            "MT001",
+            "MT002",
+            "MT008",
+            "MT009",
+            "MT010",
+            "VO006"
+        ],
+        "difficulty": "intermediate",
+        "training_category": "driving",
+        "prerequisite_competencies": [
+            "MT004"
+        ]
+        },
+        {
+        "day_number": 9,
+        "title": "Mini Roundabouts",
+        "description": "Approach, observation, lane discipline and exit procedures at mini roundabouts.",
+        "lesson_objectives": [
+            "Understand roundabout priority",
+            "Select correct lane",
+            "Exit safely",
+            "Improve observation"
+        ],
+        "practical_objectives": [
+            "Drive through mini roundabouts",
+            "Signal correctly",
+            "Maintain lane discipline",
+            "Judge traffic gaps"
+        ],
+        "estimated_minutes": 30,
+        "estimated_distance_km": 4,
+        "preferred_location": "Area with Roundabouts",
+        "enforce_prerequisites": true,
+        "is_theory": false,
+        "competencies": [
+            "RB001",
+            "RB003",
+            "RB004",
+            "RB005",
+            "SC003",
+            "SC005"
+        ],
+        "difficulty": "intermediate",
+        "training_category": "driving",
+        "prerequisite_competencies": [
+            "JN004",
+            "JN007"
+        ]
+        },
+        {
+        "day_number": 10,
+        "title": "Reverse Driving & Rear Observation",
+        "description": "Straight reverse, observation techniques and vehicle control while reversing.",
+        "lesson_objectives": [
+            "Understand reverse driving principles",
+            "Maintain continuous observation",
+            "Control vehicle at low speed"
+        ],
+        "practical_objectives": [
+            "Reverse in a straight line",
+            "Observe all blind spots",
+            "Maintain steering accuracy",
+            "Stop safely when required"
+        ],
+        "estimated_minutes": 30,
+        "estimated_distance_km": 2,
+        "preferred_location": "Driving Yard",
+        "enforce_prerequisites": true,
+        "is_theory": false,
+        "competencies": [
+            "PK001",
+            "VO005",
+            "SC001",
+            "SC002"
+        ],
+        "difficulty": "intermediate",
+        "training_category": "driving",
+        "prerequisite_competencies": [
+            "SC002"
+        ]
+        },
+        {
+        "day_number": 11,
+        "title": "Reverse Bay Parking",
+        "description": "Reverse bay parking using clutch control, steering reference points and observation.",
+        "lesson_objectives": [
+            "Understand reverse bay parking procedure",
+            "Use reference points effectively",
+            "Maintain steering accuracy"
+        ],
+        "practical_objectives": [
+            "Reverse into parking bay",
+            "Finish centered within bay",
+            "Maintain all-round observation",
+            "Correct positioning safely"
+        ],
+        "estimated_minutes": 30,
+        "estimated_distance_km": 2,
+        "preferred_location": "Parking Area",
+        "enforce_prerequisites": true,
+        "is_theory": false,
+        "competencies": [
+            "PK004",
+            "PK005",
+            "SC001",
+            "VO005",
+            "MT002"
+        ],
+        "difficulty": "intermediate",
+        "training_category": "driving",
+        "prerequisite_competencies": [
+            "PK001"
+        ]
+        },
+        {
+        "day_number": 12,
+        "title": "Week 2 Theory - Hazard Perception & Defensive Driving",
+        "description": "Hazard perception, space management, defensive positioning and safe following distances.",
+        "lesson_objectives": [
+            "Understand hazard perception",
+            "Recognize developing hazards",
+            "Understand safe following distance",
+            "Apply defensive driving principles"
+        ],
+        "practical_objectives": [],
+        "estimated_minutes": 120,
+        "estimated_distance_km": 0,
+        "preferred_location": "Classroom",
+        "enforce_prerequisites": false,
+        "is_theory": true,
+        "competencies": [
+            "DD001",
+            "DD002",
+            "DD003",
+            "DD008",
+            "SC005"
+        ],
+        "difficulty": "intermediate",
+        "training_category": "driving",
+        "prerequisite_competencies": []
+        }
+    ]
+    },
+    {
+  "week_number": 3,
+  "days": [
+    {
+      "day_number": 13,
+      "title": "Parallel Parking",
+      "description": "Learning safe parallel parking using observation, clutch control and steering accuracy.",
+      "lesson_objectives": [
+        "Understand parallel parking procedure",
+        "Identify reference points",
+        "Control vehicle at low speed",
+        "Maintain continuous observation"
+      ],
+      "practical_objectives": [
+        "Parallel park independently",
+        "Maintain safe clearance",
+        "Complete manoeuvre within reasonable adjustments",
+        "Exit parking safely"
+      ],
+      "estimated_minutes": 30,
+      "estimated_distance_km": 2,
+      "preferred_location": "Quiet Residential Road",
+      "enforce_prerequisites": true,
+      "is_theory": false,
+      "competencies": [
+        "PK006",
+        "MT002",
+        "SC001",
+        "SC002",
+        "VO005"
+      ],
+      "difficulty": "intermediate",
+      "training_category": "driving",
+      "prerequisite_competencies": [
+        "PK004",
+        "PK005"
+      ]
+    },
+    {
+      "day_number": 14,
+      "title": "Three Point Turn & U-Turn",
+      "description": "Performing turning manoeuvres safely while maintaining observation and vehicle control.",
+      "lesson_objectives": [
+        "Understand three-point turn procedure",
+        "Understand safe U-turns",
+        "Develop vehicle positioning"
+      ],
+      "practical_objectives": [
+        "Complete three-point turn",
+        "Complete safe U-turn",
+        "Observe throughout manoeuvre",
+        "Maintain clutch control"
+      ],
+      "estimated_minutes": 30,
+      "estimated_distance_km": 3,
+      "preferred_location": "Quiet Residential Area",
+      "enforce_prerequisites": true,
+      "is_theory": false,
+      "competencies": [
+        "PK007",
+        "PK008",
+        "SC002",
+        "VO005",
+        "MT002"
+      ],
+      "difficulty": "intermediate",
+      "training_category": "driving",
+      "prerequisite_competencies": [
+        "PK006"
+      ]
+    },
+    {
+      "day_number": 15,
+      "title": "Urban Driving & Lane Changes",
+      "description": "Driving in heavier traffic while maintaining lane discipline and safe lane changes.",
+      "lesson_objectives": [
+        "Maintain lane discipline",
+        "Perform safe lane changes",
+        "Improve traffic awareness",
+        "Manage urban traffic"
+      ],
+      "practical_objectives": [
+        "Change lanes safely",
+        "Maintain correct positioning",
+        "Respond to traffic conditions",
+        "Use mirrors effectively"
+      ],
+      "estimated_minutes": 30,
+      "estimated_distance_km": 5,
+      "preferred_location": "Urban Roads",
+      "enforce_prerequisites": true,
+      "is_theory": false,
+      "competencies": [
+        "TM008",
+        "SC003",
+        "SC004",
+        "SC005",
+        "DD001"
+      ],
+      "difficulty": "intermediate",
+      "training_category": "driving",
+      "prerequisite_competencies": [
+        "RB003",
+        "PK007"
+      ]
+    },
+    {
+      "day_number": 16,
+      "title": "Overtaking & Road Sharing",
+      "description": "Safe overtaking procedures and sharing the road with other road users.",
+      "lesson_objectives": [
+        "Understand overtaking rules",
+        "Recognize safe overtaking opportunities",
+        "Share the road safely"
+      ],
+      "practical_objectives": [
+        "Perform safe overtakes",
+        "Maintain safe following distance",
+        "Return to lane correctly",
+        "Demonstrate hazard awareness"
+      ],
+      "estimated_minutes": 30,
+      "estimated_distance_km": 6,
+      "preferred_location": "Urban & Rural Roads",
+      "enforce_prerequisites": true,
+      "is_theory": false,
+      "competencies": [
+        "TM007",
+        "TM008",
+        "DD001",
+        "DD003",
+        "SC005"
+      ],
+      "difficulty": "advanced",
+      "training_category": "driving",
+      "prerequisite_competencies": [
+        "TM008"
+      ]
+    },
+    {
+      "day_number": 17,
+      "title": "Independent Driving",
+      "description": "Driving independently while following road signs and instructor directions.",
+      "lesson_objectives": [
+        "Drive without prompts",
+        "Interpret road signs",
+        "Plan routes",
+        "Maintain consistent safe driving"
+      ],
+      "practical_objectives": [
+        "Complete assigned route",
+        "Follow traffic signs",
+        "Demonstrate good judgement",
+        "Drive confidently"
+      ],
+      "estimated_minutes": 30,
+      "estimated_distance_km": 6,
+      "preferred_location": "Mixed Urban Roads",
+      "enforce_prerequisites": true,
+      "is_theory": false,
+      "competencies": [
+        "TR001",
+        "TR002",
+        "DD001",
+        "SC003",
+        "SC005"
+      ],
+      "difficulty": "advanced",
+      "training_category": "driving",
+      "prerequisite_competencies": [
+        "TM007"
+      ]
+    },
+    {
+      "day_number": 18,
+      "title": "Week 3 Theory - Vehicle Maintenance & Eco Driving",
+      "description": "Vehicle care, preventive maintenance, economical driving and environmental responsibility.",
+      "lesson_objectives": [
+        "Understand routine maintenance",
+        "Identify warning signs",
+        "Practice economical driving",
+        "Reduce environmental impact"
+      ],
+      "practical_objectives": [],
+      "estimated_minutes": 120,
+      "estimated_distance_km": 0,
+      "preferred_location": "Classroom",
+      "enforce_prerequisites": false,
+      "is_theory": true,
+      "competencies": [
+        "VF008",
+        "DD003",
+        "TR005"
+      ],
+      "difficulty": "intermediate",
+      "training_category": "driving",
+      "prerequisite_competencies": []
+    }
+  ]
+},
+{
+  "week_number": 4,
+  "days": [
+    {
+      "day_number": 19,
+      "title": "Higher Speed Roads & Dual Carriageways",
+      "description": "Applying safe driving techniques on higher-speed roads, dual carriageways and major highways while maintaining lane discipline and anticipation.",
+      "lesson_objectives": [
+        "Understand higher-speed road driving",
+        "Maintain lane discipline",
+        "Use appropriate following distances",
+        "Develop anticipation and planning"
+      ],
+      "practical_objectives": [
+        "Merge safely into faster traffic",
+        "Maintain consistent speed",
+        "Use mirrors effectively",
+        "Leave dual carriageways safely"
+      ],
+      "estimated_minutes": 30,
+      "estimated_distance_km": 8,
+      "preferred_location": "Dual Carriageway / Highway",
+      "enforce_prerequisites": true,
+      "is_theory": false,
+      "competencies": [
+        "RT004",
+        "RT005",
+        "SC003",
+        "SC004",
+        "SC005",
+        "DD001",
+        "DD003"
+      ],
+      "difficulty": "advanced",
+      "training_category": "driving",
+      "prerequisite_competencies": [
+        "TR001",
+        "TM008"
+      ]
+    },
+    {
+      "day_number": 20,
+      "title": "Complete Mock Practical Test",
+      "description": "Conduct a full Ministry of Works style practical assessment under realistic examination conditions.",
+      "lesson_objectives": [
+        "Understand examination expectations",
+        "Drive independently",
+        "Maintain consistent competency"
+      ],
+      "practical_objectives": [
+        "Complete full mock driving test",
+        "Follow examiner instructions",
+        "Identify improvement areas"
+      ],
+      "estimated_minutes": 30,
+      "estimated_distance_km": 8,
+      "preferred_location": "Official Test Route",
+      "enforce_prerequisites": true,
+      "is_theory": false,
+      "competencies": [
+        "TR001",
+        "TR003",
+        "TR004",
+        "TR007"
+      ],
+      "difficulty": "advanced",
+      "training_category": "driving",
+      "prerequisite_competencies": [
+        "RT005"
+      ]
+    },
+    {
+      "day_number": 21,
+      "title": "Remedial Training & Weak Competencies",
+      "description": "Focused coaching on competencies identified during the mock practical assessment.",
+      "lesson_objectives": [
+        "Improve weak competencies",
+        "Increase confidence",
+        "Achieve consistent safe driving"
+      ],
+      "practical_objectives": [
+        "Practice instructor-selected competencies",
+        "Reduce critical driving errors",
+        "Improve consistency"
+      ],
+      "estimated_minutes": 30,
+      "estimated_distance_km": 5,
+      "preferred_location": "Instructor Selected Route",
+      "enforce_prerequisites": true,
+      "is_theory": false,
+      "competencies": [
+        "DD001",
+        "SC003",
+        "SC005",
+        "TR007"
+      ],
+      "difficulty": "advanced",
+      "training_category": "driving",
+      "prerequisite_competencies": [
+        "TR003"
+      ]
+    },
+    {
+      "day_number": 22,
+      "title": "Final Competency Assessment Drive",
+      "description": "Demonstrate competence across all core driving competencies with minimal instructor intervention.",
+      "lesson_objectives": [
+        "Demonstrate safe driving",
+        "Maintain independent decision making",
+        "Meet curriculum competency requirements"
+      ],
+      "practical_objectives": [
+        "Complete instructor assessment route",
+        "Apply all previously learned skills",
+        "Drive safely throughout"
+      ],
+      "estimated_minutes": 30,
+      "estimated_distance_km": 8,
+      "preferred_location": "Mixed Test Route",
+      "enforce_prerequisites": true,
+      "is_theory": false,
+      "competencies": [
+        "TR001",
+        "TR003",
+        "TR007",
+        "TR008"
+      ],
+      "difficulty": "advanced",
+      "training_category": "driving",
+      "prerequisite_competencies": [
+        "TR007"
+      ]
+    },
+    {
+      "day_number": 23,
+      "title": "Confidence Building & Final Practice",
+      "description": "Consolidation lesson allowing the learner to practice remaining weak areas before the official driving test.",
+      "lesson_objectives": [
+        "Build confidence",
+        "Consolidate all driving skills",
+        "Prepare mentally for assessment"
+      ],
+      "practical_objectives": [
+        "Drive confidently",
+        "Perform instructor-selected manoeuvres",
+        "Maintain safe driving habits"
+      ],
+      "estimated_minutes": 30,
+      "estimated_distance_km": 6,
+      "preferred_location": "Mixed Urban & Highway Route",
+      "enforce_prerequisites": true,
+      "is_theory": false,
+      "competencies": [
+        "TR006",
+        "TR007",
+        "TR008",
+        "DD001"
+      ],
+      "difficulty": "advanced",
+      "training_category": "driving",
+      "prerequisite_competencies": [
+        "TR008"
+      ]
+    },
+    {
+      "day_number": 24,
+      "title": "Week 4 Theory - Test Readiness & Professional Driving",
+      "description": "Final review of Highway Code, driving test procedure, professional driver conduct and post-licensing responsibilities.",
+      "lesson_objectives": [
+        "Review test procedures",
+        "Understand examiner expectations",
+        "Develop lifelong safe driving habits",
+        "Understand responsibilities after licensing"
+      ],
+      "practical_objectives": [],
+      "estimated_minutes": 120,
+      "estimated_distance_km": 0,
+      "preferred_location": "Classroom",
+      "enforce_prerequisites": false,
+      "is_theory": true,
+      "competencies": [
+        "TR005",
+        "TR006",
+        "TR008",
+        "DD007"
+      ],
+      "difficulty": "advanced",
+      "training_category": "driving",
+      "prerequisite_competencies": []
+    }
+  ]
+}
+  ]
+}

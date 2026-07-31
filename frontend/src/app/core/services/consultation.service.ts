@@ -213,6 +213,10 @@ export class ConsultationService {
     return this.http.delete<Consultation>(`/api/v1/consultations/${id}`);
   }
 
+  bulkDelete(ids: string[]) {
+    return this.http.post<{deleted: number}>(`/api/v1/consultations/bulk-delete`, { ids });
+  }
+
   createFollowUp(consultationId: string, data: FollowUpCreate) {
     return this.http.post<FollowUp>(`/api/v1/consultations/${consultationId}/follow-ups`, data);
   }

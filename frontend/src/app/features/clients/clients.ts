@@ -128,6 +128,68 @@ export class Clients implements OnInit, OnDestroy {
   receiptUserName = signal('');
   receiptInstallments = signal<{ due_date: string; amount: number; product_name: string }[]>([]);
 
+  selectedIds = signal<Set<string>>(new Set());
+
+  private itemId(item: Consultation | ClientInfo): string | null {
+    return 'latest_consultation_id' in item ? item.latest_consultation_id : item.id;
+  }
+
+  isAllSelected = () => {
+    const items = this.displayedResults();
+    const ids = items.map(i => this.itemId(i)).filter(Boolean) as string[];
+    return ids.length > 0 && ids.every(id => this.selectedIds().has(id));
+  };
+
+  isAnySelected = () => this.selectedIds().size > 0;
+
+  toggleSelect(id: string) {
+    this.selectedIds.update(s => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  toggleSelectAll() {
+    const items = this.displayedResults();
+    const ids = items.map(i => this.itemId(i)).filter(Boolean) as string[];
+    if (this.isAllSelected()) {
+      this.selectedIds.set(new Set());
+    } else {
+      this.selectedIds.set(new Set(ids));
+    }
+  }
+
+  showBulkDelete() {
+    return this.isAnySelected() && this.authService.currentUserRole() === 'super_user';
+  }
+
+  confirmBulkDelete() {
+    const count = this.selectedIds().size;
+    this.confirmationService.confirm({
+      message: `Permanently delete ${count} client(s) and ALL associated data (payments, training, lesson plans, etc.)? This CANNOT be undone.`,
+      header: 'Delete Clients',
+      icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => this.bulkDelete(),
+    });
+  }
+
+  async bulkDelete() {
+    const ids = [...this.selectedIds()];
+    this.loading.set(true);
+    try {
+      await this.consultationService.bulkDelete(ids).toPromise();
+      this.selectedIds.set(new Set());
+      await this.loadConsultations();
+      this.messageService.add({ severity: 'success', summary: 'Deleted', detail: `${ids.length} client(s) deleted permanently` });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete clients' });
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
   stages = [
     { label: 'All Stages', value: '' },
     { label: 'Consulting', value: 'consulting' },

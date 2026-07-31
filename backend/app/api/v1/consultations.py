@@ -139,6 +139,7 @@ async def create_full_consultation(
             cart_status = 'converted_paid' if is_fully_paid else 'converted_paying'
 
             payment = Payment(
+                id=uuid.UUID(uuid.uuid4().hex),
                 consultation_id=consultation.id,
                 created_by_phone=current_user.phone,
                 product_id=item_data.product_id,
@@ -149,12 +150,13 @@ async def create_full_consultation(
                 receipt_number=receipt_number,
                 system_receipt_number=transaction_id,
             )
+            payment_id = payment.id
             db.add(payment)
             await db.flush()
 
             # Create paid installment for today's payment
             paid_inst = Installment(
-                payment_id=payment.id,
+                payment_id=payment_id,
                 due_date=date.today(),
                 amount=allocation,
                 status=InstallmentStatus.PAID,
@@ -168,7 +170,7 @@ async def create_full_consultation(
             if item_data.installments:
                 for fi in item_data.installments:
                     fi_inst = Installment(
-                        payment_id=payment.id,
+                        payment_id=payment_id,
                         due_date=fi.due_date,
                         amount=fi.amount,
                         status=InstallmentStatus.PENDING,
@@ -432,3 +434,25 @@ async def deactivate_follow_up(
         )
     updated = await consultation_service.deactivate_follow_up(db, fu)
     return FollowUpRead.model_validate(updated)
+
+
+@router.post("/bulk-delete", status_code=status.HTTP_200_OK)
+async def bulk_delete_consultations(
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ids = data.get("ids", [])
+    if not ids or not isinstance(ids, list):
+        raise HTTPException(status_code=400, detail="ids must be a non-empty list")
+    try:
+        consultation_ids = [uuid.UUID(str(i)) for i in ids]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID in ids")
+    deleted = await consultation_service.hard_delete_consultations(
+        db,
+        consultation_ids,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+    )
+    return {"deleted": deleted}

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.cart import CartItem, CartItemStatus, follow_up_cart_items
+from app.models.commission import Commission
 from app.models.company import Branch
 from app.models.consultation import (
     Consultation,
@@ -15,6 +16,7 @@ from app.models.consultation import (
     FollowUpType,
     InterestLevel,
 )
+from app.models.lead import Lead
 from app.models.user import UserRole
 
 
@@ -217,6 +219,50 @@ async def deactivate_consultation(db: AsyncSession, consultation: Consultation) 
         )
     )
     return result.scalar_one()
+
+
+async def hard_delete_consultations(
+    db: AsyncSession,
+    consultation_ids: list[uuid.UUID],
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> int:
+    """Hard-delete consultations with all associated data. Super admin only."""
+    if current_user_role != UserRole.SUPER_USER:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Only super admin can delete clients")
+
+    if company_id is not None:
+        c_result = await db.execute(
+            select(Consultation.id).join(Branch).where(
+                Consultation.id.in_(consultation_ids),
+                Branch.company_id == company_id,
+            )
+        )
+        existing = {row[0] for row in c_result.all()}
+        missing = set(consultation_ids) - existing
+        if missing:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail=f"Consultations not found: {[str(m) for m in missing]}")
+
+    cart_items_result = await db.execute(
+        select(CartItem.id).where(CartItem.consultation_id.in_(consultation_ids))
+    )
+    cart_item_ids = [row[0] for row in cart_items_result]
+
+    await db.execute(
+        delete(Lead).where(Lead.converted_consultation_id.in_(consultation_ids))
+    )
+    if cart_item_ids:
+        await db.execute(
+            delete(Commission).where(Commission.cart_item_id.in_(cart_item_ids))
+        )
+
+    result = await db.execute(
+        delete(Consultation).where(Consultation.id.in_(consultation_ids))
+    )
+    await db.flush()
+    return len(consultation_ids)
 
 
 async def client_search(

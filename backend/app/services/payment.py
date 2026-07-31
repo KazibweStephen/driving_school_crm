@@ -52,6 +52,7 @@ async def create_payment(
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Consultation not found")
     payment = Payment(
+        id=uuid.uuid4(),
         consultation_id=consultation_id,
         created_by_phone=created_by_phone,
         product_id=product_id,
@@ -62,12 +63,13 @@ async def create_payment(
         receipt_number=receipt_number or None,
         system_receipt_number=_generate_system_receipt_number(),
     )
+    payment_id = payment.id
     db.add(payment)
     await db.flush()
 
     for inst_data in installments_data:
         create_inst = Installment(
-            payment_id=payment.id,
+            payment_id=payment_id,
             due_date=inst_data["due_date"],
             amount=inst_data["amount"],
         )
@@ -77,7 +79,7 @@ async def create_payment(
     # Reload with installments to compute totals
     result = await db.execute(
         select(Payment)
-        .where(Payment.id == payment.id)
+        .where(Payment.id == payment_id)
         .options(selectinload(Payment.installments))
     )
     payment = result.scalar_one()
@@ -233,12 +235,14 @@ async def mark_installment_paid(
     inst.paid_amount = paid_amount or inst.amount
     if notes is not None:
         inst.notes = notes
+
+    payment_id = inst.payment_id
     await db.flush()
 
     # Recompute parent payment totals
     result = await db.execute(
         select(Payment)
-        .where(Payment.id == inst.payment_id)
+        .where(Payment.id == payment_id)
         .options(selectinload(Payment.installments))
     )
     payment = result.scalar_one()

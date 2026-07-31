@@ -147,6 +147,10 @@ async def create_payment(
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
 
+    # Serialize immediately to avoid lazy-load issues after subsequent db queries
+    from app.schemas.payment import PaymentRead, InstallmentRead
+    payment_response = PaymentRead.model_validate(payment)
+
     # Send payment received SMS
     if current_user.company_id:
         try:
@@ -168,7 +172,7 @@ async def create_payment(
         except Exception as e:
             logger.warning("[SMS] Failed to send payment_received notification: %s", e)
 
-    return PaymentRead.model_validate(payment)
+    return payment_response
 
 
 @router.get(
@@ -213,6 +217,9 @@ async def update_installment(
     if not inst:
         raise HTTPException(status_code=404, detail="Installment not found")
 
+    # Serialize before SMS queries to avoid lazy-load issues
+    inst_response = InstallmentRead.model_validate(inst)
+
     # Send payment received SMS on installment payment
     if current_user.company_id:
         try:
@@ -241,4 +248,4 @@ async def update_installment(
         except Exception as e:
             logger.warning("[SMS] Failed to send payment_received notification: %s", e)
 
-    return InstallmentRead.model_validate(inst)
+    return inst_response

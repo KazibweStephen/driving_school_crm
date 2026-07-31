@@ -13,6 +13,7 @@ import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { SelectModule } from 'primeng/select';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { CompanyService, Company, CompanyCreate, CompanyUpdate } from '../../core/services/company.service';
+import { AuthService } from '../../core/auth/auth.service';
 
 @Component({
   selector: 'app-companies',
@@ -28,7 +29,9 @@ import { CompanyService, Company, CompanyCreate, CompanyUpdate } from '../../cor
     <div class="p-4">
       <div class="flex items-center justify-between mb-4">
         <h1 class="text-2xl font-bold">Companies</h1>
-        <p-button label="New Company" icon="pi pi-plus" (onClick)="showCreate()" />
+        @if (isSuperUser) {
+          <p-button label="New Company" icon="pi pi-plus" (onClick)="showCreate()" />
+        }
       </div>
 
       <p-table [value]="companies()" [loading]="loading()" dataKey="id"
@@ -57,8 +60,12 @@ import { CompanyService, Company, CompanyCreate, CompanyUpdate } from '../../cor
             <td class="text-sm text-gray-500">{{ c.created_at | date:'dd/MM/yy' }}</td>
             <td>
               <div class="flex gap-1">
-                <p-button icon="pi pi-pencil" severity="secondary" text (onClick)="showEdit(c)" pTooltip="Edit" />
-                <p-button icon="pi pi-trash" severity="danger" text (onClick)="confirmDelete(c)" pTooltip="Delete" />
+                @if (isSuperUser) {
+                  <p-button icon="pi pi-pencil" severity="secondary" text (onClick)="showEdit(c)" pTooltip="Edit" />
+                  <p-button icon="pi pi-trash" severity="danger" text (onClick)="confirmDelete(c)" pTooltip="Delete" />
+                } @else {
+                  <span class="text-sm text-gray-300">—</span>
+                }
               </div>
             </td>
           </tr>
@@ -128,7 +135,12 @@ export class CompaniesCmp implements OnInit {
     private service: CompanyService,
     private confirmationService: ConfirmationService,
     private messageService: MessageService,
-  ) {}
+    private authService: AuthService,
+  ) {
+    this.isSuperUser = this.authService.currentUserRole() === 'super_user';
+  }
+
+  isSuperUser = false;
 
   ngOnInit() {
     this.load();

@@ -18,6 +18,7 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { ProductService, Product, Package } from '../../core/services/product.service';
 import { LessonPlanService, LessonPlanTemplate, LessonPlanTemplateCreate, LessonTemplateItem } from '../../core/services/lesson-plan.service';
 import { LessonLibraryService, LessonLibrary } from '../../core/services/lesson-library.service';
+import { AuthService } from '../../core/auth/auth.service';
 
 @Component({
   selector: 'app-products',
@@ -122,7 +123,13 @@ export class Products implements OnInit {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public currencyService: CurrencyService,
-  ) {}
+    private authService: AuthService,
+  ) {
+    const role = this.authService.currentUserRole();
+    this.isAdmin = role === 'super_user' || role === 'company_super_user';
+  }
+
+  isAdmin = false;
 
   ngOnInit() {
     this.loadProducts();

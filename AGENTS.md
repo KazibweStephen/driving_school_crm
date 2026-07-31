@@ -59,6 +59,8 @@
 - Payments page under Management sidebar group: list/search, date range + client type + branch filters, totals cards, print report (privileged roles)
 - Payments table: client name links to `/consultations/{id}`, received-by user shown below phone, sort icons kept on same line as headers
 - Payments list filters/sorts by `document_date` (falling back to `created_at`)
+- Products GET endpoints (`GET /api/v1/products/`, `GET /api/v1/products/{id}`) allow any authenticated user (read-only); create/update/delete remain `require_admin_access` (super_user / company_super_user); frontend Products page hides Templates/Add/Edit/Deactivate actions for non-admin roles
+- Companies GET endpoints (`GET /api/v1/companies/`, `GET /api/v1/companies/{id}`) allow any authenticated user but non-super users only see/access their own company (list returns just their company, by-id returns 404 for other companies); create/update/delete remain `require_super_user`; frontend Companies page hides New/Edit/Delete for non-super roles
 
 ## Progress
 ### Done

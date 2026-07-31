@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_admin_access
+from app.api.deps import get_current_user, require_admin_access
 from app.core.database import get_db
 from app.models.product import EntityStatus
 from app.models.user import User
@@ -40,7 +40,7 @@ async def list_products(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(get_current_user),
 ):
     products, total = await product_service.list_products(
         db,
@@ -63,7 +63,7 @@ async def list_products(
 async def get_product(
     product_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(get_current_user),
 ):
     from uuid import UUID
     try:

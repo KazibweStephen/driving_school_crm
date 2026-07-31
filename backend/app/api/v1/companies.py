@@ -96,9 +96,14 @@ async def create_company(
 @router.get("/", response_model=list[CompanyRead])
 async def list_companies(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(Company).order_by(Company.created_at.desc()))
+    query = select(Company)
+    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+        query = query.where(Company.id == current_user.company_id)
+    elif current_user.role != UserRole.SUPER_USER:
+        return []
+    result = await db.execute(query.order_by(Company.created_at.desc()))
     companies = result.scalars().all()
     return [CompanyRead.model_validate(c) for c in companies]
 
@@ -107,7 +112,7 @@ async def list_companies(
 async def get_company(
     company_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(get_current_user),
 ):
     try:
         cid = uuid.UUID(company_id)
@@ -116,6 +121,12 @@ async def get_company(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid company ID",
         )
+    if current_user.role != UserRole.SUPER_USER:
+        if current_user.company_id != cid:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company not found",
+            )
     result = await db.execute(select(Company).where(Company.id == cid))
     company = result.scalar_one_or_none()
     if company is None:

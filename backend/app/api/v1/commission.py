@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User, UserRole
 from app.models.commission import ContestStatus, CommissionContest
@@ -29,7 +29,7 @@ async def list_rates(
     package_id: Optional[uuid.UUID] = Query(None),
     active_only: bool = Query(False),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("commissions.view")),
 ):
     items = await commission_service.list_commission_rates(
         db, current_user.company_id, current_user.role,
@@ -56,7 +56,7 @@ async def list_rates(
 async def create_rate(
     data: CommissionRateCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("commissions.manage")),
 ):
     company_id = await resolve_company_id(db, current_user)
     if not company_id:
@@ -85,7 +85,7 @@ async def update_rate(
     rate_id: uuid.UUID,
     data: CommissionRateUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("commissions.manage")),
 ):
     rate = await commission_service.get_commission_rate_by_id(db, rate_id, current_user.company_id)
     if not rate:
@@ -110,7 +110,7 @@ async def update_rate(
 async def delete_rate(
     rate_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("commissions.manage")),
 ):
     rate = await commission_service.get_commission_rate_by_id(db, rate_id, current_user.company_id)
     if not rate:
@@ -126,7 +126,7 @@ async def list_commissions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("commissions.view")),
 ):
     items, total = await commission_service.list_commissions(
         db, company_id=current_user.company_id, user_role=current_user.role,
@@ -178,7 +178,7 @@ async def list_commissions(
 async def get_commission(
     commission_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("commissions.view")),
 ):
     c = await commission_service.get_commission_by_id(db, commission_id, current_user.company_id)
     if not c:
@@ -223,7 +223,7 @@ async def get_commission(
 @router.get("/my-dashboard/summary", response_model=CommissionSummaryResponse)
 async def my_commission_summary(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("commissions.view")),
 ):
     result = await commission_service.get_user_commission_summary(
         db, current_user.company_id, current_user.phone, current_user.role
@@ -242,7 +242,7 @@ async def create_contest(
     commission_id: uuid.UUID,
     data: ContestCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("commissions.manage")),
 ):
     commission = await commission_service.get_commission_by_id(db, commission_id, current_user.company_id)
     if not commission:
@@ -261,7 +261,7 @@ async def create_contest(
 @router.get("/contests/list", response_model=list[ContestRead])
 async def list_contests(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("commissions.view")),
 ):
     items = await commission_service.list_contests(db, current_user.company_id, current_user.role)
     return [
@@ -283,7 +283,7 @@ async def resolve_contest(
     contest_id: uuid.UUID,
     data: ContestResolve,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("commissions.manage")),
 ):
     from app.models.commission import CommissionContest
     result = await db.execute(

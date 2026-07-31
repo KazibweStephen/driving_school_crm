@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.company import Branch, Company
@@ -95,7 +95,7 @@ async def download_receipt(
     payment_id: uuid.UUID,
     download: bool = False,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("payments.view")),
 ):
     payment = await _load_payment_with_relationships(db, payment_id)
     if not payment:
@@ -122,7 +122,7 @@ async def download_consolidated_receipt(
     consultation_id: str,
     download: bool = False,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("payments.view")),
 ):
     cid = uuid.UUID(consultation_id)
     consult_result = await db.execute(
@@ -158,7 +158,7 @@ async def download_consolidated_receipt(
 async def get_receipt_link(
     payment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("payments.view")),
 ):
     payment = await _load_payment_with_relationships(db, payment_id)
     if not payment:

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_super_user, require_admin_access
+from app.api.deps import get_current_user, require_permission
 from app.core.database import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.user import (
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 async def create_user(
     data: UserCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("users.manage")),
 ):
     if data.role == UserRole.COMPANY_SUPER_USER and current_user.role != UserRole.SUPER_USER:
         raise HTTPException(
@@ -63,7 +63,7 @@ async def list_users(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("users.view")),
 ):
     users, total = await user_service.list_users(
         db, search=search, role=role, status=status, page=page, page_size=page_size,
@@ -90,7 +90,7 @@ async def get_current_user_profile(
 async def get_user(
     phone: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("users.view")),
 ):
     user = await user_service.get_user_by_phone_with_company(
         db, phone,
@@ -110,7 +110,7 @@ async def update_user(
     phone: str,
     data: UserUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("users.manage")),
 ):
     if data.role == UserRole.COMPANY_SUPER_USER and current_user.role != UserRole.SUPER_USER:
         raise HTTPException(
@@ -144,7 +144,7 @@ async def update_user(
 async def deactivate_user(
     phone: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("users.manage")),
 ):
     if phone == current_user.phone:
         raise HTTPException(
@@ -170,7 +170,7 @@ async def deactivate_user(
 async def approve_user(
     phone: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("users.approve")),
 ):
     user = await user_service.get_user_by_phone(db, phone)
     if user is None:
@@ -199,7 +199,7 @@ async def approve_user(
 async def reset_user_pin(
     phone: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("users.manage")),
 ):
     user = await user_service.get_user_by_phone(db, phone)
     if user is None:

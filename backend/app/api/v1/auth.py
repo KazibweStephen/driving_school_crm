@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app.models.company import Company
 from app.models.user import UserStatus
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
+from app.services.permission import get_user_permissions
 from app.services.user import get_user_by_phone
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -56,12 +57,14 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         company_result = await db.execute(select(Company).where(Company.id == user.company_id))
         company = company_result.scalar_one_or_none()
         currency = company.currency if company else "UGX"
+    permissions = sorted(await get_user_permissions(db, user))
     return TokenResponse(
         access_token=create_access_token(
             user.phone, role=user.role.value,
             can_backdate=user.can_backdate,
             company_id=company_id_str,
             currency=currency,
+            permissions=permissions,
         ),
         refresh_token=create_refresh_token(user.phone),
     )
@@ -85,16 +88,20 @@ async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
     role = user.role.value if user else None
     company_id_str = str(user.company_id) if user and user.company_id else None
     currency = "UGX"
-    if user and user.company_id:
-        company_result = await db.execute(select(Company).where(Company.id == user.company_id))
-        company = company_result.scalar_one_or_none()
-        currency = company.currency if company else "UGX"
+    permissions: list[str] = []
+    if user:
+        permissions = sorted(await get_user_permissions(db, user))
+        if user.company_id:
+            company_result = await db.execute(select(Company).where(Company.id == user.company_id))
+            company = company_result.scalar_one_or_none()
+            currency = company.currency if company else "UGX"
     return TokenResponse(
         access_token=create_access_token(
             phone, role=role,
             can_backdate=user.can_backdate if user else False,
             company_id=company_id_str,
             currency=currency,
+            permissions=permissions,
         ),
         refresh_token=create_refresh_token(phone),
     )

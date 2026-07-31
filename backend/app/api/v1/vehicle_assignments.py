@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.lesson_plan import Vehicle, VehicleAssignment
 from app.models.user import User
@@ -26,7 +26,7 @@ async def list_assignments(
     instructor_id: str | None = Query(None),
     on_date: date | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicles.view")),
 ):
     vid = uuid.UUID(vehicle_id) if vehicle_id else None
     assignments = await assignment_service.list_assignments(
@@ -41,7 +41,7 @@ async def list_assignments(
 async def get_assignment(
     assignment_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicles.view")),
 ):
     try:
         aid = uuid.UUID(assignment_id)
@@ -62,7 +62,7 @@ async def get_assignment(
 async def create_assignment(
     data: VehicleAssignmentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicles.manage")),
 ):
     try:
         vid = uuid.UUID(data.vehicle_id)
@@ -82,7 +82,7 @@ async def transfer_vehicle(
     data: VehicleAssignmentTransfer,
     vehicle_id: str = Query(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicles.manage")),
 ):
     try:
         vid = uuid.UUID(vehicle_id)
@@ -103,7 +103,7 @@ async def transfer_vehicle(
 async def delete_assignment(
     assignment_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicles.manage")),
 ):
     try:
         aid = uuid.UUID(assignment_id)

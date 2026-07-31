@@ -3,7 +3,7 @@ import uuid as _uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_admin_access
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.competency_catalogue import (
@@ -55,7 +55,7 @@ async def list_versions(
     status: str | None = None,
     company_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("competency.view")),
 ):
     cid = _uuid.UUID(company_id) if company_id else None
     return await svc.list_versions(db, _resolve_company_id(current_user, cid), status)
@@ -65,7 +65,7 @@ async def list_versions(
 async def create_version(
     data: CompetencyVersionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     try:
         return await svc.create_version(
@@ -81,7 +81,7 @@ async def get_version(
     version_id: str,
     company_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("competency.view")),
 ):
     cid = _uuid.UUID(company_id) if company_id else None
     v = await svc.get_version(db, _uuid.UUID(version_id), _resolve_company_id(current_user, cid))
@@ -100,7 +100,7 @@ async def update_version(
     version_id: str,
     data: CompetencyVersionUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     try:
         return await svc.update_version(
@@ -115,7 +115,7 @@ async def update_version(
 async def activate_version(
     version_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     try:
         return await svc.activate_version(db, _uuid.UUID(version_id), _require_company_id(current_user))
@@ -127,7 +127,7 @@ async def activate_version(
 async def delete_version(
     version_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     try:
         await svc.delete_version(db, _uuid.UUID(version_id), _require_company_id(current_user))
@@ -144,7 +144,7 @@ async def list_categories(
     include_inactive: bool = False,
     company_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("competency.view")),
 ):
     cid = _uuid.UUID(company_id) if company_id else None
     return await svc.list_categories(db, _resolve_company_id(current_user, cid), include_inactive)
@@ -154,7 +154,7 @@ async def list_categories(
 async def create_category(
     data: CompetencyCategoryCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     try:
         return await svc.create_category(
@@ -169,7 +169,7 @@ async def update_category(
     category_id: str,
     data: CompetencyCategoryUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     try:
         return await svc.update_category(
@@ -184,7 +184,7 @@ async def update_category(
 async def delete_category(
     category_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     try:
         await svc.delete_category(db, _uuid.UUID(category_id), _require_company_id(current_user))
@@ -208,7 +208,7 @@ async def list_competencies(
     page_size: int = Query(20, ge=1, le=100),
     company_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("competency.view")),
 ):
     vid = _uuid.UUID(version_id) if version_id else None
     cid = _uuid.UUID(category_id) if category_id else None
@@ -230,7 +230,7 @@ async def list_competencies(
 async def create_competency(
     data: CompetencyCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     try:
         return await svc.create_competency(
@@ -256,7 +256,7 @@ async def search_competencies(
     version_id: str | None = None,
     company_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("competency.view")),
 ):
     cid = _uuid.UUID(category_id) if category_id else None
     vid = _uuid.UUID(version_id) if version_id else None
@@ -284,7 +284,7 @@ async def get_competency(
     competency_id: str,
     company_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("competency.view")),
 ):
     cid = _uuid.UUID(company_id) if company_id else None
     comp = await svc.get_competency(db, _uuid.UUID(competency_id), _resolve_company_id(current_user, cid))
@@ -298,7 +298,7 @@ async def update_competency(
     competency_id: str,
     data: CompetencyUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     try:
         return await svc.update_competency(
@@ -316,7 +316,7 @@ async def update_competency(
 async def deactivate_competency(
     competency_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     try:
         return await svc.deactivate_competency(
@@ -333,7 +333,7 @@ async def deactivate_competency(
 async def bulk_import(
     data: CompetencyBulkImportRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     return await svc.bulk_import(
         db, _require_company_id(current_user),
@@ -348,7 +348,7 @@ async def bulk_import(
 async def get_lesson_competencies(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("competency.view")),
 ):
     return await svc.get_lesson_competencies(db, _uuid.UUID(lesson_id))
 
@@ -358,7 +358,7 @@ async def set_lesson_competencies(
     lesson_id: str,
     links: list[LessonCompetencyLink],
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("competency.manage")),
 ):
     await svc.set_lesson_competencies(
         db, _uuid.UUID(lesson_id),

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.lesson_plan import (
@@ -40,7 +40,7 @@ async def list_templates(
     transmission_type: str | None = Query(None),
     status: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     templates = await lesson_service.list_templates(db, transmission_type, status, company_id=current_user.company_id)
     return [LessonPlanTemplateRead.model_validate(t) for t in templates]
@@ -50,7 +50,7 @@ async def list_templates(
 async def create_template(
     data: LessonPlanTemplateCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     items_data = [i.model_dump() for i in data.items]
     template = await lesson_service.create_template(
@@ -72,7 +72,7 @@ async def create_template(
 async def get_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -89,7 +89,7 @@ async def update_template(
     template_id: str,
     data: LessonPlanTemplateUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -116,7 +116,7 @@ async def update_template(
 async def delete_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -133,7 +133,7 @@ async def duplicate_template(
     template_id: str,
     name: str = Query(..., description="Name for the duplicated template"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -150,7 +150,7 @@ async def duplicate_template(
 async def archive_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -167,7 +167,7 @@ async def archive_template(
 async def export_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -183,7 +183,7 @@ async def export_template(
 async def import_template_from_json(
     data: dict,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         template, import_log = await lesson_service.import_template_json(db, data, created_by_phone=current_user.phone, company_id=current_user.company_id)
@@ -200,7 +200,7 @@ async def import_template_from_json(
 async def validate_import_json(
     data: dict,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     result = await lesson_service.validate_import_json(data)
     return LessonPlanImportValidate(**result)
@@ -214,7 +214,7 @@ async def create_template_item(
     template_id: str,
     data: LessonTemplateItemCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -244,7 +244,7 @@ async def update_template_item(
     item_id: str,
     data: LessonTemplateItemUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         iid = uuid.UUID(item_id)
@@ -285,7 +285,7 @@ async def update_template_item(
 async def delete_template_item(
     item_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         iid = uuid.UUID(item_id)
@@ -312,7 +312,7 @@ async def delete_template_item(
 async def list_client_plans(
     cart_item_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     try:
         cid = uuid.UUID(cart_item_id)
@@ -327,7 +327,7 @@ async def create_client_plan(
     cart_item_id: str,
     data: ClientLessonPlanCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         cid = uuid.UUID(cart_item_id)
@@ -400,7 +400,7 @@ async def generate_student_plan(
     purchased_days: int,
     notes: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         cid = uuid.UUID(cart_item_id)
@@ -426,7 +426,7 @@ async def generate_student_plan(
 async def get_client_plan(
     plan_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -443,7 +443,7 @@ async def update_client_plan(
     plan_id: str,
     data: ClientLessonPlanUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -467,7 +467,7 @@ async def delete_client_plan(
     plan_id: str,
     delete_mode: str = Query("all", description="all | unstarted | uncompleted"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -489,7 +489,7 @@ async def upgrade_plan(
     plan_id: str,
     purchased_days: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -512,7 +512,7 @@ async def update_client_lesson(
     lesson_id: str,
     data: ClientLessonUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -558,7 +558,7 @@ async def update_client_lesson(
 async def start_lesson(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -622,7 +622,7 @@ async def complete_lesson(
     outcome: str | None = None,
     notes: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -679,7 +679,7 @@ async def complete_lesson(
 async def skip_lesson(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -699,7 +699,7 @@ async def move_lesson(
     lesson_id: str,
     new_day_number: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -717,7 +717,7 @@ async def reorder_lessons(
     plan_id: str,
     data: LessonBulkReorder,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.manage")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -732,7 +732,7 @@ async def reorder_lessons(
 async def get_lesson_history(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     try:
         lid = uuid.UUID(lesson_id)

@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.cart import CartItemCreate, CartItemRead, CartItemUpdate
@@ -21,7 +21,7 @@ async def add_cart_item(
     consultation_id: str,
     data: CartItemCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.manage")),
 ):
     try:
         cid = uuid.UUID(consultation_id)
@@ -42,7 +42,7 @@ async def add_cart_item(
 async def list_cart_items(
     consultation_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.view")),
 ):
     try:
         cid = uuid.UUID(consultation_id)
@@ -58,7 +58,7 @@ async def update_cart_item(
     item_id: str,
     data: CartItemUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.manage")),
 ):
     try:
         iid = uuid.UUID(item_id)
@@ -75,7 +75,7 @@ async def update_cart_item(
 async def remove_cart_item(
     item_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.manage")),
 ):
     try:
         iid = uuid.UUID(item_id)

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.company import BorrowStatus, CollectionStatus, ExpenseStatus, TransferStatus
@@ -36,7 +36,7 @@ router = APIRouter(prefix="/finance", tags=["finance"])
 @router.post("/expenses/upload-receipt")
 async def upload_expense_receipt(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("expenses.manage")),
 ):
     allowed_types = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
     if file.content_type and file.content_type not in allowed_types:
@@ -73,7 +73,7 @@ async def list_expenses(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("expenses.view")),
 ):
     expenses, total = await finance_service.list_expenses(
         db, branch_id=branch_id, status=status, page=page, page_size=page_size,
@@ -91,7 +91,7 @@ async def list_expenses(
 async def create_expense(
     data: ExpenseCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("expenses.manage")),
 ):
     expense = await finance_service.create_expense(
         db,
@@ -114,7 +114,7 @@ async def update_expense(
     expense_id: uuid.UUID,
     data: ExpenseUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("expenses.manage")),
 ):
     expense = await finance_service.update_expense(
         db,
@@ -164,7 +164,7 @@ async def list_borrowed(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.view")),
 ):
     items, total = await finance_service.list_borrowed(
         db, branch_id=branch_id, status=status, page=page, page_size=page_size,
@@ -182,7 +182,7 @@ async def list_borrowed(
 async def create_borrowed(
     data: BorrowedMoneyCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.manage")),
 ):
     item = await finance_service.create_borrowed(
         db,
@@ -205,7 +205,7 @@ async def update_borrowed(
     item_id: uuid.UUID,
     data: BorrowedMoneyUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.manage")),
 ):
     item = await finance_service.update_borrowed(
         db,
@@ -238,7 +238,7 @@ async def list_collections(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.view")),
 ):
     collections, total = await finance_service.list_collections(
         db, branch_id=branch_id, status=status, page=page, page_size=page_size,
@@ -256,7 +256,7 @@ async def list_collections(
 async def create_collection_for_installment(
     data: CollectionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.manage")),
 ):
     if data.installment_id:
         collection = await finance_service.create_collection_for_installment(
@@ -286,7 +286,7 @@ async def update_collection(
     collection_id: uuid.UUID,
     data: CollectionUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.manage")),
 ):
     collection = await finance_service.update_collection(
         db,
@@ -313,7 +313,7 @@ async def update_collection(
 async def get_dunning_list(
     branch_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.view")),
 ):
     return await finance_service.get_dunning_list(db, branch_id=branch_id, company_id=current_user.company_id, current_user_role=current_user.role)
 
@@ -321,7 +321,7 @@ async def get_dunning_list(
 @router.post("/dunning/send", response_model=dict)
 async def send_dunning(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.manage")),
 ):
     sent_count = await finance_service.send_dunning_notifications(db)
     return {"sent": sent_count, "message": f"Dunning notices sent to {sent_count} clients"}
@@ -338,7 +338,7 @@ async def list_branch_transfers(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.view")),
 ):
     transfers, total = await finance_service.list_branch_transfers(
         db, branch_id=branch_id, direction=direction, status=status,
@@ -357,7 +357,7 @@ async def list_branch_transfers(
 async def list_transfer_notifications(
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.view")),
 ):
     return await finance_service.list_transfer_notifications(
         db,
@@ -372,7 +372,7 @@ async def list_transfer_notifications(
 async def create_branch_transfer(
     data: BranchTransferCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.manage")),
 ):
     transfer = await finance_service.create_branch_transfer(
         db,
@@ -392,7 +392,7 @@ async def create_branch_transfer(
 async def receive_branch_transfer(
     transfer_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.manage")),
 ):
     transfer = await finance_service.receive_branch_transfer(
         db, transfer_id, received_by=current_user.phone,
@@ -410,7 +410,7 @@ async def receive_branch_transfer(
 async def cancel_branch_transfer(
     transfer_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.manage")),
 ):
     transfer = await finance_service.cancel_branch_transfer(
         db, transfer_id, cancelled_by=current_user.phone,
@@ -428,7 +428,7 @@ async def cancel_branch_transfer(
 async def get_transfer_summary(
     branch_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.view")),
 ):
     return await finance_service.get_transfer_summary(
         db, branch_id=branch_id,
@@ -446,7 +446,7 @@ async def get_collections_sheet(
     end_date: date | None = Query(None),
     branch_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.view")),
 ):
     return await finance_service.get_collections_sheet(
         db, period=period, start_date=start_date, end_date=end_date,
@@ -459,6 +459,6 @@ async def get_collections_sheet(
 async def get_finance_summary(
     branch_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.view")),
 ):
     return await finance_service.get_finance_summary(db, branch_id=branch_id, company_id=current_user.company_id, current_user_role=current_user.role)

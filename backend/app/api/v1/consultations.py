@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.cart import CartItem, CartItemStatus
 from app.models.consultation import ConsultationStatus, FollowUp, FollowUpStatus, FollowUpType
@@ -40,7 +40,7 @@ def _phone_matches(search: str, consultation) -> bool:
 async def create_consultation(
     data: ConsultationCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.create")),
 ):
     from datetime import date as date_type
     consultation = await consultation_service.create_consultation(
@@ -77,7 +77,7 @@ async def create_consultation(
 async def create_full_consultation(
     data: FullConsultationCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.create")),
 ):
     """Create a consultation with products and optional payment in a single transaction."""
     from datetime import date as date_type
@@ -215,7 +215,7 @@ async def list_consultations(
     page_size: int = Query(default=20, ge=1, le=100),
     branch_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.view")),
 ):
     consultations, total = await consultation_service.search_consultations(
         db, search=search, status=status, page=page, page_size=page_size, stage=stage,
@@ -234,7 +234,7 @@ async def list_consultations(
 async def client_search(
     search: str = Query(..., min_length=1, max_length=50),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.view")),
 ):
     """Deduplicated search — returns one result per phone number across all branches."""
     clients = await consultation_service.client_search(db, search, company_id=current_user.company_id, current_user_role=current_user.role)
@@ -260,7 +260,7 @@ async def client_search(
 async def get_consultation(
     consultation_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.view")),
 ):
     from uuid import UUID
     try:
@@ -282,7 +282,7 @@ async def update_consultation(
     consultation_id: str,
     data: ConsultationUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.manage")),
 ):
     from uuid import UUID
     try:
@@ -322,7 +322,7 @@ async def update_consultation(
 async def deactivate_consultation(
     consultation_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.delete")),
 ):
     from uuid import UUID
     try:
@@ -357,7 +357,7 @@ async def create_follow_up(
     consultation_id: str,
     data: FollowUpCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.manage")),
 ):
     from uuid import UUID
     try:
@@ -388,7 +388,7 @@ async def update_follow_up(
     follow_up_id: str,
     data: FollowUpUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.manage")),
 ):
     from uuid import UUID
     try:
@@ -414,7 +414,7 @@ async def update_follow_up(
 async def deactivate_follow_up(
     follow_up_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.manage")),
 ):
     from uuid import UUID
     try:
@@ -441,7 +441,7 @@ async def deactivate_follow_up(
 async def bulk_delete_consultations(
     data: dict,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.delete")),
 ):
     ids = data.get("ids", [])
     if not ids or not isinstance(ids, list):

@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.company import Branch, Company, UserBranchAssignment
@@ -69,7 +69,7 @@ async def _resolve_branch_ids(
 @router.get("/api/v1/payments/accessible-branches/")
 async def accessible_branches(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("payments.view")),
 ) -> list[BranchRead]:
     base_query = select(Branch)
     if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
@@ -100,7 +100,7 @@ async def list_payments(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("payments.view")),
 ) -> PaymentListResponse:
     resolved = await _resolve_branch_ids(db, current_user, branch_ids.split(",") if branch_ids else None)
     payments, total, total_amount_sum, total_paid_sum, total_balance_sum = await payment_service.list_payments(
@@ -178,7 +178,7 @@ async def payments_report(
     client_type: str | None = Query("all", pattern="^(all|new|collection)$"),
     branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reports.view")),
 ) -> str:
     resolved = await _resolve_branch_ids(db, current_user, branch_ids.split(",") if branch_ids else None)
 
@@ -287,7 +287,7 @@ async def payments_report(
 async def check_receipt(
     receipt_number: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("payments.view")),
 ):
     payment = await payment_service.get_payment_by_receipt(db, receipt_number)
     if payment is None:

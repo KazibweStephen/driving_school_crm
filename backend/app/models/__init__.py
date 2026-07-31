@@ -64,6 +64,7 @@ from app.models.payment import (
     NotificationPreference,
     Payment,
 )
+from app.models.permission import RolePermission
 from app.models.permit import PermitProgress
 from app.models.product import Package, Product
 from app.models.commission import Commission, CommissionRate, CommissionStatus, CommissionContest, ContestStatus
@@ -102,4 +103,5 @@ __all__ = [
     "Lead", "LeadStatus",
     "FuelRate", "FuelRefueling",
     "CompanySmsSettings", "SmsTemplate", "SmsTemplateCategory", "SmsLog",
+    "RolePermission",
 ]

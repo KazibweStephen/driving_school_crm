@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_admin_access
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.product import EntityStatus
 from app.models.user import User
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/packages", tags=["packages"])
 async def create_package_with_rate(
     data: PackageWithRateCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("products.manage")),
 ):
     product = await product_service.get_product_by_id(db, data.product_id, company_id=current_user.company_id)
     if product is None:
@@ -56,7 +56,7 @@ async def create_package_with_rate(
 async def create_package(
     data: PackageCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("products.manage")),
 ):
     product = await product_service.get_product_by_id(db, data.product_id, company_id=current_user.company_id)
     if product is None:
@@ -86,7 +86,7 @@ async def update_package(
     package_id: str,
     data: PackageUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("products.manage")),
 ):
     from uuid import UUID
     try:
@@ -123,7 +123,7 @@ async def update_package(
 async def deactivate_package(
     package_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("products.manage")),
 ):
     from uuid import UUID
     try:

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.lesson_plan import VideoLibraryCreate, VideoLibraryRead, VideoLibraryUpdate
@@ -19,7 +19,7 @@ async def list_videos(
     source: str | None = Query(None),
     search: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("video_library.view")),
 ):
     videos = await video_service.list_videos(db, source, search, company_id=current_user.company_id)
     return [VideoLibraryRead.model_validate(v) for v in videos]
@@ -30,7 +30,7 @@ async def create_video(
     data: VideoLibraryCreate,
     lesson_id: str | None = Query(None, description="Auto-link to this lesson"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("video_library.manage")),
 ):
     video = await video_service.create_video(
         db,
@@ -58,7 +58,7 @@ async def upload_video(
     lesson_id: str = Form(""),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("video_library.manage")),
 ):
     allowed_types = ["video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"]
     if file.content_type and file.content_type not in allowed_types:
@@ -85,7 +85,7 @@ async def upload_video(
 async def get_video(
     video_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("video_library.view")),
 ):
     try:
         vid = uuid.UUID(video_id)
@@ -102,7 +102,7 @@ async def update_video(
     video_id: str,
     data: VideoLibraryUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("video_library.manage")),
 ):
     try:
         vid = uuid.UUID(video_id)
@@ -126,7 +126,7 @@ async def update_video(
 async def delete_video(
     video_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("video_library.manage")),
 ):
     try:
         vid = uuid.UUID(video_id)
@@ -142,7 +142,7 @@ async def delete_video(
 async def stream_video(
     video_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("video_library.view")),
 ):
     try:
         vid = uuid.UUID(video_id)

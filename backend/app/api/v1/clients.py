@@ -6,7 +6,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.cart import CartItem, CartItemStatus
 from app.models.consultation import Consultation
@@ -33,7 +33,7 @@ async def list_clients(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.view")),
 ):
     consultations, total = await payment_service.list_clients(
         db, search=search, page=page, page_size=page_size,
@@ -89,7 +89,7 @@ async def list_clients(
 async def get_client(
     consultation_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("consultations.view")),
 ):
     try:
         cid = uuid.UUID(consultation_id)
@@ -121,7 +121,7 @@ async def create_payment(
     consultation_id: str,
     data: PaymentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("payments.record")),
 ):
     try:
         cid = uuid.UUID(consultation_id)
@@ -183,7 +183,7 @@ async def create_payment(
 async def list_payments(
     consultation_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("payments.view")),
 ):
     try:
         cid = uuid.UUID(consultation_id)
@@ -200,7 +200,7 @@ async def update_installment(
     installment_id: str,
     data: InstallmentUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("payments.record")),
 ):
     try:
         iid = uuid.UUID(installment_id)

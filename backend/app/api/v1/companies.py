@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_super_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.company import (
     Branch,
@@ -38,7 +38,7 @@ router = APIRouter(prefix="/api/v1/companies", tags=["Companies"])
 @router.get("/my-branches", response_model=list[BranchRead])
 async def my_branches(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("branches.view")),
 ):
     """Branches accessible to the current user (all in company if privileged, else assigned)."""
     base_query = select(Branch)
@@ -72,7 +72,7 @@ async def my_branches(
 async def create_company(
     data: CompanyCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("companies.manage")),
 ):
     company = Company(
         name=data.name,
@@ -88,6 +88,9 @@ async def create_company(
     from app.services.sms import seed_default_templates
     await seed_default_templates(db, company.id)
 
+    from app.services.permission import seed_default_permissions
+    await seed_default_permissions(db, company.id)
+
     await db.commit()
     await db.refresh(company)
     return CompanyRead.model_validate(company)
@@ -96,7 +99,7 @@ async def create_company(
 @router.get("/", response_model=list[CompanyRead])
 async def list_companies(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("companies.view")),
 ):
     query = select(Company)
     if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
@@ -112,7 +115,7 @@ async def list_companies(
 async def get_company(
     company_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("companies.view")),
 ):
     try:
         cid = uuid.UUID(company_id)
@@ -142,7 +145,7 @@ async def update_company(
     company_id: str,
     data: CompanyUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("companies.manage")),
 ):
     try:
         cid = uuid.UUID(company_id)
@@ -170,7 +173,7 @@ async def update_company(
 async def delete_company(
     company_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("companies.manage")),
 ):
     try:
         cid = uuid.UUID(company_id)
@@ -198,7 +201,7 @@ async def create_branch(
     company_id: str,
     data: BranchCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("branches.manage")),
 ):
     try:
         cid = uuid.UUID(company_id)
@@ -232,7 +235,7 @@ async def create_branch(
 async def list_branches(
     company_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("branches.view")),
 ):
     try:
         cid = uuid.UUID(company_id)
@@ -252,7 +255,7 @@ async def list_branches(
 async def get_branch(
     branch_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("branches.view")),
 ):
     try:
         bid = uuid.UUID(branch_id)
@@ -276,7 +279,7 @@ async def update_branch(
     branch_id: str,
     data: BranchUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("branches.manage")),
 ):
     try:
         bid = uuid.UUID(branch_id)
@@ -304,7 +307,7 @@ async def update_branch(
 async def delete_branch(
     branch_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("branches.manage")),
 ):
     try:
         bid = uuid.UUID(branch_id)
@@ -336,7 +339,7 @@ async def assign_user_to_branch(
     branch_id: str,
     data: UserBranchAssignmentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("branches.manage")),
 ):
     try:
         bid = uuid.UUID(branch_id)
@@ -370,7 +373,7 @@ async def assign_user_to_branch(
 async def remove_user_from_branch(
     assignment_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("branches.manage")),
 ):
     try:
         aid = uuid.UUID(assignment_id)
@@ -404,7 +407,7 @@ async def assign_vehicle_to_branch(
     branch_id: str,
     data: VehicleBranchAssignmentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("branches.manage")),
 ):
     try:
         bid = uuid.UUID(branch_id)
@@ -437,7 +440,7 @@ async def assign_vehicle_to_branch(
 async def remove_vehicle_from_branch(
     assignment_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("branches.manage")),
 ):
     try:
         aid = uuid.UUID(assignment_id)
@@ -471,7 +474,7 @@ async def create_expense(
     branch_id: str,
     data: ExpenseCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("expenses.manage")),
 ):
     try:
         bid = uuid.UUID(branch_id)
@@ -508,7 +511,7 @@ async def create_expense(
 async def list_expenses(
     branch_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("expenses.view")),
 ):
     try:
         bid = uuid.UUID(branch_id)
@@ -538,7 +541,7 @@ async def create_sale(
     branch_id: str,
     data: SaleCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("expenses.manage")),
 ):
     try:
         bid = uuid.UUID(branch_id)
@@ -575,7 +578,7 @@ async def create_sale(
 async def list_sales(
     branch_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_super_user),
+    current_user: User = Depends(require_permission("expenses.view")),
 ):
     try:
         bid = uuid.UUID(branch_id)

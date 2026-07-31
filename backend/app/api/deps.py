@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import decode_token
 from app.models.user import User, UserRole, UserStatus
+from app.services.permission import has_permission
 from app.services.user import get_user_by_phone
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -56,3 +57,24 @@ async def require_admin_access(current_user: User = Depends(get_current_user)) -
             detail="Admin access required",
         )
     return current_user
+
+
+def require_permission(permission: str):
+    """Dependency factory: allow only users whose (company, role) holds the code.
+
+    ``super_user`` bypasses all permission checks.
+    """
+
+    async def _checker(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        allowed = await has_permission(db, current_user, permission)
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {permission}",
+            )
+        return current_user
+
+    return _checker

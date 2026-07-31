@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.lesson_plan import (
     ClientLesson,
@@ -87,7 +87,7 @@ async def list_checklists(
     lesson_id: str,
     checklist_type: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.view")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -109,7 +109,7 @@ async def create_checklist_item(
     lesson_id: str,
     data: ClientLessonChecklistCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -134,7 +134,7 @@ async def update_checklist_item(
     item_id: str,
     data: ClientLessonChecklistUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         iid = uuid.UUID(item_id)
@@ -169,7 +169,7 @@ async def update_checklist_item(
 async def delete_checklist_item(
     item_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         iid = uuid.UUID(item_id)
@@ -200,7 +200,7 @@ async def delete_checklist_item(
 async def list_competencies(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.view")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -222,7 +222,7 @@ async def create_competency(
     lesson_id: str,
     data: ClientLessonCompetencyCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -248,7 +248,7 @@ async def update_competency(
     competency_id: str,
     data: ClientLessonCompetencyUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         cid = uuid.UUID(competency_id)
@@ -281,7 +281,7 @@ async def update_competency(
 async def delete_competency(
     competency_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         cid = uuid.UUID(competency_id)
@@ -312,7 +312,7 @@ async def delete_competency(
 async def get_timer(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.view")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -333,7 +333,7 @@ async def get_timer(
 async def start_timer(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -364,7 +364,7 @@ async def start_timer(
 async def pause_timer(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -392,7 +392,7 @@ async def pause_timer(
 async def resume_timer(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -421,7 +421,7 @@ async def sync_timer(
     lesson_id: str,
     data: ClientLessonTimerSync,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -453,7 +453,7 @@ async def sync_timer(
 async def list_theory_sessions(
     plan_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.view")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -475,7 +475,7 @@ async def create_theory_session(
     plan_id: str,
     data: TheorySessionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -505,7 +505,7 @@ async def generate_theory_sessions(
     plan_id: str,
     data: TheorySessionGenerateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -558,7 +558,7 @@ async def update_theory_session(
     session_id: str,
     data: TheorySessionUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.manage")),
 ):
     try:
         sid = uuid.UUID(session_id)
@@ -609,7 +609,7 @@ async def update_theory_session(
 async def get_competency_dashboard(
     consultation_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_execution.view")),
 ):
     try:
         cid = uuid.UUID(consultation_id)

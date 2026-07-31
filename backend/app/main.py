@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import (
     auth, bulk_onboarding, cart, clients, commission, competency_catalogue, companies, consultations,
     finance, fuel, instructor_qualifications, lead, lesson_plan, lesson_execution,
-    library, packages, payments, permit, products, receipts, reports,
+    library, packages, payments, permit, permissions, products, receipts, reports,
     schedule_breaks, scheduling, sms, training, users, vehicle_assignments,
     vehicle_schedule, vehicles, video_library,
 )
@@ -55,6 +55,7 @@ app.include_router(reports.router, prefix="/api/v1")
 app.include_router(schedule_breaks.router)
 app.include_router(bulk_onboarding.router, prefix="/api/v1")
 app.include_router(sms.router, prefix="/api/v1")
+app.include_router(permissions.router)
 
 
 @app.get("/health")

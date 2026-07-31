@@ -16,7 +16,7 @@ router = APIRouter(prefix="/packages", tags=["packages"])
 async def create_package_with_rate(
     data: PackageWithRateCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("products.manage")),
+    current_user: User = Depends(require_permission("products.create")),
 ):
     product = await product_service.get_product_by_id(db, data.product_id, company_id=current_user.company_id)
     if product is None:
@@ -56,7 +56,7 @@ async def create_package_with_rate(
 async def create_package(
     data: PackageCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("products.manage")),
+    current_user: User = Depends(require_permission("products.create")),
 ):
     product = await product_service.get_product_by_id(db, data.product_id, company_id=current_user.company_id)
     if product is None:
@@ -86,7 +86,7 @@ async def update_package(
     package_id: str,
     data: PackageUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("products.manage")),
+    current_user: User = Depends(require_permission("products.edit")),
 ):
     from uuid import UUID
     try:
@@ -123,7 +123,7 @@ async def update_package(
 async def deactivate_package(
     package_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("products.manage")),
+    current_user: User = Depends(require_permission("products.delete")),
 ):
     from uuid import UUID
     try:

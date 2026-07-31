@@ -178,7 +178,7 @@ async def payments_report(
     client_type: str | None = Query("all", pattern="^(all|new|collection)$"),
     branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("reports.view")),
+    current_user: User = Depends(require_permission("reports.print")),
 ) -> str:
     resolved = await _resolve_branch_ids(db, current_user, branch_ids.split(",") if branch_ids else None)
 

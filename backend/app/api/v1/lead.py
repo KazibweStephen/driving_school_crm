@@ -18,7 +18,7 @@ router = APIRouter(prefix="/leads", tags=["leads"])
 async def create_lead(
     data: LeadCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("leads.manage")),
+    current_user: User = Depends(require_permission("leads.create")),
 ):
     company_id = await resolve_company_id(db, current_user)
     if not company_id:
@@ -72,7 +72,7 @@ async def update_lead(
     lead_id: uuid.UUID,
     data: LeadUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("leads.manage")),
+    current_user: User = Depends(require_permission("leads.update_status")),
 ):
     lead = await lead_service.get_lead_by_id(db, lead_id, current_user.company_id)
     if not lead:

@@ -282,7 +282,7 @@ async def update_consultation(
     consultation_id: str,
     data: ConsultationUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("consultations.manage")),
+    current_user: User = Depends(require_permission("consultations.edit")),
 ):
     from uuid import UUID
     try:
@@ -357,7 +357,7 @@ async def create_follow_up(
     consultation_id: str,
     data: FollowUpCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("consultations.manage")),
+    current_user: User = Depends(require_permission("consultations.edit")),
 ):
     from uuid import UUID
     try:
@@ -388,7 +388,7 @@ async def update_follow_up(
     follow_up_id: str,
     data: FollowUpUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("consultations.manage")),
+    current_user: User = Depends(require_permission("consultations.edit")),
 ):
     from uuid import UUID
     try:
@@ -414,7 +414,7 @@ async def update_follow_up(
 async def deactivate_follow_up(
     follow_up_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("consultations.manage")),
+    current_user: User = Depends(require_permission("consultations.edit")),
 ):
     from uuid import UUID
     try:

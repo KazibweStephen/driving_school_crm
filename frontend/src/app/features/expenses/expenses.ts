@@ -19,6 +19,7 @@ import { CompanyService, Branch } from '../../core/services/company.service';
 import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
 import { CurrencyService } from '../../core/services/currency.service';
 import { UserDisplayCmp } from '../../shared/components/user-display';
+import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-expenses',
@@ -26,6 +27,7 @@ import { UserDisplayCmp } from '../../shared/components/user-display';
     CommonModule, FormsModule, ButtonModule, DialogModule,
     InputTextModule, InputNumberModule, TextareaModule, ToastModule,
     SelectModule, ConfirmDialogModule, TableModule, TagModule, TooltipModule, DatePickerModule, UserDisplayCmp,
+    HasPermissionDirective,
   ],
   providers: [ConfirmationService, MessageService],
   templateUrl: './expenses.html',
@@ -47,6 +49,9 @@ export class ExpensesCmp implements OnInit {
   filterBranch = signal<string>('');
   receiptFile = signal<File | null>(null);
   uploading = signal(false);
+  showRejectDialog = signal(false);
+  rejectingExpense = signal<Expense | null>(null);
+  rejectReason = signal('');
 
   categoryOptions = [
     { label: 'Fuel', value: 'Fuel' },
@@ -199,29 +204,73 @@ export class ExpensesCmp implements OnInit {
       header: 'Approve Expense',
       icon: 'pi pi-check-circle',
       acceptButtonStyleClass: 'p-button-success',
-      accept: () => this.updateStatus(e.id, 'approved'),
+      accept: () => this.approve(e.id),
     });
   }
 
   confirmReject(e: Expense) {
+    this.rejectingExpense.set(e);
+    this.rejectReason.set('');
+    this.showRejectDialog.set(true);
+  }
+
+  confirmDelete(e: Expense) {
     this.confirmationService.confirm({
-      message: `Reject this expense?`,
-      header: 'Reject Expense',
-      icon: 'pi pi-times-circle',
-      rejectButtonStyleClass: 'p-button-danger',
-      accept: () => this.updateStatus(e.id, 'rejected'),
+      message: `Delete expense "${e.description || e.category || 'Untitled'}" for ${this.currencyService.symbol()} ${e.amount}? This cannot be undone.`,
+      header: 'Delete Expense',
+      icon: 'pi pi-trash',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => this.remove(e.id),
     });
   }
 
-  async updateStatus(id: string, status: string) {
+  async approve(id: string) {
     try {
-      const updated = await this.financeService.updateExpense(id, { status }).toPromise();
+      const updated = await this.financeService.approveExpense(id).toPromise();
       if (updated) {
         this.expenses.update(list => list.map(x => x.id === id ? updated : x));
-        this.messageService.add({ severity: 'success', summary: 'Updated', detail: `Expense ${status}` });
+        this.messageService.add({ severity: 'success', summary: 'Approved', detail: 'Expense approved' });
       }
     } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: `Failed to ${status} expense` });
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to approve expense' });
+    }
+  }
+
+  async reject() {
+    const e = this.rejectingExpense();
+    const reason = this.rejectReason().trim();
+    if (!e || !reason) return;
+    try {
+      const updated = await this.financeService.rejectExpense(e.id, reason).toPromise();
+      if (updated) {
+        this.expenses.update(list => list.map(x => x.id === e.id ? updated : x));
+        this.messageService.add({ severity: 'success', summary: 'Rejected', detail: 'Expense rejected' });
+      }
+      this.showRejectDialog.set(false);
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to reject expense' });
+    }
+  }
+
+  async markPaid(id: string) {
+    try {
+      const updated = await this.financeService.markExpensePaid(id).toPromise();
+      if (updated) {
+        this.expenses.update(list => list.map(x => x.id === id ? updated : x));
+        this.messageService.add({ severity: 'success', summary: 'Paid', detail: 'Expense marked as paid' });
+      }
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to mark expense as paid' });
+    }
+  }
+
+  async remove(id: string) {
+    try {
+      await this.financeService.deleteExpense(id).toPromise();
+      this.expenses.update(list => list.filter(x => x.id !== id));
+      this.messageService.add({ severity: 'success', summary: 'Deleted', detail: 'Expense deleted' });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete expense' });
     }
   }
 

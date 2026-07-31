@@ -62,7 +62,7 @@ async def get_assignment(
 async def create_assignment(
     data: VehicleAssignmentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("vehicles.manage")),
+    current_user: User = Depends(require_permission("vehicles.assign_branches")),
 ):
     try:
         vid = uuid.UUID(data.vehicle_id)
@@ -82,7 +82,7 @@ async def transfer_vehicle(
     data: VehicleAssignmentTransfer,
     vehicle_id: str = Query(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("vehicles.manage")),
+    current_user: User = Depends(require_permission("vehicles.assign_branches")),
 ):
     try:
         vid = uuid.UUID(vehicle_id)
@@ -103,7 +103,7 @@ async def transfer_vehicle(
 async def delete_assignment(
     assignment_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("vehicles.manage")),
+    current_user: User = Depends(require_permission("vehicles.assign_branches")),
 ):
     try:
         aid = uuid.UUID(assignment_id)

@@ -59,7 +59,7 @@ async def get_slot(
 async def create_slot(
     data: VehicleScheduleSlotCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("vehicle_schedule.manage")),
+    current_user: User = Depends(require_permission("vehicle_schedule.create")),
 ):
     try:
         vid = uuid.UUID(data.vehicle_id)
@@ -79,7 +79,7 @@ async def update_slot(
     slot_id: str,
     data: VehicleScheduleSlotUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("vehicle_schedule.manage")),
+    current_user: User = Depends(require_permission("vehicle_schedule.edit")),
 ):
     try:
         sid = uuid.UUID(slot_id)
@@ -105,7 +105,7 @@ async def update_slot(
 async def delete_slot(
     slot_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("vehicle_schedule.manage")),
+    current_user: User = Depends(require_permission("vehicle_schedule.delete")),
 ):
     try:
         sid = uuid.UUID(slot_id)
@@ -126,7 +126,7 @@ async def bulk_set_schedule(
     vehicle_id: str,
     slots: list[VehicleScheduleSlotCreate],
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("vehicle_schedule.manage")),
+    current_user: User = Depends(require_permission("vehicle_schedule.create")),
 ):
     try:
         vid = uuid.UUID(vehicle_id)

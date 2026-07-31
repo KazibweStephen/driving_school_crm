@@ -54,26 +54,43 @@
         <div class="rounded-xl border bg-white p-4">
           <div class="mb-3 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-900">{{ group.label }}</h2>
-            <p-checkbox
-              [binary]="true"
-              [ngModel]="groupAllChecked(group)"
-              (onChange)="toggleGroup(group)"
-              [inputId]="'grp-' + group.key"
-            />
-          </div>
-          <div class="grid gap-1.5 sm:grid-cols-2">
-            @for (code of group.codes; track code) {
-              <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-gray-50">
+            @if (actionCodes(group).length > 0) {
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-medium text-gray-500">All actions</span>
                 <p-checkbox
                   [binary]="true"
-                  [ngModel]="has(code)"
-                  (onChange)="toggle(code)"
-                  [inputId]="'cb-' + code"
+                  [ngModel]="hasManage(group)"
+                  (onChange)="toggleAllActions(group)"
+                  [inputId]="'grp-' + group.key"
                 />
-                <span class="text-gray-800">{{ code }}</span>
-              </label>
+              </div>
             }
           </div>
+          @if (actionCodes(group).length > 0) {
+            <div class="grid gap-1.5 sm:grid-cols-2">
+              @for (code of actionCodes(group); track code) {
+                <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-gray-50">
+                  <p-checkbox
+                    [binary]="true"
+                    [ngModel]="hasManage(group) || has(code)"
+                    (onChange)="toggleAction(group, code, $event.checked)"
+                    [inputId]="'cb-' + code"
+                  />
+                  <span class="text-gray-800">{{ code }}</span>
+                </label>
+              }
+            </div>
+          } @else {
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-gray-800">
+              <p-checkbox
+                [binary]="true"
+                [ngModel]="hasManage(group)"
+                (onChange)="toggleAllActions(group)"
+                [inputId]="'grp-' + group.key"
+              />
+              {{ manageCode(group) }}
+            </label>
+          }
         </div>
       }
     </div>

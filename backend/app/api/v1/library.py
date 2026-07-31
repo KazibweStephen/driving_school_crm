@@ -47,7 +47,7 @@ async def list_lessons(
 async def create_lesson(
     data: LessonLibraryCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("lesson_library.manage")),
+    current_user: User = Depends(require_permission("lesson_library.create")),
 ):
     lesson = await library_service.create_lesson(
         db,
@@ -97,7 +97,7 @@ async def update_lesson(
     lesson_id: str,
     data: LessonLibraryUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("lesson_library.manage")),
+    current_user: User = Depends(require_permission("lesson_library.edit")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -135,7 +135,7 @@ async def update_lesson(
 async def delete_lesson(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("lesson_library.manage")),
+    current_user: User = Depends(require_permission("lesson_library.delete")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -152,7 +152,7 @@ async def attach_video(
     lesson_id: str,
     video_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("lesson_library.manage")),
+    current_user: User = Depends(require_permission("lesson_library.edit")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -167,7 +167,7 @@ async def detach_video(
     lesson_id: str,
     video_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("lesson_library.manage")),
+    current_user: User = Depends(require_permission("lesson_library.edit")),
 ):
     try:
         lid = uuid.UUID(lesson_id)

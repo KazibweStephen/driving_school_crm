@@ -20,7 +20,7 @@ router = APIRouter(prefix="/products", tags=["products"])
 async def create_product(
     data: ProductCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("products.manage")),
+    current_user: User = Depends(require_permission("products.create")),
 ):
     product = await product_service.create_product(
         db,
@@ -87,7 +87,7 @@ async def update_product(
     product_id: str,
     data: ProductUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("products.manage")),
+    current_user: User = Depends(require_permission("products.edit")),
 ):
     from uuid import UUID
     try:
@@ -118,7 +118,7 @@ async def update_product(
 async def deactivate_product(
     product_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("products.manage")),
+    current_user: User = Depends(require_permission("products.delete")),
 ):
     from uuid import UUID
     try:

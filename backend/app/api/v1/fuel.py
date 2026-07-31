@@ -86,7 +86,7 @@ async def get_active_rate(
 async def create_fuel_rate(
     data: FuelRateCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("fuel.manage")),
+    current_user: User = Depends(require_permission("fuel.create")),
 ):
     import logging
     logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ async def update_fuel_rate(
     rate_id: uuid.UUID,
     data: FuelRateUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("fuel.manage")),
+    current_user: User = Depends(require_permission("fuel.edit")),
 ):
     rate = await fuel_service.get_fuel_rate_by_id(db, rate_id, current_user.company_id)
     if not rate:
@@ -119,7 +119,7 @@ async def update_fuel_rate(
 async def delete_fuel_rate(
     rate_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("fuel.manage")),
+    current_user: User = Depends(require_permission("fuel.delete")),
 ):
     rate = await fuel_service.get_fuel_rate_by_id(db, rate_id, current_user.company_id)
     if not rate:
@@ -181,7 +181,7 @@ async def list_refuelings(
 async def create_refueling(
     data: FuelRefuelingCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("fuel.manage")),
+    current_user: User = Depends(require_permission("fuel.create")),
 ):
     company_id = await resolve_company_id(db, current_user)
     if not company_id:
@@ -196,7 +196,7 @@ async def create_refueling(
 async def delete_refueling(
     refueling_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("fuel.manage")),
+    current_user: User = Depends(require_permission("fuel.delete")),
 ):
     refueling = await fuel_service.get_fuel_refueling_by_id(
         db, refueling_id, current_user.company_id

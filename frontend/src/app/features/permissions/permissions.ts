@@ -115,27 +115,54 @@ export class PermissionsCmp implements OnInit {
     return this.selectedCodes().includes(code);
   }
 
+  manageCode(group: PermissionGroup): string {
+    return group.codes.find((c) => c.endsWith('.manage')) || group.codes[0];
+  }
+
+  actionCodes(group: PermissionGroup): string[] {
+    const mc = this.manageCode(group);
+    return group.codes.filter((c) => c !== mc);
+  }
+
+  hasManage(group: PermissionGroup): boolean {
+    return this.has(this.manageCode(group));
+  }
+
   toggle(code: string) {
     this.selectedCodes.update((codes) =>
       codes.includes(code) ? codes.filter((c) => c !== code) : [...codes, code],
     );
   }
 
-  groupAllChecked(group: PermissionGroup): boolean {
-    const codes = this.selectedCodes();
-    return group.codes.length > 0 && group.codes.every((c) => codes.includes(c));
-  }
-
-  groupSomeChecked(group: PermissionGroup): boolean {
-    return !this.groupAllChecked(group) && group.codes.some((c) => this.has(c));
-  }
-
-  toggleGroup(group: PermissionGroup) {
-    if (this.groupAllChecked(group)) {
-      this.selectedCodes.update((cur) => cur.filter((c) => !group.codes.includes(c)));
+  toggleAllActions(group: PermissionGroup) {
+    const mc = this.manageCode(group);
+    if (this.hasManage(group)) {
+      this.selectedCodes.update((cur) =>
+        cur.filter((c) => c !== mc && !group.codes.includes(c)),
+      );
     } else {
       this.selectedCodes.update((cur) => Array.from(new Set([...cur, ...group.codes])));
     }
+  }
+
+  toggleAction(group: PermissionGroup, code: string, checked: boolean) {
+    if (checked) {
+      if (!this.hasManage(group)) this.toggle(code);
+    } else if (this.hasManage(group)) {
+      this.selectedCodes.update((cur) => {
+        const set = new Set(cur);
+        set.delete(this.manageCode(group));
+        for (const c of group.codes) set.add(c);
+        set.delete(code);
+        return Array.from(set);
+      });
+    } else {
+      this.toggle(code);
+    }
+  }
+
+  groupHasAny(group: PermissionGroup): boolean {
+    return group.codes.some((c) => this.has(c));
   }
 
   async save() {

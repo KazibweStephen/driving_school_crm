@@ -24,7 +24,7 @@ router = APIRouter(tags=["instructor-qualifications"])
 async def create_qualification(
     data: InstructorQualificationCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("instructor_qualifications.manage")),
+    current_user: User = Depends(require_permission("instructor_qualifications.create")),
 ):
     qual = await qual_service.create_qualification(
         db,
@@ -86,7 +86,7 @@ async def update_qualification(
     qual_id: str,
     data: InstructorQualificationUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("instructor_qualifications.manage")),
+    current_user: User = Depends(require_permission("instructor_qualifications.edit")),
 ):
     try:
         qid = uuid.UUID(qual_id)
@@ -107,7 +107,7 @@ async def update_qualification(
 async def delete_qualification(
     qual_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("instructor_qualifications.manage")),
+    current_user: User = Depends(require_permission("instructor_qualifications.delete")),
 ):
     try:
         qid = uuid.UUID(qual_id)

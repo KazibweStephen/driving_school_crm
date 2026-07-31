@@ -106,6 +106,19 @@ async def create_expense(
     return expense
 
 
+async def get_expense(
+    db: AsyncSession,
+    expense_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> Expense | None:
+    query = select(Expense).where(Expense.id == expense_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
 async def update_expense(
     db: AsyncSession,
     expense_id: uuid.UUID,

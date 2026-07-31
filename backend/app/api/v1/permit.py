@@ -33,7 +33,7 @@ async def update_permit_progress(
     cart_item_id: str,
     data: PermitProgressUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.edit")),
 ):
     try:
         cid = uuid.UUID(cart_item_id)

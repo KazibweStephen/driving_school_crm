@@ -34,7 +34,7 @@ router = APIRouter(tags=["scheduling"])
 async def create_availability(
     data: ClientAvailabilityCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("availabilities.manage")),
+    current_user: User = Depends(require_permission("availabilities.create")),
 ):
     try:
         cid = uuid.UUID(data.cart_item_id)
@@ -73,7 +73,7 @@ async def update_availability(
     avail_id: str,
     data: ClientAvailabilityUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("availabilities.manage")),
+    current_user: User = Depends(require_permission("availabilities.edit")),
 ):
     try:
         aid = uuid.UUID(avail_id)
@@ -96,7 +96,7 @@ async def update_availability(
 async def delete_availability(
     avail_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("availabilities.manage")),
+    current_user: User = Depends(require_permission("availabilities.delete")),
 ):
     try:
         aid = uuid.UUID(avail_id)
@@ -160,7 +160,7 @@ async def find_and_lock_schedule(
     plan_id: str,
     data: FindAndLockRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("availabilities.manage")),
+    current_user: User = Depends(require_permission("availabilities.edit")),
 ):
     """Try each preferred start time in order. If one fits, lock the plan's schedule.
     If none fit, return the instructor's full day schedule with collisions highlighted."""
@@ -190,7 +190,7 @@ async def lock_schedule(
     plan_id: str,
     data: LockScheduleRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("availabilities.manage")),
+    current_user: User = Depends(require_permission("availabilities.edit")),
 ):
     try:
         pid = uuid.UUID(plan_id)

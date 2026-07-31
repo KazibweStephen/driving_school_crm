@@ -10,6 +10,7 @@ from app.core.permissions import (
     SUPER_USER_PERMISSIONS,
     default_permissions_for,
     expand_permissions,
+    expand_set,
 )
 from app.models.permission import RolePermission
 from app.models.user import User, UserRole
@@ -30,7 +31,8 @@ async def get_role_permissions(
             RolePermission.role == role,
         )
     )
-    return set(result.scalars().all())
+    stored = set(result.scalars().all())
+    return expand_set(stored)
 
 
 async def get_user_permissions(db: AsyncSession, user: User) -> set[str]:
@@ -48,13 +50,13 @@ async def has_permission(db: AsyncSession, user: User, permission: str) -> bool:
     if user.company_id is None:
         return False
     result = await db.execute(
-        select(RolePermission.id).where(
+        select(RolePermission.permission).where(
             RolePermission.company_id == user.company_id,
             RolePermission.role == user.role,
-            RolePermission.permission == permission,
         )
     )
-    return result.scalar_one_or_none() is not None
+    stored = set(result.scalars().all())
+    return permission in expand_set(stored)
 
 
 async def seed_default_permissions(db: AsyncSession, company_id: uuid.UUID) -> None:

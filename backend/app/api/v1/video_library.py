@@ -30,7 +30,7 @@ async def create_video(
     data: VideoLibraryCreate,
     lesson_id: str | None = Query(None, description="Auto-link to this lesson"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("video_library.manage")),
+    current_user: User = Depends(require_permission("video_library.create")),
 ):
     video = await video_service.create_video(
         db,
@@ -58,7 +58,7 @@ async def upload_video(
     lesson_id: str = Form(""),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("video_library.manage")),
+    current_user: User = Depends(require_permission("video_library.upload")),
 ):
     allowed_types = ["video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"]
     if file.content_type and file.content_type not in allowed_types:
@@ -102,7 +102,7 @@ async def update_video(
     video_id: str,
     data: VideoLibraryUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("video_library.manage")),
+    current_user: User = Depends(require_permission("video_library.edit")),
 ):
     try:
         vid = uuid.UUID(video_id)
@@ -126,7 +126,7 @@ async def update_video(
 async def delete_video(
     video_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("video_library.manage")),
+    current_user: User = Depends(require_permission("video_library.delete")),
 ):
     try:
         vid = uuid.UUID(video_id)

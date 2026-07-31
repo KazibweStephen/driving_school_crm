@@ -56,7 +56,7 @@ async def list_rates(
 async def create_rate(
     data: CommissionRateCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("commissions.manage")),
+    current_user: User = Depends(require_permission("commissions.create")),
 ):
     company_id = await resolve_company_id(db, current_user)
     if not company_id:
@@ -85,7 +85,7 @@ async def update_rate(
     rate_id: uuid.UUID,
     data: CommissionRateUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("commissions.manage")),
+    current_user: User = Depends(require_permission("commissions.edit")),
 ):
     rate = await commission_service.get_commission_rate_by_id(db, rate_id, current_user.company_id)
     if not rate:
@@ -110,7 +110,7 @@ async def update_rate(
 async def delete_rate(
     rate_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("commissions.manage")),
+    current_user: User = Depends(require_permission("commissions.delete")),
 ):
     rate = await commission_service.get_commission_rate_by_id(db, rate_id, current_user.company_id)
     if not rate:
@@ -242,7 +242,7 @@ async def create_contest(
     commission_id: uuid.UUID,
     data: ContestCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("commissions.manage")),
+    current_user: User = Depends(require_permission("commissions.contest")),
 ):
     commission = await commission_service.get_commission_by_id(db, commission_id, current_user.company_id)
     if not commission:
@@ -283,7 +283,7 @@ async def resolve_contest(
     contest_id: uuid.UUID,
     data: ContestResolve,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("commissions.manage")),
+    current_user: User = Depends(require_permission("commissions.contest")),
 ):
     from app.models.commission import CommissionContest
     result = await db.execute(

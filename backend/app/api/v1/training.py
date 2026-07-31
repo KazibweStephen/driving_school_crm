@@ -60,7 +60,7 @@ async def create_training_session(
     cart_item_id: str,
     data: TrainingSessionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.create")),
 ):
     try:
         cid = uuid.UUID(cart_item_id)
@@ -87,7 +87,7 @@ async def generate_training_sessions(
     cart_item_id: str,
     data: GenerateSessionsRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.generate")),
 ):
     try:
         cid = uuid.UUID(cart_item_id)
@@ -125,7 +125,7 @@ async def update_training_session(
     session_id: str,
     data: TrainingSessionUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.edit")),
 ):
     try:
         sid = uuid.UUID(session_id)
@@ -151,7 +151,7 @@ async def update_training_session(
 async def delete_training_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.delete")),
 ):
     try:
         sid = uuid.UUID(session_id)
@@ -170,7 +170,7 @@ async def delete_training_session(
 async def start_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.start")),
 ):
     try:
         sid = uuid.UUID(session_id)
@@ -190,7 +190,7 @@ async def update_timer(
     session_id: str,
     timer_seconds: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.edit")),
 ):
     try:
         sid = uuid.UUID(session_id)
@@ -208,7 +208,7 @@ async def end_training_session(
     session_id: str,
     data: EndSessionRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.edit")),
 ):
     try:
         sid = uuid.UUID(session_id)
@@ -225,7 +225,7 @@ async def end_training_session(
 async def cache_video(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.edit")),
 ):
     try:
         sid = uuid.UUID(session_id)
@@ -242,7 +242,7 @@ async def cache_video(
 async def invalidate_video(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.edit")),
 ):
     try:
         sid = uuid.UUID(session_id)
@@ -277,7 +277,7 @@ async def create_skill(
     session_id: str,
     data: SkillCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.edit")),
 ):
     try:
         sid = uuid.UUID(session_id)
@@ -299,7 +299,7 @@ async def update_skill(
     skill_id: str,
     data: SkillUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.edit")),
 ):
     try:
         sid = uuid.UUID(skill_id)
@@ -323,7 +323,7 @@ async def update_skill(
 async def delete_skill(
     skill_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("training.manage")),
+    current_user: User = Depends(require_permission("training.edit")),
 ):
     try:
         sid = uuid.UUID(skill_id)

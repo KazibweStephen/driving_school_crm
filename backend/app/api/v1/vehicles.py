@@ -32,7 +32,7 @@ async def list_vehicles(
 async def create_vehicle(
     data: VehicleCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("vehicles.manage")),
+    current_user: User = Depends(require_permission("vehicles.create")),
 ):
     vehicle = await vehicle_service.create_vehicle(
         db,
@@ -71,7 +71,7 @@ async def update_vehicle(
     vehicle_id: str,
     data: VehicleUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("vehicles.manage")),
+    current_user: User = Depends(require_permission("vehicles.edit")),
 ):
     try:
         vid = uuid.UUID(vehicle_id)
@@ -98,7 +98,7 @@ async def update_vehicle(
 async def delete_vehicle(
     vehicle_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("vehicles.manage")),
+    current_user: User = Depends(require_permission("vehicles.delete")),
 ):
     try:
         vid = uuid.UUID(vehicle_id)

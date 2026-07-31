@@ -56,7 +56,7 @@ test.describe('Permissions', () => {
     await page.getByRole('option', { name: 'Reception' }).click();
     await expect(page.locator('[id="cb-consultations.create"]')).toBeVisible();
 
-    await page.getByText('consultations.create', { exact: true }).click();
+    await page.locator('label').filter({ hasText: 'consultations.create' }).click();
     await expect(page.locator('[id="cb-consultations.create"]')).not.toBeChecked();
 
     await page.getByRole('button', { name: 'Save Changes' }).click();

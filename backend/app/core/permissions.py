@@ -6,14 +6,22 @@ Permissions are string codes granted per (company, role) via the
 Rules
 -----
 * Every code belongs to a named group (used by the admin UI).
-* A ``.manage`` code implies its ``.view`` counterpart when granted
-  (``expand_permissions``). Both are stored so backend checks are exact.
+* A ``<group>.manage`` code is the **all-actions master**: when granted it
+  expands to every other code in its group (``expand_permissions`` /
+  ``_expand``). Both are stored so backend checks are exact.
+* Groups whose only meaningful code is the master keep a bare ``manage`` code
+  with no extra actions (e.g. ``schedule_breaks.manage``).
 * Endpoints that only make sense as a mutation (e.g. bulk onboarding) have a
   bare ``manage`` code with no view counterpart.
 
 The default matrices encode each role's intended capabilities. They are
 seeded for every company (at creation and via the backfill migration) and can
 be adjusted per company by someone holding ``permissions.manage``.
+
+Legacy rows stored before this rewrite only contain ``view`` / ``manage``
+codes. ``get_role_permissions`` and ``has_permission`` re-expand at runtime,
+so a stored ``manage`` automatically grants every action in its group with no
+data migration.
 """
 
 from dataclasses import dataclass, field
@@ -29,45 +37,126 @@ class PermissionGroup:
 
 
 PERMISSION_GROUPS: list[PermissionGroup] = [
-    PermissionGroup("dashboard", "Dashboard", ["dashboard.view"]),
-    PermissionGroup("reports", "Reports", ["reports.view"]),
+    PermissionGroup("dashboard", "Dashboard", ["dashboard.manage", "dashboard.view"]),
+    PermissionGroup("reports", "Reports", ["reports.manage", "reports.view", "reports.print"]),
     PermissionGroup(
         "consultations",
         "Consultations",
-        ["consultations.view", "consultations.create", "consultations.manage", "consultations.delete"],
+        ["consultations.manage", "consultations.view", "consultations.create", "consultations.edit", "consultations.delete"],
     ),
-    PermissionGroup("payments", "Payments & Receipts", ["payments.view", "payments.record"]),
-    PermissionGroup("transfers", "Branch Transfers", ["transfers.view", "transfers.manage"]),
-    PermissionGroup("expenses", "Expenses", ["expenses.view", "expenses.manage"]),
-    PermissionGroup("collections", "Collections & Dunning", ["collections.view", "collections.manage"]),
-    PermissionGroup("products", "Products & Packages", ["products.view", "products.manage"]),
-    PermissionGroup("companies", "Companies", ["companies.view", "companies.manage"]),
-    PermissionGroup("branches", "Branches", ["branches.view", "branches.manage"]),
-    PermissionGroup("users", "Users", ["users.view", "users.manage", "users.approve"]),
-    PermissionGroup("vehicles", "Vehicles", ["vehicles.view", "vehicles.manage"]),
-    PermissionGroup("vehicle_schedule", "Vehicle Scheduling", ["vehicle_schedule.view", "vehicle_schedule.manage"]),
+    PermissionGroup(
+        "payments",
+        "Payments & Receipts",
+        ["payments.manage", "payments.view", "payments.record", "payments.delete"],
+    ),
+    PermissionGroup(
+        "transfers",
+        "Branch Transfers",
+        ["transfers.manage", "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel"],
+    ),
+    PermissionGroup(
+        "expenses",
+        "Expenses",
+        ["expenses.manage", "expenses.view", "expenses.create", "expenses.edit", "expenses.delete", "expenses.approve", "expenses.reject", "expenses.pay"],
+    ),
+    PermissionGroup(
+        "collections",
+        "Collections & Dunning",
+        ["collections.manage", "collections.view", "collections.create", "collections.edit", "collections.delete", "collections.send_dunning"],
+    ),
+    PermissionGroup(
+        "sales",
+        "Sales",
+        ["sales.manage", "sales.view", "sales.create", "sales.edit", "sales.delete"],
+    ),
+    PermissionGroup(
+        "products",
+        "Products & Packages",
+        ["products.manage", "products.view", "products.create", "products.edit", "products.delete"],
+    ),
+    PermissionGroup(
+        "companies",
+        "Companies",
+        ["companies.manage", "companies.view", "companies.create", "companies.edit", "companies.delete"],
+    ),
+    PermissionGroup(
+        "branches",
+        "Branches",
+        ["branches.manage", "branches.view", "branches.create", "branches.edit", "branches.delete", "branches.assign_users", "branches.assign_vehicles"],
+    ),
+    PermissionGroup(
+        "users",
+        "Users",
+        ["users.manage", "users.view", "users.create", "users.edit", "users.delete", "users.reset_pin", "users.approve"],
+    ),
+    PermissionGroup(
+        "vehicles",
+        "Vehicles",
+        ["vehicles.manage", "vehicles.view", "vehicles.create", "vehicles.edit", "vehicles.delete", "vehicles.assign_branches"],
+    ),
+    PermissionGroup(
+        "vehicle_schedule",
+        "Vehicle Scheduling",
+        ["vehicle_schedule.manage", "vehicle_schedule.view", "vehicle_schedule.create", "vehicle_schedule.edit", "vehicle_schedule.delete"],
+    ),
     PermissionGroup("schedule_breaks", "Schedule Breaks", ["schedule_breaks.manage"]),
-    PermissionGroup("availabilities", "Client Scheduling", ["availabilities.view", "availabilities.manage"]),
-    PermissionGroup("training", "Training & Permit", ["training.view", "training.manage"]),
-    PermissionGroup("fuel", "Fuel Tracking", ["fuel.view", "fuel.manage"]),
-    PermissionGroup("lesson_plans", "Lesson Plans", ["lesson_plans.view", "lesson_plans.manage"]),
-    PermissionGroup("lesson_library", "Lesson Library", ["lesson_library.view", "lesson_library.manage"]),
-    PermissionGroup("video_library", "Video Library", ["video_library.view", "video_library.manage"]),
-    PermissionGroup("competency", "Competency Catalogue", ["competency.view", "competency.manage"]),
+    PermissionGroup(
+        "availabilities",
+        "Client Scheduling",
+        ["availabilities.manage", "availabilities.view", "availabilities.create", "availabilities.edit", "availabilities.delete"],
+    ),
+    PermissionGroup(
+        "training",
+        "Training & Permit",
+        ["training.manage", "training.view", "training.create", "training.edit", "training.delete", "training.generate", "training.start"],
+    ),
+    PermissionGroup(
+        "fuel",
+        "Fuel Tracking",
+        ["fuel.manage", "fuel.view", "fuel.create", "fuel.edit", "fuel.delete"],
+    ),
+    PermissionGroup(
+        "lesson_plans",
+        "Lesson Plans",
+        ["lesson_plans.manage", "lesson_plans.view", "lesson_plans.create", "lesson_plans.edit", "lesson_plans.delete", "lesson_plans.duplicate", "lesson_plans.archive", "lesson_plans.export", "lesson_plans.import"],
+    ),
+    PermissionGroup(
+        "lesson_library",
+        "Lesson Library",
+        ["lesson_library.manage", "lesson_library.view", "lesson_library.create", "lesson_library.edit", "lesson_library.delete"],
+    ),
+    PermissionGroup(
+        "video_library",
+        "Video Library",
+        ["video_library.manage", "video_library.view", "video_library.create", "video_library.edit", "video_library.delete", "video_library.upload"],
+    ),
+    PermissionGroup(
+        "competency",
+        "Competency Catalogue",
+        ["competency.manage", "competency.view", "competency.create", "competency.edit", "competency.delete", "competency.import"],
+    ),
     PermissionGroup(
         "lesson_execution",
         "Lesson Execution",
-        ["lesson_execution.view", "lesson_execution.manage"],
+        ["lesson_execution.manage", "lesson_execution.view", "lesson_execution.start"],
     ),
     PermissionGroup(
         "instructor_qualifications",
         "Instructor Qualifications",
-        ["instructor_qualifications.view", "instructor_qualifications.manage"],
+        ["instructor_qualifications.manage", "instructor_qualifications.view", "instructor_qualifications.create", "instructor_qualifications.edit", "instructor_qualifications.delete"],
     ),
-    PermissionGroup("commissions", "Commissions & Contests", ["commissions.view", "commissions.manage"]),
-    PermissionGroup("leads", "Leads", ["leads.view", "leads.manage"]),
+    PermissionGroup(
+        "commissions",
+        "Commissions & Contests",
+        ["commissions.manage", "commissions.view", "commissions.create", "commissions.edit", "commissions.delete", "commissions.contest"],
+    ),
+    PermissionGroup(
+        "leads",
+        "Leads",
+        ["leads.manage", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.update_status"],
+    ),
     PermissionGroup("bulk_onboarding", "Bulk Onboarding", ["bulk_onboarding.manage"]),
-    PermissionGroup("sms", "SMS", ["sms.view", "sms.manage"]),
+    PermissionGroup("sms", "SMS", ["sms.manage", "sms.view", "sms.send"]),
     PermissionGroup("permissions", "Roles & Permissions", ["permissions.manage"]),
 ]
 
@@ -79,21 +168,19 @@ SUPER_USER_PERMISSIONS: set[str] = set(ALL_PERMISSIONS)
 
 
 def _expand(codes: list[str]) -> set[str]:
-    """Return the codes plus every implied ``.view`` for granted ``.manage`` codes."""
+    """Return the codes plus every implied action for granted ``.manage`` codes."""
     result = set(codes)
-    view_links: dict[str, str] = {}
     for group in PERMISSION_GROUPS:
-        views = [c for c in group.codes if c.endswith(".view")]
         manages = [c for c in group.codes if c.endswith(".manage")]
         for m in manages:
-            base = m[: -len(".manage")]
-            for v in views:
-                if v == f"{base}.view":
-                    view_links[m] = v
-    for code in codes:
-        if code in view_links:
-            result.add(view_links[code])
+            if m in result:
+                result |= set(group.codes)
     return result
+
+
+def expand_set(codes: set[str]) -> set[str]:
+    """Expand a stored set of codes into the full effective permission set."""
+    return _expand(list(codes))
 
 
 def expand_permissions(codes: list[str]) -> list[str]:
@@ -108,112 +195,116 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.OFFICE_ADMIN: [
         "dashboard.view",
         "reports.view",
-        "consultations.view", "consultations.create", "consultations.manage",
+        "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
-        "transfers.view", "transfers.manage",
+        "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
         "expenses.view",
-        "collections.view", "collections.manage",
+        "sales.view",
+        "collections.view", "collections.create", "collections.edit", "collections.delete", "collections.send_dunning",
         "products.view",
         "companies.view", "branches.view",
         "users.view",
-        "vehicles.view", "vehicles.manage",
-        "vehicle_schedule.view", "vehicle_schedule.manage",
+        "vehicles.view", "vehicles.create", "vehicles.edit", "vehicles.delete", "vehicles.assign_branches",
+        "vehicle_schedule.view", "vehicle_schedule.create", "vehicle_schedule.edit", "vehicle_schedule.delete",
         "schedule_breaks.manage",
-        "availabilities.view", "availabilities.manage",
-        "training.view", "training.manage",
+        "availabilities.view", "availabilities.create", "availabilities.edit", "availabilities.delete",
+        "training.view", "training.create", "training.edit", "training.delete", "training.generate", "training.start",
         "fuel.view",
-        "lesson_plans.view", "lesson_plans.manage",
+        "lesson_plans.view", "lesson_plans.create", "lesson_plans.edit", "lesson_plans.delete", "lesson_plans.duplicate", "lesson_plans.archive", "lesson_plans.export", "lesson_plans.import",
         "lesson_library.view",
         "video_library.view",
         "competency.view",
-        "lesson_execution.view", "lesson_execution.manage",
+        "lesson_execution.view", "lesson_execution.start",
         "instructor_qualifications.view",
         "commissions.view",
-        "leads.view", "leads.manage",
+        "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.update_status",
         "bulk_onboarding.manage",
         "sms.view",
     ],
     UserRole.BRANCH_SUPERVISOR: [
         "dashboard.view",
         "reports.view",
-        "consultations.view", "consultations.create", "consultations.manage",
+        "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
-        "transfers.view", "transfers.manage",
+        "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
         "expenses.view",
-        "collections.view", "collections.manage",
+        "sales.view",
+        "collections.view", "collections.create", "collections.edit", "collections.delete", "collections.send_dunning",
         "products.view",
         "companies.view", "branches.view",
         "users.view",
-        "vehicles.view", "vehicles.manage",
-        "vehicle_schedule.view", "vehicle_schedule.manage",
+        "vehicles.view", "vehicles.create", "vehicles.edit", "vehicles.delete", "vehicles.assign_branches",
+        "vehicle_schedule.view", "vehicle_schedule.create", "vehicle_schedule.edit", "vehicle_schedule.delete",
         "schedule_breaks.manage",
-        "availabilities.view", "availabilities.manage",
-        "training.view", "training.manage",
+        "availabilities.view", "availabilities.create", "availabilities.edit", "availabilities.delete",
+        "training.view", "training.create", "training.edit", "training.delete", "training.generate", "training.start",
         "fuel.view",
-        "lesson_plans.view", "lesson_plans.manage",
+        "lesson_plans.view", "lesson_plans.create", "lesson_plans.edit", "lesson_plans.delete", "lesson_plans.duplicate", "lesson_plans.archive", "lesson_plans.export", "lesson_plans.import",
         "lesson_library.view",
         "video_library.view",
         "competency.view",
-        "lesson_execution.view", "lesson_execution.manage",
+        "lesson_execution.view", "lesson_execution.start",
         "instructor_qualifications.view",
         "commissions.view",
-        "leads.view", "leads.manage",
+        "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.update_status",
         "bulk_onboarding.manage",
         "sms.view",
     ],
     UserRole.MANAGER: [
         "dashboard.view",
         "reports.view",
-        "consultations.view", "consultations.create", "consultations.manage",
+        "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
-        "transfers.view", "transfers.manage",
-        "expenses.view", "expenses.manage",
-        "collections.view", "collections.manage",
+        "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
+        "expenses.view", "expenses.create", "expenses.edit", "expenses.delete", "expenses.approve", "expenses.reject", "expenses.pay",
+        "sales.view", "sales.create", "sales.edit", "sales.delete",
+        "collections.view", "collections.create", "collections.edit", "collections.delete", "collections.send_dunning",
         "products.view",
         "companies.view", "branches.view",
-        "users.view", "users.manage",
-        "vehicles.view", "vehicles.manage",
-        "vehicle_schedule.view", "vehicle_schedule.manage",
+        "users.view", "users.create", "users.edit", "users.delete", "users.reset_pin",
+        "vehicles.view", "vehicles.create", "vehicles.edit", "vehicles.delete", "vehicles.assign_branches",
+        "vehicle_schedule.view", "vehicle_schedule.create", "vehicle_schedule.edit", "vehicle_schedule.delete",
         "schedule_breaks.manage",
-        "availabilities.view", "availabilities.manage",
-        "training.view", "training.manage",
+        "availabilities.view", "availabilities.create", "availabilities.edit", "availabilities.delete",
+        "training.view", "training.create", "training.edit", "training.delete", "training.generate", "training.start",
         "fuel.view",
-        "lesson_plans.view", "lesson_plans.manage",
+        "lesson_plans.view", "lesson_plans.create", "lesson_plans.edit", "lesson_plans.delete", "lesson_plans.duplicate", "lesson_plans.archive", "lesson_plans.export", "lesson_plans.import",
         "lesson_library.view",
         "video_library.view",
         "competency.view",
-        "lesson_execution.view", "lesson_execution.manage",
+        "lesson_execution.view", "lesson_execution.start",
         "instructor_qualifications.view",
         "commissions.view",
-        "leads.view", "leads.manage",
+        "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.update_status",
         "bulk_onboarding.manage",
         "sms.view",
     ],
     UserRole.SUPERVISOR: [
         "dashboard.view",
         "reports.view",
-        "consultations.view", "consultations.create", "consultations.manage",
+        "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
-        "transfers.view", "transfers.manage",
-        "expenses.view", "expenses.manage",
-        "collections.view", "collections.manage",
+        "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
+        "expenses.view", "expenses.create", "expenses.edit", "expenses.delete", "expenses.approve", "expenses.reject", "expenses.pay",
+        "sales.view", "sales.create", "sales.edit", "sales.delete",
+        "collections.view", "collections.create", "collections.edit", "collections.delete", "collections.send_dunning",
         "products.view",
         "companies.view", "branches.view",
-        "users.view", "users.manage",
-        "vehicles.view", "vehicles.manage",
-        "vehicle_schedule.view", "vehicle_schedule.manage",
+        "users.view", "users.create", "users.edit", "users.delete", "users.reset_pin",
+        "vehicles.view", "vehicles.create", "vehicles.edit", "vehicles.delete", "vehicles.assign_branches",
+        "vehicle_schedule.view", "vehicle_schedule.create", "vehicle_schedule.edit", "vehicle_schedule.delete",
         "schedule_breaks.manage",
-        "availabilities.view", "availabilities.manage",
-        "training.view", "training.manage",
+        "availabilities.view", "availabilities.create", "availabilities.edit", "availabilities.delete",
+        "training.view", "training.create", "training.edit", "training.delete", "training.generate", "training.start",
         "fuel.view",
-        "lesson_plans.view", "lesson_plans.manage",
+        "lesson_plans.view", "lesson_plans.create", "lesson_plans.edit", "lesson_plans.delete", "lesson_plans.duplicate", "lesson_plans.archive", "lesson_plans.export", "lesson_plans.import",
         "lesson_library.view",
         "video_library.view",
         "competency.view",
-        "lesson_execution.view", "lesson_execution.manage",
+        "lesson_execution.view", "lesson_execution.start",
         "instructor_qualifications.view",
-        "commissions.view", "commissions.manage",
-        "leads.view", "leads.manage",
+        "commissions.view", "commissions.create", "commissions.edit", "commissions.delete", "commissions.contest",
+        "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.update_status",
         "bulk_onboarding.manage",
         "sms.view",
     ],
@@ -226,17 +317,17 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     ],
     UserRole.INSTRUCTOR: [
         "dashboard.view",
-        "consultations.view", "consultations.create", "consultations.manage",
+        "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "transfers.view",
-        "fuel.manage",
-        "training.manage",
+        "fuel.view", "fuel.create", "fuel.edit", "fuel.delete",
+        "training.view", "training.create", "training.edit", "training.delete", "training.generate", "training.start",
         "vehicle_schedule.view",
-        "availabilities.manage",
+        "availabilities.view", "availabilities.create", "availabilities.edit", "availabilities.delete",
         "lesson_plans.view",
         "lesson_library.view",
         "video_library.view",
         "competency.view",
-        "lesson_execution.manage",
+        "lesson_execution.view", "lesson_execution.start",
     ],
 }
 

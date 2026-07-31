@@ -21,7 +21,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 async def create_user(
     data: UserCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("users.manage")),
+    current_user: User = Depends(require_permission("users.create")),
 ):
     if data.role == UserRole.COMPANY_SUPER_USER and current_user.role != UserRole.SUPER_USER:
         raise HTTPException(
@@ -110,7 +110,7 @@ async def update_user(
     phone: str,
     data: UserUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("users.manage")),
+    current_user: User = Depends(require_permission("users.edit")),
 ):
     if data.role == UserRole.COMPANY_SUPER_USER and current_user.role != UserRole.SUPER_USER:
         raise HTTPException(
@@ -144,7 +144,7 @@ async def update_user(
 async def deactivate_user(
     phone: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("users.manage")),
+    current_user: User = Depends(require_permission("users.delete")),
 ):
     if phone == current_user.phone:
         raise HTTPException(
@@ -199,7 +199,7 @@ async def approve_user(
 async def reset_user_pin(
     phone: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("users.manage")),
+    current_user: User = Depends(require_permission("users.reset_pin")),
 ):
     user = await user_service.get_user_by_phone(db, phone)
     if user is None:

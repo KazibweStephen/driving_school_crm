@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,12 @@ class CollectionStatus(str, enum.Enum):
     PENDING = "pending"
     COLLECTED = "collected"
     PARTIAL = "partial"
+    CANCELLED = "cancelled"
+
+
+class TransferStatus(str, enum.Enum):
+    INITIATED = "initiated"
+    RECEIVED = "received"
     CANCELLED = "cancelled"
 
 
@@ -277,6 +283,57 @@ class Collection(Base):
 
     installment: Mapped["Installment"] = relationship("Installment")
     consultation: Mapped["Consultation"] = relationship("Consultation")
+
+
+class BranchTransfer(Base):
+    """Money moved between branches. Initiated at one branch and must be
+    received by a user at the destination branch before it counts there."""
+    __tablename__ = "branch_transfers"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    from_branch_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    to_branch_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    consultation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("consultations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    status: Mapped[TransferStatus] = mapped_column(
+        Enum(TransferStatus, values_callable=lambda x: [e.value for e in x]),
+        default=TransferStatus.INITIATED, nullable=False,
+    )
+    initiated_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.phone"), nullable=True
+    )
+    initiated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    received_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.phone"), nullable=True
+    )
+    received_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cancelled_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.phone"), nullable=True
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    from_branch: Mapped["Branch"] = relationship("Branch", foreign_keys=[from_branch_id])
+    to_branch: Mapped["Branch"] = relationship("Branch", foreign_keys=[to_branch_id])
+    consultation: Mapped["Consultation | None"] = relationship("Consultation")
 
 
 class CompanySmsSettings(Base):

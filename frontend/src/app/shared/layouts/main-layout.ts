@@ -40,6 +40,7 @@ export class MainLayout {
         { path: '/expenses', label: 'Expenses', icon: 'pi pi-minus-circle' },
         { path: '/payments', label: 'Payments', icon: 'pi pi-credit-card' },
         { path: '/collections-sheet', label: 'Collections Sheet', icon: 'pi pi-file-invoice' },
+        { path: '/transfers', label: 'Branch Transfers', icon: 'pi pi-arrow-right-arrow-left' },
       ],
     },
     {

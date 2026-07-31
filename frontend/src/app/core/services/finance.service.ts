@@ -48,6 +48,48 @@ export interface ExpenseListResponse {
   page_size: number;
 }
 
+export interface BranchTransfer {
+  id: string;
+  from_branch_id: string;
+  to_branch_id: string;
+  amount: string;
+  reason?: string;
+  consultation_id?: string;
+  status: 'initiated' | 'received' | 'cancelled';
+  initiated_by?: string;
+  initiated_at: string;
+  received_by?: string;
+  received_at?: string;
+  cancelled_by?: string;
+  cancelled_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BranchTransferCreate {
+  from_branch_id: string;
+  to_branch_id: string;
+  amount: number;
+  reason?: string;
+  consultation_id?: string;
+}
+
+export interface BranchTransferListResponse {
+  items: BranchTransfer[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface TransferSummary {
+  outgoing_initiated: number;
+  outgoing_received: number;
+  incoming_initiated: number;
+  incoming_received: number;
+  total_outgoing: number;
+  total_incoming: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class FinanceService {
   private base = '/api/v1/finance';
@@ -94,5 +136,39 @@ export class FinanceService {
     if (params?.end_date) p = p.set('end_date', params.end_date);
     if (params?.branch_id) p = p.set('branch_id', params.branch_id);
     return this.http.get<any[]>(`${this.base}/collections/sheet`, { params: p });
+  }
+
+  listTransfers(params?: {
+    branch_id?: string;
+    direction?: string;
+    status?: string;
+    page?: number;
+    page_size?: number;
+  }): Observable<BranchTransferListResponse> {
+    let p = new HttpParams();
+    if (params?.branch_id) p = p.set('branch_id', params.branch_id);
+    if (params?.direction) p = p.set('direction', params.direction);
+    if (params?.status) p = p.set('status', params.status);
+    if (params?.page) p = p.set('page', params.page);
+    if (params?.page_size) p = p.set('page_size', params.page_size);
+    return this.http.get<BranchTransferListResponse>(`${this.base}/transfers`, { params: p });
+  }
+
+  createTransfer(data: BranchTransferCreate): Observable<BranchTransfer> {
+    return this.http.post<BranchTransfer>(`${this.base}/transfers`, data);
+  }
+
+  receiveTransfer(id: string): Observable<BranchTransfer> {
+    return this.http.post<BranchTransfer>(`${this.base}/transfers/${id}/receive`, {});
+  }
+
+  cancelTransfer(id: string): Observable<BranchTransfer> {
+    return this.http.post<BranchTransfer>(`${this.base}/transfers/${id}/cancel`, {});
+  }
+
+  getTransferSummary(params?: { branch_id?: string }): Observable<TransferSummary> {
+    let p = new HttpParams();
+    if (params?.branch_id) p = p.set('branch_id', params.branch_id);
+    return this.http.get<TransferSummary>(`${this.base}/transfers/summary`, { params: p });
   }
 }

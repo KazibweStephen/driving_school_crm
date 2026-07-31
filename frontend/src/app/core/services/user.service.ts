@@ -12,6 +12,7 @@ export interface User {
   created_by_phone: string | null;
   created_at: string;
   updated_at: string;
+  branch_ids: string[];
 }
 
 export interface UserCreate {
@@ -21,6 +22,7 @@ export interface UserCreate {
   company_id?: string | null;
   is_company_admin?: boolean;
   can_backdate?: boolean;
+  branch_ids?: string[];
 }
 
 export interface UserUpdate {
@@ -30,6 +32,7 @@ export interface UserUpdate {
   company_id?: string | null;
   is_company_admin?: boolean;
   can_backdate?: boolean;
+  branch_ids?: string[];
 }
 
 export interface PinChange {

@@ -37,8 +37,12 @@ async def _resolve_branch_ids(
         UserRole.SUPER_USER, UserRole.OFFICE_ADMIN, UserRole.MANAGER, UserRole.BRANCH_SUPERVISOR,
     )
 
-    if requested_branch_ids and is_privileged:
-        # Verify requested branches belong to the user's company
+    if is_privileged:
+        # Privileged users (super, office admin, manager, branch supervisor) can see
+        # all branches in their company when no specific branch filter is requested.
+        if not requested_branch_ids:
+            result = await db.execute(base_query)
+            return [b.id for b in result.scalars().all()]
         result = await db.execute(
             base_query.where(Branch.id.in_([uuid.UUID(b) for b in requested_branch_ids]))
         )
@@ -47,7 +51,7 @@ async def _resolve_branch_ids(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No branch access")
         return resolved
 
-    # Non-privileged or no selection: use assigned branches (scoped to company)
+    # Non-privileged: use assigned branches (scoped to company)
     result = await db.execute(
         select(UserBranchAssignment.branch_id)
         .join(Branch, UserBranchAssignment.branch_id == Branch.id)

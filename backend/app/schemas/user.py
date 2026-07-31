@@ -13,6 +13,7 @@ class UserCreate(BaseModel):
     company_id: uuid.UUID | None = None
     is_company_admin: bool = False
     can_backdate: bool = False
+    branch_ids: list[uuid.UUID] | None = None
 
 
 class UserRead(BaseModel):
@@ -26,6 +27,7 @@ class UserRead(BaseModel):
     created_by_phone: str | None
     created_at: datetime
     updated_at: datetime
+    branch_ids: list[uuid.UUID] = []
 
     model_config = {"from_attributes": True}
 
@@ -37,6 +39,7 @@ class UserUpdate(BaseModel):
     company_id: uuid.UUID | None = None
     is_company_admin: bool | None = None
     can_backdate: bool | None = None
+    branch_ids: list[uuid.UUID] | None = None
 
 
 class UserPinChange(BaseModel):

@@ -1,0 +1,125 @@
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+
+<div class="p-4 sm:p-6">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-gray-900">Branch Transfers</h1>
+    <p-button label="Initiate Transfer" icon="pi pi-arrow-right-arrow-left" (onClick)="openCreateDialog()" />
+  </div>
+
+  <div class="mb-4 flex flex-wrap items-center gap-2">
+    <p-select [(ngModel)]="direction" [options]="directionOptions" optionLabel="label" optionValue="value"
+      placeholder="Direction" styleClass="w-40" appendTo="body" (onChange)="applyFilters()" />
+    <p-select [(ngModel)]="statusFilter" [options]="statusOptions" optionLabel="label" optionValue="value"
+      placeholder="Status" styleClass="w-40" appendTo="body" showClear="true" (onChange)="applyFilters()" />
+    @if (branches.length > 1) {
+      <p-multiSelect [(ngModel)]="selectedBranchIds" [options]="branches" optionLabel="name" optionValue="id"
+        placeholder="All Branches" styleClass="w-56" appendTo="body" [showHeader]="false"
+        [maxSelectedLabels]="2" [selectedItemsLabel]="'{0} branches'" (onChange)="applyFilters()" />
+    }
+    <p-button label="Clear" severity="secondary" icon="pi pi-filter-slash" (onClick)="clearFilters()" />
+  </div>
+
+  @if (!loading()) {
+    <div class="mb-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <p-card>
+        <div class="text-sm text-gray-500">Outgoing Initiated</div>
+        <div class="text-xl font-bold text-amber-600">{{ formatAmount(summary.outgoing_initiated) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Outgoing Received</div>
+        <div class="text-xl font-bold text-green-600">{{ formatAmount(summary.outgoing_received) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Incoming Initiated</div>
+        <div class="text-xl font-bold text-blue-600">{{ formatAmount(summary.incoming_initiated) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Incoming Received</div>
+        <div class="text-xl font-bold text-green-600">{{ formatAmount(summary.incoming_received) }}</div>
+      </p-card>
+    </div>
+  }
+
+  <p-table [value]="transfers()" [loading]="loading()" [paginator]="true" [rows]="pageSize"
+    [totalRecords]="total" [lazy]="true" (onPage)="onPage($event)"
+    [rowsPerPageOptions]="[10, 20, 50]" sortField="initiated_at" [sortOrder]="-1">
+    <ng-template pTemplate="header">
+      <tr>
+        <th>From</th>
+        <th>To</th>
+        <th>Amount</th>
+        <th>Status</th>
+        <th>Initiated</th>
+        <th>Reason</th>
+        <th style="width: 9rem">Actions</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-t>
+      <tr>
+        <td class="font-medium">{{ branchName(t.from_branch_id) }}</td>
+        <td class="font-medium">{{ branchName(t.to_branch_id) }}</td>
+        <td class="font-bold whitespace-nowrap">{{ formatAmount(t.amount) }}</td>
+        <td><p-tag [value]="statusLabel(t)" [severity]="statusSeverity(t)" /></td>
+        <td class="text-sm text-gray-500">
+          <div class="flex flex-col">
+            <span>{{ formatDateTime(t.initiated_at) }}</span>
+            @if (t.initiated_by) {
+              <span class="text-xs text-gray-400">by {{ t.initiated_by }}</span>
+            }
+          </div>
+        </td>
+        <td class="text-sm text-gray-600 max-w-48">{{ t.reason || '—' }}</td>
+        <td>
+          <div class="flex items-center gap-1">
+            @if (canReceive(t)) {
+              <p-button icon="pi pi-check" rounded="true" text="true" severity="success"
+                pTooltip="Receive" (onClick)="confirmReceive(t)" />
+            }
+            @if (canCancel(t)) {
+              <p-button icon="pi pi-times" rounded="true" text="true" severity="danger"
+                pTooltip="Cancel" (onClick)="confirmCancel(t)" />
+            }
+            @if (!canReceive(t) && !canCancel(t)) {
+              <span class="text-xs text-gray-400">—</span>
+            }
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="7" class="text-center text-gray-500 py-4">No transfers found</td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<p-dialog header="Initiate Transfer" [modal]="true" [(visible)]="showCreateDialog"
+  [style]="{ width: '420px' }" appendTo="body" [closable]="false">
+  <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">From Branch</label>
+      <p-select [(ngModel)]="newTransfer.from_branch_id" [options]="branches" optionLabel="name" optionValue="id"
+        placeholder="Select branch" styleClass="w-full" appendTo="body" />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">To Branch</label>
+      <p-select [(ngModel)]="newTransfer.to_branch_id" [options]="branches" optionLabel="name" optionValue="id"
+        placeholder="Select branch" styleClass="w-full" appendTo="body" />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">Amount</label>
+      <p-inputNumber [(ngModel)]="newTransfer.amount" mode="currency" currency="TZS" locale="en-US"
+        styleClass="w-full" [min]="1" />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">Reason</label>
+      <input pInputText [(ngModel)]="newTransfer.reason" placeholder="Optional note" class="w-full" />
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <p-button label="Cancel" severity="secondary" (onClick)="showCreateDialog.set(false)" />
+      <p-button label="Initiate" icon="pi pi-check" [loading]="saving()" (onClick)="createTransfer()" />
+    </div>
+  </div>
+</p-dialog>

@@ -84,6 +84,7 @@
           <th>Name</th>
           <th>Role</th>
           <th>Company</th>
+          <th>Branches</th>
           <th>Status</th>
           <th>Created</th>
           <th>Actions</th>
@@ -102,6 +103,7 @@
             }
             {{ companyName(user.company_id) }}
           </td>
+          <td class="text-xs text-gray-500">{{ branchNames(user.branch_ids) }}</td>
           <td>
             <p-tag
               [value]="user.status"
@@ -180,7 +182,10 @@
             />
           </div>
         </div>
-        <p class="mt-2 text-xs text-gray-400">Created {{ user.created_at | date: 'mediumDate' }}</p>
+        <p class="mt-2 text-xs text-gray-400">
+          {{ companyName(user.company_id) }} · {{ branchNames(user.branch_ids) }}<br>
+          Created {{ user.created_at | date: 'mediumDate' }}
+        </p>
         <div class="mt-3 flex items-center gap-2 border-t pt-3">
           @if (user.status === 'pending_approval') {
             <p-button
@@ -286,6 +291,19 @@
           [showClear]="true"
         />
       </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Branches</label>
+        <p-multiSelect
+          [(ngModel)]="newUser.branch_ids"
+          [options]="branches()"
+          optionLabel="name"
+          optionValue="id"
+          placeholder="Assign to branches"
+          styleClass="w-full"
+          appendTo="body"
+          [showClear]="true"
+        />
+      </div>
       <div class="flex items-center gap-2">
         <p-checkbox [(ngModel)]="newUser.is_company_admin" [binary]="true" inputId="create_admin" />
         <label for="create_admin" class="text-sm">Company Admin</label>
@@ -346,6 +364,19 @@
             optionLabel="name"
             optionValue="id"
             placeholder="Assign to company"
+            styleClass="w-full"
+            appendTo="body"
+            [showClear]="true"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Branches</label>
+          <p-multiSelect
+            [(ngModel)]="editData.branch_ids"
+            [options]="branches()"
+            optionLabel="name"
+            optionValue="id"
+            placeholder="Assign to branches"
             styleClass="w-full"
             appendTo="body"
             [showClear]="true"

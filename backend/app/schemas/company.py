@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from app.models.company import CollectionStatus
+from app.models.company import CollectionStatus, TransferStatus
 
 
 # ── Company ──
@@ -253,6 +253,36 @@ class CollectionRead(BaseModel):
     notes: str | None = None
     collected_by: str | None = None
     collected_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Branch Transfer ──
+
+class BranchTransferCreate(BaseModel):
+    from_branch_id: uuid.UUID
+    to_branch_id: uuid.UUID
+    amount: Decimal = Field(..., decimal_places=2, gt=0)
+    reason: str | None = None
+    consultation_id: uuid.UUID | None = None
+
+
+class BranchTransferRead(BaseModel):
+    id: uuid.UUID
+    from_branch_id: uuid.UUID
+    to_branch_id: uuid.UUID
+    amount: Decimal
+    reason: str | None = None
+    consultation_id: uuid.UUID | None = None
+    status: TransferStatus
+    initiated_by: str | None = None
+    initiated_at: datetime
+    received_by: str | None = None
+    received_at: datetime | None = None
+    cancelled_by: str | None = None
+    cancelled_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -11,12 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.company import BorrowStatus, CollectionStatus, ExpenseStatus
+from app.models.company import BorrowStatus, CollectionStatus, ExpenseStatus, TransferStatus
 from app.models.user import User
 from app.schemas.company import (
     BorrowedMoneyCreate,
     BorrowedMoneyRead,
     BorrowedMoneyUpdate,
+    BranchTransferCreate,
+    BranchTransferRead,
     CollectionCreate,
     CollectionRead,
     CollectionUpdate,
@@ -323,6 +325,99 @@ async def send_dunning(
 ):
     sent_count = await finance_service.send_dunning_notifications(db)
     return {"sent": sent_count, "message": f"Dunning notices sent to {sent_count} clients"}
+
+
+# ── Branch Transfers ──
+
+
+@router.get("/transfers", response_model=dict)
+async def list_branch_transfers(
+    branch_id: uuid.UUID | None = Query(None),
+    direction: str = Query("all", pattern="^(all|incoming|outgoing)$"),
+    status: TransferStatus | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    transfers, total = await finance_service.list_branch_transfers(
+        db, branch_id=branch_id, direction=direction, status=status,
+        page=page, page_size=page_size,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+    return {
+        "items": [BranchTransferRead.model_validate(t) for t in transfers],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.post("/transfers", response_model=BranchTransferRead, status_code=status.HTTP_201_CREATED)
+async def create_branch_transfer(
+    data: BranchTransferCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    transfer = await finance_service.create_branch_transfer(
+        db,
+        from_branch_id=data.from_branch_id,
+        to_branch_id=data.to_branch_id,
+        amount=data.amount,
+        reason=data.reason,
+        consultation_id=data.consultation_id,
+        initiated_by=current_user.phone,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+    return BranchTransferRead.model_validate(transfer)
+
+
+@router.post("/transfers/{transfer_id}/receive", response_model=BranchTransferRead)
+async def receive_branch_transfer(
+    transfer_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    transfer = await finance_service.receive_branch_transfer(
+        db, transfer_id, received_by=current_user.phone,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+    if not transfer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transfer not found",
+        )
+    return BranchTransferRead.model_validate(transfer)
+
+
+@router.post("/transfers/{transfer_id}/cancel", response_model=BranchTransferRead)
+async def cancel_branch_transfer(
+    transfer_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    transfer = await finance_service.cancel_branch_transfer(
+        db, transfer_id, cancelled_by=current_user.phone,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+    if not transfer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transfer not found",
+        )
+    return BranchTransferRead.model_validate(transfer)
+
+
+@router.get("/transfers/summary", response_model=dict)
+async def get_transfer_summary(
+    branch_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await finance_service.get_transfer_summary(
+        db, branch_id=branch_id,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
 
 
 # ── Finance Summary ──

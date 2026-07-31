@@ -40,6 +40,13 @@ async def create_user(
         company_id=data.company_id or current_user.company_id,
         can_backdate=data.can_backdate,
     )
+    await user_service.sync_user_branches(
+        db, data.phone, data.branch_ids,
+        company_id=data.company_id or current_user.company_id,
+        current_user_role=current_user.role,
+    )
+    await db.flush()
+    await db.refresh(user, attribute_names=["branch_assignments"])
     target_company_id = data.company_id or current_user.company_id
     if target_company_id:
         await on_user_created(
@@ -122,6 +129,14 @@ async def update_user(
         company_id=data.company_id,
         can_backdate=data.can_backdate,
     )
+    target_company_id = data.company_id or user.company_id
+    await user_service.sync_user_branches(
+        db, phone, data.branch_ids,
+        company_id=target_company_id,
+        current_user_role=current_user.role,
+    )
+    await db.flush()
+    await db.refresh(updated, attribute_names=["branch_assignments"])
     return UserRead.model_validate(updated)
 
 

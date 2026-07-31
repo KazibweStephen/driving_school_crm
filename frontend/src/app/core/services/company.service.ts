@@ -132,6 +132,10 @@ export class CompanyService {
     return this.http.get<Branch[]>(`${this.base}/${companyId}/branches`);
   }
 
+  myBranches(): Observable<Branch[]> {
+    return this.http.get<Branch[]>(`${this.base}/my-branches`);
+  }
+
   getBranch(id: string): Observable<Branch> {
     return this.http.get<Branch>(`${this.base}/branches/${id}`);
   }

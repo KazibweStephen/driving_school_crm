@@ -69,3 +69,7 @@ class User(Base):
     branch_assignments: Mapped[list["UserBranchAssignment"]] = relationship(
         "UserBranchAssignment", back_populates="user", cascade="all, delete-orphan"
     )
+
+    @property
+    def branch_ids(self) -> list[uuid.UUID]:
+        return [a.branch_id for a in self.branch_assignments]

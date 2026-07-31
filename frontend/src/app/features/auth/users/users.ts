@@ -9,13 +9,14 @@ import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { InputMaskModule } from 'primeng/inputmask';
 import { SelectModule } from 'primeng/select';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { TooltipModule } from 'primeng/tooltip';
 import { UserService, User } from '../../../core/services/user.service';
 import { AuthService } from '../../../core/auth/auth.service';
-import { CompanyService, Company } from '../../../core/services/company.service';
+import { CompanyService, Company, Branch } from '../../../core/services/company.service';
 
 @Component({
   selector: 'app-users',
@@ -28,6 +29,7 @@ import { CompanyService, Company } from '../../../core/services/company.service'
     DialogModule,
     InputTextModule,
     SelectModule,
+    MultiSelectModule,
     TableModule,
     TagModule,
     ToastModule,
@@ -56,8 +58,9 @@ export class Users implements OnInit {
   editingUser = signal<User | null>(null);
 
   companies = signal<Company[]>([]);
-  newUser: { phone: string; name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean } = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false };
-  editData: { name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean } = { name: '', role: '', company_id: null, is_company_admin: false, can_backdate: false };
+  branches = signal<Branch[]>([]);
+  newUser: { phone: string; name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; branch_ids: string[] } = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
+  editData: { name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; branch_ids: string[] } = { name: '', role: '', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
   get isSuperUser(): boolean {
     return this.auth.currentUserRole() === 'super_user';
   }
@@ -82,6 +85,14 @@ export class Users implements OnInit {
     return this.companies().find(c => c.id === id)?.name || id.substring(0, 8);
   }
 
+  branchNames(ids: string[] | null | undefined): string {
+    if (!ids || ids.length === 0) return '-';
+    const names = ids
+      .map(id => this.branches().find(b => b.id === id)?.name)
+      .filter(Boolean);
+    return names.length ? names.join(', ') : `${ids.length} branch(es)`;
+  }
+
   statuses = [
     { label: 'Active', value: 'active' },
     { label: 'Pending Approval', value: 'pending_approval' },
@@ -100,6 +111,14 @@ export class Users implements OnInit {
   ngOnInit() {
     this.loadUsers();
     this.loadCompanies();
+    this.loadBranches();
+  }
+
+  async loadBranches() {
+    try {
+      const res = await this.companyService.myBranches().toPromise();
+      this.branches.set(res || []);
+    } catch {}
   }
 
   async loadCompanies() {
@@ -160,7 +179,7 @@ export class Users implements OnInit {
     try {
       await this.userService.create(this.newUser).toPromise();
       this.showCreateDialog.set(false);
-      this.newUser = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false };
+      this.newUser = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
       await this.loadUsers();
       this.messageService.add({
         severity: 'success',
@@ -180,7 +199,7 @@ export class Users implements OnInit {
 
   openEdit(user: User) {
     this.editingUser.set(user);
-    this.editData = { name: user.name, role: user.role, company_id: user.company_id, is_company_admin: user.is_company_admin, can_backdate: user.can_backdate };
+    this.editData = { name: user.name, role: user.role, company_id: user.company_id, is_company_admin: user.is_company_admin, can_backdate: user.can_backdate, branch_ids: user.branch_ids || [] };
     this.showEditDialog.set(true);
   }
 
@@ -196,6 +215,7 @@ export class Users implements OnInit {
           company_id: this.editData.company_id,
           is_company_admin: this.editData.is_company_admin,
           can_backdate: this.editData.can_backdate,
+          branch_ids: this.editData.branch_ids,
         })
         .toPromise();
       this.showEditDialog.set(false);

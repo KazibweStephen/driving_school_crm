@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -10,10 +10,12 @@ from app.models.company import (
     BorrowedMoney,
     BorrowStatus,
     Branch,
+    BranchTransfer,
     Collection,
     CollectionStatus,
     Expense,
     ExpenseStatus,
+    TransferStatus,
 )
 from app.models.consultation import Consultation
 from app.models.payment import Installment, InstallmentStatus
@@ -537,6 +539,215 @@ async def send_dunning_notifications(db: AsyncSession) -> int:
             await db.flush()
 
     return sent_count
+
+
+# ── Branch Transfers ──
+
+
+async def _verify_branches_in_company(
+    db: AsyncSession,
+    branch_ids: list[uuid.UUID],
+    company_id: uuid.UUID | None,
+    user_role: UserRole | None,
+) -> bool:
+    if user_role == UserRole.SUPER_USER or company_id is None:
+        return True
+    result = await db.execute(
+        select(Branch).where(Branch.id.in_(branch_ids), Branch.company_id == company_id)
+    )
+    return len(list(result.scalars().all())) == len(set(branch_ids))
+
+
+async def create_branch_transfer(
+    db: AsyncSession,
+    from_branch_id: uuid.UUID,
+    to_branch_id: uuid.UUID,
+    amount: Decimal,
+    reason: str | None = None,
+    consultation_id: uuid.UUID | None = None,
+    initiated_by: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> BranchTransfer:
+    if from_branch_id == to_branch_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="From and to branches must be different")
+    if not await _verify_branches_in_company(
+        db, [from_branch_id, to_branch_id], company_id, current_user_role
+    ):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Branch not found")
+    transfer = BranchTransfer(
+        from_branch_id=from_branch_id,
+        to_branch_id=to_branch_id,
+        amount=float(amount),
+        reason=reason,
+        consultation_id=consultation_id,
+        initiated_by=initiated_by,
+    )
+    db.add(transfer)
+    await db.flush()
+    await db.refresh(transfer)
+    return transfer
+
+
+async def _get_transfer_scoped(
+    db: AsyncSession,
+    transfer_id: uuid.UUID,
+    company_id: uuid.UUID | None,
+    current_user_role: UserRole | None,
+) -> BranchTransfer | None:
+    query = select(BranchTransfer).where(BranchTransfer.id == transfer_id)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        from_branch = select(Branch.id).where(
+            Branch.id == BranchTransfer.from_branch_id,
+            Branch.company_id == company_id,
+        )
+        to_branch = select(Branch.id).where(
+            Branch.id == BranchTransfer.to_branch_id,
+            Branch.company_id == company_id,
+        )
+        query = query.where(or_(from_branch.exists(), to_branch.exists()))
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
+async def receive_branch_transfer(
+    db: AsyncSession,
+    transfer_id: uuid.UUID,
+    received_by: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> BranchTransfer | None:
+    transfer = await _get_transfer_scoped(db, transfer_id, company_id, current_user_role)
+    if not transfer:
+        return None
+    if transfer.status != TransferStatus.INITIATED:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Only initiated transfers can be received")
+    transfer.status = TransferStatus.RECEIVED
+    transfer.received_by = received_by
+    transfer.received_at = datetime.now(timezone.utc)
+    await db.flush()
+    await db.refresh(transfer)
+    return transfer
+
+
+async def cancel_branch_transfer(
+    db: AsyncSession,
+    transfer_id: uuid.UUID,
+    cancelled_by: str | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> BranchTransfer | None:
+    transfer = await _get_transfer_scoped(db, transfer_id, company_id, current_user_role)
+    if not transfer:
+        return None
+    if transfer.status != TransferStatus.INITIATED:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Only initiated transfers can be cancelled")
+    transfer.status = TransferStatus.CANCELLED
+    transfer.cancelled_by = cancelled_by
+    transfer.cancelled_at = datetime.now(timezone.utc)
+    await db.flush()
+    await db.refresh(transfer)
+    return transfer
+
+
+async def list_branch_transfers(
+    db: AsyncSession,
+    branch_id: uuid.UUID | None = None,
+    direction: str = "all",
+    status: TransferStatus | None = None,
+    page: int = 1,
+    page_size: int = 20,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> tuple[list[BranchTransfer], int]:
+    query = select(BranchTransfer)
+    count_query = select(func.count(BranchTransfer.id))
+
+    if branch_id:
+        if direction == "incoming":
+            cond = BranchTransfer.to_branch_id == branch_id
+        elif direction == "outgoing":
+            cond = BranchTransfer.from_branch_id == branch_id
+        else:
+            cond = or_(BranchTransfer.to_branch_id == branch_id, BranchTransfer.from_branch_id == branch_id)
+        query = query.where(cond)
+        count_query = count_query.where(cond)
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        from_branch = select(Branch.id).where(
+            Branch.id == BranchTransfer.from_branch_id,
+            Branch.company_id == company_id,
+        )
+        to_branch = select(Branch.id).where(
+            Branch.id == BranchTransfer.to_branch_id,
+            Branch.company_id == company_id,
+        )
+        query = query.where(or_(from_branch.exists(), to_branch.exists()))
+        count_query = count_query.where(or_(from_branch.exists(), to_branch.exists()))
+    if status:
+        query = query.where(BranchTransfer.status == status)
+        count_query = count_query.where(BranchTransfer.status == status)
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.order_by(BranchTransfer.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    transfers = list(result.scalars().all())
+
+    return transfers, total
+
+
+async def get_transfer_summary(
+    db: AsyncSession,
+    branch_id: uuid.UUID | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> dict:
+    """Totals for outgoing/incoming transfers (initiated + received)."""
+    summary = {
+        "outgoing_initiated": 0.0,
+        "outgoing_received": 0.0,
+        "incoming_initiated": 0.0,
+        "incoming_received": 0.0,
+        "total_outgoing": 0.0,
+        "total_incoming": 0.0,
+    }
+    for role in ("outgoing", "incoming"):
+        base = select(
+            BranchTransfer.status,
+            func.coalesce(func.sum(BranchTransfer.amount), 0),
+        )
+        if branch_id:
+            if role == "outgoing":
+                base = base.where(BranchTransfer.from_branch_id == branch_id)
+            else:
+                base = base.where(BranchTransfer.to_branch_id == branch_id)
+        elif current_user_role != UserRole.SUPER_USER and company_id is not None:
+            branch_exists = select(Branch.id).where(
+                Branch.id == (
+                    BranchTransfer.from_branch_id if role == "outgoing"
+                    else BranchTransfer.to_branch_id
+                ),
+                Branch.company_id == company_id,
+            )
+            base = base.where(branch_exists.exists())
+        result = await db.execute(base.group_by(BranchTransfer.status))
+        initiated_total = 0.0
+        received_total = 0.0
+        for status, amount in result:
+            if status == TransferStatus.INITIATED:
+                initiated_total += float(amount)
+            elif status == TransferStatus.RECEIVED:
+                received_total += float(amount)
+        summary[f"{role}_initiated"] = initiated_total
+        summary[f"{role}_received"] = received_total
+        summary[f"total_{role}"] = initiated_total + received_total
+    return summary
 
 
 # ── Finance Summary ──

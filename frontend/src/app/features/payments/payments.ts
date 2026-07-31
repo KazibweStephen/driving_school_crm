@@ -46,7 +46,7 @@ export class PaymentsCmp implements OnInit {
   search = '';
   dateRangeValue: Date[] = [];
   clientType = 'all';
-  activePreset = 'today';
+  activePreset = 'this_week';
   totals: PaymentTotals = { total_amount_sum: '0', total_paid_sum: '0', total_balance_sum: '0' };
 
   branches: BranchInfo[] = [];
@@ -90,7 +90,7 @@ export class PaymentsCmp implements OnInit {
       this.branches = [];
       this.selectedBranchIds = [];
     }
-    this.setPreset('today');
+    this.setPreset('this_week');
     this.loadPayments();
   }
 
@@ -152,8 +152,15 @@ export class PaymentsCmp implements OnInit {
   clearFilters() {
     const today = new Date();
     this.search = '';
-    this.dateRangeValue = [today, today];
-    this.activePreset = 'today';
+    this.activePreset = 'this_week';
+    const now = new Date();
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    const mon = new Date(now);
+    mon.setDate(diff);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    this.dateRangeValue = [mon, sun];
     this.clientType = 'all';
     this.selectedBranchIds = this.branches.map(b => b.id);
     this.page = 1;

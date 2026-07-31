@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_super_user
+from app.api.deps import get_current_user, require_super_user
 from app.core.database import get_db
 from app.models.company import (
     Branch,
@@ -14,7 +14,7 @@ from app.models.company import (
     UserBranchAssignment,
     VehicleBranchAssignment,
 )
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.company import (
     BranchCreate,
     BranchRead,
@@ -33,6 +33,36 @@ from app.schemas.company import (
 )
 
 router = APIRouter(prefix="/api/v1/companies", tags=["Companies"])
+
+
+@router.get("/my-branches", response_model=list[BranchRead])
+async def my_branches(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Branches accessible to the current user (all in company if privileged, else assigned)."""
+    base_query = select(Branch)
+    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+        base_query = base_query.where(Branch.company_id == current_user.company_id)
+
+    is_privileged = current_user.role in (
+        UserRole.SUPER_USER,
+        UserRole.COMPANY_SUPER_USER,
+        UserRole.OFFICE_ADMIN,
+        UserRole.MANAGER,
+        UserRole.BRANCH_SUPERVISOR,
+    )
+    if is_privileged:
+        result = await db.execute(base_query.order_by(Branch.name))
+        branches = result.scalars().all()
+    else:
+        result = await db.execute(
+            base_query.join(UserBranchAssignment).where(
+                UserBranchAssignment.user_id == current_user.phone
+            ).order_by(Branch.name)
+        )
+        branches = result.unique().scalars().all()
+    return [BranchRead.model_validate(b) for b in branches]
 
 
 # ── Company ──

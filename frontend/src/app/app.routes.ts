@@ -69,6 +69,11 @@ export const routes: Routes = [
           import('./features/collections-sheet/collections-sheet').then((c) => c.CollectionsSheetCmp),
       },
       {
+        path: 'transfers',
+        loadComponent: () =>
+          import('./features/transfers/transfers').then((c) => c.TransfersCmp),
+      },
+      {
         path: 'companies',
         loadComponent: () =>
           import('./features/companies/companies').then((c) => c.CompaniesCmp),

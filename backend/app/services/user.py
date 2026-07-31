@@ -3,13 +3,62 @@ import uuid
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.security import hash_pin, generate_otp, verify_pin
+from app.models.company import Branch, UserBranchAssignment
 from app.models.user import User, UserRole, UserStatus
 
 
 def generate_initial_pin() -> str:
     return f"{random.randint(0, 9999):04d}"
+
+
+async def sync_user_branches(
+    db: AsyncSession,
+    phone: str,
+    branch_ids: list[uuid.UUID] | None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> None:
+    """Replace the user's branch assignments with the given set.
+
+    Branch IDs are validated against the current user's company unless they are
+    a SUPER_USER (who can assign across companies).
+    """
+    if branch_ids is None:
+        return
+
+    existing_result = await db.execute(
+        select(UserBranchAssignment).where(UserBranchAssignment.user_id == phone)
+    )
+    existing = list(existing_result.scalars().all())
+    existing_by_branch = {a.branch_id: a for a in existing}
+
+    target_ids = set(branch_ids)
+
+    for a in existing:
+        if a.branch_id not in target_ids:
+            await db.delete(a)
+
+    if target_ids:
+        query = select(Branch).where(Branch.id.in_(target_ids))
+        if current_user_role != UserRole.SUPER_USER and company_id is not None:
+            query = query.where(Branch.company_id == company_id)
+        result = await db.execute(query)
+        valid_branches = {b.id for b in result.scalars().all()}
+
+        for bid in target_ids:
+            if bid not in valid_branches:
+                from fastapi import HTTPException
+                raise HTTPException(
+                    status_code=403,
+                    detail="Branch not accessible in your company",
+                )
+            if bid not in existing_by_branch:
+                db.add(UserBranchAssignment(user_id=phone, branch_id=bid))
+
+    await db.flush()
 
 
 async def create_user(
@@ -42,7 +91,9 @@ async def create_user(
 
 
 async def get_user_by_phone(db: AsyncSession, phone: str) -> User | None:
-    result = await db.execute(select(User).where(User.phone == phone))
+    result = await db.execute(
+        select(User).options(selectinload(User.branch_assignments)).where(User.phone == phone)
+    )
     return result.scalar_one_or_none()
 
 
@@ -55,7 +106,7 @@ async def get_user_by_phone_with_company(
     """Lookup user by phone, scoped to company (super_admin bypasses)."""
     if current_user_role == UserRole.SUPER_USER:
         return await get_user_by_phone(db, phone)
-    query = select(User).where(User.phone == phone)
+    query = select(User).options(selectinload(User.branch_assignments)).where(User.phone == phone)
     if company_id is not None:
         query = query.where(User.company_id == company_id)
     result = await db.execute(query)
@@ -72,7 +123,7 @@ async def list_users(
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> tuple[list[User], int]:
-    query = select(User)
+    query = select(User).options(selectinload(User.branch_assignments))
 
     if current_user_role != UserRole.SUPER_USER and company_id is not None:
         query = query.where(User.company_id == company_id)

@@ -1,0 +1,81 @@
+<p-toast></p-toast>
+
+<div class="p-4">
+  <div class="mb-4">
+    <h1 class="text-2xl font-bold">Permissions</h1>
+    <p class="text-sm text-gray-500">Fine-grained role permissions for this company. Changes take effect for users on next login.</p>
+  </div>
+
+  <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+    @if (isSuperUser) {
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-gray-500">Company</label>
+        <p-select
+          [options]="companies()"
+          optionLabel="name"
+          optionValue="id"
+          [(ngModel)]="selectedCompanyId"
+          appendTo="body"
+          class="w-full sm:w-64"
+          (onChange)="onCompanyChange()"
+        />
+      </div>
+    }
+    <div class="flex flex-col gap-1">
+      <label class="text-xs font-medium text-gray-500">Role</label>
+      <p-select
+        [options]="roles"
+        optionLabel="label"
+        optionValue="value"
+        [(ngModel)]="selectedRole"
+        appendTo="body"
+        class="w-full sm:w-64"
+        (onChange)="onRoleChange()"
+      />
+    </div>
+    <div class="ml-auto self-end">
+      <p-button
+        label="Save Changes"
+        icon="pi pi-check"
+        [loading]="saving()"
+        [disabled]="!selectedRole() || loading()"
+        (onClick)="save()"
+      />
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="flex items-center justify-center py-16">
+      <span class="pi pi-spin pi-spinner text-3xl text-gray-400"></span>
+    </div>
+  } @else {
+    <div class="grid gap-3 lg:grid-cols-2">
+      @for (group of groups(); track group.key) {
+        <div class="rounded-xl border bg-white p-4">
+          <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-900">{{ group.label }}</h2>
+            <p-checkbox
+              [binary]="true"
+              [ngModel]="groupAllChecked(group)"
+              (onChange)="toggleGroup(group)"
+              [inputId]="'grp-' + group.key"
+            />
+          </div>
+          <div class="grid gap-1.5 sm:grid-cols-2">
+            @for (code of group.codes; track code) {
+              <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-gray-50">
+                <p-checkbox
+                  [binary]="true"
+                  [ngModel]="has(code)"
+                  (onChange)="toggle(code)"
+                  [inputId]="'cb-' + code"
+                />
+                <span class="text-gray-800">{{ code }}</span>
+              </label>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

@@ -59,8 +59,12 @@
 - Payments page under Management sidebar group: list/search, date range + client type + branch filters, totals cards, print report (privileged roles)
 - Payments table: client name links to `/consultations/{id}`, received-by user shown below phone, sort icons kept on same line as headers
 - Payments list filters/sorts by `document_date` (falling back to `created_at`)
-- Products GET endpoints (`GET /api/v1/products/`, `GET /api/v1/products/{id}`) allow any authenticated user (read-only); create/update/delete remain `require_admin_access` (super_user / company_super_user); frontend Products page hides Templates/Add/Edit/Deactivate actions for non-admin roles
-- Companies GET endpoints (`GET /api/v1/companies/`, `GET /api/v1/companies/{id}`) allow any authenticated user but non-super users only see/access their own company (list returns just their company, by-id returns 404 for other companies); create/update/delete remain `require_super_user`; frontend Companies page hides New/Edit/Delete for non-super roles
+- Products GET endpoints (`GET /api/v1/products/`, `GET /api/v1/products/{id}`) allow any authenticated user (read-only); create/update/delete are gated by `products.manage`; frontend Products page hides Templates/Add/Edit/Deactivate actions for users without it
+- Companies GET endpoints allow any authenticated user but non-super users only see/access their own company; create/update/delete are gated by `companies.manage`; frontend Companies page hides New/Edit/Delete without it
+- All v1 API endpoints are gated by fine-grained permission codes (`require_permission("...")`); `super_user` bypasses all checks; `.manage` implies its `.view` counterpart; only `users.py` (`/me`, `/change-pin`) still uses plain `get_current_user`
+- JWT access token carries a `permissions` claim (stored set, DB-authoritative) used for UI gating; role_permissions is per-company, so re-login is required for changes to take effect
+- Frontend: routes carry `data.permission`, gated by `permissionGuard` (`canActivateChild`); sidebar nav filtered by permission codes (groups with zero visible children are hidden); `AuthService.hasPermission()` / `hasAnyPermission()`; `HasPermissionDirective` (`*appHasPermission`) for element-level gating
+- Sidebar group expansion uses an `expandedGroups` Set signal (never mutate `group.expanded` on copies — `visibleNavGroups` getter returns fresh objects each CD run, so state must live in the component)
 
 ## Progress
 ### Done
@@ -128,6 +132,7 @@
 - **Competency Catalogue Module**: company-scoped `CompetencyVersion`, `CompetencyCategory`, `Competency`, `CompetencyPrerequisite`, `LessonCompetencyLink` models; 3 enums (`CompetencyDifficulty`, `CompetencyTrainingCategory`, `CompetencyVersionStatus`); full CRUD + search + bulk import API (17 endpoints); frontend 3-tab page with versions, categories, competencies (filter/pagination/bulk import/assessment criteria); reusable `competency-picker` component; lesson-library and lesson-plans pages now use `p-multiSelect` with `competency_ids` instead of free-text arrays; old JSONB `competencies`/`prerequisite_competencies` columns dropped from `lesson_library`; Alembic migration `d4e5f6a7b8c9` (chains from `j2k3l4m5n6o7`); seed data: 1 version, 13 categories, 106 competencies, 44 prerequisite links
 - **Payments fixes + auto cross-branch transfers**: `payments.branch_id` FK (collecting branch) + `branch_transfers.payment_id` FK (migration `f6a7b8c9d0e1`); payments list branch filter is now OR of `Consultation.branch_id`/`Payment.branch_id` (fixes missing today/this-week rows for null-branch or cross-collected consultations); `hard_delete_consultations` skips company scoping for `super_user` (fixes bulk-delete 404 on null-branch rows); `PaymentCreate.branch_id` accepted/validated; `create_full_consultation` sets `payment.branch_id = consultation.branch_id`; `mark_installment_paid` auto-creates/updates an `INITIATED` BranchTransfer when payment branch ≠ consultation branch (accumulates `total_paid`, reason includes branch names + receipt); frontend Complete Sale / Make Payment / Pay All dialogs get a "Collecting Branch" selector (defaults to consultation branch, `appendTo="body"`); Payments page table gains a Branch column showing `branch_name`; e2e fixtures now send `branch_id`
 - **Global notifications bell**: header bell (mobile + desktop header) with red badge count; `GET /api/v1/finance/transfers/notifications` returns initiated transfers for the user's accessible branches (`incoming`/`outgoing` with from/to branch names + `to_receive_count`/`to_receive_amount`; privileged roles see all company branches, others are limited to their `UserBranchAssignment` branches); dropdown panel lists transfers with Receive action (wired to `FinanceService.receiveTransfer`), "View all transfers" link to `/transfers`, polls every 60s; frontend `FinanceService.getTransferNotifications()`
+- **Fine-grained RBAC (backend + frontend)**: see the `## Fine-Grained RBAC` section below — permission catalog, `role_permissions` matrix, `require_permission()` on all v1 routers, JWT `permissions` claim, route `data.permission` + `permissionGuard`, sidebar filtering, `*appHasPermission`, `/permissions` admin page, migration `g1a2b3c4d5e6f`
 
 ## Multi-Company Architecture
 - **Company** (`companies`): Top-level tenant with `id`, `name`, `code` (unique), `address`, `phone`, `email`, `is_active`
@@ -164,9 +169,7 @@ All endpoints have been fixed with multi-company scoping. Each endpoint verifies
 - `company_super_user` role operates all functions within their company (same operational access as `super_user` but scoped to own company).
 - Only `super_user` can create/assign `company_super_user` role via users API.
 - Created with `pending_approval` status; cannot log in until approved by `super_user` via `POST /api/v1/users/{phone}/approve`.
-- `require_admin_access` dependency used for users/products/packages endpoints (allows both `SUPER_USER` and `COMPANY_SUPER_USER`).
-- `require_super_user` kept for truly cross-company operations (companies CRUD, approving accounts).
-- Frontend should show `company_super_user` option in role dropdown (only when current user is `super_user`), `PENDING_APPROVAL` status badge, and approve button.
+- All v1 endpoints now use `require_permission(...)`; `super_user` bypasses everything (permission model replaces the old `require_admin_access` / `require_super_user` dependencies, which no longer exist in routers).
 
 ## Commission System (Complete — backend)
 - **CommissionRate** per Package: 3-way split (`converter_pct`, `primary_recommender_pct`, `secondary_recommender_pct` must sum to 100). Lifecycle dates: `active_from` (required), `active_until` (nullable), `deactivated_at` (nullable — soft deactivates).
@@ -184,10 +187,19 @@ All endpoints have been fixed with multi-company scoping. Each endpoint verifies
 - Contests CRUD at `/api/v1/commission/contests`.
 - Frontend not yet built.
 
+## Fine-Grained RBAC (Complete — backend + frontend)
+- **Permission catalog** in `backend/app/core/permissions.py`: 28 groups, 54 codes, `<group>.<view|manage>` convention (bare-`manage` groups: `bulk_onboarding`, `schedule_breaks`, `permissions`). `expand_permissions()` adds the implied `.view` for every granted `.manage`.
+- **`role_permissions` table** (`company_id` + `role` + `permission`): per-company matrix; `super_user` never stored (implicit bypass). Seeded via `seed_default_permissions()` on company create from `_DEFAULT_MATRIX` (company_super_user = all, office_admin/branch_supervisor/manager/supervisor/instructor/reception per defaults).
+- **`require_permission(code)`** in `app/api/deps.py`: reads DB-authoritative `role_permissions` (cached per request via `request.state`), returns 403 `Permission denied: {code}`. Every v1 router is wired with per-function codes; `users.py` `/me` + `/change-pin` remain plain `get_current_user`.
+- **Permissions admin API** (`/api/v1/permissions`): `GET /catalog`, `GET /matrix?company_id=`, `GET /role/{role}?company_id=`, `PUT /matrix/{role}?company_id=` body `{"permissions":[...]}` — all gated `permissions.manage`; company_super_user restricted to own company (404 otherwise).
+- **JWT claim**: login/refresh embed `permissions` (sorted stored codes, super_user = full catalog). Frontend decodes into `AuthService.permissions` signal.
+- **Frontend gating**: `permissionGuard` on `canActivateChild` (redirects to `/dashboard`); `data.permission` on every route; sidebar `visibleTopItems`/`visibleNavGroups` filter by codes; `*appHasPermission` structural directive. Sidebar group expansion state lives in `expandedGroups` Set signal.
+- **Admin page** `/permissions` (nav: Management → Permissions): company selector (super_user), role selector, per-group checkbox matrix with select-all, Save (PUT). Users must re-login for changes to apply.
+- Ad-hoc role checks replaced: clients bulk-delete→`consultations.delete`, payments print→`reports.view`, products admin→`products.manage`, companies edit→`companies.manage`, transfers receive/cancel→`transfers.manage`, competency writes→`competency.manage`. Super_user-only cross-company selectors (company-settings, users role option, competency/companies/permissions company pickers) and payments `canViewAllBranches` keep role checks (no permission equivalent).
+
 ## Remaining
 - Build frontend for commission rates management, lead submission, commission dashboard, contests.
 - User creation API doesn't return the auto-generated initial PIN — frontend needs to call reset-pin to get a PIN, or the API should return it in the response.
-- Build frontend for `company_super_user` role assignment (role dropdown, warning dialog, approve button).
 - Build frontend Expense and Sale pages under branches.
 - Add `appendTo="body"` to remaining `p-select` and `p-datepicker` dropdowns for mobile.
 
@@ -205,16 +217,19 @@ Postgres `:5433` (external), backend `:8000`, frontend `:80`
 If migration files are missing from container: `docker cp backend/alembic/versions/<file> crm-backend:/app/alembic/versions/`
 
 ## Migration Heads
-`f6a7b8c9d0e1` (head — payment branch + transfer payment link, chains from `e5f6a7b8c9d0`)
+`g1a2b3c4d5e6f` (head — `role_permissions` table, chains from `f6a7b8c9d0e1`)
 
 ## Known Backend Fixes Applied
 - `reports.py:33,36` — `Commission.amount` → `Commission.total_amount` (dashboard 500 error)
 - `cart.py:72` — `update_cart_item()` accepts `converter_id`/`recommender_id`; auto-creates commission on conversion
 - `fuel.service.ts` + `commission.service.ts` — switched from `params as any` to `HttpParams` builder to avoid literal `"undefined"` strings
 - `competency_catalogue.py` model — added missing `Enum` import from `sqlalchemy`
+- Alembic pitfall: `op.create_table` with an unbound `sa.Enum` fires `CREATE TYPE` regardless of `create_type=False`; migration `g1a2b3c4d5e6f` uses raw SQL + `CAST(:role AS userrole)` inserts; when editing a migration on the host you must `docker cp` it into `crm-backend:/app/alembic/versions/` before `alembic upgrade head`
 
 ## Test Files
 - `e2e/login.spec.ts` (11 tests): login, sidebar navigation through collapsed groups, user CRUD/search/PIN
 - `e2e/consultations.spec.ts` (15 tests): list/search, stage filter, profile with products/payments/Add to Cart, API create+verify, products page, users page
 - `e2e/lesson-plans.spec.ts` (4 tests): sidebar load, API create+verify with JSONB objectives, dialog close, UI delete
+- `e2e/permissions.spec.ts` (2 tests): page loads with catalog groups + matrix, role matrix edit/save via API verify + restore
+- `e2e/vehicle-scheduling.spec.ts` (1 test): full flow create template, manual/auto vehicles, instructor, product, package, consultation, client plan with manual_days=4, lock dual-phase, verify day 1–4 manual, day 5–10 auto, cleanup
 - `e2e/vehicle-scheduling.spec.ts` (1 test): full flow create template, manual/auto vehicles, instructor, product, package, consultation, client plan with manual_days=4, lock dual-phase, verify day 1–4 manual, day 5–10 auto, cleanup

@@ -15,6 +15,7 @@ interface NavItem {
   path: string;
   label: string;
   icon: string;
+  permission: string;
 }
 
 interface NavGroup {
@@ -33,6 +34,7 @@ interface NavGroup {
 })
 export class MainLayout implements OnInit, OnDestroy {
   sidebarOpen = signal(true);
+  expandedGroups = signal<Set<string>>(new Set());
   notificationsOpen = signal(false);
   notifications = signal<TransferNotification[]>([]);
   toReceiveCount = signal(0);
@@ -42,52 +44,53 @@ export class MainLayout implements OnInit, OnDestroy {
   private _pollTimer: any = null;
 
   topItems: NavItem[] = [
-    { path: '/dashboard', label: 'Dashboard', icon: 'pi pi-home' },
-    { path: '/reports', label: 'Reports', icon: 'pi pi-chart-bar' },
+    { path: '/dashboard', label: 'Dashboard', icon: 'pi pi-home', permission: 'dashboard.view' },
+    { path: '/reports', label: 'Reports', icon: 'pi pi-chart-bar', permission: 'reports.view' },
   ];
 
   navGroups: NavGroup[] = [
     {
       label: 'Sales & Expenses', icon: 'pi pi-dollar', expanded: false,
       children: [
-        { path: '/consultations', label: 'Consultations', icon: 'pi pi-phone' },
-        { path: '/bulk-onboarding', label: 'Bulk Onboarding', icon: 'pi pi-upload' },
-        { path: '/expenses', label: 'Expenses', icon: 'pi pi-minus-circle' },
-        { path: '/payments', label: 'Payments', icon: 'pi pi-credit-card' },
-        { path: '/collections-sheet', label: 'Collections Sheet', icon: 'pi pi-file-invoice' },
-        { path: '/transfers', label: 'Branch Transfers', icon: 'pi pi-arrow-right-arrow-left' },
+        { path: '/consultations', label: 'Consultations', icon: 'pi pi-phone', permission: 'consultations.view' },
+        { path: '/bulk-onboarding', label: 'Bulk Onboarding', icon: 'pi pi-upload', permission: 'bulk_onboarding.manage' },
+        { path: '/expenses', label: 'Expenses', icon: 'pi pi-minus-circle', permission: 'expenses.view' },
+        { path: '/payments', label: 'Payments', icon: 'pi pi-credit-card', permission: 'payments.view' },
+        { path: '/collections-sheet', label: 'Collections Sheet', icon: 'pi pi-file-invoice', permission: 'collections.view' },
+        { path: '/transfers', label: 'Branch Transfers', icon: 'pi pi-arrow-right-arrow-left', permission: 'transfers.view' },
       ],
     },
     {
       label: 'Fleet', icon: 'pi pi-truck', expanded: false,
       children: [
-        { path: '/vehicles', label: 'Vehicles', icon: 'pi pi-truck' },
-        { path: '/vehicle-schedule', label: 'Vehicle Schedule', icon: 'pi pi-calendar-clock' },
-        { path: '/weekly-schedule', label: 'Weekly Schedule', icon: 'pi pi-calendar' },
-        { path: '/schedule-breaks', label: 'Schedule Breaks', icon: 'pi pi-clock' },
-        { path: '/fuel-tracking', label: 'Fuel Tracking', icon: 'pi pi-car' },
-        { path: '/training-schedule', label: 'Training Schedule', icon: 'pi pi-calendar-clock' },
+        { path: '/vehicles', label: 'Vehicles', icon: 'pi pi-truck', permission: 'vehicles.view' },
+        { path: '/vehicle-schedule', label: 'Vehicle Schedule', icon: 'pi pi-calendar-clock', permission: 'vehicle_schedule.view' },
+        { path: '/weekly-schedule', label: 'Weekly Schedule', icon: 'pi pi-calendar', permission: 'availabilities.view' },
+        { path: '/schedule-breaks', label: 'Schedule Breaks', icon: 'pi pi-clock', permission: 'schedule_breaks.manage' },
+        { path: '/fuel-tracking', label: 'Fuel Tracking', icon: 'pi pi-car', permission: 'fuel.view' },
+        { path: '/training-schedule', label: 'Training Schedule', icon: 'pi pi-calendar-clock', permission: 'training.view' },
       ],
     },
     {
       label: 'Lesson Planning', icon: 'pi pi-book', expanded: false,
       children: [
-        { path: '/lesson-plans', label: 'Lesson Plans', icon: 'pi pi-book' },
-        { path: '/lesson-library', label: 'Lesson Library', icon: 'pi pi-list' },
-        { path: '/video-library', label: 'Video Library', icon: 'pi pi-video' },
-        { path: '/competency-catalogue', label: 'Competency Catalogue', icon: 'pi pi-check-circle' },
+        { path: '/lesson-plans', label: 'Lesson Plans', icon: 'pi pi-book', permission: 'lesson_plans.view' },
+        { path: '/lesson-library', label: 'Lesson Library', icon: 'pi pi-list', permission: 'lesson_library.view' },
+        { path: '/video-library', label: 'Video Library', icon: 'pi pi-video', permission: 'video_library.view' },
+        { path: '/competency-catalogue', label: 'Competency Catalogue', icon: 'pi pi-check-circle', permission: 'competency.view' },
       ],
     },
     {
       label: 'Management', icon: 'pi pi-cog', expanded: false,
       children: [
-        { path: '/users', label: 'Users', icon: 'pi pi-users' },
-        { path: '/branches', label: 'Branches', icon: 'pi pi-sitemap' },
-        { path: '/companies', label: 'Companies', icon: 'pi pi-building' },
-        { path: '/products', label: 'Products', icon: 'pi pi-box' },
-        { path: '/commissions', label: 'Commissions', icon: 'pi pi-dollar' },
-        { path: '/company-settings', label: 'Company Settings', icon: 'pi pi-cog' },
-        { path: '/sms-logs', label: 'SMS Logs', icon: 'pi pi-history' },
+        { path: '/users', label: 'Users', icon: 'pi pi-users', permission: 'users.view' },
+        { path: '/branches', label: 'Branches', icon: 'pi pi-sitemap', permission: 'branches.view' },
+        { path: '/companies', label: 'Companies', icon: 'pi pi-building', permission: 'companies.view' },
+        { path: '/products', label: 'Products', icon: 'pi pi-box', permission: 'products.view' },
+        { path: '/commissions', label: 'Commissions', icon: 'pi pi-dollar', permission: 'commissions.view' },
+        { path: '/permissions', label: 'Permissions', icon: 'pi pi-key', permission: 'permissions.manage' },
+        { path: '/company-settings', label: 'Company Settings', icon: 'pi pi-cog', permission: 'sms.view' },
+        { path: '/sms-logs', label: 'SMS Logs', icon: 'pi pi-history', permission: 'sms.view' },
       ],
     },
   ];
@@ -101,6 +104,20 @@ export class MainLayout implements OnInit, OnDestroy {
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       this.sidebarOpen.set(false);
     }
+  }
+
+  get visibleTopItems(): NavItem[] {
+    return this.topItems.filter((i) => this.auth.hasPermission(i.permission));
+  }
+
+  get visibleNavGroups(): NavGroup[] {
+    return this.navGroups
+      .map((g) => ({ ...g, children: g.children.filter((i) => this.auth.hasPermission(i.permission)) }))
+      .filter((g) => g.children.length > 0);
+  }
+
+  isGroupExpanded(group: NavGroup): boolean {
+    return this.expandedGroups().has(group.label);
   }
 
   ngOnInit() {
@@ -174,7 +191,15 @@ export class MainLayout implements OnInit, OnDestroy {
   }
 
   toggleGroup(group: NavGroup) {
-    group.expanded = !group.expanded;
+    this.expandedGroups.update((set) => {
+      const next = new Set(set);
+      if (next.has(group.label)) {
+        next.delete(group.label);
+      } else {
+        next.add(group.label);
+      }
+      return next;
+    });
   }
 
   toggleSidebar() {

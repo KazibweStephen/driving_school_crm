@@ -22,6 +22,7 @@ export class AuthService {
   currentUserRole = signal<string | null>(null);
   currentUserCompanyId = signal<string | null>(null);
   currentUserCanBackdate = signal(false);
+  permissions = signal<string[]>([]);
   currencyCode = signal('UGX');
   isAuthenticated = signal(false);
   sessionExpired = signal(false);
@@ -42,6 +43,7 @@ export class AuthService {
       this.currentUserRole.set(this.decodeRoleFromToken(token));
       this.currentUserCompanyId.set(this.decodeCompanyId(token));
       this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
+      this.permissions.set(this.decodePermissions(token));
       this.currencyCode.set(this.decodeCurrency(token));
       this.startSessionTimer();
     }
@@ -59,8 +61,22 @@ export class AuthService {
     this.currentUserRole.set(this.decodeRoleFromToken(token));
     this.currentUserCompanyId.set(this.decodeCompanyId(token));
     this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
+    this.permissions.set(this.decodePermissions(token));
     this.currencyCode.set(this.decodeCurrency(token));
     this.startSessionTimer();
+  }
+
+  hasPermission(code: string): boolean {
+    return this.permissions().includes(code);
+  }
+
+  hasAnyPermission(codes: string[]): boolean {
+    return codes.some((c) => this.hasPermission(c));
+  }
+
+  hasRole(...roles: string[]): boolean {
+    const role = this.currentUserRole();
+    return role !== null && roles.includes(role);
   }
 
   logout() {
@@ -133,6 +149,7 @@ export class AuthService {
     localStorage.removeItem(this.REFRESH_KEY);
     this.isAuthenticated.set(false);
     this.currentUser.set(null);
+    this.permissions.set([]);
     this.sessionExpired.set(false);
     this.sessionCountdown.set(160);
     this.clearTimers();
@@ -182,5 +199,11 @@ export class AuthService {
   private decodeCompanyId(token: string): string | null {
     const payload = this.decodeToken(token);
     return (payload?.['company_id'] as string) || null;
+  }
+
+  private decodePermissions(token: string): string[] {
+    const payload = this.decodeToken(token);
+    const perms = payload?.['permissions'];
+    return Array.isArray(perms) ? (perms as string[]) : [];
   }
 }

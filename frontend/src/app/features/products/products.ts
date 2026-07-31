@@ -125,8 +125,7 @@ export class Products implements OnInit {
     public currencyService: CurrencyService,
     private authService: AuthService,
   ) {
-    const role = this.authService.currentUserRole();
-    this.isAdmin = role === 'super_user' || role === 'company_super_user';
+    this.isAdmin = this.authService.hasPermission('products.manage');
   }
 
   isAdmin = false;

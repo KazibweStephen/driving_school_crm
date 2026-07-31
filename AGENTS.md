@@ -124,6 +124,7 @@
 - Alembic migrations `cc4d1dfb0f04` (add_created_by_phone_to_payments) and `0cedeb757155` (add_can_backdate_document_date)
 - Playwright tests updated: login tests navigate collapsed sidebar groups, lesson-plans API test sends JSONB arrays, consultation search test creates its own fixture, dialog Escape test focuses dialog first
 - **Competency Catalogue Module**: company-scoped `CompetencyVersion`, `CompetencyCategory`, `Competency`, `CompetencyPrerequisite`, `LessonCompetencyLink` models; 3 enums (`CompetencyDifficulty`, `CompetencyTrainingCategory`, `CompetencyVersionStatus`); full CRUD + search + bulk import API (17 endpoints); frontend 3-tab page with versions, categories, competencies (filter/pagination/bulk import/assessment criteria); reusable `competency-picker` component; lesson-library and lesson-plans pages now use `p-multiSelect` with `competency_ids` instead of free-text arrays; old JSONB `competencies`/`prerequisite_competencies` columns dropped from `lesson_library`; Alembic migration `d4e5f6a7b8c9` (chains from `j2k3l4m5n6o7`); seed data: 1 version, 13 categories, 106 competencies, 44 prerequisite links
+- **Payments fixes + auto cross-branch transfers**: `payments.branch_id` FK (collecting branch) + `branch_transfers.payment_id` FK (migration `f6a7b8c9d0e1`); payments list branch filter is now OR of `Consultation.branch_id`/`Payment.branch_id` (fixes missing today/this-week rows for null-branch or cross-collected consultations); `hard_delete_consultations` skips company scoping for `super_user` (fixes bulk-delete 404 on null-branch rows); `PaymentCreate.branch_id` accepted/validated; `create_full_consultation` sets `payment.branch_id = consultation.branch_id`; `mark_installment_paid` auto-creates/updates an `INITIATED` BranchTransfer when payment branch ≠ consultation branch (accumulates `total_paid`, reason includes branch names + receipt); frontend Complete Sale / Make Payment / Pay All dialogs get a "Collecting Branch" selector (defaults to consultation branch, `appendTo="body"`); Payments page table gains a Branch column showing `branch_name`; e2e fixtures now send `branch_id`
 
 ## Multi-Company Architecture
 - **Company** (`companies`): Top-level tenant with `id`, `name`, `code` (unique), `address`, `phone`, `email`, `is_active`
@@ -201,7 +202,7 @@ Postgres `:5433` (external), backend `:8000`, frontend `:80`
 If migration files are missing from container: `docker cp backend/alembic/versions/<file> crm-backend:/app/alembic/versions/`
 
 ## Migration Heads
-`d4e5f6a7b8c9` (head — competency catalogue, chains from `j2k3l4m5n6o7`)
+`f6a7b8c9d0e1` (head — payment branch + transfer payment link, chains from `e5f6a7b8c9d0`)
 
 ## Known Backend Fixes Applied
 - `reports.py:33,36` — `Commission.amount` → `Commission.total_amount` (dashboard 500 error)

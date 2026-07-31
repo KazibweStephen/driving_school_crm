@@ -302,6 +302,9 @@ class BranchTransfer(Base):
     consultation_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("consultations.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    payment_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("payments.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     status: Mapped[TransferStatus] = mapped_column(
         Enum(TransferStatus, values_callable=lambda x: [e.value for e in x]),
         default=TransferStatus.INITIATED, nullable=False,
@@ -334,6 +337,7 @@ class BranchTransfer(Base):
     from_branch: Mapped["Branch"] = relationship("Branch", foreign_keys=[from_branch_id])
     to_branch: Mapped["Branch"] = relationship("Branch", foreign_keys=[to_branch_id])
     consultation: Mapped["Consultation | None"] = relationship("Consultation")
+    payment: Mapped["Payment | None"] = relationship("Payment")
 
 
 class CompanySmsSettings(Base):

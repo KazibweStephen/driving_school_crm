@@ -2307,6 +2307,11 @@
             }
 
             <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Collecting Branch</label>
+              <p-select [(ngModel)]="collectionBranchId" [options]="branches()" optionLabel="name" optionValue="id" placeholder="Select branch" styleClass="w-full" appendTo="body" />
+            </div>
+
+            <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">Amount Paid</label>
               <p-inputNumber [ngModel]="completeSalePaidAmount()" (onInput)="completeSalePaidAmount.set($event.value ?? 0); onCompleteSalePaidChange()" [min]="0" [max]="completeSaleTotal()" [placeholder]="'0'" class="w-full" inputStyleClass="w-full px-3 py-2 text-sm" />
             </div>
@@ -2463,6 +2468,11 @@
               </div>
             }
 
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Collecting Branch</label>
+              <p-select [(ngModel)]="collectionBranchId" [options]="branches()" optionLabel="name" optionValue="id" placeholder="Select branch" styleClass="w-full" appendTo="body" />
+            </div>
+
             <div class="flex gap-2">
               <p-button label="Cancel" severity="secondary" (onClick)="closeMakePaymentDialog()" styleClass="flex-1 justify-center" [disabled]="loading()" />
               <p-button label="Pay" [loading]="loading()" (onClick)="makePayment()" styleClass="flex-1 justify-center" severity="success" [disabled]="!makePaymentAmount() || makePaymentAmount() <= 0" />
@@ -2583,6 +2593,11 @@
                 <p-datepicker [(ngModel)]="payAllDocumentDate" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [showClear]="true" />
               </div>
             }
+
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Collecting Branch</label>
+              <p-select [(ngModel)]="collectionBranchId" [options]="branches()" optionLabel="name" optionValue="id" placeholder="Select branch" styleClass="w-full" appendTo="body" />
+            </div>
 
             <div class="flex gap-2">
               <p-button label="Cancel" severity="secondary" (onClick)="closePayAllDialog()" styleClass="flex-1 justify-center" [disabled]="loading()" />

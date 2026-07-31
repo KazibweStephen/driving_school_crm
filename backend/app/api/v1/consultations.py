@@ -141,6 +141,7 @@ async def create_full_consultation(
             payment = Payment(
                 id=uuid.UUID(uuid.uuid4().hex),
                 consultation_id=consultation.id,
+                branch_id=consultation.branch_id,
                 created_by_phone=current_user.phone,
                 product_id=item_data.product_id,
                 package_id=item_data.package_id,

@@ -18,6 +18,7 @@ class PaymentCreate(BaseModel):
     receipt_number: str | None = Field(None, max_length=100)
     installments: list[InstallmentCreate] = []
     document_date: date | None = None
+    branch_id: uuid.UUID | None = None
 
 
 class InstallmentRead(BaseModel):
@@ -40,6 +41,7 @@ class PaymentRead(BaseModel):
     consultation_id: uuid.UUID
     product_id: str
     package_id: str | None
+    branch_id: uuid.UUID | None = None
     total_amount: Decimal
     total_paid: Decimal
     balance: Decimal
@@ -83,6 +85,8 @@ class PaymentWithClient(BaseModel):
     product_id: str
     product_name: str = ""
     package_id: str | None = None
+    branch_id: uuid.UUID | None = None
+    branch_name: str | None = None
     client_name: str = ""
     client_phone: str = ""
     created_by_name: str | None = None

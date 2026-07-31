@@ -55,6 +55,7 @@ export interface BranchTransfer {
   amount: string;
   reason?: string;
   consultation_id?: string;
+  payment_id?: string;
   status: 'initiated' | 'received' | 'cancelled';
   initiated_by?: string;
   initiated_at: string;
@@ -72,6 +73,7 @@ export interface BranchTransferCreate {
   amount: number;
   reason?: string;
   consultation_id?: string;
+  payment_id?: string;
 }
 
 export interface BranchTransferListResponse {

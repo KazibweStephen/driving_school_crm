@@ -267,6 +267,7 @@ class BranchTransferCreate(BaseModel):
     amount: Decimal = Field(..., decimal_places=2, gt=0)
     reason: str | None = None
     consultation_id: uuid.UUID | None = None
+    payment_id: uuid.UUID | None = None
 
 
 class BranchTransferRead(BaseModel):
@@ -276,6 +277,7 @@ class BranchTransferRead(BaseModel):
     amount: Decimal
     reason: str | None = None
     consultation_id: uuid.UUID | None = None
+    payment_id: uuid.UUID | None = None
     status: TransferStatus
     initiated_by: str | None = None
     initiated_at: datetime

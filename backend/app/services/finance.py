@@ -565,6 +565,7 @@ async def create_branch_transfer(
     amount: Decimal,
     reason: str | None = None,
     consultation_id: uuid.UUID | None = None,
+    payment_id: uuid.UUID | None = None,
     initiated_by: str | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
@@ -583,6 +584,7 @@ async def create_branch_transfer(
         amount=float(amount),
         reason=reason,
         consultation_id=consultation_id,
+        payment_id=payment_id,
         initiated_by=initiated_by,
     )
     db.add(transfer)

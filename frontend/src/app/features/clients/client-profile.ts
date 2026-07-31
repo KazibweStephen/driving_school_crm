@@ -34,6 +34,7 @@ import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
 import { UserService, User } from '../../core/services/user.service';
 import { SchedulingService, ClientAvailability, FindAndLockResult } from '../../core/services/scheduling.service';
 import { VehicleScheduleService } from '../../core/services/vehicle-schedule.service';
+import { CompanyService, Branch } from '../../core/services/company.service';
 
 @Component({
   selector: 'app-client-profile',
@@ -143,6 +144,9 @@ export class ClientProfile implements OnInit {
   payAllReceiptNumber = signal('');
   payAllInstallments: { due_date: Date | null; amount: number }[] = [];
   payAllDocumentDate = signal<Date | null>(null);
+
+  branches = signal<Branch[]>([]);
+  collectionBranchId = signal<string | null>(null);
 
   showGuide = signal(false);
   guideContent = signal('');
@@ -266,6 +270,7 @@ export class ClientProfile implements OnInit {
     private schedulingService: SchedulingService,
     private vehicleScheduleService: VehicleScheduleService,
     private permitProgressService: PermitProgressService,
+    private companyService: CompanyService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private sanitizer: DomSanitizer,
@@ -275,11 +280,21 @@ export class ClientProfile implements OnInit {
 
   async ngOnInit() {
     window.addEventListener('resize', () => this.isMobile.set(window.innerWidth < 640));
+    this.loadBranches();
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.loading.set(true);
       await this.loadProducts();
       await this.loadConsultation(id);
+    }
+  }
+
+  async loadBranches() {
+    try {
+      const branches = await this.companyService.myBranches().toPromise();
+      if (branches) this.branches.set(branches);
+    } catch {
+      /* branches are non-critical */
     }
   }
 
@@ -2131,6 +2146,7 @@ export class ClientProfile implements OnInit {
             notes: `Paid: ${allocation}, Balance: ${remaining}`,
             receipt_number: this.addPaymentReceiptNumber() || undefined,
             installments,
+            branch_id: this.consultation()?.branch_id || undefined,
           })
           .toPromise();
 
@@ -2461,6 +2477,7 @@ export class ClientProfile implements OnInit {
     this.completeSaleReceiptNumber.set('');
     this.completeSaleSystemReceiptNumber.set('');
     this.completeSaleDocumentDate.set(null);
+    this.collectionBranchId.set(this.consultation()?.branch_id ?? null);
     this.receiptChecking.set(false);
     this.receiptAvailable.set(null);
     this.showCompleteSaleDialog.set(true);
@@ -2581,6 +2598,7 @@ export class ClientProfile implements OnInit {
           receipt_number: this.completeSaleReceiptNumber() || undefined,
           installments,
           document_date: this.completeSaleDocumentDate() ? docDate : undefined,
+          branch_id: this.collectionBranchId() || undefined,
         })
         .toPromise();
 
@@ -2628,6 +2646,7 @@ export class ClientProfile implements OnInit {
     this.makePaymentBalance.set(balance);
     this.makePaymentReceiptNumber.set('');
     this.makePaymentDocumentDate.set(null);
+    this.collectionBranchId.set(this.consultation()?.branch_id ?? null);
     this.makePaymentInstallments = [];
     this.receiptChecking.set(false);
     this.receiptAvailable.set(null);
@@ -2662,6 +2681,7 @@ export class ClientProfile implements OnInit {
           receipt_number: this.makePaymentReceiptNumber() || undefined,
           installments,
           document_date: this.makePaymentDocumentDate() ? this.formatDate(this.makePaymentDocumentDate()!) : undefined,
+          branch_id: this.collectionBranchId() || undefined,
         })
         .toPromise();
 
@@ -2789,6 +2809,7 @@ export class ClientProfile implements OnInit {
     this.payAllReceiptNumber.set('');
     this.payAllInstallments = [];
     this.payAllDocumentDate.set(null);
+    this.collectionBranchId.set(this.consultation()?.branch_id ?? null);
     this.receiptChecking.set(false);
     this.receiptAvailable.set(null);
     this.initPayAllInstallments();
@@ -2904,6 +2925,7 @@ export class ClientProfile implements OnInit {
             receipt_number: receipt || undefined,
             installments,
             document_date: this.payAllDocumentDate() ? this.formatDate(this.payAllDocumentDate()!) : undefined,
+            branch_id: this.collectionBranchId() || undefined,
           })
           .toPromise();
 

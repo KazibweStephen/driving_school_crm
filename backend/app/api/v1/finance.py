@@ -366,6 +366,7 @@ async def create_branch_transfer(
         amount=data.amount,
         reason=data.reason,
         consultation_id=data.consultation_id,
+        payment_id=data.payment_id,
         initiated_by=current_user.phone,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )

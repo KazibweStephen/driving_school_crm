@@ -109,6 +109,7 @@ async def list_payments(
     )
 
     # Resolve product names and client info
+    branch_cache: dict = {}
     payment_list: list[PaymentWithClient] = []
     for p in payments:
         client_name = " ".join(
@@ -125,12 +126,22 @@ async def list_payments(
         except (ValueError, AttributeError):
             pass
 
+        branch_name = None
+        if p.branch_id:
+            if p.branch_id not in branch_cache:
+                br_result = await db.execute(select(Branch).where(Branch.id == p.branch_id))
+                branch_cache[p.branch_id] = br_result.scalar_one_or_none()
+            branch = branch_cache[p.branch_id]
+            branch_name = branch.name if branch else None
+
         payment_list.append(PaymentWithClient(
             id=p.id,
             consultation_id=p.consultation_id,
             product_id=p.product_id,
             product_name=product_name,
             package_id=p.package_id,
+            branch_id=p.branch_id,
+            branch_name=branch_name,
             client_name=client_name,
             client_phone=p.consultation.phone or "—",
             created_by_name=p.created_by_user.name if p.created_by_user else None,

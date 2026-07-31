@@ -145,6 +145,7 @@ async def create_payment(
         receipt_number=data.receipt_number,
         created_by_phone=current_user.phone,
         company_id=current_user.company_id, current_user_role=current_user.role,
+        branch_id=data.branch_id,
     )
 
     # Serialize immediately to avoid lazy-load issues after subsequent db queries

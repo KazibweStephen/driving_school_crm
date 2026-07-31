@@ -30,6 +30,9 @@ class Payment(Base):
     consultation_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("consultations.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_by_phone: Mapped[str | None] = mapped_column(
         String(20), ForeignKey("users.phone", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -50,6 +53,7 @@ class Payment(Base):
     )
 
     consultation: Mapped["Consultation"] = relationship("Consultation", backref="payments")
+    branch: Mapped["Branch | None"] = relationship("Branch")
     created_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_phone], uselist=False)
     installments: Mapped[list["Installment"]] = relationship(
         "Installment", back_populates="payment", cascade="all, delete-orphan"

@@ -14,6 +14,7 @@ export interface PaymentCreate {
   receipt_number?: string;
   installments: InstallmentCreate[];
   document_date?: string;
+  branch_id?: string;
 }
 
 export interface InstallmentRead {
@@ -34,6 +35,7 @@ export interface PaymentRead {
   consultation_id: string;
   product_id: string;
   package_id: string | null;
+  branch_id: string | null;
   total_amount: string;
   total_paid: string;
   balance: string;
@@ -73,6 +75,8 @@ export interface PaymentWithClient {
   product_id: string;
   product_name: string;
   package_id: string | null;
+  branch_id: string | null;
+  branch_name: string | null;
   client_name: string;
   client_phone: string;
   created_by_name: string | null;

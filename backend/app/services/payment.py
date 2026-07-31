@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
 from app.models.cart import CartItem, CartItemStatus
-from app.models.company import Branch
+from app.models.company import Branch, BranchTransfer, TransferStatus
 from app.models.consultation import Consultation, FollowUp
 from app.models.payment import Installment, InstallmentStatus, Payment
 from app.models.user import UserRole
@@ -40,6 +40,7 @@ async def create_payment(
     document_date: date | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
+    branch_id: uuid.UUID | None = None,
 ) -> Payment:
     if current_user_role != UserRole.SUPER_USER and company_id is not None:
         c_result = await db.execute(
@@ -51,9 +52,21 @@ async def create_payment(
         if not c_result.scalar_one_or_none():
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Consultation not found")
+    if branch_id is not None:
+        b_result = await db.execute(
+            select(Branch).where(Branch.id == branch_id)
+        )
+        branch = b_result.scalar_one_or_none()
+        if branch is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Branch not found")
+        if current_user_role != UserRole.SUPER_USER and company_id is not None and branch.company_id != company_id:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Branch not in your company")
     payment = Payment(
         id=uuid.uuid4(),
         consultation_id=consultation_id,
+        branch_id=branch_id,
         created_by_phone=created_by_phone,
         product_id=product_id,
         package_id=package_id,
@@ -170,7 +183,10 @@ async def list_payments(
         filters.append(Payment.document_date <= date_to)
 
     if branch_ids:
-        filters.append(Consultation.branch_id.in_(branch_ids))
+        filters.append(or_(
+            Consultation.branch_id.in_(branch_ids),
+            Payment.branch_id.in_(branch_ids),
+        ))
 
     if client_type == "new":
         filters.append(~has_prior)
@@ -243,13 +259,68 @@ async def mark_installment_paid(
     result = await db.execute(
         select(Payment)
         .where(Payment.id == payment_id)
-        .options(selectinload(Payment.installments))
+        .options(selectinload(Payment.installments), selectinload(Payment.consultation))
     )
     payment = result.scalar_one()
     await _recompute_payment_totals(payment)
     await db.flush()
+
+    # Auto-create/update a cross-branch transfer for branch reconciliation
+    await _sync_branch_transfer_for_payment(db, payment)
+
     await db.refresh(inst)
     return inst
+
+
+async def _sync_branch_transfer_for_payment(
+    db: AsyncSession,
+    payment: Payment,
+) -> BranchTransfer | None:
+    """When a payment is collected at a branch different from the client's
+    onboarded branch, keep an initiated transfer in sync for reconciliation."""
+    if payment.total_paid <= 0 or payment.branch_id is None:
+        return None
+    consultation = payment.consultation
+    if consultation is None or consultation.branch_id is None:
+        return None
+    if consultation.branch_id == payment.branch_id:
+        return None
+
+    result = await db.execute(
+        select(BranchTransfer).where(
+            BranchTransfer.payment_id == payment.id,
+            BranchTransfer.status == TransferStatus.INITIATED,
+        )
+    )
+    existing = result.scalars().first()
+
+    from_branch = await db.get(Branch, payment.branch_id)
+    to_branch = await db.get(Branch, consultation.branch_id)
+    from_name = from_branch.name if from_branch else "branch"
+    to_name = to_branch.name if to_branch else "branch"
+    reason = (
+        f"Payment collected at {from_name} for client onboarded at {to_name} "
+        f"(receipt {payment.receipt_number or payment.system_receipt_number})"
+    )
+
+    if existing is not None:
+        existing.amount = float(payment.total_paid)
+        existing.reason = reason
+        await db.flush()
+        return existing
+
+    transfer = BranchTransfer(
+        from_branch_id=payment.branch_id,
+        to_branch_id=consultation.branch_id,
+        amount=float(payment.total_paid),
+        reason=reason,
+        consultation_id=payment.consultation_id,
+        payment_id=payment.id,
+        initiated_by=payment.created_by_phone,
+    )
+    db.add(transfer)
+    await db.flush()
+    return transfer
 
 
 async def list_clients(

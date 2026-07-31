@@ -53,6 +53,7 @@ test.describe('Consultations & Clients Flow', () => {
           first_name: 'Search',
           last_name: 'Test',
           location: 'Kampala',
+          branch_id: '00000000-0000-0000-0000-000000000002',
         }),
       });
       if (!res.ok) throw new Error(`Failed to create: ${await res.text()}`);
@@ -260,6 +261,7 @@ test.describe('Consultations & Clients Flow', () => {
           first_name: 'Playwright',
           last_name: 'Test',
           location: 'Kampala',
+          branch_id: '00000000-0000-0000-0000-000000000002',
         }),
       });
       if (!res.ok) throw new Error(`Failed to create: ${await res.text()}`);

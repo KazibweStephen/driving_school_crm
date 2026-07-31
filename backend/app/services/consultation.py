@@ -232,7 +232,7 @@ async def hard_delete_consultations(
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Only super admin can delete clients")
 
-    if company_id is not None:
+    if current_user_role != UserRole.SUPER_USER and company_id is not None:
         c_result = await db.execute(
             select(Consultation.id).join(Branch).where(
                 Consultation.id.in_(consultation_ids),

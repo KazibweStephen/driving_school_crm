@@ -1,8 +1,15 @@
-import { Component, signal } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Component, OnInit, OnDestroy, signal } from '@angular/core';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TooltipModule } from 'primeng/tooltip';
+import { TagModule } from 'primeng/tag';
+import { MessageService } from 'primeng/api';
 import { AuthService } from '../../core/auth/auth.service';
+import {
+  FinanceService,
+  TransferNotification,
+  TransferNotificationsResponse,
+} from '../../core/services/finance.service';
 
 interface NavItem {
   path: string;
@@ -19,12 +26,20 @@ interface NavGroup {
 
 @Component({
   selector: 'app-main-layout',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, ButtonModule, TooltipModule],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ButtonModule, TooltipModule, TagModule],
+  providers: [MessageService],
   templateUrl: './main-layout.html',
   styleUrl: './main-layout.css',
 })
-export class MainLayout {
+export class MainLayout implements OnInit, OnDestroy {
   sidebarOpen = signal(true);
+  notificationsOpen = signal(false);
+  notifications = signal<TransferNotification[]>([]);
+  toReceiveCount = signal(0);
+  toReceiveAmount = signal('0.00');
+  loadingNotifications = signal(false);
+  receivingId = signal<string | null>(null);
+  private _pollTimer: any = null;
 
   topItems: NavItem[] = [
     { path: '/dashboard', label: 'Dashboard', icon: 'pi pi-home' },
@@ -77,10 +92,85 @@ export class MainLayout {
     },
   ];
 
-  constructor(public auth: AuthService) {
+  constructor(
+    public auth: AuthService,
+    private financeService: FinanceService,
+    private messageService: MessageService,
+    private router: Router,
+  ) {
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       this.sidebarOpen.set(false);
     }
+  }
+
+  ngOnInit() {
+    this.refreshNotifications();
+    if (typeof window !== 'undefined') {
+      this._pollTimer = setInterval(() => this.refreshNotifications(), 60000);
+    }
+  }
+
+  ngOnDestroy() {
+    if (this._pollTimer) clearInterval(this._pollTimer);
+  }
+
+  async refreshNotifications() {
+    try {
+      const res: TransferNotificationsResponse | undefined = await this.financeService
+        .getTransferNotifications(20)
+        .toPromise();
+      if (res) {
+        this.notifications.set(res.items);
+        this.toReceiveCount.set(res.to_receive_count);
+        this.toReceiveAmount.set(res.to_receive_amount);
+      }
+    } catch {
+      /* non-critical */
+    }
+  }
+
+  toggleNotifications() {
+    this.notificationsOpen.set(!this.notificationsOpen());
+    if (this.notificationsOpen()) this.refreshNotifications();
+  }
+
+  closeNotifications() {
+    this.notificationsOpen.set(false);
+  }
+
+  goToTransfers() {
+    this.notificationsOpen.set(false);
+    this.router.navigate(['/transfers']);
+  }
+
+  async receiveTransfer(t: TransferNotification) {
+    this.receivingId.set(t.id);
+    try {
+      await this.financeService.receiveTransfer(t.id).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Received', detail: 'Transfer received' });
+      await this.refreshNotifications();
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to receive transfer' });
+    } finally {
+      this.receivingId.set(null);
+    }
+  }
+
+  formatAmount(val: string | number): string {
+    const n = typeof val === 'number' ? val : parseFloat(val);
+    return Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  timeAgo(d: string): string {
+    if (!d) return '';
+    const diff = Date.now() - new Date(d).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
   }
 
   toggleGroup(group: NavGroup) {

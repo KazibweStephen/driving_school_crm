@@ -92,6 +92,30 @@ export interface TransferSummary {
   total_incoming: number;
 }
 
+export interface TransferNotification {
+  id: string;
+  from_branch_id: string;
+  to_branch_id: string;
+  from_branch_name: string | null;
+  to_branch_name: string | null;
+  amount: string;
+  reason?: string;
+  consultation_id?: string;
+  payment_id?: string;
+  status: 'initiated' | 'received' | 'cancelled';
+  direction: 'incoming' | 'outgoing';
+  initiated_by?: string;
+  initiated_at: string;
+  created_at: string;
+}
+
+export interface TransferNotificationsResponse {
+  items: TransferNotification[];
+  total: number;
+  to_receive_count: number;
+  to_receive_amount: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class FinanceService {
   private base = '/api/v1/finance';
@@ -172,5 +196,11 @@ export class FinanceService {
     let p = new HttpParams();
     if (params?.branch_id) p = p.set('branch_id', params.branch_id);
     return this.http.get<TransferSummary>(`${this.base}/transfers/summary`, { params: p });
+  }
+
+  getTransferNotifications(limit = 20): Observable<TransferNotificationsResponse> {
+    return this.http.get<TransferNotificationsResponse>(`${this.base}/transfers/notifications`, {
+      params: new HttpParams().set('limit', limit),
+    });
   }
 }

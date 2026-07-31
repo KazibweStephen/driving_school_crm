@@ -353,6 +353,21 @@ async def list_branch_transfers(
     }
 
 
+@router.get("/transfers/notifications", response_model=dict)
+async def list_transfer_notifications(
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await finance_service.list_transfer_notifications(
+        db,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+        current_user_phone=current_user.phone,
+        limit=limit,
+    )
+
+
 @router.post("/transfers", response_model=BranchTransferRead, status_code=status.HTTP_201_CREATED)
 async def create_branch_transfer(
     data: BranchTransferCreate,

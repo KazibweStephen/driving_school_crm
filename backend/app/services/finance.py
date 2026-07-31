@@ -16,6 +16,7 @@ from app.models.company import (
     Expense,
     ExpenseStatus,
     TransferStatus,
+    UserBranchAssignment,
 )
 from app.models.consultation import Consultation
 from app.models.payment import Installment, InstallmentStatus
@@ -702,6 +703,104 @@ async def list_branch_transfers(
     transfers = list(result.scalars().all())
 
     return transfers, total
+
+
+async def list_transfer_notifications(
+    db: AsyncSession,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+    current_user_phone: str | None = None,
+    limit: int = 20,
+) -> dict:
+    """Pending transfers needing attention for the user's accessible branches.
+
+    Returns initiated transfers received by (incoming) or sent from (outgoing)
+    the user's branches, newest first.
+    """
+    is_privileged = current_user_role in (
+        UserRole.SUPER_USER,
+        UserRole.OFFICE_ADMIN,
+        UserRole.MANAGER,
+        UserRole.BRANCH_SUPERVISOR,
+    )
+    if is_privileged:
+        bq = select(Branch.id)
+        if current_user_role != UserRole.SUPER_USER and company_id is not None:
+            bq = bq.where(Branch.company_id == company_id)
+    else:
+        bq = (
+            select(UserBranchAssignment.branch_id)
+            .join(Branch, UserBranchAssignment.branch_id == Branch.id)
+            .where(UserBranchAssignment.user_id == current_user_phone)
+        )
+        if company_id is not None:
+            bq = bq.where(Branch.company_id == company_id)
+    accessible = [row[0] for row in (await db.execute(bq)).all()]
+    if not accessible:
+        return {"items": [], "total": 0, "to_receive_count": 0, "to_receive_amount": "0.00"}
+
+    incoming = (
+        select(BranchTransfer)
+        .where(
+            BranchTransfer.status == TransferStatus.INITIATED,
+            BranchTransfer.to_branch_id.in_(accessible),
+        )
+        .options(
+            selectinload(BranchTransfer.from_branch),
+            selectinload(BranchTransfer.to_branch),
+        )
+        .order_by(BranchTransfer.created_at.desc())
+    )
+    outgoing = (
+        select(BranchTransfer)
+        .where(
+            BranchTransfer.status == TransferStatus.INITIATED,
+            BranchTransfer.from_branch_id.in_(accessible),
+        )
+        .options(
+            selectinload(BranchTransfer.from_branch),
+            selectinload(BranchTransfer.to_branch),
+        )
+        .order_by(BranchTransfer.created_at.desc())
+    )
+    inc_result = await db.execute(incoming)
+    out_result = await db.execute(outgoing)
+    inc_items = list(inc_result.scalars().all())[:limit]
+    out_items = list(out_result.scalars().all())[:limit]
+
+    def _to_item(t: BranchTransfer, direction: str) -> dict:
+        return {
+            "id": t.id,
+            "from_branch_id": t.from_branch_id,
+            "to_branch_id": t.to_branch_id,
+            "from_branch_name": t.from_branch.name if t.from_branch else None,
+            "to_branch_name": t.to_branch.name if t.to_branch else None,
+            "amount": str(t.amount),
+            "reason": t.reason,
+            "consultation_id": t.consultation_id,
+            "payment_id": t.payment_id,
+            "status": t.status.value,
+            "direction": direction,
+            "initiated_by": t.initiated_by,
+            "initiated_at": t.initiated_at,
+            "created_at": t.created_at,
+        }
+
+    items = [_to_item(t, "incoming") for t in inc_items] + [
+        _to_item(t, "outgoing") for t in out_items
+    ]
+    items.sort(key=lambda it: it["created_at"], reverse=True)
+
+    to_receive_amount = sum(
+        (float(it["amount"]) for it in items if it["direction"] == "incoming"),
+        0.0,
+    )
+    return {
+        "items": items[:limit],
+        "total": len(items[:limit]),
+        "to_receive_count": sum(1 for it in items if it["direction"] == "incoming"),
+        "to_receive_amount": f"{to_receive_amount:.2f}",
+    }
 
 
 async def get_transfer_summary(

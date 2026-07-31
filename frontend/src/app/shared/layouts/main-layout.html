@@ -8,14 +8,155 @@
     <span class="pi pi-bars text-xl"></span>
   </button>
   <span class="font-semibold text-gray-900">Driving School CRM</span>
-  <button
-    class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
-    (click)="auth.logout()"
-    aria-label="Logout"
-  >
-    <span class="pi pi-sign-out text-xl"></span>
-  </button>
+  <div class="flex items-center gap-1">
+    <button
+      class="relative flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
+      (click)="toggleNotifications()"
+      aria-label="Notifications"
+    >
+      <span class="pi pi-bell text-xl"></span>
+      @if (toReceiveCount() > 0) {
+        <span class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+          {{ toReceiveCount() > 9 ? '9+' : toReceiveCount() }}
+        </span>
+      }
+    </button>
+    <button
+      class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
+      (click)="auth.logout()"
+      aria-label="Logout"
+    >
+      <span class="pi pi-sign-out text-xl"></span>
+    </button>
+  </div>
 </header>
+
+<!-- Desktop header -->
+<header class="fixed top-0 left-0 right-0 z-40 hidden h-14 items-center justify-between border-b bg-white px-6 shadow-sm lg:flex lg:ml-64">
+  <span class="font-semibold text-gray-900">Driving School CRM</span>
+  <div class="flex items-center gap-2">
+    <button
+      class="relative flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
+      (click)="toggleNotifications()"
+      aria-label="Notifications"
+      pTooltip="Notifications"
+      tooltipPosition="bottom"
+    >
+      <span class="pi pi-bell text-xl"></span>
+      @if (toReceiveCount() > 0) {
+        <span class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+          {{ toReceiveCount() > 9 ? '9+' : toReceiveCount() }}
+        </span>
+      }
+    </button>
+    <div class="ml-1 flex items-center gap-2 border-l pl-3">
+      <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
+        {{ auth.currentUser()?.charAt(0) || 'U' }}
+      </div>
+      <span class="hidden text-sm font-medium text-gray-900 xl:block">{{ auth.currentUser() || 'User' }}</span>
+      <button
+        class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-red-600"
+        (click)="auth.logout()"
+        pTooltip="Logout"
+        tooltipPosition="bottom"
+      >
+        <span class="pi pi-sign-out text-lg"></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Notifications panel -->
+@if (notificationsOpen()) {
+  <div class="fixed inset-0 z-40" (click)="closeNotifications()"></div>
+  <div class="fixed top-16 right-2 z-50 flex max-h-[80vh] w-[calc(100vw-1rem)] max-w-sm flex-col overflow-hidden rounded-xl border bg-white shadow-2xl lg:top-16 lg:right-6">
+    <div class="flex items-center justify-between border-b px-4 py-3">
+      <div>
+        <p class="text-sm font-semibold text-gray-900">Notifications</p>
+        @if (toReceiveCount() > 0) {
+          <p class="text-xs text-gray-500">{{ toReceiveCount() }} to receive · {{ formatAmount(toReceiveAmount()) }} UGX</p>
+        } @else {
+          <p class="text-xs text-gray-500">No pending transfers</p>
+        }
+      </div>
+      <button
+        class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
+        (click)="closeNotifications()"
+        aria-label="Close notifications"
+      >
+        <span class="pi pi-times"></span>
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto">
+      @if (loadingNotifications()) {
+        <div class="flex items-center justify-center py-8">
+          <span class="pi pi-spin pi-spinner text-2xl text-gray-400"></span>
+        </div>
+      } @else if (notifications().length === 0) {
+        <div class="flex flex-col items-center justify-center gap-2 py-10 text-gray-400">
+          <span class="pi pi-bell-slash text-3xl"></span>
+          <p class="text-sm">No pending transfers</p>
+        </div>
+      } @else {
+        <ul class="divide-y">
+          @for (n of notifications(); track n.id) {
+            <li class="flex items-start gap-3 px-4 py-3">
+              <span
+                class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm"
+                [class.bg-green-100]="n.direction === 'incoming'"
+                [class.text-green-700]="n.direction === 'incoming'"
+                [class.bg-blue-100]="n.direction === 'outgoing'"
+                [class.text-blue-700]="n.direction === 'outgoing'"
+              >
+                <span [class]="n.direction === 'incoming' ? 'pi pi-arrow-down-left' : 'pi pi-arrow-up-right'"></span>
+              </span>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm text-gray-900">
+                  <span class="font-medium">{{ n.from_branch_name || 'Unknown' }}</span>
+                  <span class="text-gray-400">→</span>
+                  <span class="font-medium">{{ n.to_branch_name || 'Unknown' }}</span>
+                </p>
+                <p class="text-xs text-gray-500">
+                  {{ n.direction === 'incoming' ? 'Incoming' : 'Outgoing' }} · UGX {{ formatAmount(n.amount) }} · {{ timeAgo(n.created_at) }}
+                </p>
+                @if (n.reason) {
+                  <p class="mt-0.5 truncate text-xs text-gray-400">{{ n.reason }}</p>
+                }
+              </div>
+              <div class="flex shrink-0 flex-col items-end gap-1">
+                @if (n.direction === 'incoming') {
+                  <button
+                    class="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    [disabled]="receivingId() === n.id"
+                    (click)="receiveTransfer(n)"
+                  >
+                    @if (receivingId() === n.id) {
+                      <span class="pi pi-spin pi-spinner"></span>
+                    } @else {
+                      Receive
+                    }
+                  </button>
+                } @else {
+                  <p-tag value="Initiated" severity="warn" />
+                }
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+
+    <div class="border-t p-2">
+      <button
+        class="w-full rounded-lg px-3 py-2 text-center text-sm font-medium text-blue-700 hover:bg-blue-50"
+        (click)="goToTransfers()"
+      >
+        View all transfers
+      </button>
+    </div>
+  </div>
+}
 
 <!-- Sidebar overlay -->
 @if (sidebarOpen()) {
@@ -110,7 +251,7 @@
 
 <!-- Main content -->
 <main class="min-h-screen bg-gray-50 lg:ml-64">
-  <div class="pt-14 lg:pt-0">
+  <div class="pt-14 lg:pt-14">
     <router-outlet />
   </div>
 </main>

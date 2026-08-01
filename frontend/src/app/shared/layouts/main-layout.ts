@@ -1,10 +1,11 @@
-import { Component, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TooltipModule } from 'primeng/tooltip';
 import { TagModule } from 'primeng/tag';
 import { MessageService } from 'primeng/api';
 import { AuthService } from '../../core/auth/auth.service';
+import { ChangePinDialog } from '../../shared/components/change-pin-dialog';
 import {
   FinanceService,
   TransferNotification,
@@ -27,7 +28,7 @@ interface NavGroup {
 
 @Component({
   selector: 'app-main-layout',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, ButtonModule, TooltipModule, TagModule],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ButtonModule, TooltipModule, TagModule, ChangePinDialog],
   providers: [MessageService],
   templateUrl: './main-layout.html',
   styleUrl: './main-layout.css',
@@ -42,6 +43,15 @@ export class MainLayout implements OnInit, OnDestroy {
   loadingNotifications = signal(false);
   receivingId = signal<string | null>(null);
   private _pollTimer: any = null;
+  @ViewChild('changePin') changePin!: ChangePinDialog;
+
+  get displayName(): string {
+    return this.auth.currentUserName() || this.auth.currentUser() || 'User';
+  }
+
+  get displayInitial(): string {
+    return (this.auth.currentUserName() || this.auth.currentUser() || 'U').charAt(0).toUpperCase();
+  }
 
   topItems: NavItem[] = [
     { path: '/dashboard', label: 'Dashboard', icon: 'pi pi-home', permission: 'dashboard.view' },

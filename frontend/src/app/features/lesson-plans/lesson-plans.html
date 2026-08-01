@@ -112,7 +112,7 @@
     [style]="{ width: '90vw', maxWidth: '700px' }"
     [draggable]="false"
     [resizable]="false"
-    [closable]="!loading()"
+    [closable]="!saving()"
   >
     <div class="flex flex-col gap-4 pt-2">
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -191,12 +191,12 @@
 
       <p-button
         [label]="editingTemplate() ? 'Save Changes' : 'Create Template'"
-        [loading]="loading()"
+        [loading]="saving()"
         (onClick)="save()"
         styleClass="w-full justify-center"
       />
     </div>
-    @if (loading()) {
+    @if (saving()) {
       <div class="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/70">
         <span class="pi pi-spin pi-spinner text-3xl text-blue-600"></span>
       </div>

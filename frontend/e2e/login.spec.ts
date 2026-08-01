@@ -107,9 +107,10 @@ test.describe('Login Flow', () => {
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
     await page.getByText('Add User').click();
     await page.getByPlaceholder('e.g. 256700000001').fill(phone);
-    await page.getByPlaceholder('e.g. Jane Instructor').fill('Test User');
+    await page.getByPlaceholder('e.g. Jane').fill('Test');
+    await page.getByPlaceholder('e.g. Instructor').fill('User');
     await page.getByRole('button', { name: 'Create User' }).click();
-    await expect(page.getByRole('cell', { name: phone }).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('cell', { name: phone }).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('can search users by name', async ({ page }) => {

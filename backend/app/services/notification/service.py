@@ -183,6 +183,22 @@ async def on_pin_reset(
     )
 
 
+async def on_pin_reset_otp(
+    db: AsyncSession,
+    company_id,
+    phone: str,
+    name: str,
+    otp: str,
+) -> bool:
+    message = (
+        f"Dear {name},\n\nYour Driving School CRM PIN reset code is: {otp}\n"
+        f"It expires in 10 minutes. Do not share it with anyone.\n\nDrive Safe!"
+    )
+    return await send_sms(
+        db, company_id, phone, message, trigger_event="pin_reset_otp",
+    )
+
+
 async def on_consultation_created(
     db: AsyncSession,
     company_id,

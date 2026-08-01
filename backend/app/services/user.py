@@ -1,5 +1,6 @@
 import random
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,13 @@ from app.models.user import User, UserRole, UserStatus
 
 def generate_initial_pin() -> str:
     return f"{random.randint(0, 9999):04d}"
+
+
+def split_name(name: str) -> tuple[str, str]:
+    parts = (name or "").strip().split(maxsplit=1)
+    first = parts[0] if parts else ""
+    last = parts[1] if len(parts) > 1 else ""
+    return first, last
 
 
 async def sync_user_branches(
@@ -67,15 +75,26 @@ async def create_user(
     name: str,
     role: UserRole,
     created_by_phone: str,
+    first_name: str | None = None,
+    last_name: str | None = None,
     is_company_admin: bool = False,
     company_id: uuid.UUID | None = None,
     can_backdate: bool = False,
 ) -> tuple[User, str]:
     initial_pin = generate_initial_pin()
+    if first_name is not None or last_name is not None:
+        name = f"{(first_name or '').strip()} {(last_name or '').strip()}".strip()
+    first, last = split_name(name)
+    if first_name is not None:
+        first = first_name.strip()
+    if last_name is not None:
+        last = last_name.strip()
     status = UserStatus.PENDING_APPROVAL if role == UserRole.COMPANY_SUPER_USER else UserStatus.ACTIVE
     user = User(
         phone=phone,
         name=name,
+        first_name=first,
+        last_name=last,
         role=role,
         hashed_pin=hash_pin(initial_pin),
         status=status,
@@ -153,12 +172,20 @@ async def update_user(
     db: AsyncSession,
     user: User,
     name: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
     role: UserRole | None = None,
     status: UserStatus | None = None,
     is_company_admin: bool | None = None,
     company_id: uuid.UUID | None = None,
     can_backdate: bool | None = None,
 ) -> User:
+    if first_name is not None or last_name is not None:
+        first = first_name if first_name is not None else user.first_name
+        last = last_name if last_name is not None else user.last_name
+        user.first_name = first.strip()
+        user.last_name = last.strip()
+        name = f"{user.first_name} {user.last_name}".strip()
     if name is not None:
         user.name = name
     if role is not None:
@@ -214,5 +241,52 @@ async def change_user_pin(
     user.hashed_pin = hash_pin(new_pin)
     user.pin_reset_otp = None
     user.pin_reset_otp_expires_at = None
+    await db.flush()
+    return user
+
+
+PIN_RESET_OTP_TTL_MINUTES = 10
+PIN_RESET_RESEND_SECONDS = 60
+
+
+async def request_pin_reset_otp(
+    db: AsyncSession, phone: str
+) -> tuple[User | None, str | None]:
+    """Generate and store a PIN-reset OTP for the given phone.
+
+    Returns ``(user, otp)``. ``otp`` is ``None`` when the account does not
+    exist/is inactive (generic response to avoid enumeration) or when a code
+    was sent within the last ``PIN_RESET_RESEND_SECONDS`` (rate limiting).
+    """
+    user = await get_user_by_phone(db, phone)
+    if user is None or user.status != UserStatus.ACTIVE:
+        return None, None
+    now = datetime.now(timezone.utc)
+    if user.pin_reset_otp and user.pin_reset_otp_expires_at:
+        if user.pin_reset_otp_expires_at > now:
+            last_sent = user.pin_reset_otp_expires_at - timedelta(minutes=PIN_RESET_OTP_TTL_MINUTES)
+            if (now - last_sent).total_seconds() < PIN_RESET_RESEND_SECONDS:
+                return user, None
+    otp = generate_otp()
+    user.pin_reset_otp = otp
+    user.pin_reset_otp_expires_at = now + timedelta(minutes=PIN_RESET_OTP_TTL_MINUTES)
+    await db.flush()
+    return user, otp
+
+
+async def verify_pin_reset_otp(
+    db: AsyncSession, phone: str, otp: str, new_pin: str
+) -> User:
+    user = await get_user_by_phone(db, phone)
+    if user is None or not user.pin_reset_otp or not user.pin_reset_otp_expires_at:
+        raise ValueError("Invalid or expired OTP")
+    if user.pin_reset_otp_expires_at < datetime.now(timezone.utc):
+        raise ValueError("OTP has expired")
+    if user.pin_reset_otp != otp:
+        raise ValueError("Invalid OTP")
+    user.hashed_pin = hash_pin(new_pin)
+    user.pin_reset_otp = None
+    user.pin_reset_otp_expires_at = None
+    user.failed_login_attempts = 0
     await db.flush()
     return user

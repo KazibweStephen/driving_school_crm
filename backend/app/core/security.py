@@ -27,6 +27,7 @@ def create_access_token(
     company_id: str | None = None,
     currency: str | None = None,
     permissions: list[str] | None = None,
+    name: str | None = None,
 ) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.jwt_access_token_expire_minutes
@@ -45,6 +46,8 @@ def create_access_token(
         payload["currency"] = currency
     if permissions is not None:
         payload["permissions"] = permissions
+    if name:
+        payload["name"] = name
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 

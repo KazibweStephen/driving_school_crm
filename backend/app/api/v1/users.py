@@ -36,6 +36,8 @@ async def create_user(
         )
     user, initial_pin = await user_service.create_user(
         db, data.phone, data.name, data.role, current_user.phone,
+        first_name=data.first_name,
+        last_name=data.last_name,
         is_company_admin=data.is_company_admin,
         company_id=data.company_id or current_user.company_id,
         can_backdate=data.can_backdate,
@@ -124,7 +126,10 @@ async def update_user(
             detail="User not found",
         )
     updated = await user_service.update_user(
-        db, user, name=data.name, role=data.role, status=data.status,
+        db, user, name=data.name,
+        first_name=data.first_name,
+        last_name=data.last_name,
+        role=data.role, status=data.status,
         is_company_admin=data.is_company_admin,
         company_id=data.company_id,
         can_backdate=data.can_backdate,

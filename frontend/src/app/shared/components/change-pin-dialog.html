@@ -1,0 +1,45 @@
+<p-toast />
+@if (visible()) {
+  <p-dialog
+    header="Change Your PIN"
+    [(visible)]="visible"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '420px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    <div class="flex flex-col gap-4 pt-2">
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Current PIN</label>
+        <input
+          pInputText
+          type="password"
+          [(ngModel)]="data.old_pin"
+          placeholder="Enter current PIN"
+          maxlength="4"
+          inputmode="numeric"
+          class="w-full"
+        />
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">New PIN</label>
+        <input
+          pInputText
+          type="password"
+          [(ngModel)]="data.new_pin"
+          placeholder="Enter new 4-digit PIN"
+          maxlength="4"
+          inputmode="numeric"
+          class="w-full"
+        />
+      </div>
+      <p-button
+        label="Change PIN"
+        [loading]="loading()"
+        [disabled]="loading()"
+        (onClick)="save()"
+        styleClass="w-full justify-center"
+      />
+    </div>
+  </p-dialog>
+}

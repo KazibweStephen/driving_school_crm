@@ -4,6 +4,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 export interface User {
   phone: string;
   name: string;
+  first_name: string;
+  last_name: string;
   role: string;
   status: string;
   is_company_admin: boolean;
@@ -18,6 +20,8 @@ export interface User {
 export interface UserCreate {
   phone: string;
   name: string;
+  first_name?: string;
+  last_name?: string;
   role: string;
   company_id?: string | null;
   is_company_admin?: boolean;
@@ -27,6 +31,8 @@ export interface UserCreate {
 
 export interface UserUpdate {
   name?: string;
+  first_name?: string;
+  last_name?: string;
   role?: string;
   status?: string;
   company_id?: string | null;

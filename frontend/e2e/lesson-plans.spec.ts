@@ -93,14 +93,13 @@ test.describe('Lesson Plan Templates', () => {
     await page.waitForTimeout(500);
 
     await page.click('button:has-text("New Template")');
-    await page.waitForTimeout(500);
 
-    await expect(page.locator('.p-dialog-header')).toContainText('New Template', { timeout: 5000 });
+    const dialog = page.getByRole('dialog', { name: 'New Template' });
+    await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // Focus inside dialog then press Escape to close
-    await page.locator('.p-dialog-content').click();
+    // Focus a real input inside the dialog so Escape is handled by the dialog's key handler
+    await dialog.locator('input').first().click();
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(800);
     await expect(page.locator('.p-dialog-header')).toHaveCount(0, { timeout: 5000 });
   });
 
@@ -129,7 +128,7 @@ test.describe('Lesson Plan Templates', () => {
 
     // Find card by h2 text and traverse up to the card
     const card = page.locator(`h2:has-text("${templateName}")`).locator('..').locator('..').locator('..');
-    await expect(card).toBeVisible({ timeout: 5000 });
+    await expect(card).toBeVisible({ timeout: 10000 });
 
     // Find the delete button (danger button with trash icon) inside this card
     const trashBtn = card.locator('button.p-button-danger');

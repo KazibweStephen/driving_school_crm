@@ -12,9 +12,17 @@ from sqlalchemy import select
 
 from app.models.company import Company
 from app.models.user import UserStatus
-from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
+from app.schemas.auth import (
+    LoginRequest,
+    PinResetRequest,
+    PinResetVerifyRequest,
+    RefreshRequest,
+    TokenResponse,
+)
 from app.services.permission import get_user_permissions
+from app.services import user as user_service
 from app.services.user import get_user_by_phone
+from app.services.notification.service import on_pin_reset_otp
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -65,6 +73,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
             company_id=company_id_str,
             currency=currency,
             permissions=permissions,
+            name=user.name,
         ),
         refresh_token=create_refresh_token(user.phone),
     )
@@ -102,6 +111,45 @@ async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
             company_id=company_id_str,
             currency=currency,
             permissions=permissions,
+            name=user.name if user else None,
         ),
         refresh_token=create_refresh_token(phone),
     )
+
+
+async def _resolve_sms_company_id(db, user):
+    """Return the company_id to use for SMS delivery (default company for super users)."""
+    if user.company_id:
+        return user.company_id
+    if user.role.value == "super_user":
+        from sqlalchemy import select as sa_select
+        from app.models.company import Company
+        default_company_result = await db.execute(
+            sa_select(Company).where(Company.is_active == True).limit(1)
+        )
+        default_company = default_company_result.scalar_one_or_none()
+        if default_company:
+            return default_company.id
+    return None
+
+
+@router.post("/forgot-pin", response_model=dict)
+async def forgot_pin(data: PinResetRequest, db: AsyncSession = Depends(get_db)):
+    user, otp = await user_service.request_pin_reset_otp(db, data.phone)
+    if otp and user:
+        sms_company_id = await _resolve_sms_company_id(db, user)
+        if sms_company_id:
+            await on_pin_reset_otp(db, sms_company_id, user.phone, user.name, otp)
+    return {"message": "If the phone is registered, an OTP has been sent via SMS."}
+
+
+@router.post("/forgot-pin/verify", response_model=dict)
+async def verify_forgot_pin(data: PinResetVerifyRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        await user_service.verify_pin_reset_otp(db, data.phone, data.otp, data.new_pin)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    return {"message": "PIN reset successfully. You can now log in with your new PIN."}

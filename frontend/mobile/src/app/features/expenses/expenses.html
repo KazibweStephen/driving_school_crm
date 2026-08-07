@@ -147,7 +147,7 @@
               optionLabel="name"
               optionValue="id"
               [ngModel]="branchId()"
-              (ngModelChange)="branchId.set($event)"
+              (ngModelChange)="onCreateBranchChange($event)"
               placeholder="Select branch"
               appendTo="body"
               class="w-full"
@@ -182,6 +182,38 @@
             data-testid="expense-category"
           />
         </div>
+
+        @if (category() === 'Fuel') {
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700">Vehicle *</label>
+            <p-select
+              [options]="vehicleOptions()"
+              optionLabel="label"
+              optionValue="value"
+              [ngModel]="vehicleId()"
+              (ngModelChange)="vehicleId.set($event)"
+              placeholder="Select vehicle"
+              appendTo="body"
+              class="w-full"
+              data-testid="expense-vehicle"
+            />
+            @if (vehicles().length === 0) {
+              <p class="mt-1 text-xs text-slate-400">No vehicles available for this branch.</p>
+            }
+          </div>
+
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700">Mileage (km)</label>
+            <input
+              type="number"
+              min="0"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              [ngModel]="mileage()"
+              (ngModelChange)="mileage.set($event ?? null)"
+              data-testid="expense-mileage"
+            />
+          </div>
+        }
 
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-700">Description</label>

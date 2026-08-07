@@ -9,6 +9,7 @@ import { DialogModule } from 'primeng/dialog';
 import { AuthService } from '../../core/auth/auth.service';
 import { ExpenseService, Expense, ExpenseCreatePayload } from '../../core/services/expense.service';
 import { PaymentService, BranchInfo } from '../../core/services/payment.service';
+import { CatalogService, Vehicle } from '../../core/services/catalog.service';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { PageHeader } from '../../shared/page-header/page-header';
 import { formatMoney, toISODate, todayISO } from '../../shared/format';
@@ -45,6 +46,7 @@ export class Expenses {
   private auth = inject(AuthService);
   private expenseService = inject(ExpenseService);
   private paymentService = inject(PaymentService);
+  private catalog = inject(CatalogService);
   private messageService = inject(MessageService);
 
   currency = this.auth.currencyCode;
@@ -74,6 +76,16 @@ export class Expenses {
   );
   receiptUrl = signal<string | null>(null);
   selectedFile: File | null = null;
+
+  vehicles = signal<Vehicle[]>([]);
+  vehicleId = signal<string | null>(null);
+  mileage = signal<number | null>(null);
+  vehicleOptions = computed(() =>
+    this.vehicles().map((v) => ({
+      label: `${v.plate_number} · ${v.transmission}`,
+      value: v.id,
+    })),
+  );
 
   statusOptions = [
     { label: 'All', value: '' },
@@ -158,10 +170,34 @@ export class Expenses {
     this.expenseDate.set(todayISO());
     this.receiptUrl.set(null);
     this.selectedFile = null;
+    this.vehicleId.set(null);
+    this.mileage.set(null);
+    this.vehicles.set([]);
     if (this.branches().length > 0 && !this.branchId()) {
       this.branchId.set(this.branches()[0].id);
     }
+    this.loadVehiclesForBranch();
     this.step.set('create');
+  }
+
+  onCreateBranchChange(value: string | null) {
+    this.branchId.set(value);
+    this.loadVehiclesForBranch();
+  }
+
+  private loadVehiclesForBranch() {
+    const branchId = this.branchId();
+    if (!branchId) return;
+    this.vehicles.set([]);
+    this.vehicleId.set(null);
+    this.catalog.listVehicles().subscribe({
+      next: (vehicles) => {
+        this.vehicles.set(
+          vehicles.filter((v) => v.status === 'available' && v.branch_ids?.includes(branchId)),
+        );
+      },
+      error: () => {},
+    });
   }
 
   backToList() {
@@ -212,12 +248,19 @@ export class Expenses {
       this.messageService.add({ severity: 'warn', summary: 'Enter a valid amount' });
       return;
     }
+    if (this.category() === 'Fuel' && !this.vehicleId()) {
+      this.messageService.add({ severity: 'warn', summary: 'Select the vehicle being fueled' });
+      return;
+    }
     this.submitting.set(true);
+    const isFuel = this.category() === 'Fuel';
     const payload: ExpenseCreatePayload = {
       branch_id: branchId,
       amount,
       description: this.description() || undefined,
       category: this.category() || undefined,
+      vehicle_id: isFuel ? (this.vehicleId() ?? undefined) : undefined,
+      mileage: isFuel ? (this.mileage() ?? undefined) : undefined,
       expense_date: this.expenseDate(),
       status: 'pending',
     };

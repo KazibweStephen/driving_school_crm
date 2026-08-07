@@ -1,22 +1,50 @@
 import { test, expect, Page } from '@playwright/test';
+import { loginSuperAdmin } from './helpers';
+
+const DEFAULT_COMPANY_ID = '00000000-0000-0000-0000-000000000001';
+
+async function createUserViaApi(page: Page) {
+  const token = await page.evaluate(async () => {
+    const res = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '0782832711', pin: '1234' }),
+    });
+    return (await res.json()).access_token;
+  });
+  const phone = `2567${Date.now().toString().slice(-7)}`;
+  const name = `Search${Date.now().toString().slice(-5)}`;
+  await page.evaluate(
+    async ({ token, phone, name, companyId }) => {
+      const res = await fetch('/api/v1/users/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          phone,
+          name,
+          first_name: name,
+          role: 'office_admin',
+          company_id: companyId,
+          is_company_admin: false,
+          can_backdate: false,
+          branch_ids: [],
+        }),
+      });
+      if (!res.ok) throw new Error(`Failed to create user: ${await res.text()}`);
+      return res.json();
+    },
+    { token, phone, name, companyId: DEFAULT_COMPANY_ID },
+  );
+  return { phone, name };
+}
 
 test.describe('Login Flow', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/login');
   });
-
-  async function signIn(page: Page) {
-    await page.fill('#phone', '0782832711');
-    await page.fill('input[type="password"]', '1234');
-    await page.getByRole('button', { name: 'Sign In' }).click();
-    // Super admin may be prompted to pick a company when >1 exist
-    const dialog = page.getByText('Select Company', { exact: true });
-    if (await dialog.isVisible().catch(() => false)) {
-      await page.getByText('Default Company', { exact: true }).click();
-      await page.getByRole('button', { name: 'Continue' }).click();
-    }
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
-  }
 
   test('shows login page with heading', async ({ page }) => {
     await expect(page.locator('h1')).toContainText('Driving School CRM');
@@ -30,14 +58,13 @@ test.describe('Login Flow', () => {
   });
 
   test('successful login redirects to dashboard', async ({ page }) => {
-    await signIn(page);
+    await loginSuperAdmin(page);
     await expect(page.locator('h1')).toContainText('Dashboard');
   });
 
   test('sidebar shows navigation on desktop after login', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/login');
-    await signIn(page);
+    await loginSuperAdmin(page);
     await expect(page.locator('aside').getByText('Dashboard')).toBeVisible();
     await expect(page.locator('aside').getByText('Management')).toBeVisible();
     await page.locator('aside').getByText('Management').click();
@@ -46,15 +73,13 @@ test.describe('Login Flow', () => {
 
   test('mobile viewport has hamburger and sidebar is hidden', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto('/login');
-    await signIn(page);
+    await loginSuperAdmin(page);
     await expect(page.getByLabel('Toggle menu')).toBeVisible();
   });
 
   test('opens sidebar on mobile and navigates to users', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto('/login');
-    await signIn(page);
+    await loginSuperAdmin(page);
     await page.getByLabel('Toggle menu').click();
     await page.locator('aside').getByText('Management').click();
     await expect(page.locator('aside').getByText('Users')).toBeVisible();
@@ -63,24 +88,22 @@ test.describe('Login Flow', () => {
   });
 
   test('users page shows existing users in table', async ({ page }) => {
+    const { phone } = await createUserViaApi(page);
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/login');
-    await signIn(page);
+    await loginSuperAdmin(page);
     await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
-    // Search for the seeded super admin instead of assuming first page
+    // Search for the freshly created company user
     const searchInput = page.getByPlaceholder('Search name or phone...');
-    await searchInput.fill('0782832711');
+    await searchInput.fill(phone);
     await searchInput.press('Enter');
-    await expect(page.getByRole('cell', { name: 'Super Admin' })).toBeVisible({ timeout: 5000 });
-    await expect(page.getByRole('cell', { name: '0782832711' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: phone })).toBeVisible({ timeout: 5000 });
   });
 
   test('create user dialog opens and can be dismissed', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/login');
-    await signIn(page);
+    await loginSuperAdmin(page);
     await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
@@ -92,8 +115,7 @@ test.describe('Login Flow', () => {
   test('creates a new user successfully', async ({ page }) => {
     const phone = `2567000${Date.now().toString().slice(-6)}`;
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/login');
-    await signIn(page);
+    await loginSuperAdmin(page);
     await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
@@ -106,22 +128,21 @@ test.describe('Login Flow', () => {
   });
 
   test('can search users by name', async ({ page }) => {
+    const { name } = await createUserViaApi(page);
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/login');
-    await signIn(page);
+    await loginSuperAdmin(page);
     await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
     const searchInput = page.getByPlaceholder('Search name or phone...');
-    await searchInput.fill('Super Admin');
+    await searchInput.fill(name);
     await searchInput.press('Enter');
-    await expect(page.getByRole('cell', { name: 'Super Admin' })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('cell', { name: name })).toBeVisible({ timeout: 5000 });
   });
 
   test('can open change PIN dialog', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/login');
-    await signIn(page);
+    await loginSuperAdmin(page);
     await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });

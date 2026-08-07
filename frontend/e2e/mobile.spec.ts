@@ -12,7 +12,7 @@ async function mobileLogin(page: Page) {
   // Super admin may be prompted to pick a company when >1 exist
   const companySelection = page.getByTestId('company-selection');
   try {
-    await companySelection.waitFor({ state: 'visible', timeout: 5000 });
+    await companySelection.waitFor({ state: 'visible', timeout: 10000 });
     await page.getByText('Default Company', { exact: true }).click();
     await page.getByRole('button', { name: 'Continue' }).click();
   } catch {

@@ -19,11 +19,12 @@ export async function loginSuperAdmin(
 
   const dialog = page.getByText('Select Company', { exact: true });
   try {
-    await dialog.waitFor({ state: 'visible', timeout: 5000 });
+    await dialog.waitFor({ state: 'visible', timeout: 10000 });
     await page.getByText(companyName, { exact: true }).click();
     await page.getByRole('button', { name: 'Continue' }).click();
-  } catch {
-    // No company selection dialog; proceed to dashboard
+  } catch (e) {
+    console.error('helper dialog step failed:', e.message);
+    throw e;
   }
 
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });

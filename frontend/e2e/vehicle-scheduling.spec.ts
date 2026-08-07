@@ -103,7 +103,7 @@ test.describe('Vehicle & Dual-Phase Scheduling', () => {
       const res = await fetch('/api/v1/consultations/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ phone, first_name: 'Dual', last_name: 'Phase', location: 'Kampala' }),
+        body: JSON.stringify({ phone, first_name: 'Dual', last_name: 'Phase', location: 'Kampala', branch_id: '00000000-0000-0000-0000-000000000002' }),
       });
       return res.json();
     }, { token, phone });

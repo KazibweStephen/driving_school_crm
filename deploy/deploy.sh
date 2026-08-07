@@ -19,28 +19,44 @@ if [ -n "$SERVICE" ] && [ "$SERVICE" != "frontend" ] && [ "$SERVICE" != "backend
     exit 1
 fi
 
-# Verify required env vars
+# Backend env file (gitignored). Prefer values already exported in the shell
+# environment; fall back to backend/.env.prod if it exists.
+if [ -f "./backend/.env.prod" ]; then
+    set -a
+    source ./backend/.env.prod
+    set +a
+fi
+
+# Critical vars must resolve (from the shell environment or backend/.env.prod)
 : "${POSTGRES_USER:?POSTGRES_USER must be set}"
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
 : "${POSTGRES_DB:?POSTGRES_DB must be set}"
 
+# If backend/.env.prod is missing, generate it from the environment so that
+# docker compose (env_file) keeps working. Only generated when absent — the
+# file persists on the droplet afterwards, so you don't have to recreate it
+# after every pull. Export these vars once (e.g. in ~/.bashrc) to avoid
+# maintaining the file at all.
 if [ ! -f "./backend/.env.prod" ]; then
-    echo "ERROR: backend/.env.prod not found. Copy backend/.env.prod.example to backend/.env.prod and fill in production secrets."
-    exit 1
+    echo "=== backend/.env.prod not found — generating from environment variables ==="
+    cat > "./backend/.env.prod" <<EOF
+POSTGRES_USER=${POSTGRES_USER}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+POSTGRES_DB=${POSTGRES_DB}
+POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+POSTGRES_PORT=${POSTGRES_PORT:-5432}
+JWT_SECRET_KEY=${JWT_SECRET_KEY:-$(openssl rand -hex 32)}
+JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+JWT_REFRESH_TOKEN_EXPIRE_DAYS=${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+CORS_ORIGINS=${CORS_ORIGINS:-}
+RECEIPT_BASE_URL=${RECEIPT_BASE_URL:-}
+APP_URL=${APP_URL:-}
+APP_NAME=${APP_NAME:-Driving School CRM}
+DEBUG=${DEBUG:-false}
+EOF
+    echo "Generated backend/.env.prod. Review CORS_ORIGINS / RECEIPT_BASE_URL / APP_URL (export them, or edit the file)."
 fi
-
-# Validate .env.prod has the critical postgres vars
-for var in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB; do
-    if ! grep -qE "^${var}=.+" ./backend/.env.prod; then
-        echo "ERROR: $var is missing or empty in backend/.env.prod"
-        exit 1
-    fi
-done
-
-# Load backend environment variables for use by docker compose
-set -a
-source ./backend/.env.prod
-set +a
 
 echo "=== Pulling latest code ==="
 git pull origin main || true

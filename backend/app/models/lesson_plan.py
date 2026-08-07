@@ -1,8 +1,9 @@
 import enum
 import uuid
 from datetime import date, datetime, time
+from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text, Time, func
+from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, Index, Integer, Numeric, String, Text, Time, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -294,6 +295,8 @@ class ClientLesson(Base):
         ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Fuel consumed by this lesson: active vehicle fuel rate snapshotted at completion
+    fuel_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     # Scheduling fields
     scheduled_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     scheduled_start_time: Mapped[time | None] = mapped_column(Time, nullable=True)

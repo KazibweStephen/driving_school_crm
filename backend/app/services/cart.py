@@ -65,6 +65,13 @@ async def add_cart_item(
             item.driving_training_duration_days = pkg.driving_training_duration_days
             item.theory_training_hours = pkg.theory_training_hours
             item.permit_processing_duration_days = pkg.permit_processing_duration_days
+            # Snapshot the package's active fuel rate (maximum expected fuel cost)
+            from app.services import fuel as fuel_service
+            active_fuel_rate = await fuel_service.get_active_package_fuel_rate(
+                db, pkg.id, company_id
+            )
+            if active_fuel_rate:
+                item.fuel_rate_per_session = active_fuel_rate.fuel_rate_per_session
 
     db.add(item)
     await db.flush()

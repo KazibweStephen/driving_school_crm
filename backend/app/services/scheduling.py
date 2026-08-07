@@ -712,6 +712,14 @@ async def lock_schedule(
             elif vehicle_id:
                 lesson.vehicle_id = vehicle_id
 
+    # Fuel budget guard: the plan's projected fuel (completed lessons + active
+    # rates of every lesson now assigned a vehicle) must stay within budget.
+    from app.services.fuel import assert_plan_fuel_budget
+    try:
+        await assert_plan_fuel_budget(db, plan_id, company_id)
+    except ValueError as e:
+        raise ValueError(f"Fuel budget exceeded: {e}")
+
     await db.flush()
     return lessons
 

@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime, time
+from decimal import Decimal
 
 from pydantic import BaseModel
 
@@ -311,6 +312,7 @@ class ClientLessonRead(BaseModel):
     instructor_id: str | None
     vehicle_id: uuid.UUID | None
     completed_at: datetime | None
+    fuel_cost: Decimal | None
     notes: str | None
     preferred_location: str | None
     enforce_prerequisites: bool

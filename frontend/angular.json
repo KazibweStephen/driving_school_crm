@@ -72,6 +72,78 @@
           "builder": "@angular/build:unit-test"
         }
       }
+    },
+    "mobile": {
+      "projectType": "application",
+      "schematics": {},
+      "root": "mobile",
+      "sourceRoot": "mobile/src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "mobile/src/main.ts",
+            "tsConfig": "mobile/tsconfig.app.json",
+            "serviceWorker": "mobile/src/ngsw-config.json",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "mobile/public"
+              },
+              {
+                "glob": "**/*",
+                "input": "mobile/src/assets"
+              }
+            ],
+            "styles": [
+              "mobile/src/styles.css"
+            ],
+            "index": "mobile/src/index.html",
+            "outputPath": "dist/mobile"
+          },
+          "configurations": {
+            "production": {
+              "baseHref": "/m/",
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "4kB",
+                  "maximumError": "8kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "port": 4201,
+            "proxyConfig": "proxy.conf.json"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "mobile:build:production"
+            },
+            "development": {
+              "buildTarget": "mobile:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
     }
   }
 }

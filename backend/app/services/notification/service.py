@@ -137,19 +137,20 @@ async def send_template_sms(
     """Look up the active template for a trigger/category, render variables, and send."""
     from app.services.sms import resolve_template, render_template
 
-    template = await resolve_template(db, company_id, category, trigger_event=trigger_event)
-    if not template:
-        logger.warning(
-            "[SMS] No active template for trigger=%s category=%s company=%s, skipping",
-            trigger_event, category, company_id,
+    async with db.begin_nested():
+        template = await resolve_template(db, company_id, category, trigger_event=trigger_event)
+        if not template:
+            logger.warning(
+                "[SMS] No active template for trigger=%s category=%s company=%s, skipping",
+                trigger_event, category, company_id,
+            )
+            return False
+        message = render_template(template.body, variables)
+        return await send_sms(
+            db, company_id, phone, message,
+            trigger_event=trigger_event or category,
+            template_id=template.id,
         )
-        return False
-    message = render_template(template.body, variables)
-    return await send_sms(
-        db, company_id, phone, message,
-        trigger_event=trigger_event or category,
-        template_id=template.id,
-    )
 
 
 # ── Event-driven SMS helpers ──
@@ -362,7 +363,7 @@ async def on_training_completed(
     lesson_number: str,
 ) -> bool:
     return await send_template_sms(
-        db, company_id, phone, "training_completed",
+        db, company_id, phone, "general",
         {"name": name, "training_type": training_type, "lesson_number": lesson_number},
         trigger_event="training_completed",
     )

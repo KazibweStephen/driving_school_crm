@@ -1,8 +1,9 @@
 import enum
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Table, Text, func
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, Numeric, String, Table, Text, func
 from sqlalchemy.dialects.postgresql import UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,6 +59,8 @@ class CartItem(Base):
     driving_training_duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     theory_training_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     permit_processing_duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Fuel budget snapshot inherited from Package's active fuel rate at creation
+    fuel_rate_per_session: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

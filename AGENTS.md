@@ -135,6 +135,7 @@
 - **Fine-grained RBAC (backend + frontend)**: see the `## Fine-Grained RBAC` section below — permission catalog, `role_permissions` matrix, `require_permission()` on all v1 routers, JWT `permissions` claim, route `data.permission` + `permissionGuard`, sidebar filtering, `*appHasPermission`, `/permissions` admin page, migration `g1a2b3c4d5e6f`
 - **Action-level RBAC upgrade**: permission catalog expanded to 28 groups / 142 codes with `<group>.manage` as an all-actions master that expands to every code in its group (`expand_set`, runtime re-expansion in `get_role_permissions`/`has_permission` — no data migration needed, stored `.manage`/`.view` legacy rows keep working); all v1 routers remapped to granular codes (`expenses.create/approve/reject/pay`, `payments.record`, `users.reset_pin`, `transfers.receive`, `video_library.upload`, `competency.import`, etc.); new `sales` group carved from `expenses` via backfill migration `h2i3j4k5l6m7`; one-time remap helper `backend/remap_permissions.py` (MAP of file→(verb,path)→code)
 - **Expense approval workflow**: `POST /api/v1/finance/expenses/{id}/approve` (+ `reject` with `{rejection_reason}`, `mark-paid`, `DELETE`); pending-only reject, approved→paid only, paid/approved undeletable (409), rejected-delete requires `expenses.manage`, creator cannot approve/reject own (403), PATCH status changes outside pending require `expenses.manage`; approve clears `rejection_reason` and notifies creator via SMS (`on_expense_approved`); frontend Expenses page has permission-gated Approve/Reject/Delete/Mark-Paid row actions + reject-reason dialog; e2e `expenses.spec.ts` covers dialog create + full workflow
+- **Office Admin Mobile PWA** (`/m/`): second Angular project in `frontend/mobile` built as a PWA (`manifest.webmanifest`, icons, service worker) and served under `/m/` via nginx `alias` + exact `/m` redirect. Features: login with phone+PIN, Dashboard (daily sales, monthly sales vs target, pending collections, current-month commission earned/pending + quick actions), Make a Sale / Previous Sale (backdated), Upsell (existing client → show already-purchased products with amount/paid/balance, add new ones, only new items in payment step), Collect Payments (per-cart-item balance, installments, receipt check), Lessons (weekly schedule day chips + start/stop lesson timer + outcome), Schedule (generate client plan from template + auto-assign instructor/vehicle via find-and-lock), Send SMS (saved templates or free text), Expenses (list/filter, create with receipt upload, approve/reject/pay/delete actions). Uses separate localStorage keys `mobile_access_token`/`mobile_refresh_token`. Backend changes: added `sms.send` to `office_admin`/`branch_supervisor` defaults in `permissions.py` and backfilled via migration `k2l3m4n5o6p7` (merges `h2i3j4k5l6m7` and `k1l2m3n4o5p6`); added `Company.monthly_sales_target` column and `GET /api/v1/dashboard/mobile` endpoint via migration `m2n3o4p5q6r7`; granted `expenses.create`/`expenses.delete` to `office_admin`/`branch_supervisor` via migration `n3o4p5q6r7s8t`. Product list on the sale screen now requests `status=active&page_size=100` from `/api/v1/products/` (matching the web Add-to-Cart behaviour) instead of fetching the default first page and filtering client-side, so active products are not hidden by pagination. Payment amount inputs use plain `<input type="number">`; balance/installment schedule is recomputed only when the user taps a **Calculate schedule** button (no live typing recompute) and updates the `selectedItems` signal to keep the UI responsive. "How did you hear about us" is a `p-select` dropdown. Receipt printing fetches the authenticated HTML blob via `PaymentService.downloadReceipt()` and opens a `blob:` URL. Collect Payments now shows a success/failure result step with amount, balance message, **Print receipt**, and **Return to client** actions instead of redirecting to the client profile. Login/refresh preserves the attempted route in `localStorage` and redirects back after sign-in. Server-side mobile detection in nginx redirects `/` and `/login` to `/m/` and `/m/login` for phone User-Agents unless the `prefer_desktop=1` cookie is set; the mobile shell has a **Desktop** link that sets the cookie and loads the desktop site. All 40 Playwright tests pass.
 
 ## Multi-Company Architecture
 - **Company** (`companies`): Top-level tenant with `id`, `name`, `code` (unique), `address`, `phone`, `email`, `is_active`
@@ -162,7 +163,7 @@
 - Consultations API + service: `search_consultations`, `get_consultation_by_id`, `client_search` scoped via `Branch.company_id`
 - Clients API + service (`payment.py`): `list_clients`, `get_client_detail` scoped via `Branch.company_id`
 - Finance API + service: `list_expenses`, `list_borrowed`, `list_collections`, `get_dunning_list`, `get_finance_summary` — all scoped via `Branch.company_id`
-- All 31 Playwright tests pass (no regressions)
+- All 39 Playwright tests pass (1 flaky retry on user creation)
 
 ## Tenant Isolation Status — All Endpoints Scoped
 All endpoints have been fixed with multi-company scoping. Each endpoint verifies that the user's `company_id` matches the entity chain before allowing access; `super_user` / `company_super_user` bypasses all checks.
@@ -205,6 +206,8 @@ All endpoints have been fixed with multi-company scoping. Each endpoint verifies
 - User creation API doesn't return the auto-generated initial PIN — frontend needs to call reset-pin to get a PIN, or the API should return it in the response.
 - Build frontend Sale page under branches (Expense page is done).
 - Add `appendTo="body"` to remaining `p-select` and `p-datepicker` dropdowns for mobile.
+- Investigate the Playwright worker process cleanup warning that occasionally appears after the full suite run.
+- Add a native mobile Expense entry screen (current quick action opens the web app at `/expenses`).
 
 ## Test Credentials
 Super Admin `0782832711`, pin=`1234`
@@ -220,7 +223,9 @@ Postgres `:5433` (external), backend `:8000`, frontend `:80`
 If migration files are missing from container: `docker cp backend/alembic/versions/<file> crm-backend:/app/alembic/versions/`
 
 ## Migration Heads
-`h2i3j4k5l6m7` (head — backfill `sales.*` permissions from `expenses.*`, chains from `g1a2b3c4d5e6f`)
+- `o4p5q6r7s8t9u` (head — aligns DB `commissionstatus` enum with `CommissionStatus` model values, chains from `n3o4p5q6r7s8t`)
+- `n3o4p5q6r7s8t` — grants `expenses.create`/`expenses.delete` to `office_admin`/`branch_supervisor` role_permissions
+- `m2n3o4p5q6r7` — adds `monthly_sales_target` to `companies`
 
 ## Known Backend Fixes Applied
 - `reports.py:33,36` — `Commission.amount` → `Commission.total_amount` (dashboard 500 error)
@@ -228,6 +233,9 @@ If migration files are missing from container: `docker cp backend/alembic/versio
 - `fuel.service.ts` + `commission.service.ts` — switched from `params as any` to `HttpParams` builder to avoid literal `"undefined"` strings
 - `competency_catalogue.py` model — added missing `Enum` import from `sqlalchemy`
 - Alembic pitfall: `op.create_table` with an unbound `sa.Enum` fires `CREATE TYPE` regardless of `create_type=False`; migration `g1a2b3c4d5e6f` uses raw SQL + `CAST(:role AS userrole)` inserts; when editing a migration on the host you must `docker cp` it into `crm-backend:/app/alembic/versions/` before `alembic upgrade head`
+- Mobile nginx subfolder: use `location ^~ /m/ { alias /usr/share/nginx/html/mobile/; try_files $uri $uri/ /m/index.html; }` and `location = /m { return 301 /m/; }` so that `/main-*.js` files in the web app are not caught by the `/m` prefix redirect.
+- Mobile dashboard (`/api/v1/dashboard/mobile`): fixed company scoping by joining `Payment.branch_id → Branch.company_id`; changed permission gate to `dashboard.view`; aligned commission earned/pending queries with `CommissionStatus` values (`fully_matured` / `pending`/`partially_matured`).
+- DB `commissionstatus` enum: migration `o4p5q6r7s8t9u` renames `paid` → `fully_matured` and adds `partially_matured` to match the model.
 
 ## Test Files
 - `e2e/login.spec.ts` (11 tests): login, sidebar navigation through collapsed groups, user CRUD/search/PIN
@@ -236,4 +244,4 @@ If migration files are missing from container: `docker cp backend/alembic/versio
 - `e2e/permissions.spec.ts` (2 tests): page loads with catalog groups + matrix, role matrix edit/save via API verify + restore
 - `e2e/expenses.spec.ts` (2 tests): dialog create + pending row, full approve/reject/pay workflow enforced (self-approve 403, manager approve, mark-paid, delete-paid 409, reject + delete-rejected)
 - `e2e/vehicle-scheduling.spec.ts` (1 test): full flow create template, manual/auto vehicles, instructor, product, package, consultation, client plan with manual_days=4, lock dual-phase, verify day 1–4 manual, day 5–10 auto, cleanup
-- `e2e/vehicle-scheduling.spec.ts` (1 test): full flow create template, manual/auto vehicles, instructor, product, package, consultation, client plan with manual_days=4, lock dual-phase, verify day 1–4 manual, day 5–10 auto, cleanup
+- `e2e/mobile.spec.ts` (5 tests): mobile PWA login, dashboard, bottom nav tabs, expenses create, invalid PIN error

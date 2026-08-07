@@ -170,18 +170,21 @@ async def find_and_lock_schedule(
         raise HTTPException(status_code=400, detail="Invalid plan ID")
     vid = uuid.UUID(data.vehicle_id) if data.vehicle_id else None
     vid_auto = uuid.UUID(data.vehicle_id_auto) if data.vehicle_id_auto else None
-    result = await scheduling_service.find_and_lock_schedule(
-        db,
-        plan_id=pid,
-        instructor_id=data.instructor_id,
-        start_date=data.start_date,
-        preferred_times=data.preferred_times,
-        vehicle_id=vid,
-        instructor_id_auto=data.instructor_id_auto,
-        vehicle_id_auto=vid_auto,
-        manual_days=data.manual_days,
-        company_id=current_user.company_id,
-    )
+    try:
+        result = await scheduling_service.find_and_lock_schedule(
+            db,
+            plan_id=pid,
+            instructor_id=data.instructor_id,
+            start_date=data.start_date,
+            preferred_times=data.preferred_times,
+            vehicle_id=vid,
+            instructor_id_auto=data.instructor_id_auto,
+            vehicle_id_auto=vid_auto,
+            manual_days=data.manual_days,
+            company_id=current_user.company_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return result
 
 

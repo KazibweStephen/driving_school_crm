@@ -1,0 +1,179 @@
+<app-page-header title="Schedule" />
+
+@if (step() === 'client') {
+  <div class="space-y-4">
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <label class="mb-1 block text-sm font-medium text-slate-700">Find a client</label>
+      <app-client-search (selected)="selectedClient($event)" />
+    </div>
+  </div>
+}
+
+@if (step() === 'cart') {
+  <div class="space-y-4">
+    <button type="button" class="text-sm text-slate-500" (click)="reset()">
+      <span class="pi pi-chevron-left"></span> Change client
+    </button>
+
+    <div class="rounded-xl bg-slate-900 p-4 text-white">
+      <div class="text-base font-semibold">{{ clientName() }}</div>
+      <div class="text-xs text-slate-300">{{ consultation()?.phone }}</div>
+    </div>
+
+    <div>
+      <h2 class="mb-2 text-sm font-semibold text-slate-900">Pick a product</h2>
+      <div class="space-y-3">
+        @for (ci of scheduleableItems(); track ci.id) {
+          <div class="rounded-xl border border-slate-200 bg-white p-4">
+            <div class="flex items-center justify-between">
+              <div class="text-sm font-semibold text-slate-900">{{ itemLabel(ci) }}</div>
+              <p-button
+                label="Schedule"
+                size="small"
+                (click)="openSetup(ci)"
+                data-testid="schedule-item"
+              />
+            </div>
+          </div>
+        }
+        @if (scheduleableItems().length === 0) {
+          <p class="text-sm text-slate-500">No products with packages for this client.</p>
+        }
+      </div>
+    </div>
+  </div>
+}
+
+@if (step() === 'setup') {
+  @if (targetItem(); as ci) {
+    <div class="space-y-4">
+      <button type="button" class="text-sm text-slate-500" (click)="step.set('cart')">
+        <span class="pi pi-chevron-left"></span> Back
+      </button>
+
+      <div class="rounded-xl border border-slate-200 bg-white p-4">
+        <div class="text-sm font-semibold text-slate-900">{{ itemLabel(ci) }}</div>
+        <div class="text-xs text-slate-500">{{ clientName() }}</div>
+      </div>
+
+      <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Lesson plan template</label>
+          <p-select
+            [options]="templates()"
+            optionLabel="name"
+            optionValue="id"
+            [(ngModel)]="templateId"
+            appendTo="body"
+            class="w-full"
+            (ngModelChange)="onTemplateChange()"
+            data-testid="template-select"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Start date</label>
+          <p-datepicker
+            [ngModel]="startDateObject()"
+            (ngModelChange)="onStartDate($event)"
+            dateFormat="dd/mm/yy"
+            appendTo="body"
+            class="w-full"
+            data-testid="start-date"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Purchased days</label>
+          <p-inputNumber
+            [ngModel]="purchasedDays()"
+            (ngModelChange)="purchasedDays.set($event ?? null)"
+            [min]="1"
+            class="w-full"
+            data-testid="purchased-days"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Instructor (optional)</label>
+          <p-select
+            [options]="instructors()"
+            optionLabel="name"
+            optionValue="phone"
+            [(ngModel)]="instructorId"
+            appendTo="body"
+            class="w-full"
+            placeholder="Auto"
+            data-testid="instructor-select"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Vehicle (optional)</label>
+          <p-select
+            [options]="vehicles()"
+            optionLabel="name"
+            optionValue="id"
+            [(ngModel)]="vehicleId"
+            appendTo="body"
+            class="w-full"
+            placeholder="Auto"
+            data-testid="vehicle-select"
+          />
+        </div>
+      </div>
+
+      <p-button
+        label="Generate & auto-schedule"
+        styleClass="w-full justify-center"
+        [loading]="generating()"
+        (click)="generateAndSchedule()"
+        data-testid="generate-schedule"
+      />
+    </div>
+  }
+}
+
+@if (step() === 'done') {
+  <div class="rounded-2xl bg-white p-6 text-center shadow">
+    <div
+      class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full text-2xl"
+      [class.bg-green-100]="result()?.locked"
+      [class.text-green-600]="result()?.locked"
+      [class.bg-amber-100]="!result()?.locked"
+      [class.text-amber-600]="!result()?.locked"
+    >
+      <span [class]="result()?.locked ? 'pi pi-check' : 'pi pi-exclamation-triangle'"></span>
+    </div>
+    <h2 class="text-lg font-semibold text-slate-900">
+      {{ result()?.locked ? 'Scheduled' : 'Not fully scheduled' }}
+    </h2>
+    <p class="mt-1 text-sm text-slate-500">
+      {{ itemLabel(targetItem()!) }} · {{ clientName() }}
+    </p>
+    @if (result()?.locked) {
+      <p class="mt-2 text-sm text-slate-700">
+        Starts {{ timeOf(result()!.start_time) }} on {{ startDate() }}.
+        @if (result()?.lessons_locked) {
+          {{ result()?.lessons_locked }} lesson(s) locked.
+        }
+      </p>
+    } @else {
+      <p class="mt-2 text-sm text-slate-600">{{ result()?.message || 'No slot found at the preferred time.' }}</p>
+    }
+    <div class="mt-5 space-y-2">
+      <p-button
+        label="New schedule"
+        styleClass="w-full justify-center"
+        (click)="reset()"
+        data-testid="schedule-again"
+      />
+      <p-button
+        label="Change details"
+        styleClass="w-full justify-center"
+        severity="secondary"
+        (click)="step.set('setup')"
+        data-testid="change-details"
+      />
+    </div>
+  </div>
+}
+
+<app-loading-overlay [visible]="loading()" message="Loading..." />
+<app-loading-overlay [visible]="generating()" message="Generating & assigning..." />

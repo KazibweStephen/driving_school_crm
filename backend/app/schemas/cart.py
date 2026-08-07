@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel
 
@@ -33,6 +34,7 @@ class CartItemRead(BaseModel):
     driving_training_duration_days: int | None = None
     theory_training_hours: int | None = None
     permit_processing_duration_days: int | None = None
+    fuel_rate_per_session: Decimal | None = None
     created_at: datetime
     updated_at: datetime
 

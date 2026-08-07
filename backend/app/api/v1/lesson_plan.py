@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
+from app.schemas.fuel import PlanFuelBudget
 from app.schemas.lesson_plan import (
     ClientLessonPlanCreate,
     ClientLessonPlanRead,
@@ -25,6 +26,7 @@ from app.schemas.lesson_plan import (
     LessonTemplateItemRead,
     LessonTemplateItemUpdate,
 )
+from app.services import fuel as fuel_service
 from app.services import lesson_plan as lesson_service
 
 logger = logging.getLogger(__name__)
@@ -551,6 +553,28 @@ async def update_client_lesson(
         preferred_location=data.preferred_location,
         enforce_prerequisites=data.enforce_prerequisites,
     )
+
+    # Fuel snapshot if a lesson is completed directly via edit
+    if (
+        updated.status.value == "completed"
+        and updated.fuel_cost is None
+        and not updated.is_theory
+        and updated.vehicle_id
+    ):
+        vehicle_rate = await fuel_service.get_vehicle_active_rate_for_vehicle(
+            db, updated.vehicle_id, current_user.company_id
+        )
+        if vehicle_rate:
+            updated.fuel_cost = vehicle_rate.rate_per_lesson
+            await db.flush()
+
+    # Fuel budget guard (reflects any vehicle/status change applied above)
+    try:
+        await fuel_service.assert_plan_fuel_budget(
+            db, updated.lesson_plan_id, current_user.company_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=f"Fuel budget exceeded: {e}")
     return ClientLessonRead.model_validate(updated)
 
 
@@ -571,6 +595,12 @@ async def start_lesson(
         raise HTTPException(status_code=403, detail="Lesson is locked. Upgrade package to unlock.")
     if lesson.status.value in ("started", "completed", "paused"):
         raise HTTPException(status_code=400, detail=f"Lesson is already {lesson.status.value}")
+    try:
+        await fuel_service.assert_plan_fuel_budget(
+            db, lesson.lesson_plan_id, current_user.company_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=f"Fuel budget exceeded: {e}")
     updated = await lesson_service.update_client_lesson(
         db, lesson, status="started", instructor_id=current_user.phone
     )
@@ -633,8 +663,27 @@ async def complete_lesson(
         raise HTTPException(status_code=404, detail="Lesson not found")
     if lesson.status.value != "started" and lesson.status.value != "paused":
         raise HTTPException(status_code=400, detail="Lesson must be started before completing")
+
+    # Fuel budget guard: the lesson's vehicle rate is already counted in the
+    # plan's projected fuel because the lesson is not yet completed.
+    try:
+        await fuel_service.assert_plan_fuel_budget(
+            db, lesson.lesson_plan_id, current_user.company_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=f"Fuel budget exceeded: {e}")
+
+    # Snapshot the active fuel rate of the lesson's vehicle at completion
+    fuel_cost = None
+    if not lesson.is_theory and lesson.vehicle_id:
+        vehicle_rate = await fuel_service.get_vehicle_active_rate_for_vehicle(
+            db, lesson.vehicle_id, current_user.company_id
+        )
+        if vehicle_rate:
+            fuel_cost = vehicle_rate.rate_per_lesson
+
     updated = await lesson_service.update_client_lesson(
-        db, lesson, status="completed", outcome=outcome, notes=notes
+        db, lesson, status="completed", outcome=outcome, notes=notes, fuel_cost=fuel_cost
     )
 
     # Send training completed SMS
@@ -726,6 +775,25 @@ async def reorder_lessons(
     lessons_data = [l.model_dump() for l in data.lessons]
     lessons = await lesson_service.bulk_reorder_lessons(db, pid, lessons_data, company_id=current_user.company_id, current_user_role=current_user.role)
     return [ClientLessonRead.model_validate(l) for l in lessons]
+
+
+@router.get("/api/v1/lesson-plans/{plan_id}/fuel", response_model=PlanFuelBudget)
+async def get_plan_fuel_budget(
+    plan_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
+):
+    try:
+        pid = uuid.UUID(plan_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid plan ID")
+    plan = await lesson_service.get_client_plan_by_id(
+        db, pid, company_id=current_user.company_id, current_user_role=current_user.role
+    )
+    if not plan:
+        raise HTTPException(status_code=404, detail="Lesson plan not found")
+    budget = await fuel_service.get_plan_fuel_budget(db, pid, current_user.company_id)
+    return PlanFuelBudget(**budget)
 
 
 @router.get("/api/v1/lesson-plans/lessons/{lesson_id}/history", response_model=list[LessonHistoryRead])

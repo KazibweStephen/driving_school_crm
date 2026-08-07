@@ -1,0 +1,81 @@
+<div class="space-y-4">
+  <div class="rounded-xl bg-slate-900 p-4 text-white">
+    <h1 class="text-lg font-semibold">Office Admin</h1>
+    <p class="text-xs text-slate-300">{{ data() ? 'Today' : 'Loading...' }}</p>
+  </div>
+
+  <div class="grid grid-cols-2 gap-3">
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="text-xs text-slate-500">Daily Sales</div>
+      <div class="mt-1 text-base font-semibold text-slate-900">{{ money(data()?.daily_sales ?? 0) }}</div>
+    </div>
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="text-xs text-slate-500">Pending Collections</div>
+      <div class="mt-1 text-base font-semibold text-amber-600">{{ money(data()?.pending_collections ?? 0) }}</div>
+    </div>
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="text-xs text-slate-500">Commission Earned</div>
+      <div class="mt-1 text-base font-semibold text-green-600">{{ money(data()?.commission_earned ?? 0) }}</div>
+    </div>
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="text-xs text-slate-500">Commission Pending</div>
+      <div class="mt-1 text-base font-semibold text-slate-900">{{ money(data()?.commission_pending ?? 0) }}</div>
+    </div>
+  </div>
+
+  <div class="rounded-xl border border-slate-200 bg-white p-4">
+    <div class="mb-2 flex items-center justify-between">
+      <div class="text-sm font-semibold text-slate-900">Monthly Sales vs Target</div>
+      <div class="text-xs text-slate-500">{{ progressPct() }}%</div>
+    </div>
+    <p-progressBar [value]="progressPct()" [showValue]="false" styleClass="h-2" />
+    <div class="mt-2 flex justify-between text-xs text-slate-500">
+      <span>{{ money(data()?.monthly_sales ?? 0) }}</span>
+      <span>{{ money(data()?.monthly_target ?? 0) }}</span>
+    </div>
+  </div>
+
+  <div>
+    <h2 class="mb-2 text-sm font-semibold text-slate-900">Quick actions</h2>
+    <div class="grid grid-cols-2 gap-3">
+      <button
+        type="button"
+        class="flex flex-col items-center gap-2 rounded-xl bg-slate-900 p-4 text-white"
+        (click)="goTo('/sales')"
+        data-testid="qa-sale"
+      >
+        <span class="pi pi-tags text-xl"></span>
+        <span class="text-sm font-medium">Make Sale</span>
+      </button>
+      <button
+        type="button"
+        class="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 text-slate-800"
+        (click)="goTo('/payments')"
+        data-testid="qa-payment"
+      >
+        <span class="pi pi-wallet text-xl"></span>
+        <span class="text-sm font-medium">Collect</span>
+      </button>
+      <button
+        type="button"
+        class="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 text-slate-800"
+        (click)="openExpense()"
+        data-testid="qa-expense"
+      >
+        <span class="pi pi-money-bill text-xl"></span>
+        <span class="text-sm font-medium">Expense</span>
+      </button>
+      <button
+        type="button"
+        class="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 text-slate-800"
+        (click)="goTo('/lessons')"
+        data-testid="qa-lessons"
+      >
+        <span class="pi pi-calendar text-xl"></span>
+        <span class="text-sm font-medium">Lessons</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<app-loading-overlay [visible]="loading()" message="Loading dashboard..." />

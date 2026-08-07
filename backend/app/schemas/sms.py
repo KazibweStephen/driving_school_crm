@@ -105,7 +105,7 @@ DEFAULT_TEMPLATES = {
     },
     "training_completed": {
         "name": "Training Completed",
-        "category": "training_completed",
+        "category": "general",
         "body": "Dear {name},\n\nCongratulations! You have completed your {training_type} lesson (Day {lesson_number}).\n\nKeep up the great work!\n\nDrive Safe!",
     },
 }

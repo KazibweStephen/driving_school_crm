@@ -12,7 +12,7 @@ from app.models.user import User
 from app.schemas.fuel import (
     FuelRateCreate, FuelRateRead, FuelRateUpdate, FuelRateListResponse,
     FuelRefuelingCreate, FuelRefuelingRead, FuelRefuelingListResponse,
-    FuelAlert,
+    FuelAlert, BudgetAlert,
 )
 from app.schemas.reports import FuelReportResponse, FuelReportItem
 from app.services import fuel as fuel_service
@@ -215,6 +215,17 @@ async def get_fuel_alerts(
         db, current_user.company_id, current_user.role
     )
     return [FuelAlert(**a) for a in alerts]
+
+
+@router.get("/budget-alerts", response_model=list[BudgetAlert])
+async def get_budget_alerts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("fuel.view")),
+):
+    alerts = await fuel_service.get_budget_alerts(
+        db, current_user.company_id, current_user.role
+    )
+    return [BudgetAlert(**a) for a in alerts]
 
 
 @router.get("/status/{vehicle_id}")

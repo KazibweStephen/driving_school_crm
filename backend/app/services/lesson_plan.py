@@ -872,6 +872,7 @@ async def update_client_lesson(
     notes: str | None = None,
     preferred_location: str | None = None,
     enforce_prerequisites: bool | None = None,
+    fuel_cost: Decimal | None = None,
 ) -> ClientLesson:
     if day_number is not None:
         lesson.day_number = day_number
@@ -952,13 +953,6 @@ async def update_client_lesson(
                                 db.add(commission)
             except Exception:
                 pass
-        history = LessonHistory(
-            client_lesson_id=lesson.id,
-            from_state=from_state,
-            to_state=status,
-            changed_by=instructor_id,
-        )
-        db.add(history)
     if difficulty is not None:
         from app.models.lesson_plan import LessonDifficulty
         lesson.difficulty = LessonDifficulty(difficulty)
@@ -996,6 +990,8 @@ async def update_client_lesson(
         lesson.preferred_location = preferred_location
     if enforce_prerequisites is not None:
         lesson.enforce_prerequisites = enforce_prerequisites
+    if fuel_cost is not None:
+        lesson.fuel_cost = Decimal(fuel_cost)
     await db.flush()
     await db.refresh(lesson)
     return lesson

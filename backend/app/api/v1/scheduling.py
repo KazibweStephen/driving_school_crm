@@ -4,7 +4,7 @@ from datetime import date, time
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.lesson_plan import (
@@ -34,7 +34,7 @@ router = APIRouter(tags=["scheduling"])
 async def create_availability(
     data: ClientAvailabilityCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("availabilities.create")),
 ):
     try:
         cid = uuid.UUID(data.cart_item_id)
@@ -55,7 +55,7 @@ async def create_availability(
 async def list_availability(
     cart_item_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("availabilities.view")),
 ):
     try:
         cid = uuid.UUID(cart_item_id)
@@ -73,7 +73,7 @@ async def update_availability(
     avail_id: str,
     data: ClientAvailabilityUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("availabilities.edit")),
 ):
     try:
         aid = uuid.UUID(avail_id)
@@ -96,7 +96,7 @@ async def update_availability(
 async def delete_availability(
     avail_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("availabilities.delete")),
 ):
     try:
         aid = uuid.UUID(avail_id)
@@ -118,7 +118,7 @@ async def get_instructor_schedule(
     instructor_id: str,
     on_date: str = Query(..., description="Date in YYYY-MM-DD format"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("availabilities.view")),
 ):
     try:
         d = date.fromisoformat(on_date)
@@ -137,7 +137,7 @@ async def get_instructor_schedule(
 async def get_weekly_schedule(
     start_date: str = Query(..., description="Start date in YYYY-MM-DD format (Monday)"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("availabilities.view")),
 ):
     try:
         d = date.fromisoformat(start_date)
@@ -160,7 +160,7 @@ async def find_and_lock_schedule(
     plan_id: str,
     data: FindAndLockRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("availabilities.edit")),
 ):
     """Try each preferred start time in order. If one fits, lock the plan's schedule.
     If none fit, return the instructor's full day schedule with collisions highlighted."""
@@ -170,18 +170,21 @@ async def find_and_lock_schedule(
         raise HTTPException(status_code=400, detail="Invalid plan ID")
     vid = uuid.UUID(data.vehicle_id) if data.vehicle_id else None
     vid_auto = uuid.UUID(data.vehicle_id_auto) if data.vehicle_id_auto else None
-    result = await scheduling_service.find_and_lock_schedule(
-        db,
-        plan_id=pid,
-        instructor_id=data.instructor_id,
-        start_date=data.start_date,
-        preferred_times=data.preferred_times,
-        vehicle_id=vid,
-        instructor_id_auto=data.instructor_id_auto,
-        vehicle_id_auto=vid_auto,
-        manual_days=data.manual_days,
-        company_id=current_user.company_id,
-    )
+    try:
+        result = await scheduling_service.find_and_lock_schedule(
+            db,
+            plan_id=pid,
+            instructor_id=data.instructor_id,
+            start_date=data.start_date,
+            preferred_times=data.preferred_times,
+            vehicle_id=vid,
+            instructor_id_auto=data.instructor_id_auto,
+            vehicle_id_auto=vid_auto,
+            manual_days=data.manual_days,
+            company_id=current_user.company_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return result
 
 
@@ -190,7 +193,7 @@ async def lock_schedule(
     plan_id: str,
     data: LockScheduleRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("availabilities.edit")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -225,7 +228,7 @@ async def find_available_slot(
     on_date: str = Query(...),
     preferred_times: str = Query(..., description="Comma-separated HH:MM times, e.g. 17:00,18:00"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("availabilities.view")),
 ):
     """Check each preferred start time in order and return the first available slot."""
     try:

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select as sa_select, func as sqlfunc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_admin_access
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.sms import SmsLog
 from app.models.user import User
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/sms", tags=["sms"])
 async def get_sms_settings(
     company_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("sms.view")),
 ):
     settings = await sms_service.get_company_sms_settings(db, company_id)
     if not settings:
@@ -49,7 +49,7 @@ async def upsert_sms_settings(
     company_id: uuid.UUID,
     data: CompanySmsSettingsUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("sms.send")),
 ):
     settings = await sms_service.upsert_company_sms_settings(
         db,
@@ -73,7 +73,7 @@ async def test_sms(
     company_id: uuid.UUID,
     data: TestSmsRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("sms.send")),
 ):
     ok = await send_sms(db, company_id, data.phone, "Test SMS from your CRM. If you receive this, your SMS provider is configured correctly.")
     if ok:
@@ -93,7 +93,7 @@ async def list_templates(
     category: str | None = None,
     trigger_event: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("sms.view")),
 ):
     templates = await sms_service.list_sms_templates(db, company_id, category=category, trigger_event=trigger_event)
     return [SmsTemplateRead.model_validate(t) for t in templates]
@@ -103,7 +103,7 @@ async def list_templates(
 async def get_template(
     template_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("sms.view")),
 ):
     template = await sms_service.get_sms_template(db, template_id)
     if not template:
@@ -119,7 +119,7 @@ async def create_template(
     company_id: uuid.UUID,
     data: SmsTemplateCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("sms.send")),
 ):
     template = await sms_service.create_sms_template(
         db,
@@ -138,7 +138,7 @@ async def update_template(
     template_id: uuid.UUID,
     data: SmsTemplateUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("sms.send")),
 ):
     template = await sms_service.get_sms_template(db, template_id)
     if not template:
@@ -162,7 +162,7 @@ async def update_template(
 async def delete_template(
     template_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("sms.send")),
 ):
     template = await sms_service.get_sms_template(db, template_id)
     if not template:
@@ -181,7 +181,7 @@ async def send_arbitrary_sms(
     company_id: uuid.UUID,
     data: SendSmsRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("sms.send")),
 ):
     ok = await send_sms(db, company_id, data.phone, data.message)
     if ok:
@@ -197,7 +197,7 @@ async def send_from_template(
     company_id: uuid.UUID,
     data: SendTemplateSmsRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("sms.send")),
 ):
     ok = await send_template_sms(db, company_id, data.phone, data.category, data.variables)
     if ok:
@@ -220,7 +220,7 @@ async def list_sms_logs(
     page: int = 1,
     page_size: int = 50,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin_access),
+    current_user: User = Depends(require_permission("sms.view")),
 ):
     query = sa_select(SmsLog).where(SmsLog.company_id == company_id)
     count_query = sa_select(sqlfunc.count(SmsLog.id)).where(SmsLog.company_id == company_id)

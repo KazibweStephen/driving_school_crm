@@ -6,13 +6,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.fuel import (
     FuelRateCreate, FuelRateRead, FuelRateUpdate, FuelRateListResponse,
     FuelRefuelingCreate, FuelRefuelingRead, FuelRefuelingListResponse,
-    FuelAlert,
+    FuelAlert, BudgetAlert,
 )
 from app.schemas.reports import FuelReportResponse, FuelReportItem
 from app.services import fuel as fuel_service
@@ -26,7 +26,7 @@ async def list_fuel_rates(
     vehicle_id: Optional[uuid.UUID] = Query(None),
     active_only: bool = Query(False),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("fuel.view")),
 ):
     items = await fuel_service.list_fuel_rates(
         db,
@@ -57,7 +57,7 @@ async def list_fuel_rates(
 async def get_active_rate(
     vehicle_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("fuel.view")),
 ):
     company_id = await resolve_company_id(db, current_user)
     if not company_id:
@@ -86,7 +86,7 @@ async def get_active_rate(
 async def create_fuel_rate(
     data: FuelRateCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("fuel.create")),
 ):
     import logging
     logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ async def update_fuel_rate(
     rate_id: uuid.UUID,
     data: FuelRateUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("fuel.edit")),
 ):
     rate = await fuel_service.get_fuel_rate_by_id(db, rate_id, current_user.company_id)
     if not rate:
@@ -119,7 +119,7 @@ async def update_fuel_rate(
 async def delete_fuel_rate(
     rate_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("fuel.delete")),
 ):
     rate = await fuel_service.get_fuel_rate_by_id(db, rate_id, current_user.company_id)
     if not rate:
@@ -133,7 +133,7 @@ async def list_refuelings(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("fuel.view")),
 ):
     items, total = await fuel_service.list_fuel_refuelings(
         db,
@@ -181,7 +181,7 @@ async def list_refuelings(
 async def create_refueling(
     data: FuelRefuelingCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("fuel.create")),
 ):
     company_id = await resolve_company_id(db, current_user)
     if not company_id:
@@ -196,7 +196,7 @@ async def create_refueling(
 async def delete_refueling(
     refueling_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("fuel.delete")),
 ):
     refueling = await fuel_service.get_fuel_refueling_by_id(
         db, refueling_id, current_user.company_id
@@ -209,7 +209,7 @@ async def delete_refueling(
 @router.get("/alerts", response_model=list[FuelAlert])
 async def get_fuel_alerts(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("fuel.view")),
 ):
     alerts = await fuel_service.get_fuel_alerts(
         db, current_user.company_id, current_user.role
@@ -217,11 +217,22 @@ async def get_fuel_alerts(
     return [FuelAlert(**a) for a in alerts]
 
 
+@router.get("/budget-alerts", response_model=list[BudgetAlert])
+async def get_budget_alerts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("fuel.view")),
+):
+    alerts = await fuel_service.get_budget_alerts(
+        db, current_user.company_id, current_user.role
+    )
+    return [BudgetAlert(**a) for a in alerts]
+
+
 @router.get("/status/{vehicle_id}")
 async def get_vehicle_fuel_status(
     vehicle_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("fuel.view")),
 ):
     company_id = await resolve_company_id(db, current_user)
     if not company_id:
@@ -240,7 +251,7 @@ async def fuel_report(
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("fuel.view")),
 ):
     result = await fuel_service.get_fuel_report(
         db,

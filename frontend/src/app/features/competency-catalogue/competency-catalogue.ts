@@ -100,10 +100,7 @@ export class CompetencyCatalogueCmp implements OnInit {
   categoryOptions = computed(() =>
     this.categories().map(c => ({ label: c.name, value: c.id }))
   );
-  isAdmin = computed(() => {
-    const role = this.auth.currentUserRole();
-    return role === 'super_user' || role === 'company_super_user';
-  });
+  isAdmin = computed(() => this.auth.hasPermission('competency.manage'));
 
   constructor(
     private service: CompetencyCatalogueService,

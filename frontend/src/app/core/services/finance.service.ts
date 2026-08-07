@@ -150,6 +150,22 @@ export class FinanceService {
     return this.http.patch<Expense>(`${this.base}/expenses/${id}`, data);
   }
 
+  approveExpense(id: string): Observable<Expense> {
+    return this.http.post<Expense>(`${this.base}/expenses/${id}/approve`, {});
+  }
+
+  rejectExpense(id: string, reason: string): Observable<Expense> {
+    return this.http.post<Expense>(`${this.base}/expenses/${id}/reject`, { rejection_reason: reason });
+  }
+
+  markExpensePaid(id: string): Observable<Expense> {
+    return this.http.post<Expense>(`${this.base}/expenses/${id}/mark-paid`, {});
+  }
+
+  deleteExpense(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/expenses/${id}`);
+  }
+
   getCollectionsSheet(params?: {
     period?: string;
     start_date?: string;

@@ -23,6 +23,13 @@
     </button>
     <button
       class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
+      (click)="changePin.open()"
+      aria-label="Change PIN"
+    >
+      <span class="pi pi-key text-xl"></span>
+    </button>
+    <button
+      class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
       (click)="auth.logout()"
       aria-label="Logout"
     >
@@ -51,9 +58,21 @@
     </button>
     <div class="ml-1 flex items-center gap-2 border-l pl-3">
       <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-        {{ auth.currentUser()?.charAt(0) || 'U' }}
+        {{ displayInitial }}
       </div>
-      <span class="hidden text-sm font-medium text-gray-900 xl:block">{{ auth.currentUser() || 'User' }}</span>
+      <div class="hidden leading-tight xl:block">
+        <p class="text-sm font-medium text-gray-900">{{ displayName }}</p>
+        <p class="font-mono text-xs text-gray-500">{{ auth.currentUser() }}</p>
+      </div>
+      <button
+        class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-blue-600"
+        (click)="changePin.open()"
+        pTooltip="Change PIN"
+        tooltipPosition="bottom"
+        aria-label="Change PIN"
+      >
+        <span class="pi pi-key text-lg"></span>
+      </button>
       <button
         class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-red-600"
         (click)="auth.logout()"
@@ -126,17 +145,21 @@
               </div>
               <div class="flex shrink-0 flex-col items-end gap-1">
                 @if (n.direction === 'incoming') {
-                  <button
-                    class="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                    [disabled]="receivingId() === n.id"
-                    (click)="receiveTransfer(n)"
-                  >
-                    @if (receivingId() === n.id) {
-                      <span class="pi pi-spin pi-spinner"></span>
-                    } @else {
-                      Receive
-                    }
-                  </button>
+                  @if (auth.hasPermission('transfers.manage')) {
+                    <button
+                      class="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                      [disabled]="receivingId() === n.id"
+                      (click)="receiveTransfer(n)"
+                    >
+                      @if (receivingId() === n.id) {
+                        <span class="pi pi-spin pi-spinner"></span>
+                      } @else {
+                        Receive
+                      }
+                    </button>
+                  } @else {
+                    <span class="text-xs text-gray-400">Assign staff can receive</span>
+                  }
                 } @else {
                   <p-tag value="Initiated" severity="warn" />
                 }
@@ -183,7 +206,7 @@
 
   <nav class="flex-1 overflow-y-auto p-3">
     <!-- Top-level items -->
-    @for (item of topItems; track item.path) {
+    @for (item of visibleTopItems; track item.path) {
       <a
         [routerLink]="item.path"
         routerLinkActive="bg-blue-50 text-blue-700 font-medium"
@@ -196,7 +219,7 @@
     }
 
     <!-- Grouped items -->
-    @for (group of navGroups; track group.label) {
+    @for (group of visibleNavGroups; track group.label) {
       <div class="mt-2">
         <button
           class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-500 hover:bg-gray-100"
@@ -205,11 +228,11 @@
           <span [class]="'pi ' + group.icon + ' text-lg'"></span>
           <span class="font-semibold">{{ group.label }}</span>
           <span class="ml-auto pi text-xs transition-transform"
-            [class.pi-chevron-down]="group.expanded"
-            [class.pi-chevron-right]="!group.expanded"></span>
+            [class.pi-chevron-down]="isGroupExpanded(group)"
+            [class.pi-chevron-right]="!isGroupExpanded(group)"></span>
         </button>
 
-        @if (group.expanded) {
+        @if (isGroupExpanded(group)) {
           <div class="ml-2 mt-0.5 border-l pl-2">
             @for (child of group.children; track child.path) {
               <a
@@ -232,11 +255,21 @@
   <div class="border-t p-3">
     <div class="flex items-center gap-3">
       <div class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-        {{ auth.currentUser()?.charAt(0) || 'U' }}
+        {{ displayInitial }}
       </div>
-      <div class="min-w-0 flex-1">
-        <p class="truncate text-sm font-medium text-gray-900">{{ auth.currentUser() || 'User' }}</p>
+      <div class="min-w-0 flex-1 leading-tight">
+        <p class="truncate text-sm font-medium text-gray-900">{{ displayName }}</p>
+        <p class="truncate font-mono text-xs text-gray-500">{{ auth.currentUser() }}</p>
       </div>
+      <button
+        class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-blue-600"
+        (click)="changePin.open()"
+        pTooltip="Change PIN"
+        tooltipPosition="top"
+        aria-label="Change PIN"
+      >
+        <span class="pi pi-key text-lg"></span>
+      </button>
       <button
         class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-red-600"
         (click)="auth.logout()"
@@ -255,3 +288,5 @@
     <router-outlet />
   </div>
 </main>
+
+<app-change-pin-dialog #changePin />

@@ -1,0 +1,380 @@
+<app-page-header title="Sales" />
+
+@if (step() === 'home') {
+  <div class="space-y-3">
+    <button
+      type="button"
+      class="flex w-full items-center gap-3 rounded-2xl bg-slate-900 p-5 text-left text-white shadow"
+      (click)="startFlow(true, false)"
+      data-testid="new-sale"
+    >
+      <span class="pi pi-tags text-2xl"></span>
+      <span>
+        <span class="block text-base font-semibold">Make a Sale</span>
+        <span class="block text-xs text-slate-300">Sell a product or package to a new client</span>
+      </span>
+    </button>
+    <button
+      type="button"
+      class="flex w-full items-center gap-3 rounded-2xl border border-slate-300 bg-white p-5 text-left text-slate-800"
+      (click)="startFlow(true, true)"
+      data-testid="previous-sale"
+    >
+      <span class="pi pi-history text-2xl"></span>
+      <span>
+        <span class="block text-base font-semibold">Enter Previous Sale</span>
+        <span class="block text-xs text-slate-500">Record a backdated sale</span>
+      </span>
+    </button>
+  </div>
+}
+
+@if (step() === 'client') {
+  <div class="space-y-4">
+    <div class="flex items-center gap-2">
+      <button type="button" class="text-sm text-slate-500" (click)="step.set('home')">
+        <span class="pi pi-chevron-left"></span> Back
+      </button>
+      <h2 class="text-sm font-medium text-slate-700">
+        {{ isPrevious() ? 'Previous sale' : 'New sale' }} · Step 1 of 3
+      </h2>
+    </div>
+
+    <div class="flex gap-2">
+      <button
+        type="button"
+        [class.bg-slate-900]="isNewSale()"
+        [class.text-white]="isNewSale()"
+        [class.bg-white]="!isNewSale()"
+        [class.text-slate-500]="!isNewSale()"
+        class="flex-1 rounded-lg border border-slate-300 py-2 text-sm"
+        (click)="isNewSale.set(true)"
+        data-testid="new-sale-tab"
+      >
+        New Sale
+      </button>
+      <button
+        type="button"
+        [class.bg-slate-900]="!isNewSale()"
+        [class.text-white]="!isNewSale()"
+        [class.bg-white]="isNewSale()"
+        [class.text-slate-500]="isNewSale()"
+        class="flex-1 rounded-lg border border-slate-300 py-2 text-sm"
+        (click)="isNewSale.set(false)"
+        data-testid="upsell-tab"
+      >
+        Upsell
+      </button>
+    </div>
+
+    @if (isNewSale()) {
+      <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Phone *</label>
+          <input pInputText type="tel" [(ngModel)]="phone" class="w-full" data-testid="client-phone" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700">First name *</label>
+            <input pInputText [(ngModel)]="firstName" class="w-full" data-testid="client-first" />
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700">Last name</label>
+            <input pInputText [(ngModel)]="lastName" class="w-full" />
+          </div>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Location</label>
+          <input pInputText [(ngModel)]="location" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">How did you hear about us?</label>
+          <p-select
+            [options]="howTheyKnewUsOptions"
+            [(ngModel)]="howTheyKnewUs"
+            placeholder="Select source"
+            appendTo="body"
+            class="w-full"
+            data-testid="how-they-knew-us"
+          />
+        </div>
+      </div>
+    } @else {
+      <div class="rounded-xl border border-slate-200 bg-white p-4">
+        <label class="mb-1 block text-sm font-medium text-slate-700">Find a client to upsell</label>
+        <app-client-search (selected)="onClientSelected($event)" />
+      </div>
+    }
+
+    @if (canBackdate()) {
+      <div class="rounded-xl border border-slate-200 bg-white p-4">
+        <label class="mb-1 block text-sm font-medium text-slate-700">Sale date</label>
+        <p-datepicker
+          [ngModel]="documentDateObject()"
+          (ngModelChange)="onDocumentDate($event)"
+          dateFormat="dd/mm/yy"
+          appendTo="body"
+          class="w-full"
+          data-testid="document-date"
+        />
+      </div>
+    }
+
+    <p-button
+      label="Continue"
+      styleClass="w-full justify-center"
+      (click)="nextToProducts()"
+      data-testid="continue-client"
+    />
+  </div>
+}
+
+@if (step() === 'products') {
+  <div class="space-y-4">
+    <div class="flex items-center gap-2">
+      <button type="button" class="text-sm text-slate-500" (click)="backToClient()">
+        <span class="pi pi-chevron-left"></span> Back
+      </button>
+      <h2 class="text-sm font-medium text-slate-700">Step 2 of 3 · Products</h2>
+    </div>
+
+    @if (!isNewSale() && existingItems().length > 0) {
+      <div class="rounded-xl border border-slate-200 bg-white p-4">
+        <h3 class="mb-2 text-sm font-semibold text-slate-900">Already purchased</h3>
+        <ul class="space-y-2">
+          @for (ci of existingItems(); track ci.id) {
+            <li class="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+              <div class="flex items-center justify-between">
+                <span class="font-medium text-slate-800">{{ ci.package_name || ci.product_name || 'Product' }}</span>
+                <span class="text-xs text-green-600">{{ ci.status === 'converted_paid' ? 'Paid' : 'Paying' }}</span>
+              </div>
+              <div class="mt-1 flex justify-between text-xs text-slate-500">
+                <span>Total: {{ money(existingTotalForItem(ci)) }}</span>
+                <span>Paid: <span class="text-green-600">{{ money(existingPaidForItem(ci)) }}</span></span>
+                <span>Bal: <span class="text-amber-600">{{ money(existingBalanceForItem(ci)) }}</span></span>
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    <div class="space-y-3">
+      @for (product of products(); track product.id) {
+        <div class="rounded-xl border border-slate-200 bg-white p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm font-semibold text-slate-900">{{ product.name }}</div>
+              @if (product.duration_label) {
+                <div class="text-xs text-slate-500">{{ product.duration_label }}</div>
+              }
+            </div>
+            @if (product.packages.length === 0) {
+              <p-button
+                label="Add"
+                size="small"
+                [disabled]="isAdded(product) || isPurchased(product)"
+                (click)="addProductOnly(product)"
+                data-testid="add-product"
+              />
+            }
+          </div>
+          @if (product.packages.length > 0) {
+            <ul class="mt-2 divide-y divide-slate-100">
+              @for (pkg of product.packages; track pkg.id) {
+                <li class="flex items-center justify-between py-2">
+                  <div>
+                    <div class="text-sm text-slate-700">{{ pkg.name }}</div>
+                    <div class="text-xs text-slate-500">{{ money(pkg.price) }}</div>
+                  </div>
+                  <p-button
+                    label="Add"
+                    size="small"
+                    [disabled]="selectedItems().some((i) => i.package?.id === pkg.id) || isPurchased(product, pkg)"
+                    (click)="addPackage(product, pkg)"
+                    data-testid="add-package"
+                  />
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      }
+      @if (products().length === 0) {
+        <p class="text-sm text-slate-500">No active products. Add them in the web app first.</p>
+      }
+    </div>
+
+    @if (selectedItems().length > 0) {
+      <div class="rounded-xl border border-slate-200 bg-white p-4">
+        <h3 class="mb-2 text-sm font-semibold text-slate-900">Adding</h3>
+        <ul class="space-y-2">
+          @for (item of selectedItems(); track $index) {
+            <li class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+              <div>
+                <div class="text-sm text-slate-800">{{ item.package?.name || item.product.name }}</div>
+                <div class="text-xs text-slate-500">{{ money(item.price) }}</div>
+              </div>
+              <button type="button" class="text-red-600" (click)="removeItem($index)">
+                <span class="pi pi-times"></span>
+              </button>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    <p-button
+      label="Continue to Payment"
+      styleClass="w-full justify-center"
+      (click)="nextToPayment()"
+      data-testid="continue-payment"
+    />
+  </div>
+}
+
+@if (step() === 'payment') {
+  <div class="space-y-4">
+    <div class="flex items-center gap-2">
+      <button type="button" class="text-sm text-slate-500" (click)="backToProducts()">
+        <span class="pi pi-chevron-left"></span> Back
+      </button>
+      <h2 class="text-sm font-medium text-slate-700">Step 3 of 3 · Payment</h2>
+    </div>
+
+    <div class="space-y-3">
+      @for (item of selectedItems(); track $index) {
+        <div class="rounded-xl border border-slate-200 bg-white p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm font-semibold text-slate-900">
+                {{ item.package?.name || item.product.name }}
+              </div>
+              <div class="text-xs text-slate-500">Price: {{ money(item.price) }}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-semibold text-slate-900">
+                Remaining: {{ money(Math.max(0, item.price - item.allocation)) }}
+              </div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="mb-1 block text-sm font-medium text-slate-700">Amount received</label>
+            <input
+              type="number"
+              min="0"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              [(ngModel)]="item.allocation"
+              data-testid="allocation"
+            />
+            <p-button
+              label="Calculate schedule"
+              size="small"
+              styleClass="mt-2 w-full justify-center"
+              (click)="recomputeSchedule(item)"
+              data-testid="recompute-schedule"
+            />
+          </div>
+          @if (item.price > 0 && item.allocation < item.price) {
+            <div class="mt-3 border-t border-slate-100 pt-3">
+              <div class="mb-2 text-sm font-medium text-slate-700">Future installments</div>
+              @for (inst of item.installments; track $index) {
+                <div class="mb-2 grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    [ngModel]="inst.amount"
+                    (ngModelChange)="setInstallmentAmount(item, $index, $event)"
+                    data-testid="installment-amount"
+                  />
+                  <p-datepicker
+                    [ngModel]="parseDate(inst.due_date)"
+                    (ngModelChange)="setInstallmentDate(item, $index, $event)"
+                    dateFormat="dd/mm/yy"
+                    appendTo="body"
+                    class="w-full"
+                  />
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="rounded-xl bg-slate-900 p-4 text-white">
+      <div class="flex justify-between text-sm">
+        <span>Total</span>
+        <span>{{ money(totalPrice()) }}</span>
+      </div>
+      <div class="flex justify-between text-sm">
+        <span>Paid now</span>
+        <span class="font-semibold">{{ money(totalPaid()) }}</span>
+      </div>
+      <div class="flex justify-between text-sm">
+        <span>Balance</span>
+        <span>{{ money(totalRemaining()) }}</span>
+      </div>
+    </div>
+
+    <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700">Receipt number (optional)</label>
+        <input pInputText [(ngModel)]="receiptNumber" class="w-full" data-testid="receipt-number" />
+      </div>
+      @if (branches().length > 1) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Collecting branch</label>
+          <p-select
+            [options]="branches()"
+            optionLabel="name"
+            optionValue="id"
+            [(ngModel)]="branchId"
+            appendTo="body"
+            class="w-full"
+            data-testid="branch"
+          />
+        </div>
+      }
+    </div>
+
+    <p-button
+      label="Complete Sale"
+      styleClass="w-full justify-center"
+      [loading]="submitting()"
+      (click)="submitSale()"
+      data-testid="submit-sale"
+    />
+  </div>
+}
+
+@if (step() === 'done') {
+  <div class="rounded-2xl bg-white p-6 text-center shadow">
+    <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-2xl text-green-600">
+      <span class="pi pi-check"></span>
+    </div>
+    <h2 class="text-lg font-semibold text-slate-900">{{ isNewSale() ? 'Sale completed' : 'Upsell completed' }}</h2>
+    <p class="mt-1 text-sm text-slate-500">
+      {{ money(totalPaid()) }} received from {{ isNewSale() ? (firstName || 'client') : (client?.first_name || 'client') }}
+    </p>
+    <div class="mt-5 space-y-2">
+      <p-button
+        label="View receipt"
+        styleClass="w-full justify-center"
+        (click)="openReceipt()"
+        data-testid="view-receipt"
+      />
+      <p-button
+        label="New sale"
+        styleClass="w-full justify-center"
+        severity="secondary"
+        (click)="resetSale()"
+        data-testid="new-sale-again"
+      />
+    </div>
+  </div>
+}
+
+<app-loading-overlay [visible]="loading()" message="Loading..." />
+<app-loading-overlay [visible]="submitting()" message="Completing sale..." />

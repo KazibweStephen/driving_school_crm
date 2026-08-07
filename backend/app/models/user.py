@@ -32,6 +32,8 @@ class User(Base):
 
     phone: Mapped[str] = mapped_column(String(20), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    first_name: Mapped[str] = mapped_column(String(50), nullable=False, server_default="")
+    last_name: Mapped[str] = mapped_column(String(50), nullable=False, server_default="")
     hashed_pin: Mapped[str] = mapped_column(String(128), nullable=False)
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, values_callable=lambda x: [e.value for e in x]),

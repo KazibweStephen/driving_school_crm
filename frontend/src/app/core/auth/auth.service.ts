@@ -19,9 +19,11 @@ export class AuthService {
   private readonly REFRESH_KEY = 'refresh_token';
 
   currentUser = signal<string | null>(null);
+  currentUserName = signal<string | null>(null);
   currentUserRole = signal<string | null>(null);
   currentUserCompanyId = signal<string | null>(null);
   currentUserCanBackdate = signal(false);
+  permissions = signal<string[]>([]);
   currencyCode = signal('UGX');
   isAuthenticated = signal(false);
   sessionExpired = signal(false);
@@ -39,9 +41,11 @@ export class AuthService {
       this.isAuthenticated.set(true);
       const phone = this.decodePhoneFromToken(token);
       this.currentUser.set(phone);
+      this.currentUserName.set(this.decodeNameFromToken(token));
       this.currentUserRole.set(this.decodeRoleFromToken(token));
       this.currentUserCompanyId.set(this.decodeCompanyId(token));
       this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
+      this.permissions.set(this.decodePermissions(token));
       this.currencyCode.set(this.decodeCurrency(token));
       this.startSessionTimer();
     }
@@ -51,16 +55,39 @@ export class AuthService {
     return this.http.post<TokenResponse>('/api/v1/auth/login', data);
   }
 
+  requestPinReset(phone: string) {
+    return this.http.post<{ message: string }>('/api/v1/auth/forgot-pin', { phone });
+  }
+
+  verifyPinReset(data: { phone: string; otp: string; new_pin: string }) {
+    return this.http.post<{ message: string }>('/api/v1/auth/forgot-pin/verify', data);
+  }
+
   setSession(token: string, refreshToken: string) {
     localStorage.setItem(this.TOKEN_KEY, token);
     localStorage.setItem(this.REFRESH_KEY, refreshToken);
     this.isAuthenticated.set(true);
     this.currentUser.set(this.decodePhoneFromToken(token));
+    this.currentUserName.set(this.decodeNameFromToken(token));
     this.currentUserRole.set(this.decodeRoleFromToken(token));
     this.currentUserCompanyId.set(this.decodeCompanyId(token));
     this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
+    this.permissions.set(this.decodePermissions(token));
     this.currencyCode.set(this.decodeCurrency(token));
     this.startSessionTimer();
+  }
+
+  hasPermission(code: string): boolean {
+    return this.permissions().includes(code);
+  }
+
+  hasAnyPermission(codes: string[]): boolean {
+    return codes.some((c) => this.hasPermission(c));
+  }
+
+  hasRole(...roles: string[]): boolean {
+    const role = this.currentUserRole();
+    return role !== null && roles.includes(role);
   }
 
   logout() {
@@ -133,6 +160,8 @@ export class AuthService {
     localStorage.removeItem(this.REFRESH_KEY);
     this.isAuthenticated.set(false);
     this.currentUser.set(null);
+    this.currentUserName.set(null);
+    this.permissions.set([]);
     this.sessionExpired.set(false);
     this.sessionCountdown.set(160);
     this.clearTimers();
@@ -164,6 +193,11 @@ export class AuthService {
     return (payload?.['sub'] as string) || null;
   }
 
+  private decodeNameFromToken(token: string): string | null {
+    const payload = this.decodeToken(token);
+    return (payload?.['name'] as string) || null;
+  }
+
   private decodeRoleFromToken(token: string): string | null {
     const payload = this.decodeToken(token);
     return (payload?.['role'] as string) || null;
@@ -182,5 +216,11 @@ export class AuthService {
   private decodeCompanyId(token: string): string | null {
     const payload = this.decodeToken(token);
     return (payload?.['company_id'] as string) || null;
+  }
+
+  private decodePermissions(token: string): string[] {
+    const payload = this.decodeToken(token);
+    const perms = payload?.['permissions'];
+    return Array.isArray(perms) ? (perms as string[]) : [];
   }
 }

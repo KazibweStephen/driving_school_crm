@@ -1,4 +1,4 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
@@ -17,6 +17,7 @@ import { TooltipModule } from 'primeng/tooltip';
 import { UserService, User } from '../../../core/services/user.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { CompanyService, Company, Branch } from '../../../core/services/company.service';
+import { ChangePinDialog } from '../../../shared/components/change-pin-dialog';
 
 @Component({
   selector: 'app-users',
@@ -34,6 +35,7 @@ import { CompanyService, Company, Branch } from '../../../core/services/company.
     TagModule,
     ToastModule,
     TooltipModule,
+    ChangePinDialog,
   ],
   providers: [ConfirmationService, MessageService],
   templateUrl: './users.html',
@@ -53,14 +55,13 @@ export class Users implements OnInit {
   showCreateDialog = signal(false);
   showEditDialog = signal(false);
   showResetPinDialog = signal(false);
-  showChangePinDialog = signal(false);
 
   editingUser = signal<User | null>(null);
 
   companies = signal<Company[]>([]);
   branches = signal<Branch[]>([]);
-  newUser: { phone: string; name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; branch_ids: string[] } = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
-  editData: { name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; branch_ids: string[] } = { name: '', role: '', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
+  newUser: { phone: string; first_name: string; last_name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; branch_ids: string[] } = { phone: '', first_name: '', last_name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
+  editData: { first_name: string; last_name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; branch_ids: string[] } = { first_name: '', last_name: '', role: '', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
   get isSuperUser(): boolean {
     return this.auth.currentUserRole() === 'super_user';
   }
@@ -68,7 +69,7 @@ export class Users implements OnInit {
     return this.isSuperUser ? this.roles : this.roles.filter(r => r.value !== 'company_super_user');
   }
   resetPinResult = signal<string | null>(null);
-  changePinData = { old_pin: '', new_pin: '' };
+  @ViewChild('changePinDialog') changePinDialog!: ChangePinDialog;
 
   roles = [
     { label: 'Super User', value: 'super_user' },
@@ -177,9 +178,21 @@ export class Users implements OnInit {
   async createUser() {
     this.loading.set(true);
     try {
-      await this.userService.create(this.newUser).toPromise();
+      await this.userService
+        .create({
+          phone: this.newUser.phone,
+          name: this.fullName(this.newUser.first_name, this.newUser.last_name),
+          first_name: this.newUser.first_name,
+          last_name: this.newUser.last_name,
+          role: this.newUser.role,
+          company_id: this.newUser.company_id,
+          is_company_admin: this.newUser.is_company_admin,
+          can_backdate: this.newUser.can_backdate,
+          branch_ids: this.newUser.branch_ids,
+        })
+        .toPromise();
       this.showCreateDialog.set(false);
-      this.newUser = { phone: '', name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
+      this.newUser = { phone: '', first_name: '', last_name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
       await this.loadUsers();
       this.messageService.add({
         severity: 'success',
@@ -197,9 +210,13 @@ export class Users implements OnInit {
     }
   }
 
+  fullName(first: string, last: string): string {
+    return [first.trim(), last.trim()].filter(Boolean).join(' ');
+  }
+
   openEdit(user: User) {
     this.editingUser.set(user);
-    this.editData = { name: user.name, role: user.role, company_id: user.company_id, is_company_admin: user.is_company_admin, can_backdate: user.can_backdate, branch_ids: user.branch_ids || [] };
+    this.editData = { first_name: user.first_name, last_name: user.last_name, role: user.role, company_id: user.company_id, is_company_admin: user.is_company_admin, can_backdate: user.can_backdate, branch_ids: user.branch_ids || [] };
     this.showEditDialog.set(true);
   }
 
@@ -210,7 +227,9 @@ export class Users implements OnInit {
     try {
       await this.userService
         .update(user.phone, {
-          name: this.editData.name,
+          name: this.fullName(this.editData.first_name, this.editData.last_name),
+          first_name: this.editData.first_name,
+          last_name: this.editData.last_name,
           role: this.editData.role,
           company_id: this.editData.company_id,
           is_company_admin: this.editData.is_company_admin,
@@ -329,25 +348,6 @@ export class Users implements OnInit {
         severity: 'error',
         summary: 'Error',
         detail: 'Failed to reset PIN',
-      });
-    }
-  }
-
-  async saveChangePin() {
-    try {
-      await this.userService.changePin(this.changePinData).toPromise();
-      this.showChangePinDialog.set(false);
-      this.changePinData = { old_pin: '', new_pin: '' };
-      this.messageService.add({
-        severity: 'success',
-        summary: 'PIN Changed',
-        detail: 'Your PIN has been updated',
-      });
-    } catch {
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to change PIN. Check your current PIN.',
       });
     }
   }

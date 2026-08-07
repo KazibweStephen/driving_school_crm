@@ -20,11 +20,9 @@ test.describe('Consultations & Clients Flow', () => {
     await page.goto('/consultations');
     await expect(page).toHaveURL(/\/consultations/, { timeout: 10000 });
     await expect(page.locator('h1')).toContainText('Consultations');
-    await page.waitForTimeout(2000);
-    // Desktop table should have rows
+    // Desktop table should have rows (auto-wait instead of fixed timeout)
     const rows = page.locator('table').first().locator('tbody tr');
-    const count = await rows.count();
-    expect(count).toBeGreaterThan(0);
+    await expect(rows.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('searches for existing consultation by phone', async ({ page }) => {

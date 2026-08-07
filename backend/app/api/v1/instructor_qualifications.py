@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.lesson_plan import (
@@ -24,7 +24,7 @@ router = APIRouter(tags=["instructor-qualifications"])
 async def create_qualification(
     data: InstructorQualificationCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("instructor_qualifications.create")),
 ):
     qual = await qual_service.create_qualification(
         db,
@@ -45,7 +45,7 @@ async def create_qualification(
 async def list_qualifications(
     instructor_phone: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("instructor_qualifications.view")),
 ):
     quals = await qual_service.list_qualifications(
         db, instructor_phone,
@@ -62,7 +62,7 @@ async def list_qualifications(
 async def get_qualification(
     qual_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("instructor_qualifications.view")),
 ):
     try:
         qid = uuid.UUID(qual_id)
@@ -86,7 +86,7 @@ async def update_qualification(
     qual_id: str,
     data: InstructorQualificationUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("instructor_qualifications.edit")),
 ):
     try:
         qid = uuid.UUID(qual_id)
@@ -107,7 +107,7 @@ async def update_qualification(
 async def delete_qualification(
     qual_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("instructor_qualifications.delete")),
 ):
     try:
         qid = uuid.UUID(qual_id)

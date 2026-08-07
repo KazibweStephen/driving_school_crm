@@ -5,9 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
+from app.schemas.fuel import PlanFuelBudget
 from app.schemas.lesson_plan import (
     ClientLessonPlanCreate,
     ClientLessonPlanRead,
@@ -25,6 +26,7 @@ from app.schemas.lesson_plan import (
     LessonTemplateItemRead,
     LessonTemplateItemUpdate,
 )
+from app.services import fuel as fuel_service
 from app.services import lesson_plan as lesson_service
 
 logger = logging.getLogger(__name__)
@@ -40,7 +42,7 @@ async def list_templates(
     transmission_type: str | None = Query(None),
     status: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     templates = await lesson_service.list_templates(db, transmission_type, status, company_id=current_user.company_id)
     return [LessonPlanTemplateRead.model_validate(t) for t in templates]
@@ -50,7 +52,7 @@ async def list_templates(
 async def create_template(
     data: LessonPlanTemplateCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.create")),
 ):
     items_data = [i.model_dump() for i in data.items]
     template = await lesson_service.create_template(
@@ -72,7 +74,7 @@ async def create_template(
 async def get_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -89,7 +91,7 @@ async def update_template(
     template_id: str,
     data: LessonPlanTemplateUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -116,7 +118,7 @@ async def update_template(
 async def delete_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.delete")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -133,7 +135,7 @@ async def duplicate_template(
     template_id: str,
     name: str = Query(..., description="Name for the duplicated template"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.duplicate")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -150,7 +152,7 @@ async def duplicate_template(
 async def archive_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.archive")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -167,7 +169,7 @@ async def archive_template(
 async def export_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.export")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -183,7 +185,7 @@ async def export_template(
 async def import_template_from_json(
     data: dict,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.import")),
 ):
     try:
         template, import_log = await lesson_service.import_template_json(db, data, created_by_phone=current_user.phone, company_id=current_user.company_id)
@@ -200,7 +202,7 @@ async def import_template_from_json(
 async def validate_import_json(
     data: dict,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.import")),
 ):
     result = await lesson_service.validate_import_json(data)
     return LessonPlanImportValidate(**result)
@@ -214,7 +216,7 @@ async def create_template_item(
     template_id: str,
     data: LessonTemplateItemCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         tid = uuid.UUID(template_id)
@@ -244,7 +246,7 @@ async def update_template_item(
     item_id: str,
     data: LessonTemplateItemUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         iid = uuid.UUID(item_id)
@@ -285,7 +287,7 @@ async def update_template_item(
 async def delete_template_item(
     item_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         iid = uuid.UUID(item_id)
@@ -312,7 +314,7 @@ async def delete_template_item(
 async def list_client_plans(
     cart_item_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     try:
         cid = uuid.UUID(cart_item_id)
@@ -327,7 +329,7 @@ async def create_client_plan(
     cart_item_id: str,
     data: ClientLessonPlanCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.create")),
 ):
     try:
         cid = uuid.UUID(cart_item_id)
@@ -400,7 +402,7 @@ async def generate_student_plan(
     purchased_days: int,
     notes: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.create")),
 ):
     try:
         cid = uuid.UUID(cart_item_id)
@@ -426,7 +428,7 @@ async def generate_student_plan(
 async def get_client_plan(
     plan_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -443,7 +445,7 @@ async def update_client_plan(
     plan_id: str,
     data: ClientLessonPlanUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -467,7 +469,7 @@ async def delete_client_plan(
     plan_id: str,
     delete_mode: str = Query("all", description="all | unstarted | uncompleted"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.delete")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -489,7 +491,7 @@ async def upgrade_plan(
     plan_id: str,
     purchased_days: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -512,7 +514,7 @@ async def update_client_lesson(
     lesson_id: str,
     data: ClientLessonUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -551,6 +553,28 @@ async def update_client_lesson(
         preferred_location=data.preferred_location,
         enforce_prerequisites=data.enforce_prerequisites,
     )
+
+    # Fuel snapshot if a lesson is completed directly via edit
+    if (
+        updated.status.value == "completed"
+        and updated.fuel_cost is None
+        and not updated.is_theory
+        and updated.vehicle_id
+    ):
+        vehicle_rate = await fuel_service.get_vehicle_active_rate_for_vehicle(
+            db, updated.vehicle_id, current_user.company_id
+        )
+        if vehicle_rate:
+            updated.fuel_cost = vehicle_rate.rate_per_lesson
+            await db.flush()
+
+    # Fuel budget guard (reflects any vehicle/status change applied above)
+    try:
+        await fuel_service.assert_plan_fuel_budget(
+            db, updated.lesson_plan_id, current_user.company_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=f"Fuel budget exceeded: {e}")
     return ClientLessonRead.model_validate(updated)
 
 
@@ -558,7 +582,7 @@ async def update_client_lesson(
 async def start_lesson(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -571,6 +595,12 @@ async def start_lesson(
         raise HTTPException(status_code=403, detail="Lesson is locked. Upgrade package to unlock.")
     if lesson.status.value in ("started", "completed", "paused"):
         raise HTTPException(status_code=400, detail=f"Lesson is already {lesson.status.value}")
+    try:
+        await fuel_service.assert_plan_fuel_budget(
+            db, lesson.lesson_plan_id, current_user.company_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=f"Fuel budget exceeded: {e}")
     updated = await lesson_service.update_client_lesson(
         db, lesson, status="started", instructor_id=current_user.phone
     )
@@ -622,7 +652,7 @@ async def complete_lesson(
     outcome: str | None = None,
     notes: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -633,8 +663,27 @@ async def complete_lesson(
         raise HTTPException(status_code=404, detail="Lesson not found")
     if lesson.status.value != "started" and lesson.status.value != "paused":
         raise HTTPException(status_code=400, detail="Lesson must be started before completing")
+
+    # Fuel budget guard: the lesson's vehicle rate is already counted in the
+    # plan's projected fuel because the lesson is not yet completed.
+    try:
+        await fuel_service.assert_plan_fuel_budget(
+            db, lesson.lesson_plan_id, current_user.company_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=f"Fuel budget exceeded: {e}")
+
+    # Snapshot the active fuel rate of the lesson's vehicle at completion
+    fuel_cost = None
+    if not lesson.is_theory and lesson.vehicle_id:
+        vehicle_rate = await fuel_service.get_vehicle_active_rate_for_vehicle(
+            db, lesson.vehicle_id, current_user.company_id
+        )
+        if vehicle_rate:
+            fuel_cost = vehicle_rate.rate_per_lesson
+
     updated = await lesson_service.update_client_lesson(
-        db, lesson, status="completed", outcome=outcome, notes=notes
+        db, lesson, status="completed", outcome=outcome, notes=notes, fuel_cost=fuel_cost
     )
 
     # Send training completed SMS
@@ -679,7 +728,7 @@ async def complete_lesson(
 async def skip_lesson(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -699,7 +748,7 @@ async def move_lesson(
     lesson_id: str,
     new_day_number: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         lid = uuid.UUID(lesson_id)
@@ -717,7 +766,7 @@ async def reorder_lessons(
     plan_id: str,
     data: LessonBulkReorder,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
     try:
         pid = uuid.UUID(plan_id)
@@ -728,11 +777,30 @@ async def reorder_lessons(
     return [ClientLessonRead.model_validate(l) for l in lessons]
 
 
+@router.get("/api/v1/lesson-plans/{plan_id}/fuel", response_model=PlanFuelBudget)
+async def get_plan_fuel_budget(
+    plan_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
+):
+    try:
+        pid = uuid.UUID(plan_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid plan ID")
+    plan = await lesson_service.get_client_plan_by_id(
+        db, pid, company_id=current_user.company_id, current_user_role=current_user.role
+    )
+    if not plan:
+        raise HTTPException(status_code=404, detail="Lesson plan not found")
+    budget = await fuel_service.get_plan_fuel_budget(db, pid, current_user.company_id)
+    return PlanFuelBudget(**budget)
+
+
 @router.get("/api/v1/lesson-plans/lessons/{lesson_id}/history", response_model=list[LessonHistoryRead])
 async def get_lesson_history(
     lesson_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("lesson_plans.view")),
 ):
     try:
         lid = uuid.UUID(lesson_id)

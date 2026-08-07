@@ -91,3 +91,63 @@ class FuelAlert(BaseModel):
     last_refueling_id: UUID
     last_refueling_date: datetime
     lessons_covered: int
+
+
+class PackageFuelRateCreate(BaseModel):
+    fuel_rate_per_session: Decimal
+    active_from: Optional[date] = None
+    active_until: Optional[date] = None
+    notes: Optional[str] = None
+
+
+class PackageFuelRateUpdate(BaseModel):
+    fuel_rate_per_session: Optional[Decimal] = None
+    active_from: Optional[date] = None
+    active_until: Optional[date] = None
+    deactivated_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
+class PackageFuelRateRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    company_id: UUID
+    package_id: UUID
+    fuel_rate_per_session: Decimal
+    active_from: date
+    active_until: Optional[date] = None
+    deactivated_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    package_name: Optional[str] = None
+
+
+class PlanFuelBudget(BaseModel):
+    plan_id: UUID
+    cart_item_id: Optional[UUID] = None
+    purchased_days: Optional[int] = None
+    fuel_rate_per_session: Optional[Decimal] = None
+    budget_total: Decimal = Decimal("0")
+    fuel_used: Decimal = Decimal("0")
+    remaining: Decimal = Decimal("0")
+    percent_used: float = 0.0
+    completed_lessons: int = 0
+    scheduled_lessons: int = 0
+    warning: Optional[str] = None
+    blocked: bool = False
+
+
+class BudgetAlert(BaseModel):
+    plan_id: UUID
+    cart_item_id: Optional[UUID] = None
+    client_name: Optional[str] = None
+    purchased_days: Optional[int] = None
+    fuel_rate_per_session: Optional[Decimal] = None
+    budget_total: Decimal = Decimal("0")
+    fuel_used: Decimal = Decimal("0")
+    remaining: Decimal = Decimal("0")
+    percent_used: float = 0.0
+    warning: str

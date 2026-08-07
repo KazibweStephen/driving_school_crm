@@ -64,11 +64,12 @@ from app.models.payment import (
     NotificationPreference,
     Payment,
 )
+from app.models.permission import RolePermission
 from app.models.permit import PermitProgress
 from app.models.product import Package, Product
 from app.models.commission import Commission, CommissionRate, CommissionStatus, CommissionContest, ContestStatus
 from app.models.lead import Lead, LeadStatus
-from app.models.fuel import FuelRate, FuelRefueling
+from app.models.fuel import FuelRate, FuelRefueling, PackageFuelRate
 from app.models.schedule_break import ScheduleBreak
 from app.models.sms import SmsLog, SmsTemplate, SmsTemplateCategory
 from app.models.training import TrainingSession
@@ -100,6 +101,7 @@ __all__ = [
     "Vehicle", "VehicleAssignment", "VehicleScheduleSlot", "VehicleStatus",
     "Commission", "CommissionRate", "CommissionStatus", "CommissionContest", "ContestStatus",
     "Lead", "LeadStatus",
-    "FuelRate", "FuelRefueling",
+    "FuelRate", "FuelRefueling", "PackageFuelRate",
     "CompanySmsSettings", "SmsTemplate", "SmsTemplateCategory", "SmsLog",
+    "RolePermission",
 ]

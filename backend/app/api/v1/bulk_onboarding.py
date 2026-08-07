@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.bulk_onboarding import BulkOnboardingRequest, BulkOnboardingResponse
@@ -23,7 +23,7 @@ class ReceiptCheckResponse(BaseModel):
 async def bulk_onboard(
     data: BulkOnboardingRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("bulk_onboarding.manage")),
 ):
     result = await bulk_onboarding.bulk_onboard_clients(db, current_user, data)
     return BulkOnboardingResponse(**result)
@@ -33,7 +33,7 @@ async def bulk_onboard(
 async def check_receipts(
     data: ReceiptCheckRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("bulk_onboarding.manage")),
 ):
     from app.services.payment import get_payment_by_receipt
 

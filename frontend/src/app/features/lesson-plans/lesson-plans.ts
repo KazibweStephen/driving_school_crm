@@ -44,6 +44,7 @@ import { CompetencyCatalogueService, CompetencySearchResult } from '../../core/s
 export class LessonPlans implements OnInit {
   templates = signal<LessonPlanTemplate[]>([]);
   loading = signal(false);
+  saving = signal(false);
   selectedTemplate = signal<LessonPlanTemplate | null>(null);
 
   showCreateDialog = signal(false);
@@ -567,7 +568,7 @@ export class LessonPlans implements OnInit {
 
   async save() {
     const editing = this.editingTemplate();
-    this.loading.set(true);
+    this.saving.set(true);
     try {
       if (editing) {
         await this.lessonPlanService.updateTemplate(editing.id, {
@@ -635,7 +636,7 @@ export class LessonPlans implements OnInit {
     } catch {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: `Failed to ${editing ? 'update' : 'create'} template` });
     } finally {
-      this.loading.set(false);
+      this.saving.set(false);
     }
   }
 

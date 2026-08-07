@@ -59,8 +59,12 @@
 - Payments page under Management sidebar group: list/search, date range + client type + branch filters, totals cards, print report (privileged roles)
 - Payments table: client name links to `/consultations/{id}`, received-by user shown below phone, sort icons kept on same line as headers
 - Payments list filters/sorts by `document_date` (falling back to `created_at`)
-- Products GET endpoints (`GET /api/v1/products/`, `GET /api/v1/products/{id}`) allow any authenticated user (read-only); create/update/delete remain `require_admin_access` (super_user / company_super_user); frontend Products page hides Templates/Add/Edit/Deactivate actions for non-admin roles
-- Companies GET endpoints (`GET /api/v1/companies/`, `GET /api/v1/companies/{id}`) allow any authenticated user but non-super users only see/access their own company (list returns just their company, by-id returns 404 for other companies); create/update/delete remain `require_super_user`; frontend Companies page hides New/Edit/Delete for non-super roles
+- Products GET endpoints (`GET /api/v1/products/`, `GET /api/v1/products/{id}`) allow any authenticated user (read-only); create/update/delete are gated by `products.manage`; frontend Products page hides Templates/Add/Edit/Deactivate actions for users without it
+- Companies GET endpoints allow any authenticated user but non-super users only see/access their own company; create/update/delete are gated by `companies.manage`; frontend Companies page hides New/Edit/Delete without it
+- All v1 API endpoints are gated by fine-grained permission codes (`require_permission("...")`); `super_user` bypasses all checks; `.manage` implies its `.view` counterpart; only `users.py` (`/me`, `/change-pin`) still uses plain `get_current_user`
+- JWT access token carries a `permissions` claim (stored set, DB-authoritative) used for UI gating; role_permissions is per-company, so re-login is required for changes to take effect
+- Frontend: routes carry `data.permission`, gated by `permissionGuard` (`canActivateChild`); sidebar nav filtered by permission codes (groups with zero visible children are hidden); `AuthService.hasPermission()` / `hasAnyPermission()`; `HasPermissionDirective` (`*appHasPermission`) for element-level gating
+- Sidebar group expansion uses an `expandedGroups` Set signal (never mutate `group.expanded` on copies — `visibleNavGroups` getter returns fresh objects each CD run, so state must live in the component)
 
 ## Progress
 ### Done
@@ -128,6 +132,10 @@
 - **Competency Catalogue Module**: company-scoped `CompetencyVersion`, `CompetencyCategory`, `Competency`, `CompetencyPrerequisite`, `LessonCompetencyLink` models; 3 enums (`CompetencyDifficulty`, `CompetencyTrainingCategory`, `CompetencyVersionStatus`); full CRUD + search + bulk import API (17 endpoints); frontend 3-tab page with versions, categories, competencies (filter/pagination/bulk import/assessment criteria); reusable `competency-picker` component; lesson-library and lesson-plans pages now use `p-multiSelect` with `competency_ids` instead of free-text arrays; old JSONB `competencies`/`prerequisite_competencies` columns dropped from `lesson_library`; Alembic migration `d4e5f6a7b8c9` (chains from `j2k3l4m5n6o7`); seed data: 1 version, 13 categories, 106 competencies, 44 prerequisite links
 - **Payments fixes + auto cross-branch transfers**: `payments.branch_id` FK (collecting branch) + `branch_transfers.payment_id` FK (migration `f6a7b8c9d0e1`); payments list branch filter is now OR of `Consultation.branch_id`/`Payment.branch_id` (fixes missing today/this-week rows for null-branch or cross-collected consultations); `hard_delete_consultations` skips company scoping for `super_user` (fixes bulk-delete 404 on null-branch rows); `PaymentCreate.branch_id` accepted/validated; `create_full_consultation` sets `payment.branch_id = consultation.branch_id`; `mark_installment_paid` auto-creates/updates an `INITIATED` BranchTransfer when payment branch ≠ consultation branch (accumulates `total_paid`, reason includes branch names + receipt); frontend Complete Sale / Make Payment / Pay All dialogs get a "Collecting Branch" selector (defaults to consultation branch, `appendTo="body"`); Payments page table gains a Branch column showing `branch_name`; e2e fixtures now send `branch_id`
 - **Global notifications bell**: header bell (mobile + desktop header) with red badge count; `GET /api/v1/finance/transfers/notifications` returns initiated transfers for the user's accessible branches (`incoming`/`outgoing` with from/to branch names + `to_receive_count`/`to_receive_amount`; privileged roles see all company branches, others are limited to their `UserBranchAssignment` branches); dropdown panel lists transfers with Receive action (wired to `FinanceService.receiveTransfer`), "View all transfers" link to `/transfers`, polls every 60s; frontend `FinanceService.getTransferNotifications()`
+- **Fine-grained RBAC (backend + frontend)**: see the `## Fine-Grained RBAC` section below — permission catalog, `role_permissions` matrix, `require_permission()` on all v1 routers, JWT `permissions` claim, route `data.permission` + `permissionGuard`, sidebar filtering, `*appHasPermission`, `/permissions` admin page, migration `g1a2b3c4d5e6f`
+- **Action-level RBAC upgrade**: permission catalog expanded to 28 groups / 142 codes with `<group>.manage` as an all-actions master that expands to every code in its group (`expand_set`, runtime re-expansion in `get_role_permissions`/`has_permission` — no data migration needed, stored `.manage`/`.view` legacy rows keep working); all v1 routers remapped to granular codes (`expenses.create/approve/reject/pay`, `payments.record`, `users.reset_pin`, `transfers.receive`, `video_library.upload`, `competency.import`, etc.); new `sales` group carved from `expenses` via backfill migration `h2i3j4k5l6m7`; one-time remap helper `backend/remap_permissions.py` (MAP of file→(verb,path)→code)
+- **Expense approval workflow**: `POST /api/v1/finance/expenses/{id}/approve` (+ `reject` with `{rejection_reason}`, `mark-paid`, `DELETE`); pending-only reject, approved→paid only, paid/approved undeletable (409), rejected-delete requires `expenses.manage`, creator cannot approve/reject own (403), PATCH status changes outside pending require `expenses.manage`; approve clears `rejection_reason` and notifies creator via SMS (`on_expense_approved`); frontend Expenses page has permission-gated Approve/Reject/Delete/Mark-Paid row actions + reject-reason dialog; e2e `expenses.spec.ts` covers dialog create + full workflow
+- **Office Admin Mobile PWA** (`/m/`): second Angular project in `frontend/mobile` built as a PWA (`manifest.webmanifest`, icons, service worker) and served under `/m/` via nginx `alias` + exact `/m` redirect. Features: login with phone+PIN, Dashboard (daily sales, monthly sales vs target, pending collections, current-month commission earned/pending + quick actions), Make a Sale / Previous Sale (backdated), Upsell (existing client → show already-purchased products with amount/paid/balance, add new ones, only new items in payment step), Collect Payments (per-cart-item balance, installments, receipt check), Lessons (weekly schedule day chips + start/stop lesson timer + outcome), Schedule (generate client plan from template + auto-assign instructor/vehicle via find-and-lock), Send SMS (saved templates or free text), Expenses (list/filter, create with receipt upload, approve/reject/pay/delete actions). Uses separate localStorage keys `mobile_access_token`/`mobile_refresh_token`. Backend changes: added `sms.send` to `office_admin`/`branch_supervisor` defaults in `permissions.py` and backfilled via migration `k2l3m4n5o6p7` (merges `h2i3j4k5l6m7` and `k1l2m3n4o5p6`); added `Company.monthly_sales_target` column and `GET /api/v1/dashboard/mobile` endpoint via migration `m2n3o4p5q6r7`; granted `expenses.create`/`expenses.delete` to `office_admin`/`branch_supervisor` via migration `n3o4p5q6r7s8t`. Product list on the sale screen now requests `status=active&page_size=100` from `/api/v1/products/` (matching the web Add-to-Cart behaviour) instead of fetching the default first page and filtering client-side, so active products are not hidden by pagination. Payment amount inputs use plain `<input type="number">`; balance/installment schedule is recomputed only when the user taps a **Calculate schedule** button (no live typing recompute) and updates the `selectedItems` signal to keep the UI responsive. "How did you hear about us" is a `p-select` dropdown. Receipt printing fetches the authenticated HTML blob via `PaymentService.downloadReceipt()` and opens a `blob:` URL. Collect Payments now shows a success/failure result step with amount, balance message, **Print receipt**, and **Return to client** actions instead of redirecting to the client profile. Login/refresh preserves the attempted route in `localStorage` and redirects back after sign-in. Server-side mobile detection in nginx redirects `/` and `/login` to `/m/` and `/m/login` for phone User-Agents unless the `prefer_desktop=1` cookie is set; the mobile shell has a **Desktop** link that sets the cookie and loads the desktop site. All 40 Playwright tests pass.
 
 ## Multi-Company Architecture
 - **Company** (`companies`): Top-level tenant with `id`, `name`, `code` (unique), `address`, `phone`, `email`, `is_active`
@@ -155,7 +163,7 @@
 - Consultations API + service: `search_consultations`, `get_consultation_by_id`, `client_search` scoped via `Branch.company_id`
 - Clients API + service (`payment.py`): `list_clients`, `get_client_detail` scoped via `Branch.company_id`
 - Finance API + service: `list_expenses`, `list_borrowed`, `list_collections`, `get_dunning_list`, `get_finance_summary` — all scoped via `Branch.company_id`
-- All 31 Playwright tests pass (no regressions)
+- All 39 Playwright tests pass (1 flaky retry on user creation)
 
 ## Tenant Isolation Status — All Endpoints Scoped
 All endpoints have been fixed with multi-company scoping. Each endpoint verifies that the user's `company_id` matches the entity chain before allowing access; `super_user` / `company_super_user` bypasses all checks.
@@ -164,9 +172,7 @@ All endpoints have been fixed with multi-company scoping. Each endpoint verifies
 - `company_super_user` role operates all functions within their company (same operational access as `super_user` but scoped to own company).
 - Only `super_user` can create/assign `company_super_user` role via users API.
 - Created with `pending_approval` status; cannot log in until approved by `super_user` via `POST /api/v1/users/{phone}/approve`.
-- `require_admin_access` dependency used for users/products/packages endpoints (allows both `SUPER_USER` and `COMPANY_SUPER_USER`).
-- `require_super_user` kept for truly cross-company operations (companies CRUD, approving accounts).
-- Frontend should show `company_super_user` option in role dropdown (only when current user is `super_user`), `PENDING_APPROVAL` status badge, and approve button.
+- All v1 endpoints now use `require_permission(...)`; `super_user` bypasses everything (permission model replaces the old `require_admin_access` / `require_super_user` dependencies, which no longer exist in routers).
 
 ## Commission System (Complete — backend)
 - **CommissionRate** per Package: 3-way split (`converter_pct`, `primary_recommender_pct`, `secondary_recommender_pct` must sum to 100). Lifecycle dates: `active_from` (required), `active_until` (nullable), `deactivated_at` (nullable — soft deactivates).
@@ -184,12 +190,24 @@ All endpoints have been fixed with multi-company scoping. Each endpoint verifies
 - Contests CRUD at `/api/v1/commission/contests`.
 - Frontend not yet built.
 
+## Fine-Grained RBAC (Complete — backend + frontend)
+- **Permission catalog** in `backend/app/core/permissions.py`: 28 groups, 142 codes, `<group>.manage` (all-actions master) + per-action codes like `<group>.create/edit/delete/approve/reject/pay` (bare-`manage` groups: `bulk_onboarding`, `schedule_breaks`, `permissions`). `expand_permissions()`/`expand_set()` expand a granted `.manage` to every code in its group (including itself, so stored and effective sets stay aligned); the implied-code expansion replaces the old `.view`-only implication.
+- **Runtime re-expansion (no data migration)**: `get_role_permissions()` and `has_permission()` load the stored row set and apply `expand_set()`, so legacy `.manage`/`.view` rows automatically cover all new action codes.
+- **`role_permissions` table** (`company_id` + `role` + `permission`): per-company matrix; `super_user` never stored (implicit bypass). Seeded via `seed_default_permissions()` on company create from `_DEFAULT_MATRIX` (company_super_user = all, office_admin/branch_supervisor/manager/supervisor/instructor/reception per defaults). Backfill migration `h2i3j4k5l6m7` grants `sales.view` to any role with `expenses.view` and `sales.create/edit/delete` to any role with `expenses.manage`.
+- **`require_permission(code)`** in `app/api/deps.py`: reads DB-authoritative `role_permissions` (cached per request via `request.state`), returns 403 `Permission denied: {code}`. Every v1 router is wired with per-function action codes; `users.py` `/me` + `/change-pin` remain plain `get_current_user`.
+- **Permissions admin API** (`/api/v1/permissions`): `GET /catalog`, `GET /matrix?company_id=`, `GET /role/{role}?company_id=`, `PUT /matrix/{role}?company_id=` body `{"permissions":[...]}` — all gated `permissions.manage`; company_super_user restricted to own company (404 otherwise).
+- **JWT claim**: login/refresh embed `permissions` (sorted stored codes, super_user = full catalog). Frontend decodes into `AuthService.permissions` signal.
+- **Frontend gating**: `permissionGuard` on `canActivateChild` (redirects to `/dashboard`); `data.permission` on every route; sidebar `visibleTopItems`/`visibleNavGroups` filter by codes; `*appHasPermission` structural directive (Expenses page uses action codes; other features keep `.manage` masters which still expand to all actions). Sidebar group expansion state lives in `expandedGroups` Set signal.
+- **Admin page** `/permissions` (nav: Management → Permissions): company selector (super_user), role selector, per-group "All actions" master checkbox (grants the `.manage` code) + granular action checkboxes (unchecking one action while All is on converts to an explicit subset), Save (PUT). Users must re-login for changes to apply.
+- Ad-hoc role checks replaced: clients bulk-delete→`consultations.delete`, payments print→`reports.view`, products admin→`products.manage`, companies edit→`companies.manage`, transfers receive/cancel→`transfers.manage`, competency writes→`competency.manage`. Super_user-only cross-company selectors (company-settings, users role option, competency/companies/permissions company pickers) and payments `canViewAllBranches` keep role checks (no permission equivalent).
+
 ## Remaining
 - Build frontend for commission rates management, lead submission, commission dashboard, contests.
 - User creation API doesn't return the auto-generated initial PIN — frontend needs to call reset-pin to get a PIN, or the API should return it in the response.
-- Build frontend for `company_super_user` role assignment (role dropdown, warning dialog, approve button).
-- Build frontend Expense and Sale pages under branches.
+- Build frontend Sale page under branches (Expense page is done).
 - Add `appendTo="body"` to remaining `p-select` and `p-datepicker` dropdowns for mobile.
+- Investigate the Playwright worker process cleanup warning that occasionally appears after the full suite run.
+- Add a native mobile Expense entry screen (current quick action opens the web app at `/expenses`).
 
 ## Test Credentials
 Super Admin `0782832711`, pin=`1234`
@@ -205,16 +223,25 @@ Postgres `:5433` (external), backend `:8000`, frontend `:80`
 If migration files are missing from container: `docker cp backend/alembic/versions/<file> crm-backend:/app/alembic/versions/`
 
 ## Migration Heads
-`f6a7b8c9d0e1` (head — payment branch + transfer payment link, chains from `e5f6a7b8c9d0`)
+- `o4p5q6r7s8t9u` (head — aligns DB `commissionstatus` enum with `CommissionStatus` model values, chains from `n3o4p5q6r7s8t`)
+- `n3o4p5q6r7s8t` — grants `expenses.create`/`expenses.delete` to `office_admin`/`branch_supervisor` role_permissions
+- `m2n3o4p5q6r7` — adds `monthly_sales_target` to `companies`
 
 ## Known Backend Fixes Applied
 - `reports.py:33,36` — `Commission.amount` → `Commission.total_amount` (dashboard 500 error)
 - `cart.py:72` — `update_cart_item()` accepts `converter_id`/`recommender_id`; auto-creates commission on conversion
 - `fuel.service.ts` + `commission.service.ts` — switched from `params as any` to `HttpParams` builder to avoid literal `"undefined"` strings
 - `competency_catalogue.py` model — added missing `Enum` import from `sqlalchemy`
+- Alembic pitfall: `op.create_table` with an unbound `sa.Enum` fires `CREATE TYPE` regardless of `create_type=False`; migration `g1a2b3c4d5e6f` uses raw SQL + `CAST(:role AS userrole)` inserts; when editing a migration on the host you must `docker cp` it into `crm-backend:/app/alembic/versions/` before `alembic upgrade head`
+- Mobile nginx subfolder: use `location ^~ /m/ { alias /usr/share/nginx/html/mobile/; try_files $uri $uri/ /m/index.html; }` and `location = /m { return 301 /m/; }` so that `/main-*.js` files in the web app are not caught by the `/m` prefix redirect.
+- Mobile dashboard (`/api/v1/dashboard/mobile`): fixed company scoping by joining `Payment.branch_id → Branch.company_id`; changed permission gate to `dashboard.view`; aligned commission earned/pending queries with `CommissionStatus` values (`fully_matured` / `pending`/`partially_matured`).
+- DB `commissionstatus` enum: migration `o4p5q6r7s8t9u` renames `paid` → `fully_matured` and adds `partially_matured` to match the model.
 
 ## Test Files
 - `e2e/login.spec.ts` (11 tests): login, sidebar navigation through collapsed groups, user CRUD/search/PIN
 - `e2e/consultations.spec.ts` (15 tests): list/search, stage filter, profile with products/payments/Add to Cart, API create+verify, products page, users page
 - `e2e/lesson-plans.spec.ts` (4 tests): sidebar load, API create+verify with JSONB objectives, dialog close, UI delete
+- `e2e/permissions.spec.ts` (2 tests): page loads with catalog groups + matrix, role matrix edit/save via API verify + restore
+- `e2e/expenses.spec.ts` (2 tests): dialog create + pending row, full approve/reject/pay workflow enforced (self-approve 403, manager approve, mark-paid, delete-paid 409, reject + delete-rejected)
 - `e2e/vehicle-scheduling.spec.ts` (1 test): full flow create template, manual/auto vehicles, instructor, product, package, consultation, client plan with manual_days=4, lock dual-phase, verify day 1–4 manual, day 5–10 auto, cleanup
+- `e2e/mobile.spec.ts` (5 tests): mobile PWA login, dashboard, bottom nav tabs, expenses create, invalid PIN error

@@ -137,7 +137,7 @@ export class CompaniesCmp implements OnInit {
     private messageService: MessageService,
     private authService: AuthService,
   ) {
-    this.isSuperUser = this.authService.currentUserRole() === 'super_user';
+    this.isSuperUser = this.authService.hasPermission('companies.manage');
   }
 
   isSuperUser = false;

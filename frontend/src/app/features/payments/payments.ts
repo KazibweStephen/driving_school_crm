@@ -53,8 +53,7 @@ export class PaymentsCmp implements OnInit {
   selectedBranchIds: string[] = [];
 
   canPrint = computed(() => {
-    const role = this.authService.currentUserRole();
-    return role === 'office_admin' || role === 'branch_supervisor' || role === 'manager';
+    return this.authService.hasPermission('reports.view');
   });
 
   canViewAllBranches = computed(() => {

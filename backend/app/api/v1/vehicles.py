@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.lesson_plan import VehicleCreate, VehicleRead, VehicleUpdate
@@ -17,7 +17,7 @@ async def list_vehicles(
     status: str | None = Query(None),
     transmission: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicles.view")),
 ):
     vehicles = await vehicle_service.list_vehicles(db, status, transmission, company_id=current_user.company_id)
     result = []
@@ -32,7 +32,7 @@ async def list_vehicles(
 async def create_vehicle(
     data: VehicleCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicles.create")),
 ):
     vehicle = await vehicle_service.create_vehicle(
         db,
@@ -52,7 +52,7 @@ async def create_vehicle(
 async def get_vehicle(
     vehicle_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicles.view")),
 ):
     try:
         vid = uuid.UUID(vehicle_id)
@@ -71,7 +71,7 @@ async def update_vehicle(
     vehicle_id: str,
     data: VehicleUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicles.edit")),
 ):
     try:
         vid = uuid.UUID(vehicle_id)
@@ -98,7 +98,7 @@ async def update_vehicle(
 async def delete_vehicle(
     vehicle_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicles.delete")),
 ):
     try:
         vid = uuid.UUID(vehicle_id)

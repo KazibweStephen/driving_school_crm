@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.lead import LeadCreate, LeadRead, LeadUpdate
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/leads", tags=["leads"])
 async def create_lead(
     data: LeadCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("leads.create")),
 ):
     company_id = await resolve_company_id(db, current_user)
     if not company_id:
@@ -42,7 +42,7 @@ async def create_lead(
 async def list_leads(
     status: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("leads.view")),
 ):
     submitted_by = None
     if current_user.role in ("instructor",):
@@ -72,7 +72,7 @@ async def update_lead(
     lead_id: uuid.UUID,
     data: LeadUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("leads.update_status")),
 ):
     lead = await lead_service.get_lead_by_id(db, lead_id, current_user.company_id)
     if not lead:

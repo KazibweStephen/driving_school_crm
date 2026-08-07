@@ -1,0 +1,33 @@
+<header class="sticky top-0 z-20 flex items-center justify-between bg-slate-900 px-4 py-3 text-white">
+  <div>
+    <div class="text-sm font-semibold">Drive CRM</div>
+    <div class="text-xs text-slate-300">{{ user() || 'Admin' }}</div>
+  </div>
+  <div class="flex items-center gap-2">
+    <button
+      type="button"
+      class="text-xs text-slate-300 hover:text-white"
+      (click)="switchToDesktop()"
+      data-testid="switch-desktop"
+    >
+      Desktop
+    </button>
+    <button
+      type="button"
+      class="flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+      (click)="logout()"
+      data-testid="logout"
+    >
+      <span class="pi pi-sign-out"></span>
+      <span>Logout</span>
+    </button>
+  </div>
+</header>
+
+<main class="mx-auto max-w-md px-4 pb-24 pt-4">
+  <router-outlet />
+</main>
+
+@if (tabs().length > 1) {
+  <app-bottom-nav [tabs]="tabs()" />
+}

@@ -4,7 +4,7 @@ from datetime import time
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.lesson_plan import (
@@ -24,7 +24,7 @@ async def list_slots(
     instructor_id: str | None = Query(None),
     day_of_week: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicle_schedule.view")),
 ):
     vid = uuid.UUID(vehicle_id) if vehicle_id else None
     slots = await schedule_service.list_slots(
@@ -39,7 +39,7 @@ async def list_slots(
 async def get_slot(
     slot_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicle_schedule.view")),
 ):
     try:
         sid = uuid.UUID(slot_id)
@@ -59,7 +59,7 @@ async def get_slot(
 async def create_slot(
     data: VehicleScheduleSlotCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicle_schedule.create")),
 ):
     try:
         vid = uuid.UUID(data.vehicle_id)
@@ -79,7 +79,7 @@ async def update_slot(
     slot_id: str,
     data: VehicleScheduleSlotUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicle_schedule.edit")),
 ):
     try:
         sid = uuid.UUID(slot_id)
@@ -105,7 +105,7 @@ async def update_slot(
 async def delete_slot(
     slot_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicle_schedule.delete")),
 ):
     try:
         sid = uuid.UUID(slot_id)
@@ -126,7 +126,7 @@ async def bulk_set_schedule(
     vehicle_id: str,
     slots: list[VehicleScheduleSlotCreate],
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicle_schedule.create")),
 ):
     try:
         vid = uuid.UUID(vehicle_id)
@@ -148,7 +148,7 @@ async def resolve_instructor(
     day_of_week: int = Query(...),
     at_time: str = Query(..., description="HH:MM time"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("vehicle_schedule.view")),
 ):
     """Resolve which instructor is assigned to a vehicle at a given day+time."""
     try:

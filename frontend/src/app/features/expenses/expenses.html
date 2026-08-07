@@ -4,7 +4,7 @@
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
     <h1 class="text-2xl font-bold text-gray-900">Expenses</h1>
     <div class="flex flex-wrap gap-2">
-      <p-button label="Add Expense" icon="pi pi-plus" (onClick)="openCreate()" pTooltip="Create new expense" tooltipPosition="bottom" />
+      <p-button *appHasPermission="'expenses.create'" label="Add Expense" icon="pi pi-plus" (onClick)="openCreate()" pTooltip="Create new expense" tooltipPosition="bottom" />
     </div>
   </div>
 
@@ -47,7 +47,11 @@
             <br><span class="text-xs text-gray-400">{{ e.description }}</span>
           }
         </td>
-        <td><p-tag [value]="e.status.toUpperCase()" [severity]="severityMap[e.status]"></p-tag></td>
+        <td><p-tag [value]="e.status.toUpperCase()" [severity]="severityMap[e.status]"></p-tag>
+          @if (e.status === 'rejected' && e.rejection_reason) {
+            <div class="text-xs text-red-500 mt-1">{{ e.rejection_reason }}</div>
+          }
+        </td>
         <td>
           <div class="flex flex-col text-xs">
             <app-user-display [phone]="e.created_by_phone" />
@@ -73,11 +77,12 @@
         <td>
           <div class="flex gap-1">
             @if (e.status === 'pending') {
-              <p-button icon="pi pi-check" severity="success" rounded="true" pTooltip="Approve" (onClick)="confirmApprove(e)" />
-              <p-button icon="pi pi-times" severity="danger" rounded="true" pTooltip="Reject" (onClick)="confirmReject(e)" />
+              <p-button *appHasPermission="'expenses.approve'" icon="pi pi-check" severity="success" rounded="true" pTooltip="Approve" (onClick)="confirmApprove(e)" />
+              <p-button *appHasPermission="'expenses.reject'" icon="pi pi-times" severity="danger" rounded="true" pTooltip="Reject" (onClick)="confirmReject(e)" />
+              <p-button *appHasPermission="'expenses.delete'" icon="pi pi-trash" severity="secondary" rounded="true" pTooltip="Delete" (onClick)="confirmDelete(e)" />
             }
             @if (e.status === 'approved') {
-              <p-button icon="pi pi-credit-card" severity="info" rounded="true" pTooltip="Mark Paid" (onClick)="updateStatus(e.id, 'paid')" />
+              <p-button *appHasPermission="'expenses.pay'" icon="pi pi-credit-card" severity="info" rounded="true" pTooltip="Mark Paid" (onClick)="markPaid(e.id)" />
             }
           </div>
         </td>
@@ -160,6 +165,31 @@
   <ng-template pTemplate="footer">
     <p-button label="Cancel" severity="secondary" (onClick)="showDialog.set(false)" />
     <p-button label="Create" [disabled]="!formIsValid() || uploading()" [loading]="uploading()" (onClick)="save()" />
+  </ng-template>
+</p-dialog>
+
+<p-dialog
+  [(visible)]="showRejectDialog"
+  header="Reject Expense"
+  [modal]="true"
+  [style]="{ width: '420px' }"
+  [draggable]="false"
+  [resizable]="false"
+  appendTo="body"
+>
+  <div class="flex flex-col gap-3 pt-2">
+    <p class="text-sm text-gray-600">
+      Reject <span class="font-medium">{{ currencyService.symbol() }} {{ rejectingExpense()?.amount }}</span>?
+    </p>
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700">Reason *</label>
+      <textarea pTextarea [(ngModel)]="rejectReason" class="w-full" rows="3"
+        placeholder="Required — e.g. missing receipt"></textarea>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button label="Cancel" severity="secondary" (onClick)="showRejectDialog.set(false)" />
+    <p-button label="Reject" severity="danger" [disabled]="!rejectReason().trim()" (onClick)="reject()" />
   </ng-template>
 </p-dialog>
 

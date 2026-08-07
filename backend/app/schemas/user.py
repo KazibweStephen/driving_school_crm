@@ -9,6 +9,8 @@ from app.models.user import UserRole, UserStatus
 class UserCreate(BaseModel):
     phone: str = Field(..., pattern=r"^\d{7,15}$")
     name: str = Field(..., min_length=1, max_length=100)
+    first_name: str | None = Field(None, max_length=50)
+    last_name: str | None = Field(None, max_length=50)
     role: UserRole = UserRole.OFFICE_ADMIN
     company_id: uuid.UUID | None = None
     is_company_admin: bool = False
@@ -19,6 +21,8 @@ class UserCreate(BaseModel):
 class UserRead(BaseModel):
     phone: str
     name: str
+    first_name: str = ""
+    last_name: str = ""
     role: UserRole
     status: UserStatus
     is_company_admin: bool
@@ -34,6 +38,8 @@ class UserRead(BaseModel):
 
 class UserUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=100)
+    first_name: str | None = Field(None, max_length=50)
+    last_name: str | None = Field(None, max_length=50)
     role: UserRole | None = None
     status: UserStatus | None = None
     company_id: uuid.UUID | None = None

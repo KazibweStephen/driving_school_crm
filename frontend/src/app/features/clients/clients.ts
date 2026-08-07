@@ -161,7 +161,7 @@ export class Clients implements OnInit, OnDestroy {
   }
 
   showBulkDelete() {
-    return this.isAnySelected() && this.authService.currentUserRole() === 'super_user';
+    return this.isAnySelected() && this.authService.hasPermission('consultations.delete');
   }
 
   confirmBulkDelete() {

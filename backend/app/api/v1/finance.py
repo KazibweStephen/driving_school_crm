@@ -5,10 +5,11 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_permission
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.company import BorrowStatus, CollectionStatus, ExpenseStatus, TransferStatus
@@ -27,6 +28,7 @@ from app.schemas.company import (
     ExpenseUpdate,
 )
 from app.services import finance as finance_service
+from app.services.permission import has_permission
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +38,7 @@ router = APIRouter(prefix="/finance", tags=["finance"])
 @router.post("/expenses/upload-receipt")
 async def upload_expense_receipt(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("expenses.edit")),
 ):
     allowed_types = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
     if file.content_type and file.content_type not in allowed_types:
@@ -73,7 +75,7 @@ async def list_expenses(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("expenses.view")),
 ):
     expenses, total = await finance_service.list_expenses(
         db, branch_id=branch_id, status=status, page=page, page_size=page_size,
@@ -91,7 +93,7 @@ async def list_expenses(
 async def create_expense(
     data: ExpenseCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("expenses.create")),
 ):
     expense = await finance_service.create_expense(
         db,
@@ -114,8 +116,15 @@ async def update_expense(
     expense_id: uuid.UUID,
     data: ExpenseUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("expenses.edit")),
 ):
+    if data.status is not None and data.status != "pending" and not await has_permission(
+        db, current_user, "expenses.manage"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Status changes require expenses.manage; use the approve/reject/mark-paid actions",
+        )
     expense = await finance_service.update_expense(
         db,
         expense_id=expense_id,
@@ -154,6 +163,126 @@ async def update_expense(
     return ExpenseRead.model_validate(expense)
 
 
+class ExpenseReject(BaseModel):
+    rejection_reason: str
+
+
+@router.post("/expenses/{expense_id}/approve", response_model=ExpenseRead)
+async def approve_expense(
+    expense_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.approve")),
+):
+    expense = await finance_service.get_expense(
+        db, expense_id, company_id=current_user.company_id, current_user_role=current_user.role
+    )
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+    if expense.status == ExpenseStatus.PAID:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Paid expenses cannot be approved")
+    if expense.status == ExpenseStatus.APPROVED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Expense already approved")
+    if expense.status == ExpenseStatus.REJECTED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Rejected expenses must be re-submitted as a new expense")
+    if expense.created_by_phone and expense.created_by_phone == current_user.phone:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You cannot approve your own expense")
+
+    expense.status = ExpenseStatus.APPROVED
+    expense.approved_by = current_user.phone
+    expense.approved_at = datetime.now()
+    expense.rejection_reason = None
+    await db.flush()
+    await db.refresh(expense)
+
+    if current_user.company_id and expense.created_by_phone:
+        try:
+            from app.services.notification.service import on_expense_approved
+            creator_result = await db.execute(
+                select(User).where(User.phone == expense.created_by_phone)
+            )
+            creator = creator_result.scalar_one_or_none()
+            if creator and creator.phone:
+                await on_expense_approved(
+                    db, current_user.company_id, creator.phone, creator.name or "Staff",
+                    expense.description or "Expense", str(expense.amount),
+                )
+        except Exception as e:
+            logger.warning("[SMS] Failed to send expense_approved notification: %s", e)
+
+    return ExpenseRead.model_validate(expense)
+
+
+@router.post("/expenses/{expense_id}/reject", response_model=ExpenseRead)
+async def reject_expense(
+    expense_id: uuid.UUID,
+    data: ExpenseReject,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.reject")),
+):
+    expense = await finance_service.get_expense(
+        db, expense_id, company_id=current_user.company_id, current_user_role=current_user.role
+    )
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+    if expense.status != ExpenseStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only pending expenses can be rejected")
+    if expense.created_by_phone and expense.created_by_phone == current_user.phone:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You cannot reject your own expense")
+
+    expense.status = ExpenseStatus.REJECTED
+    expense.rejection_reason = data.rejection_reason
+    expense.approved_by = current_user.phone
+    expense.approved_at = datetime.now()
+    await db.flush()
+    await db.refresh(expense)
+    return ExpenseRead.model_validate(expense)
+
+
+@router.post("/expenses/{expense_id}/mark-paid", response_model=ExpenseRead)
+async def mark_expense_paid(
+    expense_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.pay")),
+):
+    expense = await finance_service.get_expense(
+        db, expense_id, company_id=current_user.company_id, current_user_role=current_user.role
+    )
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+    if expense.status != ExpenseStatus.APPROVED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only approved expenses can be marked as paid")
+
+    expense.status = ExpenseStatus.PAID
+    expense.paid_by = current_user.phone
+    expense.paid_at = datetime.now()
+    await db.flush()
+    await db.refresh(expense)
+    return ExpenseRead.model_validate(expense)
+
+
+@router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_expense(
+    expense_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.delete")),
+):
+    expense = await finance_service.get_expense(
+        db, expense_id, company_id=current_user.company_id, current_user_role=current_user.role
+    )
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+    if expense.status in (ExpenseStatus.APPROVED, ExpenseStatus.PAID):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Approved or paid expenses cannot be deleted")
+    if expense.status == ExpenseStatus.REJECTED and not await has_permission(db, current_user, "expenses.manage"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: rejected expenses require expenses.manage to delete",
+        )
+    await db.delete(expense)
+    await db.flush()
+    return None
+
+
 # ── Borrowed Money ──
 
 
@@ -164,7 +293,7 @@ async def list_borrowed(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.view")),
 ):
     items, total = await finance_service.list_borrowed(
         db, branch_id=branch_id, status=status, page=page, page_size=page_size,
@@ -182,7 +311,7 @@ async def list_borrowed(
 async def create_borrowed(
     data: BorrowedMoneyCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.create")),
 ):
     item = await finance_service.create_borrowed(
         db,
@@ -205,7 +334,7 @@ async def update_borrowed(
     item_id: uuid.UUID,
     data: BorrowedMoneyUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.edit")),
 ):
     item = await finance_service.update_borrowed(
         db,
@@ -238,7 +367,7 @@ async def list_collections(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.view")),
 ):
     collections, total = await finance_service.list_collections(
         db, branch_id=branch_id, status=status, page=page, page_size=page_size,
@@ -256,7 +385,7 @@ async def list_collections(
 async def create_collection_for_installment(
     data: CollectionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.create")),
 ):
     if data.installment_id:
         collection = await finance_service.create_collection_for_installment(
@@ -286,7 +415,7 @@ async def update_collection(
     collection_id: uuid.UUID,
     data: CollectionUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.edit")),
 ):
     collection = await finance_service.update_collection(
         db,
@@ -313,7 +442,7 @@ async def update_collection(
 async def get_dunning_list(
     branch_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.view")),
 ):
     return await finance_service.get_dunning_list(db, branch_id=branch_id, company_id=current_user.company_id, current_user_role=current_user.role)
 
@@ -321,7 +450,7 @@ async def get_dunning_list(
 @router.post("/dunning/send", response_model=dict)
 async def send_dunning(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.send_dunning")),
 ):
     sent_count = await finance_service.send_dunning_notifications(db)
     return {"sent": sent_count, "message": f"Dunning notices sent to {sent_count} clients"}
@@ -338,7 +467,7 @@ async def list_branch_transfers(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.view")),
 ):
     transfers, total = await finance_service.list_branch_transfers(
         db, branch_id=branch_id, direction=direction, status=status,
@@ -357,7 +486,7 @@ async def list_branch_transfers(
 async def list_transfer_notifications(
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.view")),
 ):
     return await finance_service.list_transfer_notifications(
         db,
@@ -372,7 +501,7 @@ async def list_transfer_notifications(
 async def create_branch_transfer(
     data: BranchTransferCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.create")),
 ):
     transfer = await finance_service.create_branch_transfer(
         db,
@@ -392,7 +521,7 @@ async def create_branch_transfer(
 async def receive_branch_transfer(
     transfer_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.receive")),
 ):
     transfer = await finance_service.receive_branch_transfer(
         db, transfer_id, received_by=current_user.phone,
@@ -410,7 +539,7 @@ async def receive_branch_transfer(
 async def cancel_branch_transfer(
     transfer_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.cancel")),
 ):
     transfer = await finance_service.cancel_branch_transfer(
         db, transfer_id, cancelled_by=current_user.phone,
@@ -428,7 +557,7 @@ async def cancel_branch_transfer(
 async def get_transfer_summary(
     branch_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("transfers.view")),
 ):
     return await finance_service.get_transfer_summary(
         db, branch_id=branch_id,
@@ -446,7 +575,7 @@ async def get_collections_sheet(
     end_date: date | None = Query(None),
     branch_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.view")),
 ):
     return await finance_service.get_collections_sheet(
         db, period=period, start_date=start_date, end_date=end_date,
@@ -459,6 +588,6 @@ async def get_collections_sheet(
 async def get_finance_summary(
     branch_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("collections.view")),
 ):
     return await finance_service.get_finance_summary(db, branch_id=branch_id, company_id=current_user.company_id, current_user_role=current_user.role)

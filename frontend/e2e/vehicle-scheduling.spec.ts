@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { loginSuperAdmin } from './helpers';
 
 const SUPER_PHONE = '0782832711';
 const SUPER_PIN = '1234';
@@ -6,11 +7,7 @@ const SUPER_PIN = '1234';
 test.describe('Vehicle & Dual-Phase Scheduling', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/login');
-    await page.fill('#phone', SUPER_PHONE);
-    await page.fill('input[type="password"]', SUPER_PIN);
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await loginSuperAdmin(page);
   });
 
   test('creates lesson plan with dual-phase vehicles and locks schedule via API', async ({ page }) => {

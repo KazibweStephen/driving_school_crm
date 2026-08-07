@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { loginSuperAdmin } from './helpers';
 
 const SUPER_PHONE = '0782832711';
 const SUPER_PIN = '1234';
@@ -7,11 +8,7 @@ const COMPANY_ID = '00000000-0000-0000-0000-000000000001';
 test.describe('Permissions', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/login');
-    await page.fill('#phone', SUPER_PHONE);
-    await page.fill('input[type="password"]', SUPER_PIN);
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await loginSuperAdmin(page);
   });
 
   test('permissions page loads with catalog groups and matrix', async ({ page }) => {

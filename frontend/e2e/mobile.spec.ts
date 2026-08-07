@@ -1,7 +1,25 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 
 const phone = '0782832711';
 const pin = '1234';
+
+async function mobileLogin(page: Page) {
+  await page.goto('/m/login');
+  await page.waitForLoadState('networkidle');
+  await page.getByTestId('phone').fill(phone);
+  await page.getByTestId('pin').fill(pin);
+  await page.getByTestId('login-btn').click();
+  // Super admin may be prompted to pick a company when >1 exist
+  const companySelection = page.getByTestId('company-selection');
+  try {
+    await companySelection.waitFor({ state: 'visible', timeout: 5000 });
+    await page.getByText('Default Company', { exact: true }).click();
+    await page.getByRole('button', { name: 'Continue' }).click();
+  } catch {
+    // No company selection; proceed to dashboard
+  }
+  await expect(page).toHaveURL(/\/m\/dashboard$/, { timeout: 10000 });
+}
 
 test.describe('Mobile PWA', () => {
   test('loads login screen at /m/login', async ({ page }) => {
@@ -15,23 +33,13 @@ test.describe('Mobile PWA', () => {
   });
 
   test('office admin can log in and see dashboard', async ({ page }) => {
-    await page.goto('/m/login');
-    await page.waitForLoadState('networkidle');
-    await page.getByTestId('phone').fill(phone);
-    await page.getByTestId('pin').fill(pin);
-    await page.getByTestId('login-btn').click();
-    await expect(page).toHaveURL(/\/m\/dashboard$/, { timeout: 10000 });
+    await mobileLogin(page);
     await expect(page.getByText('Daily Sales')).toBeVisible();
     await expect(page.getByTestId('qa-sale')).toBeVisible();
   });
 
   test('bottom nav shows home and admin tabs', async ({ page }) => {
-    await page.goto('/m/login');
-    await page.waitForLoadState('networkidle');
-    await page.getByTestId('phone').fill(phone);
-    await page.getByTestId('pin').fill(pin);
-    await page.getByTestId('login-btn').click();
-    await expect(page).toHaveURL(/\/m\/dashboard$/, { timeout: 10000 });
+    await mobileLogin(page);
     const nav = page.locator('nav');
     await expect(nav.getByText('Home')).toBeVisible();
     await expect(nav.getByText('Sales')).toBeVisible();
@@ -43,12 +51,7 @@ test.describe('Mobile PWA', () => {
   });
 
   test('expenses page loads and can create an expense', async ({ page }) => {
-    await page.goto('/m/login');
-    await page.waitForLoadState('networkidle');
-    await page.getByTestId('phone').fill(phone);
-    await page.getByTestId('pin').fill(pin);
-    await page.getByTestId('login-btn').click();
-    await expect(page).toHaveURL(/\/m\/dashboard$/, { timeout: 10000 });
+    await mobileLogin(page);
     await page.goto('/m/expenses');
     await page.waitForLoadState('networkidle');
     await expect(page.getByRole('heading', { name: 'Expenses' })).toBeVisible();

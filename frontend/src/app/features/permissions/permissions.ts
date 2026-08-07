@@ -61,7 +61,11 @@ export class PermissionsCmp implements OnInit {
       try {
         const list = await this.companyService.list().toPromise();
         this.companies.set(list || []);
-        if (list?.length) this.selectedCompanyId.set(list[0].id);
+        const activeCompanyId = this.auth.currentUserCompanyId();
+        if (list?.length) {
+          const active = list.find((c) => c.id === activeCompanyId);
+          this.selectedCompanyId.set(active ? active.id : list[0].id);
+        }
       } catch {
         this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load companies' });
       }

@@ -42,7 +42,7 @@ async def my_branches(
 ):
     """Branches accessible to the current user (all in company if privileged, else assigned)."""
     base_query = select(Branch)
-    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+    if current_user.company_id is not None:
         base_query = base_query.where(Branch.company_id == current_user.company_id)
 
     is_privileged = current_user.role in (

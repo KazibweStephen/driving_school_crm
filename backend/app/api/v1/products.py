@@ -12,6 +12,7 @@ from app.schemas.product import (
     ProductUpdate,
 )
 from app.services import product as product_service
+from app.utils.tenant import resolve_company_id
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -22,13 +23,14 @@ async def create_product(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("products.create")),
 ):
+    company_id = await resolve_company_id(db, current_user)
     product = await product_service.create_product(
         db,
         name=data.name,
         duration_label=data.duration_label,
         description=data.description,
         created_by_phone=current_user.phone,
-        company_id=current_user.company_id,
+        company_id=company_id,
     )
     return ProductRead.model_validate(product)
 

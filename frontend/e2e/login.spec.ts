@@ -1,9 +1,22 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 
 test.describe('Login Flow', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/login');
   });
+
+  async function signIn(page: Page) {
+    await page.fill('#phone', '0782832711');
+    await page.fill('input[type="password"]', '1234');
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    // Super admin may be prompted to pick a company when >1 exist
+    const dialog = page.getByText('Select Company', { exact: true });
+    if (await dialog.isVisible().catch(() => false)) {
+      await page.getByText('Default Company', { exact: true }).click();
+      await page.getByRole('button', { name: 'Continue' }).click();
+    }
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+  }
 
   test('shows login page with heading', async ({ page }) => {
     await expect(page.locator('h1')).toContainText('Driving School CRM');
@@ -17,20 +30,14 @@ test.describe('Login Flow', () => {
   });
 
   test('successful login redirects to dashboard', async ({ page }) => {
-    await page.fill('#phone', '0782832711');
-    await page.fill('input[type="password"]', '1234');
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await signIn(page);
     await expect(page.locator('h1')).toContainText('Dashboard');
   });
 
   test('sidebar shows navigation on desktop after login', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '0782832711');
-    await page.fill('input[type="password"]', '1234');
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await signIn(page);
     await expect(page.locator('aside').getByText('Dashboard')).toBeVisible();
     await expect(page.locator('aside').getByText('Management')).toBeVisible();
     await page.locator('aside').getByText('Management').click();
@@ -40,20 +47,14 @@ test.describe('Login Flow', () => {
   test('mobile viewport has hamburger and sidebar is hidden', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/login');
-    await page.fill('#phone', '0782832711');
-    await page.fill('input[type="password"]', '1234');
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await signIn(page);
     await expect(page.getByLabel('Toggle menu')).toBeVisible();
   });
 
   test('opens sidebar on mobile and navigates to users', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/login');
-    await page.fill('#phone', '0782832711');
-    await page.fill('input[type="password"]', '1234');
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await signIn(page);
     await page.getByLabel('Toggle menu').click();
     await page.locator('aside').getByText('Management').click();
     await expect(page.locator('aside').getByText('Users')).toBeVisible();
@@ -64,10 +65,7 @@ test.describe('Login Flow', () => {
   test('users page shows existing users in table', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '0782832711');
-    await page.fill('input[type="password"]', '1234');
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await signIn(page);
     await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
@@ -82,10 +80,7 @@ test.describe('Login Flow', () => {
   test('create user dialog opens and can be dismissed', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '0782832711');
-    await page.fill('input[type="password"]', '1234');
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await signIn(page);
     await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
@@ -98,10 +93,7 @@ test.describe('Login Flow', () => {
     const phone = `2567000${Date.now().toString().slice(-6)}`;
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '0782832711');
-    await page.fill('input[type="password"]', '1234');
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await signIn(page);
     await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
@@ -116,10 +108,7 @@ test.describe('Login Flow', () => {
   test('can search users by name', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '0782832711');
-    await page.fill('input[type="password"]', '1234');
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await signIn(page);
     await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });
@@ -132,10 +121,7 @@ test.describe('Login Flow', () => {
   test('can open change PIN dialog', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/login');
-    await page.fill('#phone', '0782832711');
-    await page.fill('input[type="password"]', '1234');
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await signIn(page);
     await page.locator('aside').getByText('Management').click();
     await page.locator('aside').getByText('Users').click();
     await expect(page).toHaveURL(/\/users/, { timeout: 5000 });

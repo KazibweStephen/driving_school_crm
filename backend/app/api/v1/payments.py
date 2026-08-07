@@ -30,7 +30,7 @@ async def _resolve_branch_ids(
     """
     # Start with the base branch query scoped to the user's company
     base_query = select(Branch)
-    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+    if current_user.company_id is not None:
         base_query = base_query.where(Branch.company_id == current_user.company_id)
 
     is_privileged = current_user.role in (
@@ -57,7 +57,7 @@ async def _resolve_branch_ids(
         .join(Branch, UserBranchAssignment.branch_id == Branch.id)
         .where(
             UserBranchAssignment.user_id == current_user.phone,
-            Branch.company_id == current_user.company_id if current_user.company_id and current_user.role != UserRole.SUPER_USER else True,
+            Branch.company_id == current_user.company_id if current_user.company_id else True,
         )
     )
     assigned = [row[0] for row in result.all()]
@@ -72,7 +72,7 @@ async def accessible_branches(
     current_user: User = Depends(require_permission("payments.view")),
 ) -> list[BranchRead]:
     base_query = select(Branch)
-    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+    if current_user.company_id is not None:
         base_query = base_query.where(Branch.company_id == current_user.company_id)
 
     is_privileged = current_user.role in (
@@ -293,7 +293,7 @@ async def check_receipt(
     if payment is None:
         return {"exists": False}
     # Verify payment belongs to a consultation in the user's company
-    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+    if current_user.company_id is not None:
         from sqlalchemy import select as sa_select
         from app.models.consultation import Consultation
         from app.models.company import Branch

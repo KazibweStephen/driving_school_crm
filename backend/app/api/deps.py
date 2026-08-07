@@ -1,6 +1,8 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
+import uuid
 
 from app.core.database import get_db
 from app.core.security import decode_token
@@ -38,6 +40,20 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
         )
+    if user.role == UserRole.SUPER_USER:
+        active_company_id = payload.get("company_id")
+        if active_company_id:
+            try:
+                parsed = uuid.UUID(active_company_id)
+                user.active_company_id = parsed
+                # Set company_id as a "committed" value so scoping works
+                # everywhere via current_user.company_id, but it is never
+                # flushed/persisted back to the DB on a later commit.
+                set_committed_value(user, "company_id", parsed)
+            except ValueError:
+                user.active_company_id = None
+        else:
+            user.active_company_id = None
     return user
 
 

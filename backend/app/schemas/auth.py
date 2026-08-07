@@ -16,6 +16,10 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class CompanySwitchRequest(BaseModel):
+    company_id: str = Field(..., min_length=36, max_length=36)
+
+
 class PinResetRequest(BaseModel):
     phone: str = Field(..., pattern=r"^\d{7,15}$")
 

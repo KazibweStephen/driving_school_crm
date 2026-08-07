@@ -9,6 +9,15 @@
   </button>
   <span class="font-semibold text-gray-900">Driving School CRM</span>
   <div class="flex items-center gap-1">
+    @if (isSuperAdmin) {
+      <button
+        class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
+        (click)="toggleCompanySwitcher()"
+        aria-label="Switch company"
+      >
+        <span class="pi pi-building text-xl"></span>
+      </button>
+    }
     <button
       class="relative flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
       (click)="toggleNotifications()"
@@ -42,6 +51,19 @@
 <header class="fixed top-0 left-0 right-0 z-40 hidden h-14 items-center justify-between border-b bg-white px-6 shadow-sm lg:flex lg:ml-64">
   <span class="font-semibold text-gray-900">Driving School CRM</span>
   <div class="flex items-center gap-2">
+    @if (isSuperAdmin) {
+      <button
+        class="relative flex h-10 items-center gap-2 rounded-lg px-3 text-gray-700 hover:bg-gray-100"
+        (click)="toggleCompanySwitcher()"
+        pTooltip="Switch company"
+        tooltipPosition="bottom"
+        aria-label="Switch company"
+      >
+        <span class="pi pi-building text-lg"></span>
+        <span class="hidden max-w-[180px] truncate text-sm font-medium xl:block">{{ currentCompanyName }}</span>
+        <span class="pi pi-chevron-down text-xs"></span>
+      </button>
+    }
     <button
       class="relative flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
       (click)="toggleNotifications()"
@@ -177,6 +199,53 @@
       >
         View all transfers
       </button>
+    </div>
+  </div>
+}
+
+<!-- Company switcher panel -->
+@if (companySwitcherOpen()) {
+  <div class="fixed inset-0 z-40" (click)="closeCompanySwitcher()"></div>
+  <div class="fixed top-16 right-2 z-50 flex max-h-[70vh] w-[calc(100vw-1rem)] max-w-xs flex-col overflow-hidden rounded-xl border bg-white shadow-2xl lg:top-16 lg:right-6">
+    <div class="flex items-center justify-between border-b px-4 py-3">
+      <p class="text-sm font-semibold text-gray-900">Switch Company</p>
+      <button
+        class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
+        (click)="closeCompanySwitcher()"
+        aria-label="Close company switcher"
+      >
+        <span class="pi pi-times"></span>
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto">
+      <ul class="divide-y">
+        @for (c of companies(); track c.id) {
+          <li>
+            <button
+              class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 disabled:opacity-60"
+              (click)="switchCompany(c.id)"
+              [disabled]="switchingCompany()"
+            >
+              <span
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm"
+                [class.bg-blue-600]="c.id === auth.currentUserCompanyId()"
+                [class.text-white]="c.id === auth.currentUserCompanyId()"
+                [class.bg-gray-100]="c.id !== auth.currentUserCompanyId()"
+                [class.text-gray-600]="c.id !== auth.currentUserCompanyId()"
+              >
+                <span [class]="c.id === auth.currentUserCompanyId() ? 'pi pi-check' : 'pi pi-building'"></span>
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm font-medium text-gray-900">{{ c.name }}</span>
+                <span class="block font-mono text-xs text-gray-500">{{ c.code }} · {{ c.currency }}</span>
+              </span>
+              @if (switchingCompany()) {
+                <span class="pi pi-spin pi-spinner text-xs text-gray-400"></span>
+              }
+            </button>
+          </li>
+        }
+      </ul>
     </div>
   </div>
 }

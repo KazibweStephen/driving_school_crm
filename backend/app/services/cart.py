@@ -25,7 +25,7 @@ async def add_cart_item(
     current_user_role: UserRole | None = None,
 ) -> CartItem:
     # Verify consultation belongs to user's company
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         c_result = await db.execute(
             select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
                 Consultation.id == consultation_id,
@@ -95,7 +95,7 @@ async def update_cart_item(
     item = result.scalar_one_or_none()
     if not item:
         return None
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         c_result = await db.execute(
             select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
                 Consultation.id == item.consultation_id,
@@ -182,7 +182,7 @@ async def remove_cart_item(
     item = result.scalar_one_or_none()
     if not item:
         return False
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         c_result = await db.execute(
             select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
                 Consultation.id == item.consultation_id,
@@ -207,7 +207,7 @@ async def get_cart_items(
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> list[CartItem]:
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         c_result = await db.execute(
             select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
                 Consultation.id == consultation_id,

@@ -23,7 +23,7 @@ async def list_slots(
     query = select(VehicleScheduleSlot).join(
         Vehicle, VehicleScheduleSlot.vehicle_id == Vehicle.id
     )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.where(Vehicle.company_id == company_id)
     if vehicle_id:
         query = query.where(VehicleScheduleSlot.vehicle_id == vehicle_id)
@@ -45,7 +45,7 @@ async def get_slot_by_id(
     current_user_role: UserRole | None = None,
 ) -> VehicleScheduleSlot | None:
     query = select(VehicleScheduleSlot).where(VehicleScheduleSlot.id == slot_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(
             Vehicle, VehicleScheduleSlot.vehicle_id == Vehicle.id
         ).where(Vehicle.company_id == company_id)

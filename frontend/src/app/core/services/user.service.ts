@@ -64,6 +64,7 @@ export class UserService {
     status?: string;
     page?: number;
     page_size?: number;
+    company_id?: string;
   }) {
     let httpParams = new HttpParams();
     if (params) {
@@ -72,6 +73,7 @@ export class UserService {
       if (params.status) httpParams = httpParams.set('status', params.status);
       if (params.page) httpParams = httpParams.set('page', params.page);
       if (params.page_size) httpParams = httpParams.set('page_size', params.page_size);
+      if (params.company_id) httpParams = httpParams.set('company_id', params.company_id);
     }
     return this.http.get<UserListResponse>('/api/v1/users/', { params: httpParams });
   }

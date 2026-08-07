@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
 
 from app.api.deps import get_current_user, require_permission
 from app.core.database import get_db
@@ -64,12 +65,17 @@ async def list_users(
     status: UserStatus | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    company_id: UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("users.view")),
 ):
+    if current_user.role == UserRole.SUPER_USER and company_id is not None:
+        effective_company_id = company_id
+    else:
+        effective_company_id = current_user.company_id
     users, total = await user_service.list_users(
         db, search=search, role=role, status=status, page=page, page_size=page_size,
-        company_id=current_user.company_id,
+        company_id=effective_company_id,
         current_user_role=current_user.role,
     )
     return UserListResponse(

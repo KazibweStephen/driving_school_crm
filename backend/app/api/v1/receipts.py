@@ -100,7 +100,7 @@ async def download_receipt(
     payment = await _load_payment_with_relationships(db, payment_id)
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
-    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+    if current_user.company_id is not None:
         branch = payment.consultation.branch if payment.consultation else None
         if not branch or branch.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Payment not found")
@@ -136,7 +136,7 @@ async def download_consolidated_receipt(
     consultation = consult_result.scalar_one_or_none()
     if not consultation:
         raise HTTPException(status_code=404, detail="Consultation not found")
-    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+    if current_user.company_id is not None:
         if not consultation.branch or consultation.branch.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Consultation not found")
 
@@ -163,7 +163,7 @@ async def get_receipt_link(
     payment = await _load_payment_with_relationships(db, payment_id)
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
-    if current_user.role != UserRole.SUPER_USER and current_user.company_id is not None:
+    if current_user.company_id is not None:
         branch = payment.consultation.branch if payment.consultation else None
         if not branch or branch.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Payment not found")

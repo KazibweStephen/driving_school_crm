@@ -15,7 +15,7 @@ async def _verify_cart_item_company(
     db: AsyncSession, cart_item_id: uuid.UUID,
     company_id: uuid.UUID | None, user_role: UserRole | None,
 ) -> bool:
-    if user_role == UserRole.SUPER_USER or company_id is None:
+    if company_id is None:
         return True
     result = await db.execute(
         select(CartItem).join(Consultation, CartItem.consultation_id == Consultation.id)

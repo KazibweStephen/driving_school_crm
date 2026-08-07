@@ -15,7 +15,7 @@ async def list_breaks(
     current_user_role: UserRole | None = None,
 ) -> list[ScheduleBreak]:
     query = select(ScheduleBreak)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.where(ScheduleBreak.company_id == company_id)
     if active_only:
         query = query.where(ScheduleBreak.is_active == True)
@@ -31,7 +31,7 @@ async def get_break(
     current_user_role: UserRole | None = None,
 ) -> ScheduleBreak | None:
     query = select(ScheduleBreak).where(ScheduleBreak.id == break_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.where(ScheduleBreak.company_id == company_id)
     result = await db.execute(query)
     return result.scalar_one_or_none()

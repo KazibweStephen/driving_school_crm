@@ -55,6 +55,10 @@ export class AuthService {
     return this.http.post<TokenResponse>('/api/v1/auth/login', data);
   }
 
+  switchCompany(companyId: string) {
+    return this.http.post<TokenResponse>('/api/v1/auth/switch-company', { company_id: companyId });
+  }
+
   requestPinReset(phone: string) {
     return this.http.post<{ message: string }>('/api/v1/auth/forgot-pin', { phone });
   }

@@ -6,6 +6,7 @@ import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
 import { AuthService } from '../../../core/auth/auth.service';
+import { CompanyService, Company } from '../../../core/services/company.service';
 
 @Component({
   selector: 'app-login',
@@ -35,9 +36,17 @@ export class Login {
   forgotSuccess = signal<string | null>(null);
   forgotLoading = signal(false);
 
+  companies = signal<Company[]>([]);
+  selectedCompanyId = signal<string | null>(null);
+  showCompanyDialog = signal(false);
+  companyLoading = signal(false);
+  companyError = signal<string | null>(null);
+  switchingCompany = signal(false);
+
   constructor(
     private auth: AuthService,
     private router: Router,
+    private companyService: CompanyService,
   ) {}
 
   async onSubmit() {
@@ -50,12 +59,53 @@ export class Login {
       }).toPromise();
       if (res) {
         this.auth.setSession(res.access_token, res.refresh_token);
-        await this.router.navigate(['/dashboard']);
+        await this.openCompanySelection();
       }
     } catch {
       this.error.set('Invalid phone or PIN.');
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  async openCompanySelection() {
+    this.companyError.set(null);
+    this.companyLoading.set(true);
+    try {
+      const companies = await this.companyService.list().toPromise();
+      if (companies && companies.length > 1) {
+        this.companies.set(companies);
+        this.selectedCompanyId.set(this.auth.currentUserCompanyId());
+        this.showCompanyDialog.set(true);
+        return;
+      }
+    } catch {
+      this.companyError.set('Failed to load companies.');
+    } finally {
+      this.companyLoading.set(false);
+    }
+    await this.router.navigate(['/dashboard']);
+  }
+
+  async confirmCompany() {
+    this.companyError.set(null);
+    const companyId = this.selectedCompanyId();
+    if (!companyId) {
+      this.companyError.set('Select a company to continue.');
+      return;
+    }
+    this.switchingCompany.set(true);
+    try {
+      const res = await this.auth.switchCompany(companyId).toPromise();
+      if (res) {
+        this.auth.setSession(res.access_token, res.refresh_token);
+        this.showCompanyDialog.set(false);
+        await this.router.navigate(['/dashboard']);
+      }
+    } catch {
+      this.companyError.set('Failed to switch company. Please try again.');
+    } finally {
+      this.switchingCompany.set(false);
     }
   }
 

@@ -42,7 +42,7 @@ async def create_payment(
     current_user_role: UserRole | None = None,
     branch_id: uuid.UUID | None = None,
 ) -> Payment:
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         c_result = await db.execute(
             select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
                 Consultation.id == consultation_id,
@@ -60,7 +60,7 @@ async def create_payment(
         if branch is None:
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Branch not found")
-        if current_user_role != UserRole.SUPER_USER and company_id is not None and branch.company_id != company_id:
+        if company_id is not None and branch.company_id != company_id:
             from fastapi import HTTPException
             raise HTTPException(status_code=403, detail="Branch not in your company")
     payment = Payment(
@@ -113,7 +113,7 @@ async def get_payments_by_consultation(
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> list[Payment]:
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         c_result = await db.execute(
             select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
                 Consultation.id == consultation_id,
@@ -236,7 +236,7 @@ async def mark_installment_paid(
     inst = result.scalar_one_or_none()
     if not inst:
         return None
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         p_result = await db.execute(
             select(Payment).join(Consultation, Payment.consultation_id == Consultation.id)
             .join(Branch, Consultation.branch_id == Branch.id)
@@ -346,7 +346,7 @@ async def list_clients(
         selectinload(Consultation.follow_ups),
     )
 
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
 
     if search:
@@ -384,7 +384,7 @@ async def get_client_detail(
             selectinload(Consultation.follow_ups).selectinload(FollowUp.cart_items),
         )
     )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     result = await db.execute(query)
     return result.scalar_one_or_none()

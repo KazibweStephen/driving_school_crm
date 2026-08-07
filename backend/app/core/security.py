@@ -51,11 +51,13 @@ def create_access_token(
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
-def create_refresh_token(phone: str) -> str:
+def create_refresh_token(phone: str, company_id: str | None = None) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.jwt_refresh_token_expire_days
     )
     payload = {"sub": phone, "exp": expire, "type": "refresh"}
+    if company_id:
+        payload["company_id"] = company_id
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 

@@ -42,7 +42,7 @@ async def list_expenses(
     if branch_id:
         query = query.where(Expense.branch_id == branch_id)
         count_query = count_query.where(Expense.branch_id == branch_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
         count_query = count_query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
     if status:
@@ -64,7 +64,7 @@ async def _verify_branch_company(
     db: AsyncSession, branch_id: uuid.UUID,
     company_id: uuid.UUID | None, user_role: UserRole | None,
 ) -> bool:
-    if user_role == UserRole.SUPER_USER or company_id is None:
+    if company_id is None:
         return True
     result = await db.execute(
         select(Branch).where(Branch.id == branch_id, Branch.company_id == company_id)
@@ -113,7 +113,7 @@ async def get_expense(
     current_user_role: UserRole | None = None,
 ) -> Expense | None:
     query = select(Expense).where(Expense.id == expense_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
     result = await db.execute(query)
     return result.scalar_one_or_none()
@@ -133,7 +133,7 @@ async def update_expense(
     current_user_role: UserRole | None = None,
 ) -> Expense | None:
     query = select(Expense).where(Expense.id == expense_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
     result = await db.execute(query)
     expense = result.scalar_one_or_none()
@@ -183,7 +183,7 @@ async def list_borrowed(
     if branch_id:
         query = query.where(BorrowedMoney.branch_id == branch_id)
         count_query = count_query.where(BorrowedMoney.branch_id == branch_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, BorrowedMoney.branch_id == Branch.id).where(Branch.company_id == company_id)
         count_query = count_query.join(Branch, BorrowedMoney.branch_id == Branch.id).where(Branch.company_id == company_id)
     if status:
@@ -250,7 +250,7 @@ async def update_borrowed(
     current_user_role: UserRole | None = None,
 ) -> BorrowedMoney | None:
     query = select(BorrowedMoney).where(BorrowedMoney.id == item_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, BorrowedMoney.branch_id == Branch.id).where(Branch.company_id == company_id)
     result = await db.execute(query)
     item = result.scalar_one_or_none()
@@ -306,7 +306,7 @@ async def list_collections(
             count_query.join(Consultation, Collection.consultation_id == Consultation.id)
             .where(Consultation.branch_id == branch_id)
         )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Consultation, Collection.consultation_id == Consultation.id)
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
         count_query = count_query.join(Consultation, Collection.consultation_id == Consultation.id)
@@ -336,7 +336,7 @@ async def create_collection(
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> Collection:
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         c_result = await db.execute(
             select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
                 Consultation.id == consultation_id,
@@ -371,7 +371,7 @@ async def update_collection(
     current_user_role: UserRole | None = None,
 ) -> Collection | None:
     query = select(Collection).where(Collection.id == collection_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Consultation, Collection.consultation_id == Consultation.id)
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     result = await db.execute(query)
@@ -424,7 +424,7 @@ async def create_collection_for_installment(
     installment = result.scalar_one_or_none()
     if not installment:
         return None
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         c_result = await db.execute(
             select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
                 Consultation.id == installment.payment.consultation_id,
@@ -464,7 +464,7 @@ async def get_dunning_list(
             Installment.due_date < today,
         )
     )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Payment, Installment.payment_id == Payment.id)
         query = query.join(Consultation, Payment.consultation_id == Consultation.id)
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
@@ -564,7 +564,7 @@ async def _verify_branches_in_company(
     company_id: uuid.UUID | None,
     user_role: UserRole | None,
 ) -> bool:
-    if user_role == UserRole.SUPER_USER or company_id is None:
+    if company_id is None:
         return True
     result = await db.execute(
         select(Branch).where(Branch.id.in_(branch_ids), Branch.company_id == company_id)
@@ -614,7 +614,7 @@ async def _get_transfer_scoped(
     current_user_role: UserRole | None,
 ) -> BranchTransfer | None:
     query = select(BranchTransfer).where(BranchTransfer.id == transfer_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         from_branch = select(Branch.id).where(
             Branch.id == BranchTransfer.from_branch_id,
             Branch.company_id == company_id,
@@ -692,7 +692,7 @@ async def list_branch_transfers(
             cond = or_(BranchTransfer.to_branch_id == branch_id, BranchTransfer.from_branch_id == branch_id)
         query = query.where(cond)
         count_query = count_query.where(cond)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         from_branch = select(Branch.id).where(
             Branch.id == BranchTransfer.from_branch_id,
             Branch.company_id == company_id,
@@ -738,7 +738,7 @@ async def list_transfer_notifications(
     )
     if is_privileged:
         bq = select(Branch.id)
-        if current_user_role != UserRole.SUPER_USER and company_id is not None:
+        if company_id is not None:
             bq = bq.where(Branch.company_id == company_id)
     else:
         bq = (
@@ -841,7 +841,7 @@ async def get_transfer_summary(
                 base = base.where(BranchTransfer.from_branch_id == branch_id)
             else:
                 base = base.where(BranchTransfer.to_branch_id == branch_id)
-        elif current_user_role != UserRole.SUPER_USER and company_id is not None:
+        elif company_id is not None:
             branch_exists = select(Branch.id).where(
                 Branch.id == (
                     BranchTransfer.from_branch_id if role == "outgoing"
@@ -894,7 +894,7 @@ async def get_collections_sheet(
     end_dt = datetime.combine(end_date, datetime.max.time())
     query = query.where(Collection.created_at >= start_dt, Collection.created_at <= end_dt)
 
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     if branch_id:
         query = query.where(Consultation.branch_id == branch_id)
@@ -973,7 +973,7 @@ async def get_finance_summary(
     )
     if branch_id:
         exp_query = exp_query.where(Expense.branch_id == branch_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         exp_query = exp_query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
     exp_query = exp_query.group_by(Expense.status)
     result = await db.execute(exp_query)
@@ -996,7 +996,7 @@ async def get_finance_summary(
     )
     if branch_id:
         bor_query = bor_query.where(BorrowedMoney.branch_id == branch_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         bor_query = bor_query.join(Branch, BorrowedMoney.branch_id == Branch.id).where(Branch.company_id == company_id)
     bor_query = bor_query.group_by(BorrowedMoney.status)
     result = await db.execute(bor_query)
@@ -1023,7 +1023,7 @@ async def get_finance_summary(
             col_query.join(Consultation, Collection.consultation_id == Consultation.id)
             .where(Consultation.branch_id == branch_id)
         )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         col_query = col_query.join(Consultation, Collection.consultation_id == Consultation.id)
         col_query = col_query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     col_query = col_query.group_by(Collection.status)

@@ -67,7 +67,7 @@ async def get_mobile_dashboard(
         Commission.created_at >= month_start,
         Commission.created_at < next_month,
     )
-    if user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         commission_base = commission_base.where(Commission.company_id == company_id)
 
     earned_query = commission_base.where(

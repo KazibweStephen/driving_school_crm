@@ -18,14 +18,12 @@ def add_company_filter(
     user: User,
     company_id_col=None,
 ) -> Select:
-    """Add a company_id WHERE clause unless the user is super_admin.
+    """Add a company_id WHERE clause for the user's effective company.
 
     Usage:
         query = add_company_filter(select(Product), Product, user)
         query = add_company_filter(select(Vehicle), Vehicle, user)
     """
-    if user.role == UserRole.SUPER_USER:
-        return query
     col = company_id_col or getattr(model, "company_id", None)
     if col is not None and user.company_id is not None:
         return query.where(col == user.company_id)
@@ -47,8 +45,6 @@ def add_branch_company_filter(
         query = add_branch_company_filter(select(Consultation), Consultation, user)
         query = add_branch_company_filter(select(Expense), Expense, user)
     """
-    if user.role == UserRole.SUPER_USER:
-        return query
     col = branch_id_col or getattr(model, "branch_id", None)
     if col is None or user.company_id is None:
         return query
@@ -75,8 +71,6 @@ def add_company_filter_from_relationship(
             [(Product, Package.product_id)]
         )
     """
-    if user.role == UserRole.SUPER_USER:
-        return query
     if user.company_id is None:
         return query
 
@@ -89,20 +83,28 @@ def add_company_filter_from_relationship(
 
 
 def company_id_column(user: User) -> uuid.UUID | None:
-    """Get the effective company_id for filtering (None for super_admin)."""
-    if user.role == UserRole.SUPER_USER:
-        return None
+    """Get the effective company_id for filtering.
+
+    For a super admin with an active company selected this returns the active
+    company; for everyone else their stored company_id (None when unscoped).
+    """
+    active = getattr(user, "active_company_id", None)
+    if active is not None:
+        return active
     return user.company_id
 
 
 async def resolve_company_id(db: AsyncSession, user: User) -> uuid.UUID | None:
     """Resolve a company_id for create operations.
 
-    For regular users returns their own company_id.
-    For super_users (who have no company_id) looks up the first company
-    so they can create tenant-scoped records.
-    Returns None only if no company exists at all.
+    For regular users returns their own company_id. For super_users the
+    session's active company is used, falling back to the first company so they
+    can always create tenant-scoped records. Returns None only if no company
+    exists at all.
     """
+    active = getattr(user, "active_company_id", None)
+    if active is not None:
+        return active
     if user.company_id is not None:
         return user.company_id
     if user.role == UserRole.SUPER_USER:

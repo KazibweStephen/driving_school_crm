@@ -38,7 +38,7 @@ async def list_assignments(
     query = select(VehicleAssignment).join(
         Vehicle, VehicleAssignment.vehicle_id == Vehicle.id
     )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.where(Vehicle.company_id == company_id)
     if vehicle_id:
         query = query.where(VehicleAssignment.vehicle_id == vehicle_id)
@@ -76,7 +76,7 @@ async def get_current_assignment(
             ),
         )
     )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(
             Vehicle, VehicleAssignment.vehicle_id == Vehicle.id
         ).where(Vehicle.company_id == company_id)

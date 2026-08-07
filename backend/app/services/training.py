@@ -21,7 +21,7 @@ async def _verify_cart_item_company(
     company_id: uuid.UUID | None, user_role: UserRole | None,
 ) -> bool:
     """Verify a cart item's consultation belongs to the user's company."""
-    if user_role == UserRole.SUPER_USER or company_id is None:
+    if company_id is None:
         return True
     result = await db.execute(
         select(CartItem).join(Consultation, CartItem.consultation_id == Consultation.id)
@@ -90,7 +90,7 @@ async def get_training_session_by_id(
         .where(TrainingSession.id == session_id)
         .options(selectinload(TrainingSession.skills))
     )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = (
             query.join(CartItem, TrainingSession.cart_item_id == CartItem.id)
             .join(Consultation, CartItem.consultation_id == Consultation.id)
@@ -377,7 +377,7 @@ async def get_daily_schedule(
         .order_by(TrainingSession.session_date.asc())
     )
 
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     if branch_id:
         query = query.where(Consultation.branch_id == branch_id)
@@ -643,7 +643,7 @@ async def _verify_training_session_company(
     db: AsyncSession, session_id: uuid.UUID,
     company_id: uuid.UUID | None, user_role: UserRole | None,
 ) -> bool:
-    if user_role == UserRole.SUPER_USER or company_id is None:
+    if company_id is None:
         return True
     result = await db.execute(
         select(TrainingSession).join(CartItem, TrainingSession.cart_item_id == CartItem.id)
@@ -730,7 +730,7 @@ async def get_skill_by_id(
     current_user_role: UserRole | None = None,
 ) -> Skill | None:
     query = select(Skill).where(Skill.id == skill_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = (
             query.join(TrainingSession, Skill.training_session_id == TrainingSession.id)
             .join(CartItem, TrainingSession.cart_item_id == CartItem.id)

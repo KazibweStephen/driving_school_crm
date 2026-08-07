@@ -122,9 +122,7 @@ async def get_user_by_phone_with_company(
     company_id: uuid.UUID | None,
     current_user_role: UserRole | None = None,
 ) -> User | None:
-    """Lookup user by phone, scoped to company (super_admin bypasses)."""
-    if current_user_role == UserRole.SUPER_USER:
-        return await get_user_by_phone(db, phone)
+    """Lookup user by phone, scoped to the user's effective company."""
     query = select(User).options(selectinload(User.branch_assignments)).where(User.phone == phone)
     if company_id is not None:
         query = query.where(User.company_id == company_id)
@@ -144,7 +142,7 @@ async def list_users(
 ) -> tuple[list[User], int]:
     query = select(User).options(selectinload(User.branch_assignments))
 
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.where(User.company_id == company_id)
 
     if search:

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+import uuid as _uuid
 
 from app.core.database import get_db
 from app.core.security import (
@@ -11,14 +12,16 @@ from app.core.security import (
 from sqlalchemy import select
 
 from app.models.company import Company
-from app.models.user import UserStatus
+from app.models.user import User, UserRole, UserStatus
 from app.schemas.auth import (
+    CompanySwitchRequest,
     LoginRequest,
     PinResetRequest,
     PinResetVerifyRequest,
     RefreshRequest,
     TokenResponse,
 )
+from app.api.deps import require_super_user
 from app.services.permission import get_user_permissions
 from app.services import user as user_service
 from app.services.user import get_user_by_phone
@@ -27,6 +30,47 @@ from app.services.notification.service import on_pin_reset_otp
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 MAX_LOGIN_ATTEMPTS = 5
+
+
+async def _effective_company(
+    db: AsyncSession,
+    user: User,
+    preferred_id: _uuid.UUID | None = None,
+) -> tuple[_uuid.UUID | None, str]:
+    """Resolve the (company_id, currency) for the user's session.
+
+    For super_users the active company comes from ``preferred_id`` (carried in
+    the refresh token) or their stored company_id, falling back to the first
+    active company. Regular users are always tied to their stored company_id.
+    """
+    if user.role == UserRole.SUPER_USER:
+        candidate = preferred_id or user.company_id
+        if candidate is not None:
+            company_result = await db.execute(
+                select(Company).where(Company.id == candidate, Company.is_active == True)  # noqa: E712
+            )
+            company = company_result.scalar_one_or_none()
+            if company is not None:
+                return company.id, company.currency or "UGX"
+        result = await db.execute(
+            select(Company)
+            .where(Company.is_active == True)  # noqa: E712
+            .order_by(Company.created_at)
+            .limit(1)
+        )
+        company = result.scalar_one_or_none()
+        if company is not None:
+            return company.id, company.currency or "UGX"
+        return None, "UGX"
+    if user.company_id is not None:
+        company_result = await db.execute(select(Company).where(Company.id == user.company_id))
+        company = company_result.scalar_one_or_none()
+        return user.company_id, company.currency if company else "UGX"
+    return None, "UGX"
+
+
+def _company_id_str(company_id: _uuid.UUID | None) -> str | None:
+    return str(company_id) if company_id else None
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -59,12 +103,8 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     user.pin_reset_otp_expires_at = None
     await db.flush()
 
-    company_id_str = str(user.company_id) if user.company_id else None
-    currency = "UGX"
-    if user.company_id:
-        company_result = await db.execute(select(Company).where(Company.id == user.company_id))
-        company = company_result.scalar_one_or_none()
-        currency = company.currency if company else "UGX"
+    company_id, currency = await _effective_company(db, user)
+    company_id_str = _company_id_str(company_id)
     permissions = sorted(await get_user_permissions(db, user))
     return TokenResponse(
         access_token=create_access_token(
@@ -75,7 +115,45 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
             permissions=permissions,
             name=user.name,
         ),
-        refresh_token=create_refresh_token(user.phone),
+        refresh_token=create_refresh_token(user.phone, company_id=company_id_str),
+    )
+
+
+@router.post("/switch-company", response_model=TokenResponse)
+async def switch_company(
+    data: CompanySwitchRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_super_user),
+):
+    """Switch the super admin's active operating company for this session."""
+    try:
+        cid = _uuid.UUID(data.company_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid company ID",
+        )
+    company_result = await db.execute(
+        select(Company).where(Company.id == cid, Company.is_active == True)  # noqa: E712
+    )
+    company = company_result.scalar_one_or_none()
+    if company is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found",
+        )
+    company_id_str = str(cid)
+    permissions = sorted(await get_user_permissions(db, current_user))
+    return TokenResponse(
+        access_token=create_access_token(
+            current_user.phone, role=current_user.role.value,
+            can_backdate=current_user.can_backdate,
+            company_id=company_id_str,
+            currency=company.currency or "UGX",
+            permissions=permissions,
+            name=current_user.name,
+        ),
+        refresh_token=create_refresh_token(current_user.phone, company_id=company_id_str),
     )
 
 
@@ -95,15 +173,18 @@ async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
         )
     user = await get_user_by_phone(db, phone)
     role = user.role.value if user else None
-    company_id_str = str(user.company_id) if user and user.company_id else None
-    currency = "UGX"
+    preferred_id = None
+    raw_cid = payload.get("company_id")
+    if raw_cid:
+        try:
+            preferred_id = _uuid.UUID(raw_cid)
+        except ValueError:
+            preferred_id = None
+    company_id, currency = await _effective_company(db, user, preferred_id=preferred_id) if user else (None, "UGX")
+    company_id_str = _company_id_str(company_id)
     permissions: list[str] = []
     if user:
         permissions = sorted(await get_user_permissions(db, user))
-        if user.company_id:
-            company_result = await db.execute(select(Company).where(Company.id == user.company_id))
-            company = company_result.scalar_one_or_none()
-            currency = company.currency if company else "UGX"
     return TokenResponse(
         access_token=create_access_token(
             phone, role=role,
@@ -113,7 +194,7 @@ async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
             permissions=permissions,
             name=user.name if user else None,
         ),
-        refresh_token=create_refresh_token(phone),
+        refresh_token=create_refresh_token(phone, company_id=company_id_str),
     )
 
 

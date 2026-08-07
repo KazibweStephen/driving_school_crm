@@ -81,7 +81,7 @@ async def get_consultation_by_id(
     )
     if branch_id:
         query = query.where(Consultation.branch_id == branch_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     result = await db.execute(query)
     return result.scalar_one_or_none()
@@ -106,7 +106,7 @@ async def search_consultations(
 
     if branch_id:
         query = query.where(Consultation.branch_id == branch_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
 
     if search:
@@ -282,7 +282,7 @@ async def client_search(
             Consultation.last_name.ilike(search_term),
         )
     )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         stmt = stmt.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     stmt = stmt.order_by(Consultation.created_at.desc())
 
@@ -388,7 +388,7 @@ async def get_follow_up_by_id(
     current_user_role: UserRole | None = None,
 ) -> FollowUp | None:
     query = select(FollowUp).where(FollowUp.id == follow_up_id).options(selectinload(FollowUp.cart_items))
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = (query.join(Consultation, FollowUp.consultation_id == Consultation.id)
                  .join(Branch, Consultation.branch_id == Branch.id)
                  .where(Branch.company_id == company_id))

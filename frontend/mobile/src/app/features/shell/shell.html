@@ -4,6 +4,56 @@
     <div class="text-xs text-slate-300">{{ user() || 'Admin' }}</div>
   </div>
   <div class="flex items-center gap-2">
+    @if (isSuperAdmin) {
+      <div class="relative">
+        <button
+          type="button"
+          class="flex items-center gap-1 rounded-lg px-2 py-2 text-sm text-slate-300 hover:bg-slate-800"
+          (click)="toggleCompanyMenu()"
+          aria-label="Switch company"
+          data-testid="switch-company"
+        >
+          <span class="pi pi-building"></span>
+          @if (currentCompanyName) {
+            <span class="hidden max-w-[120px] truncate text-xs sm:block">{{ currentCompanyName }}</span>
+          }
+        </button>
+        @if (companyMenuOpen()) {
+          <div class="absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+            <p class="border-b px-4 py-2 text-xs font-semibold text-slate-500">Switch Company</p>
+            <ul class="max-h-72 divide-y overflow-y-auto">
+              @for (c of companies(); track c.id) {
+                <li>
+                  <button
+                    type="button"
+                    class="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-slate-50 disabled:opacity-60"
+                    (click)="switchCompany(c.id)"
+                    [disabled]="switchingCompany()"
+                  >
+                    <span
+                      class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm"
+                      [class.bg-blue-600]="c.id === auth.currentUserCompanyId()"
+                      [class.text-white]="c.id === auth.currentUserCompanyId()"
+                      [class.bg-slate-100]="c.id !== auth.currentUserCompanyId()"
+                      [class.text-slate-500]="c.id !== auth.currentUserCompanyId()"
+                    >
+                      <span [class]="c.id === auth.currentUserCompanyId() ? 'pi pi-check' : 'pi pi-building'"></span>
+                    </span>
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate text-sm font-medium text-slate-900">{{ c.name }}</span>
+                      <span class="block font-mono text-xs text-slate-500">{{ c.code }} · {{ c.currency }}</span>
+                    </span>
+                    @if (switchingCompany()) {
+                      <span class="pi pi-spin pi-spinner text-xs text-slate-400"></span>
+                    }
+                  </button>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+    }
     <button
       type="button"
       class="text-xs text-slate-300 hover:text-white"

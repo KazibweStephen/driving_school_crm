@@ -54,7 +54,19 @@
       appendTo="body"
       (onChange)="onSearch()"
     />
-    @if (search() || roleFilter() || statusFilter()) {
+    @if (isSuperUser) {
+      <p-select
+        [(ngModel)]="companyFilter"
+        [options]="companyOptions"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="All companies"
+        styleClass="w-48"
+        appendTo="body"
+        (onChange)="onSearch()"
+      />
+    }
+    @if (search() || roleFilter() || statusFilter() || companyFilter()) {
       <p-button
         label="Clear"
         icon="pi pi-times"

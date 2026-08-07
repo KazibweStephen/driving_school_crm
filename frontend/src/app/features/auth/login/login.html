@@ -184,3 +184,69 @@
     }
   </div>
 </p-dialog>
+
+<!-- Select Company Dialog (super admin) -->
+@if (showCompanyDialog()) {
+  <p-dialog
+    header="Select Company"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '420px' }"
+    [draggable]="false"
+    [resizable]="false"
+    [closable]="false"
+    [showHeader]="true"
+    [visible]="true"
+  >
+    <div class="flex flex-col gap-3 pt-2">
+      <p class="text-sm text-gray-600">
+        You are a super admin. Choose the company you want to operate on for this session. You can change this later from the header.
+      </p>
+
+      @if (companyLoading()) {
+        <div class="flex items-center justify-center py-8">
+          <span class="pi pi-spin pi-spinner text-2xl text-gray-400"></span>
+        </div>
+      } @else {
+        <div class="flex flex-col gap-2">
+          @for (c of companies(); track c.id) {
+            <button
+              type="button"
+              (click)="selectedCompanyId.set(c.id)"
+              class="flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors"
+              [class.border-blue-600]="selectedCompanyId() === c.id"
+              [class.bg-blue-50]="selectedCompanyId() === c.id"
+              [class.border-gray-200]="selectedCompanyId() !== c.id"
+            >
+              <span
+                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base"
+                [class.bg-blue-600]="selectedCompanyId() === c.id"
+                [class.text-white]="selectedCompanyId() === c.id"
+                [class.bg-gray-100]="selectedCompanyId() !== c.id"
+                [class.text-gray-500]="selectedCompanyId() !== c.id"
+              >
+                <span [class]="selectedCompanyId() === c.id ? 'pi pi-check' : 'pi pi-building'"></span>
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm font-medium text-gray-900">{{ c.name }}</span>
+                <span class="block font-mono text-xs text-gray-500">{{ c.code }} · {{ c.currency }}</span>
+              </span>
+            </button>
+          }
+        </div>
+      }
+
+      @if (companyError()) {
+        <p class="text-sm text-red-600">{{ companyError() }}</p>
+      }
+
+      <p-button
+        label="Continue"
+        icon="pi pi-arrow-right"
+        [loading]="switchingCompany()"
+        [disabled]="switchingCompany() || !selectedCompanyId()"
+        (onClick)="confirmCompany()"
+        styleClass="w-full justify-center"
+      />
+    </div>
+  </p-dialog>
+}

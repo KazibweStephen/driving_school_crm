@@ -6,6 +6,7 @@ import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
 import { AuthService } from '../../core/auth/auth.service';
+import { CompanyService, Company } from '../../core/services/company.service';
 import { MOBILE_REDIRECT_KEY } from '../../core/auth/auth.guard';
 
 @Component({
@@ -22,7 +23,56 @@ import { MOBILE_REDIRECT_KEY } from '../../core/auth/auth.guard';
           <p class="text-sm text-slate-500">Office Admin</p>
         </div>
 
-        @if (!resetMode()) {
+        @if (showCompanySelection()) {
+          <div class="space-y-3" data-testid="company-selection">
+            <p class="text-sm text-slate-600">
+              You are a super admin. Select the company to operate on.
+            </p>
+            @if (companyLoading()) {
+              <div class="flex items-center justify-center py-8">
+                <span class="pi pi-spin pi-spinner text-2xl text-slate-300"></span>
+              </div>
+            } @else {
+              <div class="flex flex-col gap-2">
+                @for (c of companies(); track c.id) {
+                  <button
+                    type="button"
+                    (click)="selectedCompanyId.set(c.id)"
+                    class="flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-left"
+                    [class.border-blue-600]="selectedCompanyId() === c.id"
+                    [class.bg-blue-50]="selectedCompanyId() === c.id"
+                    [class.border-slate-200]="selectedCompanyId() !== c.id"
+                  >
+                    <span
+                      class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base"
+                      [class.bg-blue-600]="selectedCompanyId() === c.id"
+                      [class.text-white]="selectedCompanyId() === c.id"
+                      [class.bg-slate-100]="selectedCompanyId() !== c.id"
+                      [class.text-slate-500]="selectedCompanyId() !== c.id"
+                    >
+                      <span [class]="selectedCompanyId() === c.id ? 'pi pi-check' : 'pi pi-building'"></span>
+                    </span>
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate text-sm font-medium text-slate-900">{{ c.name }}</span>
+                      <span class="block font-mono text-xs text-slate-500">{{ c.code }} · {{ c.currency }}</span>
+                    </span>
+                  </button>
+                }
+              </div>
+            }
+            @if (companyError()) {
+              <p class="text-sm text-red-600">{{ companyError() }}</p>
+            }
+            <p-button
+              label="Continue"
+              icon="pi pi-arrow-right"
+              styleClass="w-full justify-center"
+              [loading]="switchingCompany()"
+              [disabled]="switchingCompany() || !selectedCompanyId()"
+              (onClick)="confirmCompany()"
+            />
+          </div>
+        } @else if (!resetMode()) {
           <form (ngSubmit)="login()" class="space-y-4">
             <div>
               <label class="mb-1 block text-sm font-medium text-slate-700">Phone</label>
@@ -144,6 +194,7 @@ export class Login {
   private auth = inject(AuthService);
   private router = inject(Router);
   private messageService = inject(MessageService);
+  private companyService = inject(CompanyService);
 
   phone = '';
   pin = '';
@@ -155,6 +206,13 @@ export class Login {
   newPin = '';
   otpSent = signal(false);
 
+  showCompanySelection = signal(false);
+  companies = signal<Company[]>([]);
+  selectedCompanyId = signal<string | null>(null);
+  companyLoading = signal(false);
+  companyError = signal('');
+  switchingCompany = signal(false);
+
   login() {
     this.error.set('');
     if (!this.phone || !this.pin) {
@@ -165,12 +223,10 @@ export class Login {
     this.auth.login({ phone: this.phone.trim(), pin: this.pin }).subscribe({
       next: (res) => {
         this.auth.setSession(res.access_token, res.refresh_token);
-        const redirectUrl = localStorage.getItem(MOBILE_REDIRECT_KEY);
-        if (redirectUrl) {
-          localStorage.removeItem(MOBILE_REDIRECT_KEY);
-          this.router.navigateByUrl(redirectUrl);
+        if (this.auth.currentUserRole() === 'super_user') {
+          this.handleSuperAdminLogin();
         } else {
-          this.router.navigate(['/dashboard']);
+          this.navigateAfterLogin();
         }
       },
       error: (err) => {
@@ -178,6 +234,57 @@ export class Login {
         this.error.set(err.error?.detail || 'Login failed. Check your phone and PIN.');
       },
       complete: () => this.loading.set(false),
+    });
+  }
+
+  private async handleSuperAdminLogin() {
+    this.showCompanySelection.set(true);
+    this.companyLoading.set(true);
+    this.companyError.set('');
+    try {
+      const companies = await this.companyService.list().toPromise();
+      if (companies && companies.length > 1) {
+        this.companies.set(companies);
+        this.selectedCompanyId.set(this.auth.currentUserCompanyId());
+        return;
+      }
+    } catch {
+      this.companyError.set('Failed to load companies.');
+    } finally {
+      this.companyLoading.set(false);
+    }
+    this.navigateAfterLogin();
+  }
+
+  private navigateAfterLogin() {
+    const redirectUrl = localStorage.getItem(MOBILE_REDIRECT_KEY);
+    if (redirectUrl) {
+      localStorage.removeItem(MOBILE_REDIRECT_KEY);
+      this.router.navigateByUrl(redirectUrl);
+    } else {
+      this.router.navigate(['/dashboard']);
+    }
+  }
+
+  confirmCompany() {
+    this.companyError.set('');
+    const companyId = this.selectedCompanyId();
+    if (!companyId) {
+      this.companyError.set('Select a company to continue.');
+      return;
+    }
+    this.switchingCompany.set(true);
+    this.auth.switchCompany(companyId).subscribe({
+      next: (res) => {
+        this.auth.setSession(res.access_token, res.refresh_token);
+        this.showCompanySelection.set(false);
+        this.navigateAfterLogin();
+      },
+      error: (err) => {
+        this.switchingCompany.set(false);
+        this.companyError.set(err.error?.detail || 'Failed to switch company.');
+      },
+      complete: () => (this.switchingCompany.set(false)),
     });
   }
 

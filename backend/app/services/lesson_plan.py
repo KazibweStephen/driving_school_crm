@@ -687,7 +687,7 @@ async def _verify_cart_item_company(
     db: AsyncSession, cart_item_id: uuid.UUID,
     company_id: uuid.UUID | None, user_role: UserRole | None,
 ) -> bool:
-    if user_role == UserRole.SUPER_USER or company_id is None:
+    if company_id is None:
         return True
     result = await db.execute(
         select(CartItem).join(Consultation, CartItem.consultation_id == Consultation.id)
@@ -701,7 +701,7 @@ async def _verify_template_company(
     db: AsyncSession, template_id: uuid.UUID,
     company_id: uuid.UUID | None, user_role: UserRole | None,
 ) -> bool:
-    if user_role == UserRole.SUPER_USER or company_id is None:
+    if company_id is None:
         return True
     result = await db.execute(
         select(LessonPlanTemplate).where(
@@ -722,7 +722,7 @@ async def get_client_plan_by_id(
         .where(ClientLessonPlan.id == plan_id)
         .options(selectinload(ClientLessonPlan.lessons))
     )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = (
             query.join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
             .join(Consultation, CartItem.consultation_id == Consultation.id)
@@ -1077,7 +1077,7 @@ async def get_client_lesson_by_id(
     current_user_role: UserRole | None = None,
 ) -> ClientLesson | None:
     query = select(ClientLesson).where(ClientLesson.id == lesson_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = (
             query.join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
             .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)

@@ -11,6 +11,7 @@ import {
   TransferNotification,
   TransferNotificationsResponse,
 } from '../../core/services/finance.service';
+import { CompanyService, Company } from '../../core/services/company.service';
 
 interface NavItem {
   path: string;
@@ -42,6 +43,9 @@ export class MainLayout implements OnInit, OnDestroy {
   toReceiveAmount = signal('0.00');
   loadingNotifications = signal(false);
   receivingId = signal<string | null>(null);
+  companies = signal<Company[]>([]);
+  companySwitcherOpen = signal(false);
+  switchingCompany = signal(false);
   private _pollTimer: any = null;
   @ViewChild('changePin') changePin!: ChangePinDialog;
 
@@ -51,6 +55,16 @@ export class MainLayout implements OnInit, OnDestroy {
 
   get displayInitial(): string {
     return (this.auth.currentUserName() || this.auth.currentUser() || 'U').charAt(0).toUpperCase();
+  }
+
+  get isSuperAdmin(): boolean {
+    return this.auth.hasRole('super_user');
+  }
+
+  get currentCompanyName(): string {
+    const cid = this.auth.currentUserCompanyId();
+    const match = this.companies().find((c) => c.id === cid);
+    return match ? match.name : cid ? 'Company' : '';
   }
 
   topItems: NavItem[] = [
@@ -108,6 +122,7 @@ export class MainLayout implements OnInit, OnDestroy {
   constructor(
     public auth: AuthService,
     private financeService: FinanceService,
+    private companyService: CompanyService,
     private messageService: MessageService,
     private router: Router,
   ) {
@@ -132,6 +147,9 @@ export class MainLayout implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.refreshNotifications();
+    if (this.isSuperAdmin) {
+      this.loadCompanies();
+    }
     if (typeof window !== 'undefined') {
       this._pollTimer = setInterval(() => this.refreshNotifications(), 60000);
     }
@@ -180,6 +198,45 @@ export class MainLayout implements OnInit, OnDestroy {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to receive transfer' });
     } finally {
       this.receivingId.set(null);
+    }
+  }
+
+  async loadCompanies() {
+    try {
+      const companies = await this.companyService.list().toPromise();
+      if (companies) this.companies.set(companies);
+    } catch {
+      /* non-critical */
+    }
+  }
+
+  toggleCompanySwitcher() {
+    this.companySwitcherOpen.set(!this.companySwitcherOpen());
+    if (this.companySwitcherOpen() && this.companies().length === 0) {
+      this.loadCompanies();
+    }
+  }
+
+  closeCompanySwitcher() {
+    this.companySwitcherOpen.set(false);
+  }
+
+  async switchCompany(id: string) {
+    this.switchingCompany.set(true);
+    try {
+      const res = await this.auth.switchCompany(id).toPromise();
+      if (res) {
+        this.auth.setSession(res.access_token, res.refresh_token);
+        window.location.reload();
+      }
+    } catch (e: any) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: e?.error?.detail || 'Failed to switch company',
+      });
+    } finally {
+      this.switchingCompany.set(false);
     }
   }
 

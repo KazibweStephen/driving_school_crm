@@ -39,7 +39,7 @@ async def list_qualifications(
     query = select(InstructorQualification).join(
         User, InstructorQualification.instructor_phone == User.phone
     )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.where(User.company_id == company_id)
     if instructor_phone:
         query = query.where(
@@ -56,7 +56,7 @@ async def get_qualification(
     current_user_role: UserRole | None = None,
 ) -> InstructorQualification | None:
     query = select(InstructorQualification).where(InstructorQualification.id == qual_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(
             User, InstructorQualification.instructor_phone == User.phone
         ).where(User.company_id == company_id)

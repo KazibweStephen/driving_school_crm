@@ -50,6 +50,7 @@ export class Users implements OnInit {
   search = signal('');
   roleFilter = signal<string | null>(null);
   statusFilter = signal<string | null>(null);
+  companyFilter = signal<string | null>(null);
   loading = signal(false);
 
   showCreateDialog = signal(false);
@@ -67,6 +68,9 @@ export class Users implements OnInit {
   }
   get roleOptions() {
     return this.isSuperUser ? this.roles : this.roles.filter(r => r.value !== 'company_super_user');
+  }
+  get companyOptions() {
+    return this.companies().map((c) => ({ label: c.name, value: c.id }));
   }
   resetPinResult = signal<string | null>(null);
   @ViewChild('changePinDialog') changePinDialog!: ChangePinDialog;
@@ -110,6 +114,7 @@ export class Users implements OnInit {
   ) {}
 
   ngOnInit() {
+    this.companyFilter.set(this.isSuperUser ? this.auth.currentUserCompanyId() : null);
     this.loadUsers();
     this.loadCompanies();
     this.loadBranches();
@@ -137,6 +142,7 @@ export class Users implements OnInit {
           search: this.search() || undefined,
           role: this.roleFilter() || undefined,
           status: this.statusFilter() || undefined,
+          company_id: this.isSuperUser ? this.companyFilter() || undefined : undefined,
           page: this.page(),
           page_size: this.pageSize(),
         })
@@ -166,6 +172,7 @@ export class Users implements OnInit {
     this.search.set('');
     this.roleFilter.set(null);
     this.statusFilter.set(null);
+    this.companyFilter.set(this.isSuperUser ? this.auth.currentUserCompanyId() : null);
     this.page.set(1);
     this.loadUsers();
   }

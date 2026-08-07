@@ -210,7 +210,7 @@ async def create_availability(
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> ClientAvailability:
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         result = await db.execute(
             select(CartItem).where(CartItem.id == cart_item_id)
         )
@@ -243,7 +243,7 @@ async def list_availability(
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> list[ClientAvailability]:
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         result = await db.execute(
             select(CartItem).where(CartItem.id == cart_item_id)
         )
@@ -272,7 +272,7 @@ async def update_availability(
     query = select(ClientAvailability).where(ClientAvailability.id == avail_id)
     company_id = kwargs.pop("company_id", None)
     current_user_role = kwargs.pop("current_user_role", None)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = (query.join(CartItem, ClientAvailability.cart_item_id == CartItem.id)
                  .join(Consultation, CartItem.consultation_id == Consultation.id)
                  .join(Branch, Consultation.branch_id == Branch.id)
@@ -291,7 +291,7 @@ async def update_availability(
 
 async def delete_availability(db: AsyncSession, avail_id: uuid.UUID, company_id: uuid.UUID | None = None, current_user_role: UserRole | None = None) -> bool:
     query = select(ClientAvailability).where(ClientAvailability.id == avail_id)
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = (query.join(CartItem, ClientAvailability.cart_item_id == CartItem.id)
                  .join(Consultation, CartItem.consultation_id == Consultation.id)
                  .join(Branch, Consultation.branch_id == Branch.id)
@@ -788,7 +788,7 @@ async def get_weekly_schedule(
             ClientLesson.scheduled_start_time.isnot(None),
         )
     )
-    if current_user_role != UserRole.SUPER_USER and company_id is not None:
+    if company_id is not None:
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     query = query.options(
         selectinload(ClientLesson.plan)

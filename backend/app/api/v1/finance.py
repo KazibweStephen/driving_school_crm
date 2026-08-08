@@ -72,6 +72,8 @@ async def upload_expense_receipt(
 async def list_expenses(
     branch_id: uuid.UUID | None = Query(None),
     status: ExpenseStatus | None = Query(None),
+    category: str | None = Query(None),
+    category_not: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -80,6 +82,7 @@ async def list_expenses(
     expenses, total = await finance_service.list_expenses(
         db, branch_id=branch_id, status=status, page=page, page_size=page_size,
         company_id=current_user.company_id, current_user_role=current_user.role,
+        category=category, category_not=category_not,
     )
     return {
         "items": [ExpenseRead.model_validate(e) for e in expenses],

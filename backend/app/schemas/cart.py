@@ -10,6 +10,9 @@ class CartItemCreate(BaseModel):
     package_id: str | None = None
     notes: str | None = None
     is_important: bool = False
+    converter_id: str | None = None
+    primary_recommender_id: str | None = None
+    secondary_recommender_id: str | None = None
 
 
 class CartItemUpdate(BaseModel):
@@ -17,6 +20,9 @@ class CartItemUpdate(BaseModel):
     notes: str | None = None
     is_important: bool | None = None
     recovery_reason: str | None = None
+    converter_id: str | None = None
+    primary_recommender_id: str | None = None
+    secondary_recommender_id: str | None = None
 
 
 class CartItemRead(BaseModel):
@@ -35,6 +41,9 @@ class CartItemRead(BaseModel):
     theory_training_hours: int | None = None
     permit_processing_duration_days: int | None = None
     fuel_rate_per_session: Decimal | None = None
+    converter_id: str | None = None
+    primary_recommender_id: str | None = None
+    secondary_recommender_id: str | None = None
     created_at: datetime
     updated_at: datetime
 

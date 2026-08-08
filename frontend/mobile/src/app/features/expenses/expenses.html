@@ -2,18 +2,38 @@
 
 @if (step() === 'list') {
   <div class="space-y-4">
+    <div class="grid grid-cols-2 gap-2">
+      @for (t of tabOptions; track t.value) {
+        <button
+          type="button"
+          class="rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+          [class]="
+            tab() === t.value
+              ? 'bg-slate-900 text-white'
+              : 'bg-white border border-slate-200 text-slate-600'
+          "
+          (click)="setTab(t.value)"
+          [attr.data-testid]="'expense-tab-' + t.value"
+        >
+          {{ t.label }}
+        </button>
+      }
+    </div>
+
     <div class="flex items-center gap-2">
-      <p-select
-        [options]="statusOptions"
-        optionLabel="label"
-        optionValue="value"
-        [ngModel]="statusFilter()"
-        (ngModelChange)="setStatusFilter($event)"
-        placeholder="Status"
-        appendTo="body"
-        class="w-full"
-        data-testid="status-filter"
-      />
+      @if (tab() === 'expenses') {
+        <p-select
+          [options]="statusOptions"
+          optionLabel="label"
+          optionValue="value"
+          [ngModel]="statusFilter()"
+          (ngModelChange)="setStatusFilter($event)"
+          placeholder="Status"
+          appendTo="body"
+          class="w-full"
+          data-testid="status-filter"
+        />
+      }
       @if (branches().length > 1) {
         <p-select
           [options]="branches()"
@@ -29,7 +49,7 @@
       }
     </div>
 
-    @if (canCreate()) {
+    @if (canCreate() && tab() === 'expenses') {
       <p-button
         label="New expense"
         icon="pi pi-plus"

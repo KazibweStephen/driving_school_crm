@@ -105,6 +105,13 @@ export class CatalogService {
     return this.http.get<UserListResponse>('/api/v1/users/', { params });
   }
 
+  listUsers(params?: { role?: string; page_size?: number }) {
+    let httpParams = new HttpParams();
+    if (params?.role) httpParams = httpParams.set('role', params.role);
+    if (params?.page_size != null) httpParams = httpParams.set('page_size', String(params.page_size));
+    return this.http.get<UserListResponse>('/api/v1/users/', { params: httpParams });
+  }
+
   listMyBranches() {
     return this.http.get<Branch[]>('/api/v1/companies/my-branches');
   }

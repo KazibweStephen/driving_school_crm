@@ -56,6 +56,13 @@ export interface FullConsultationItem {
   installments: { due_date: string; amount: number }[];
 }
 
+export interface FollowUpCreate {
+  follow_up_date: string;
+  note?: string;
+  type?: 'conversion' | 'payment';
+  cart_item_ids?: string[];
+}
+
 export interface FullConsultationCreate {
   phone: string;
   first_name: string;
@@ -70,6 +77,10 @@ export interface FullConsultationCreate {
   branch_id?: string | null;
   items: FullConsultationItem[];
   payment?: { receipt_number?: string };
+  follow_up?: FollowUpCreate;
+  converter_id?: string;
+  primary_recommender_id?: string;
+  secondary_recommender_id?: string;
 }
 
 export interface ConsultationListResponse {
@@ -105,11 +116,34 @@ export class ConsultationService {
     return this.http.post<Consultation>('/api/v1/consultations/full', data);
   }
 
-  addCartItem(consultationId: string, data: { product_id: string; package_id?: string; notes?: string }) {
+  addCartItem(
+    consultationId: string,
+    data: {
+      product_id: string;
+      package_id?: string;
+      notes?: string;
+      converter_id?: string;
+      primary_recommender_id?: string;
+      secondary_recommender_id?: string;
+    },
+  ) {
     return this.http.post<CartItem>(`/api/v1/consultations/${consultationId}/cart-items`, data);
   }
 
-  updateCartItem(itemId: string, data: { status?: string; notes?: string }) {
+  updateCartItem(
+    itemId: string,
+    data: {
+      status?: string;
+      notes?: string;
+      converter_id?: string;
+      primary_recommender_id?: string;
+      secondary_recommender_id?: string;
+    },
+  ) {
     return this.http.patch<CartItem>(`/api/v1/cart-items/${itemId}`, data);
+  }
+
+  createFollowUp(consultationId: string, data: FollowUpCreate) {
+    return this.http.post(`/api/v1/consultations/${consultationId}/follow-ups`, data);
   }
 }

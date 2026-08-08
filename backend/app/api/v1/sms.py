@@ -183,7 +183,9 @@ async def send_arbitrary_sms(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("sms.send")),
 ):
-    ok = await send_sms(db, company_id, data.phone, data.message)
+    ok = await send_sms(
+        db, company_id, data.phone, data.message, created_by_phone=current_user.phone,
+    )
     if ok:
         return {"message": "SMS sent successfully"}
     raise HTTPException(
@@ -199,7 +201,10 @@ async def send_from_template(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("sms.send")),
 ):
-    ok = await send_template_sms(db, company_id, data.phone, data.category, data.variables)
+    ok = await send_template_sms(
+        db, company_id, data.phone, data.category, data.variables,
+        created_by_phone=current_user.phone,
+    )
     if ok:
         return {"message": "Template SMS sent successfully"}
     raise HTTPException(

@@ -177,6 +177,7 @@ async def create_commission_from_conversion(
     company_id: uuid.UUID | None,
     converter_id: str | None = None,
     recommender_id: str | None = None,
+    secondary_recommender_id: str | None = None,
 ) -> Optional[Commission]:
     package_id = uuid.UUID(cart_item.package_id) if cart_item.package_id else None
     if not package_id:
@@ -255,6 +256,7 @@ async def create_commission_from_conversion(
         commission_rate_id=rate.id,
         converter_id=converter_id,
         primary_recommender_id=recommender_id,
+        secondary_recommender_id=secondary_recommender_id,
         total_amount=total,
         converter_amount=converter_amt,
         primary_recommender_amount=primary_amt,

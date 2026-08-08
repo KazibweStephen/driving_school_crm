@@ -46,12 +46,16 @@ export class ExpenseService {
   getExpenses(params?: {
     branch_id?: string | null;
     status?: string | null;
+    category?: string | null;
+    category_not?: string | null;
     page?: number;
     page_size?: number;
   }) {
     let httpParams = new HttpParams();
     if (params?.branch_id) httpParams = httpParams.set('branch_id', params.branch_id);
     if (params?.status) httpParams = httpParams.set('status', params.status);
+    if (params?.category) httpParams = httpParams.set('category', params.category);
+    if (params?.category_not) httpParams = httpParams.set('category_not', params.category_not);
     if (params?.page != null) httpParams = httpParams.set('page', String(params.page));
     if (params?.page_size != null) httpParams = httpParams.set('page_size', String(params.page_size));
     return this.http.get<ExpenseListResponse>('/api/v1/finance/expenses', { params: httpParams });

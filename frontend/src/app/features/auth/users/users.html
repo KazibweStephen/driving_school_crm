@@ -12,13 +12,15 @@
         pTooltip="Change your password"
         tooltipPosition="bottom"
       />
-      <p-button
-        label="Add User"
-        icon="pi pi-plus"
-        (onClick)="showCreateDialog.set(true)"
-        pTooltip="Create new user"
-        tooltipPosition="bottom"
-      />
+      @if (canCreate) {
+        <p-button
+          label="Add User"
+          icon="pi pi-plus"
+          (onClick)="showCreateDialog.set(true)"
+          pTooltip="Create new user"
+          tooltipPosition="bottom"
+        />
+      }
     </div>
   </div>
 
@@ -125,7 +127,7 @@
           <td class="text-sm text-gray-500">{{ user.created_at | date: 'mediumDate' }}</td>
           <td>
             <div class="flex items-center gap-1">
-              @if (user.status === 'pending_approval') {
+              @if (user.status === 'pending_approval' && canApprove) {
                 <p-button
                   icon="pi pi-check-circle"
                   severity="info"
@@ -135,15 +137,17 @@
                   tooltipPosition="top"
                 />
               }
-              <p-button
-                icon="pi pi-pencil"
-                severity="secondary"
-                (onClick)="openEdit(user)"
-                styleClass="p-button-sm p-button-rounded p-button-text"
-                pTooltip="Edit user"
-                tooltipPosition="top"
-              />
-              @if (user.status === 'active') {
+              @if (canEdit) {
+                <p-button
+                  icon="pi pi-pencil"
+                  severity="secondary"
+                  (onClick)="openEdit(user)"
+                  styleClass="p-button-sm p-button-rounded p-button-text"
+                  pTooltip="Edit user"
+                  tooltipPosition="top"
+                />
+              }
+              @if (canEdit && user.status === 'active') {
                 <p-button
                   icon="pi pi-ban"
                   severity="danger"
@@ -152,7 +156,7 @@
                   pTooltip="Deactivate user"
                   tooltipPosition="top"
                 />
-              } @else if (user.status !== 'pending_approval') {
+              } @else if (canEdit && user.status !== 'pending_approval') {
                 <p-button
                   icon="pi pi-check-circle"
                   severity="success"
@@ -162,14 +166,16 @@
                   tooltipPosition="top"
                 />
               }
-              <p-button
-                icon="pi pi-key"
-                severity="warn"
-                (onClick)="confirmResetPin(user)"
-                styleClass="p-button-sm p-button-rounded p-button-text"
-                pTooltip="Reset PIN"
-                tooltipPosition="top"
-              />
+              @if (canResetPin) {
+                <p-button
+                  icon="pi pi-key"
+                  severity="warn"
+                  (onClick)="confirmResetPin(user)"
+                  styleClass="p-button-sm p-button-rounded p-button-text"
+                  pTooltip="Reset PIN"
+                  tooltipPosition="top"
+                />
+              }
             </div>
           </td>
         </tr>
@@ -199,7 +205,7 @@
           Created {{ user.created_at | date: 'mediumDate' }}
         </p>
         <div class="mt-3 flex items-center gap-2 border-t pt-3">
-          @if (user.status === 'pending_approval') {
+          @if (user.status === 'pending_approval' && canApprove) {
             <p-button
               icon="pi pi-check-circle"
               severity="info"
@@ -209,15 +215,17 @@
               tooltipPosition="top"
             />
           }
-          <p-button
-            icon="pi pi-pencil"
-            severity="secondary"
-            (onClick)="openEdit(user)"
-            styleClass="p-button-sm p-button-rounded p-button-text"
-            pTooltip="Edit user"
-            tooltipPosition="top"
-          />
-          @if (user.status === 'active') {
+          @if (canEdit) {
+            <p-button
+              icon="pi pi-pencil"
+              severity="secondary"
+              (onClick)="openEdit(user)"
+              styleClass="p-button-sm p-button-rounded p-button-text"
+              pTooltip="Edit user"
+              tooltipPosition="top"
+            />
+          }
+          @if (canEdit && user.status === 'active') {
             <p-button
               icon="pi pi-ban"
               severity="danger"
@@ -226,7 +234,7 @@
               pTooltip="Deactivate user"
               tooltipPosition="top"
             />
-          } @else if (user.status !== 'pending_approval') {
+          } @else if (canEdit && user.status !== 'pending_approval') {
             <p-button
               icon="pi pi-check-circle"
               severity="success"
@@ -236,14 +244,16 @@
               tooltipPosition="top"
             />
           }
-          <p-button
-            icon="pi pi-key"
-            severity="warn"
-            (onClick)="confirmResetPin(user)"
-            styleClass="p-button-sm p-button-rounded p-button-text"
-            pTooltip="Reset PIN"
-            tooltipPosition="top"
-          />
+          @if (canResetPin) {
+            <p-button
+              icon="pi pi-key"
+              severity="warn"
+              (onClick)="confirmResetPin(user)"
+              styleClass="p-button-sm p-button-rounded p-button-text"
+              pTooltip="Reset PIN"
+              tooltipPosition="top"
+            />
+          }
         </div>
       </div>
     }

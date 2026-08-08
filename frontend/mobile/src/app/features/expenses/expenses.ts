@@ -16,6 +16,9 @@ import { formatMoney, toISODate, todayISO } from '../../shared/format';
 
 type Step = 'list' | 'create';
 type StatusFilter = '' | 'pending' | 'approved' | 'rejected' | 'paid';
+type ExpenseTab = 'expenses' | 'sms';
+
+const SMS_CATEGORY = 'SMS';
 
 const CATEGORIES = [
   'Fuel',
@@ -65,6 +68,11 @@ export class Expenses {
   statusFilter = signal<StatusFilter>('');
   branches = signal<BranchInfo[]>([]);
   branchId = signal<string | null>(null);
+  tab = signal<ExpenseTab>('expenses');
+  tabOptions: { label: string; value: ExpenseTab }[] = [
+    { label: 'Expenses', value: 'expenses' },
+    { label: 'SMS', value: 'sms' },
+  ];
 
   // create form
   amount = signal<number | null>(null);
@@ -108,10 +116,13 @@ export class Expenses {
 
   loadExpenses() {
     this.loading.set(true);
+    const isSms = this.tab() === 'sms';
     this.expenseService
       .getExpenses({
         branch_id: this.branchId(),
-        status: this.statusFilter() || null,
+        status: isSms ? 'paid' : (this.statusFilter() || null),
+        category: isSms ? SMS_CATEGORY : null,
+        category_not: isSms ? null : SMS_CATEGORY,
         page: this.page(),
         page_size: this.pageSize,
       })
@@ -142,6 +153,13 @@ export class Expenses {
 
   setStatusFilter(value: StatusFilter) {
     this.statusFilter.set(value);
+    this.page.set(1);
+    this.loadExpenses();
+  }
+
+  setTab(value: ExpenseTab) {
+    if (this.tab() === value) return;
+    this.tab.set(value);
     this.page.set(1);
     this.loadExpenses();
   }

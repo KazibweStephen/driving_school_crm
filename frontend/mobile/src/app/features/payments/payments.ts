@@ -133,7 +133,16 @@ export class Payments {
 
   payableItems(): CartItem[] {
     const items = this.consultation()?.cart_items || [];
-    return items.filter((ci) => ci.status === 'converted_paid' || ci.status === 'converted_paying');
+    return items.filter(
+      (ci) =>
+        ci.status === 'converted_paid' ||
+        ci.status === 'converted_paying' ||
+        ci.status === 'consulting',
+    );
+  }
+
+  isConsulting(ci: CartItem): boolean {
+    return ci.status === 'consulting';
   }
 
   paymentsForItem(ci: CartItem): PaymentRead[] {
@@ -270,7 +279,12 @@ export class Payments {
 
   private finishCollect(consultationId: string, ci: CartItem, paymentId: string) {
     const balance = this.balanceForItem(ci);
-    if (balance <= 0 && ci.status === 'converted_paying') {
+    if (ci.status === 'consulting') {
+      this.consultationService.updateCartItem(ci.id, { status: 'converted_paid' }).subscribe({
+        next: () => this.showResult(true, paymentId, balance),
+        error: () => this.showResult(true, paymentId, balance),
+      });
+    } else if (balance <= 0 && ci.status === 'converted_paying') {
       this.consultationService.updateCartItem(ci.id, { status: 'converted_paid' }).subscribe({
         next: () => this.showResult(true, paymentId, balance),
         error: () => this.showResult(true, paymentId, balance),

@@ -14,7 +14,7 @@ import {
   CartItem,
   FullConsultationItem,
 } from '../../core/services/consultation.service';
-import { CatalogService, Product, Package } from '../../core/services/catalog.service';
+import { CatalogService, Product, Package, User } from '../../core/services/catalog.service';
 import { PaymentService, BranchInfo, PaymentRead } from '../../core/services/payment.service';
 import { ClientSearch } from '../../shared/client-search/client-search';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
@@ -30,6 +30,7 @@ interface SaleItem {
 }
 
 type Step = 'home' | 'client' | 'products' | 'payment' | 'done';
+type SaleMode = 'sale' | 'consulting';
 
 @Component({
   selector: 'app-sales',
@@ -68,6 +69,7 @@ export class Sales {
 
   products = signal<Product[]>([]);
   productsLoaded = false;
+  colleagues = signal<User[]>([]);
 
   // flow type
   isNewSale = signal(true);
@@ -75,6 +77,16 @@ export class Sales {
   existingConsultation = signal<Consultation | null>(null);
   existingItems = signal<CartItem[]>([]);
   existingPayments = signal<PaymentRead[]>([]);
+
+  // payment vs consulting mode
+  saleMode = signal<SaleMode>('sale');
+
+  // consulting / follow-up fields
+  followUpDate = signal<string>(todayISO());
+  followUpNote = '';
+  converterId = signal<string | null>(null);
+  primaryRecommenderId = signal<string | null>(null);
+  secondaryRecommenderId = signal<string | null>(null);
 
   // new client fields
   phone = '';
@@ -122,6 +134,7 @@ export class Sales {
     }
     if (!this.productsLoaded) this.loadProducts();
     if (this.branches().length === 0) this.loadBranches();
+    if (this.colleagues().length === 0) this.loadColleagues();
   }
 
   private resetFlow() {
@@ -138,6 +151,23 @@ export class Sales {
     this.selectedItems.set([]);
     this.receiptNumber = '';
     this.resultConsultationId.set(null);
+    this.saleMode.set('sale');
+    this.followUpDate.set(todayISO());
+    this.followUpNote = '';
+    this.converterId.set(null);
+    this.primaryRecommenderId.set(null);
+    this.secondaryRecommenderId.set(null);
+  }
+
+  setSaleMode(mode: SaleMode) {
+    this.saleMode.set(mode);
+    if (mode === 'consulting') {
+      this.followUpDate.set(this.documentDate());
+    }
+  }
+
+  onFollowUpDate(date: Date | null) {
+    if (date) this.followUpDate.set(toISODate(date));
   }
 
   private loadProducts() {
@@ -168,6 +198,15 @@ export class Sales {
           if (branches.length === 1) this.branchId.set(branches[0].id);
         });
       },
+    });
+  }
+
+  private loadColleagues() {
+    this.catalogService.listUsers({ page_size: 100 }).subscribe({
+      next: (res) => {
+        this.colleagues.set((res.users ?? []).filter((u) => u.status === 'active'));
+      },
+      error: () => this.colleagues.set([]),
     });
   }
 
@@ -391,6 +430,10 @@ export class Sales {
   }
 
   submitSale() {
+    if (this.saleMode() === 'consulting') {
+      this.submitConsulting();
+      return;
+    }
     if (this.totalPaid() <= 0) {
       this.messageService.add({
         severity: 'warn',
@@ -419,6 +462,14 @@ export class Sales {
     this.doSubmit();
   }
 
+  private submitConsulting() {
+    if (this.isNewSale()) {
+      this.submitNewSale();
+    } else {
+      this.submitUpsell();
+    }
+  }
+
   private doSubmit() {
     if (this.isNewSale()) {
       this.submitNewSale();
@@ -429,11 +480,12 @@ export class Sales {
 
   private submitNewSale() {
     this.submitting.set(true);
+    const consulting = this.saleMode() === 'consulting';
     const items: FullConsultationItem[] = this.selectedItems().map((item) => ({
       product_id: item.product.id,
       package_id: item.package?.id,
-      allocation: item.allocation,
-      installments: item.installments,
+      allocation: consulting ? 0 : item.allocation,
+      installments: consulting ? [] : item.installments,
     }));
     const payload = {
       phone: this.phone.trim(),
@@ -445,7 +497,17 @@ export class Sales {
       document_date: this.documentDate(),
       branch_id: this.branchId(),
       items,
-      payment: this.receiptNumber ? { receipt_number: this.receiptNumber } : undefined,
+      payment: !consulting && this.receiptNumber ? { receipt_number: this.receiptNumber } : undefined,
+      follow_up: consulting
+        ? {
+            follow_up_date: this.followUpDate(),
+            note: this.followUpNote.trim() || undefined,
+            type: 'conversion' as const,
+          }
+        : undefined,
+      converter_id: this.converterId() || undefined,
+      primary_recommender_id: this.primaryRecommenderId() || undefined,
+      secondary_recommender_id: this.secondaryRecommenderId() || undefined,
     };
     this.consultationService.createFull(payload).subscribe({
       next: (res) => {
@@ -457,8 +519,8 @@ export class Sales {
         this.submitting.set(false);
         this.messageService.add({
           severity: 'error',
-          summary: 'Sale failed',
-          detail: err.error?.detail || 'Could not complete the sale',
+          summary: consulting ? 'Consultation failed' : 'Sale failed',
+          detail: err.error?.detail || 'Could not complete the action',
         });
       },
     });
@@ -469,7 +531,38 @@ export class Sales {
     if (!consultation) return;
     this.submitting.set(true);
     const docDate = this.documentDate();
+    const consulting = this.saleMode() === 'consulting';
     try {
+      if (consulting) {
+        const itemIds: string[] = [];
+        for (const item of this.selectedItems()) {
+          const cartItem = await lastValueFrom(
+            this.consultationService.addCartItem(consultation.id, {
+              product_id: item.product.id,
+              package_id: item.package?.id,
+              converter_id: this.converterId() || undefined,
+              primary_recommender_id: this.primaryRecommenderId() || undefined,
+              secondary_recommender_id: this.secondaryRecommenderId() || undefined,
+            }),
+          );
+          await lastValueFrom(
+            this.consultationService.updateCartItem(cartItem.id, { status: 'consulting' }),
+          );
+          itemIds.push(cartItem.id);
+        }
+        await lastValueFrom(
+          this.consultationService.createFollowUp(consultation.id, {
+            follow_up_date: this.followUpDate(),
+            note: this.followUpNote.trim() || undefined,
+            type: 'conversion',
+            cart_item_ids: itemIds,
+          }),
+        );
+        this.resultConsultationId.set(consultation.id);
+        this.submitting.set(false);
+        this.step.set('done');
+        return;
+      }
       for (const item of this.selectedItems()) {
         const cartItem = await lastValueFrom(
           this.consultationService.addCartItem(consultation.id, {

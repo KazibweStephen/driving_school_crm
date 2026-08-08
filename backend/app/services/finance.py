@@ -35,6 +35,8 @@ async def list_expenses(
     page_size: int = 20,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
+    category: str | None = None,
+    category_not: str | None = None,
 ) -> tuple[list[Expense], int]:
     query = select(Expense)
     count_query = select(func.count(Expense.id))
@@ -48,6 +50,12 @@ async def list_expenses(
     if status:
         query = query.where(Expense.status == status)
         count_query = count_query.where(Expense.status == status)
+    if category:
+        query = query.where(Expense.category == category)
+        count_query = count_query.where(Expense.category == category)
+    if category_not:
+        query = query.where(or_(Expense.category != category_not, Expense.category.is_(None)))
+        count_query = count_query.where(or_(Expense.category != category_not, Expense.category.is_(None)))
 
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0

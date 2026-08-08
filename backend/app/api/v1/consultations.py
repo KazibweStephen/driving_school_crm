@@ -112,6 +112,9 @@ async def create_full_consultation(
             product_id=item_data.product_id,
             package_id=item_data.package_id,
             notes=None,
+            converter_id=data.converter_id,
+            primary_recommender_id=data.primary_recommender_id,
+            secondary_recommender_id=data.secondary_recommender_id,
         )
         cart_item_map[item_data.product_id + (item_data.package_id or '')] = (ci, item_data.allocation)
 
@@ -182,7 +185,39 @@ async def create_full_consultation(
             await db.refresh(payment, ["installments"])
             await payment_service._recompute_payment_totals(payment)
             await db.flush()
-            await update_cart_item(db, ci.id, status=cart_status, notes=None, converter_id=current_user.phone)
+            await update_cart_item(
+                db, ci.id,
+                status=cart_status,
+                notes=None,
+                converter_id=data.converter_id or current_user.phone,
+                primary_recommender_id=data.primary_recommender_id,
+                secondary_recommender_id=data.secondary_recommender_id,
+            )
+
+    # Consulting flow: products added but no payment -> mark cart items CONSULTING
+    if not data.payment and data.items:
+        for item_data in data.items:
+            key = item_data.product_id + (item_data.package_id or '')
+            ci, _ = cart_item_map[key]
+            await update_cart_item(
+                db, ci.id,
+                status='consulting',
+                notes=None,
+                converter_id=data.converter_id,
+                primary_recommender_id=data.primary_recommender_id,
+                secondary_recommender_id=data.secondary_recommender_id,
+            )
+
+    # Optional follow-up (consulting flow schedules a conversion follow-up)
+    if data.follow_up and data.items:
+        await consultation_service.create_follow_up(
+            db,
+            consultation_id=consultation.id,
+            follow_up_date=data.follow_up.follow_up_date,
+            note=data.follow_up.note,
+            fu_type=data.follow_up.type,
+            cart_item_ids=data.follow_up.cart_item_ids or [ci.id for ci, _ in cart_item_map.values()],
+        )
 
     # Reload with relationships
     from app.models.consultation import Consultation

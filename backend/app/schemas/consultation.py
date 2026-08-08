@@ -189,3 +189,7 @@ class FullConsultationCreate(BaseModel):
     branch_id: uuid.UUID | None = None
     items: list[FullConsultationItem] = []
     payment: FullConsultationPayment | None = None
+    follow_up: FollowUpCreate | None = None
+    converter_id: str | None = None
+    primary_recommender_id: str | None = None
+    secondary_recommender_id: str | None = None

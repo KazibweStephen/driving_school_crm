@@ -202,6 +202,117 @@ async def _get_instructor_enforced_breaks(
     return enforced
 
 
+async def _half_day_counts_by_vehicle(
+    db: AsyncSession,
+    vehicle_ids: set[uuid.UUID],
+    dates: list[date],
+    exclude_plan_id: uuid.UUID | None = None,
+) -> dict[tuple[uuid.UUID, date], tuple[int, int, int]]:
+    """Return {(vehicle_id, date): (morning_all, afternoon_all, total_excl)}.
+
+    morning_all/afternoon_all count every active lesson in the half-day
+    (including the plan's own already-assigned lessons) and drive the
+    non-standard-break enforcement check. total_excl excludes the plan and
+    drives the vehicle daily capacity check. All in one grouped query,
+    replacing the per-key N+1 pattern.
+    """
+    if not vehicle_ids or not dates:
+        return {}
+    excl = ClientLesson.lesson_plan_id != exclude_plan_id
+    morning_cond = [
+        ClientLesson.scheduled_start_time >= DAY_START,
+        ClientLesson.scheduled_start_time < LUNCH_START,
+    ]
+    afternoon_cond = [ClientLesson.scheduled_start_time >= LUNCH_END]
+    morning_excl = func.count().filter(*morning_cond, excl) if exclude_plan_id else func.count().filter(*morning_cond)
+    afternoon_excl = func.count().filter(*afternoon_cond, excl) if exclude_plan_id else func.count().filter(*afternoon_cond)
+    total_excl = func.count().filter(excl) if exclude_plan_id else func.count()
+    query = (
+        select(
+            ClientLesson.vehicle_id,
+            ClientLesson.scheduled_date,
+            func.count().filter(*morning_cond).label("morning_all"),
+            func.count().filter(*afternoon_cond).label("afternoon_all"),
+            total_excl.label("total_excl"),
+        )
+        .where(
+            ClientLesson.vehicle_id.in_(vehicle_ids),
+            ClientLesson.scheduled_date.in_(dates),
+            ClientLesson.is_active == True,
+            ClientLesson.status.notin_(["cancelled", "skipped"]),
+        )
+        .group_by(ClientLesson.vehicle_id, ClientLesson.scheduled_date)
+    )
+    result = await db.execute(query)
+    out: dict[tuple[uuid.UUID, date], tuple[int, int, int]] = {}
+    for vehicle_id, d, m, a, t in result.all():
+        out[(vehicle_id, d)] = (m or 0, a or 0, t or 0)
+    return out
+
+
+async def _half_day_counts_by_instructor(
+    db: AsyncSession,
+    instructor_ids: set[str],
+    dates: list[date],
+    exclude_plan_id: uuid.UUID | None = None,
+) -> dict[tuple[str, date], tuple[int, int, int]]:
+    """Return {(instructor_id, date): (morning_all, afternoon_all, total_excl)}."""
+    if not instructor_ids or not dates:
+        return {}
+    excl = ClientLesson.lesson_plan_id != exclude_plan_id
+    morning_cond = [
+        ClientLesson.scheduled_start_time >= DAY_START,
+        ClientLesson.scheduled_start_time < LUNCH_START,
+    ]
+    afternoon_cond = [ClientLesson.scheduled_start_time >= LUNCH_END]
+    morning_excl = func.count().filter(*morning_cond, excl) if exclude_plan_id else func.count().filter(*morning_cond)
+    afternoon_excl = func.count().filter(*afternoon_cond, excl) if exclude_plan_id else func.count().filter(*afternoon_cond)
+    total_excl = func.count().filter(excl) if exclude_plan_id else func.count()
+    query = (
+        select(
+            ClientLesson.instructor_id,
+            ClientLesson.scheduled_date,
+            func.count().filter(*morning_cond).label("morning_all"),
+            func.count().filter(*afternoon_cond).label("afternoon_all"),
+            total_excl.label("total_excl"),
+        )
+        .where(
+            ClientLesson.instructor_id.in_(instructor_ids),
+            ClientLesson.scheduled_date.in_(dates),
+            ClientLesson.is_active == True,
+            ClientLesson.status.notin_(["cancelled", "skipped"]),
+        )
+        .group_by(ClientLesson.instructor_id, ClientLesson.scheduled_date)
+    )
+    result = await db.execute(query)
+    out: dict[tuple[str, date], tuple[int, int, int]] = {}
+    for instructor_id, d, m, a, t in result.all():
+        out[(instructor_id, d)] = (m or 0, a or 0, t or 0)
+    return out
+
+
+def _enforced_breaks_from_counts(
+    active_breaks: list[tuple[time, time, bool]],
+    half_counts: dict[tuple, tuple[int, int, int]],
+    key: tuple,
+    standard: list[tuple[time, time]],
+) -> list[tuple[time, time]]:
+    """Pure equivalent of _get_enforced_breaks using precomputed half-day counts."""
+    enforced = list(standard)
+    morning_count, afternoon_count, _ = half_counts.get(key, (0, 0, 0))
+    morning_non_std = [b for b in active_breaks if not b[2] and b[0] < LUNCH_START]
+    if morning_non_std and morning_count >= len(
+        _generate_slots(standard, start=DAY_START, end=LUNCH_START)
+    ):
+        enforced.extend(morning_non_std)
+    afternoon_non_std = [b for b in active_breaks if not b[2] and b[0] >= LUNCH_END]
+    if afternoon_non_std and afternoon_count >= len(
+        _generate_slots(standard, start=LUNCH_END, end=DAY_END)
+    ):
+        enforced.extend(afternoon_non_std)
+    return enforced
+
+
 async def create_availability(
     db: AsyncSession,
     cart_item_id: uuid.UUID,
@@ -633,6 +744,36 @@ async def lock_schedule(
         break_names = ", ".join(f"{b[0].isoformat()}-{b[1].isoformat()}" for b in breaks)
         raise ValueError(f"Cannot schedule during break time ({break_names})")
 
+    # Batch-load active breaks and per-vehicle/instructor per-date capacity counts
+    # in a handful of queries instead of per-(entity, date) N+1 round trips.
+    active_breaks = await _get_active_breaks(db, company_id=company_id)
+    standard = [(b[0], b[1]) for b in active_breaks if b[2]]
+
+    dates: list[date] = []
+    if start_date:
+        dates = sorted({start_date + timedelta(days=lesson.day_number - 1) for lesson in lessons})
+    vehicle_ids: set[uuid.UUID] = set()
+    instructor_ids: set[str] = set()
+    for lesson in lessons:
+        is_manual_phase = md and lesson.day_number <= md
+        if is_manual_phase:
+            if vehicle_id:
+                vehicle_ids.add(vehicle_id)
+            if instructor_id:
+                instructor_ids.add(instructor_id)
+        else:
+            if vehicle_id_auto or vehicle_id:
+                vehicle_ids.add(vehicle_id_auto or vehicle_id)
+            if instructor_id_auto or instructor_id:
+                instructor_ids.add(instructor_id_auto or instructor_id)
+
+    vehicle_half_counts = await _half_day_counts_by_vehicle(
+        db, vehicle_ids, dates, exclude_plan_id=plan_id
+    )
+    instructor_half_counts = await _half_day_counts_by_instructor(
+        db, instructor_ids, dates, exclude_plan_id=plan_id
+    )
+
     # Validate vehicle capacity: per-vehicle per-date with vehicle-aware breaks
     vehicle_date_counts: dict[tuple[uuid.UUID, date], int] = {}
     # Validate instructor capacity: per-instructor per-date with instructor-enforced breaks
@@ -655,10 +796,12 @@ async def lock_schedule(
         if v_id is not None:
             v_key = (v_id, lesson_date)
             if v_key not in vehicle_date_counts:
-                vehicle_breaks = await _get_enforced_breaks(db, v_id, lesson_date, company_id=company_id)
+                vehicle_breaks = _enforced_breaks_from_counts(
+                    active_breaks, vehicle_half_counts, v_key, standard
+                )
                 vehicle_slots = _generate_slots(vehicle_breaks)
                 vehicle_max = len(vehicle_slots)
-                existing = await _check_vehicle_capacity(db, v_id, lesson_date, exclude_plan_id=plan_id)
+                _, _, existing = vehicle_half_counts.get(v_key, (0, 0, 0))
                 vehicle_date_counts[v_key] = (existing, vehicle_max)
 
             count, vehicle_max = vehicle_date_counts[v_key]
@@ -673,10 +816,12 @@ async def lock_schedule(
         if i_id is not None:
             i_key = (i_id, lesson_date)
             if i_key not in instructor_date_counts:
-                instr_breaks = await _get_instructor_enforced_breaks(db, i_id, lesson_date, company_id=company_id)
+                instr_breaks = _enforced_breaks_from_counts(
+                    active_breaks, instructor_half_counts, i_key, standard
+                )
                 instr_slots = _generate_slots(instr_breaks)
                 instr_max = len(instr_slots)
-                existing = await _check_instructor_capacity(db, i_id, lesson_date, exclude_plan_id=plan_id)
+                _, _, existing = instructor_half_counts.get(i_key, (0, 0, 0))
                 instructor_date_counts[i_key] = (existing, instr_max)
 
             count, i_max = instructor_date_counts[i_key]

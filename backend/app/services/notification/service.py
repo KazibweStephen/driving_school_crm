@@ -1,5 +1,6 @@
 import logging
 import math
+from datetime import datetime, timezone
 from enum import Enum
 
 from sqlalchemy import select
@@ -63,8 +64,13 @@ async def send_sms(
     *,
     trigger_event: str | None = None,
     template_id=None,
+    created_by_phone: str | None = None,
 ) -> bool:
-    """Send an SMS using the company's configured provider and log it."""
+    """Send an SMS using the company's configured provider and log it.
+
+    SMS costs are recorded as expenses that are automatically approved and
+    paid on creation (no manual expense workflow needed).
+    """
     currency = "UGX"
     provider_name = "logging"
     rate_per_sms = 0.0
@@ -112,12 +118,19 @@ async def send_sms(
         )
         branch_row = branch_result.first()
         if branch_row:
+            now = datetime.now(timezone.utc)
             expense = Expense(
                 branch_id=branch_row[0],
                 amount=cost,
                 description=f"SMS: {sms_units} unit(s) to {phone} ({trigger_event or 'manual'})",
                 category="SMS",
-                status=ExpenseStatus.PENDING,
+                status=ExpenseStatus.PAID,
+                approved_by=created_by_phone,
+                approved_at=now,
+                paid_by=created_by_phone,
+                paid_at=now,
+                created_by_phone=created_by_phone,
+                expense_date=now,
             )
             db.add(expense)
 
@@ -133,6 +146,7 @@ async def send_template_sms(
     variables: dict[str, str],
     *,
     trigger_event: str | None = None,
+    created_by_phone: str | None = None,
 ) -> bool:
     """Look up the active template for a trigger/category, render variables, and send."""
     from app.services.sms import resolve_template, render_template
@@ -150,6 +164,7 @@ async def send_template_sms(
             db, company_id, phone, message,
             trigger_event=trigger_event or category,
             template_id=template.id,
+            created_by_phone=created_by_phone,
         )
 
 

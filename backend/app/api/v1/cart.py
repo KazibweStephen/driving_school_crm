@@ -31,6 +31,9 @@ async def add_cart_item(
     item = await cart_service.add_cart_item(
         db, consultation_id=cid, product_id=data.product_id, package_id=data.package_id, notes=data.notes, is_important=data.is_important,
         company_id=current_user.company_id, current_user_role=current_user.role,
+        converter_id=data.converter_id,
+        primary_recommender_id=data.primary_recommender_id,
+        secondary_recommender_id=data.secondary_recommender_id,
     )
     return CartItemRead.model_validate(item)
 
@@ -65,7 +68,7 @@ async def update_cart_item(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID")
 
-    item = await cart_service.update_cart_item(db, item_id=iid, status=data.status, notes=data.notes, is_important=data.is_important, recovery_reason=data.recovery_reason, company_id=current_user.company_id, current_user_role=current_user.role, converter_id=current_user.phone)
+    item = await cart_service.update_cart_item(db, item_id=iid, status=data.status, notes=data.notes, is_important=data.is_important, recovery_reason=data.recovery_reason, company_id=current_user.company_id, current_user_role=current_user.role, converter_id=data.converter_id or current_user.phone, primary_recommender_id=data.primary_recommender_id, secondary_recommender_id=data.secondary_recommender_id)
     if not item:
         raise HTTPException(status_code=404, detail="Cart item not found")
     return CartItemRead.model_validate(item)

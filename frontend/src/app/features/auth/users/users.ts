@@ -66,6 +66,18 @@ export class Users implements OnInit {
   get isSuperUser(): boolean {
     return this.auth.currentUserRole() === 'super_user';
   }
+  get canCreate(): boolean {
+    return this.auth.hasPermission('users.create');
+  }
+  get canEdit(): boolean {
+    return this.auth.hasPermission('users.edit');
+  }
+  get canApprove(): boolean {
+    return this.auth.hasPermission('users.approve');
+  }
+  get canResetPin(): boolean {
+    return this.auth.hasPermission('users.reset_pin');
+  }
   get roleOptions() {
     return this.isSuperUser ? this.roles : this.roles.filter(r => r.value !== 'company_super_user');
   }

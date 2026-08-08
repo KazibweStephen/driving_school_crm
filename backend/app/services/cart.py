@@ -23,6 +23,10 @@ async def add_cart_item(
     is_important: bool = False,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
+    converter_id: str | None = None,
+    primary_recommender_id: str | None = None,
+    secondary_recommender_id: str | None = None,
+    status: str | None = None,
 ) -> CartItem:
     # Verify consultation belongs to user's company
     if company_id is not None:
@@ -53,7 +57,12 @@ async def add_cart_item(
         package_id=package_id,
         notes=notes,
         is_important=is_important,
+        converter_id=converter_id,
+        primary_recommender_id=primary_recommender_id,
+        secondary_recommender_id=secondary_recommender_id,
     )
+    if status:
+        item.status = CartItemStatus(status)
 
     # Inherit training/permit fields from package
     if package_id:
@@ -90,6 +99,8 @@ async def update_cart_item(
     current_user_role: UserRole | None = None,
     converter_id: str | None = None,
     recommender_id: str | None = None,
+    primary_recommender_id: str | None = None,
+    secondary_recommender_id: str | None = None,
 ) -> CartItem | None:
     result = await db.execute(select(CartItem).where(CartItem.id == item_id))
     item = result.scalar_one_or_none()
@@ -123,6 +134,17 @@ async def update_cart_item(
         item.notes = notes
     if is_important is not None:
         item.is_important = is_important
+
+    # Store commission attribution (only overwrite when explicitly provided)
+    if converter_id is not None:
+        item.converter_id = converter_id
+    if primary_recommender_id is not None:
+        item.primary_recommender_id = primary_recommender_id
+    elif recommender_id is not None:
+        item.primary_recommender_id = recommender_id
+    if secondary_recommender_id is not None:
+        item.secondary_recommender_id = secondary_recommender_id
+
     await db.flush()
 
     # Auto-close follow-ups based on status change
@@ -138,8 +160,9 @@ async def update_cart_item(
         from app.services.commission import create_commission_from_conversion
         await create_commission_from_conversion(
             db, item, company_id,
-            converter_id=converter_id,
-            recommender_id=recommender_id,
+            converter_id=converter_id or item.converter_id,
+            recommender_id=primary_recommender_id or recommender_id or item.primary_recommender_id,
+            secondary_recommender_id=secondary_recommender_id or item.secondary_recommender_id,
         )
 
     # Send SMS notification on cart item conversion

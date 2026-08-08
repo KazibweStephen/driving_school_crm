@@ -40,6 +40,9 @@ export class Dashboard {
           pending_collections: 0,
           commission_earned: 0,
           commission_pending: 0,
+          today_training_sessions: 0,
+          month_training_sessions: 0,
+          days_trained: 0,
         });
         this.loading.set(false);
       },

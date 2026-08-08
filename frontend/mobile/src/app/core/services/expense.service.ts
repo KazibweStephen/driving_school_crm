@@ -18,6 +18,9 @@ export interface Expense {
   receipt_url: string | null;
   expense_date: string;
   created_by_phone: string | null;
+  created_by_name: string | null;
+  approved_by_name: string | null;
+  paid_by_name: string | null;
   created_at: string;
 }
 

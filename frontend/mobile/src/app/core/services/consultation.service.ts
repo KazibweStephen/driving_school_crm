@@ -83,6 +83,29 @@ export interface FullConsultationCreate {
   secondary_recommender_id?: string;
 }
 
+export interface ClientSummary {
+  id: string;
+  phone: string;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string | null;
+  location: string | null;
+  interest_level: string | null;
+  active_products_count: number;
+  upgradable_products_count: number;
+  total_paid: string;
+  last_payment_date: string | null;
+  created_at: string;
+}
+
+export interface ClientListResponse {
+  clients: ClientSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
 export interface ConsultationListResponse {
   consultations: Consultation[];
   total: number;
@@ -106,6 +129,18 @@ export class ConsultationService {
     if (params?.page) hp = hp.set('page', params.page);
     if (params?.page_size) hp = hp.set('page_size', params.page_size);
     return this.http.get<ConsultationListResponse>('/api/v1/consultations/', { params: hp });
+  }
+
+  listClients(params?: { search?: string; page?: number; page_size?: number }) {
+    let hp = new HttpParams();
+    if (params?.search) hp = hp.set('search', params.search);
+    if (params?.page) hp = hp.set('page', params.page);
+    if (params?.page_size) hp = hp.set('page_size', params.page_size);
+    return this.http.get<ClientListResponse>('/api/v1/clients/', { params: hp });
+  }
+
+  deleteCartItem(itemId: string) {
+    return this.http.delete(`/api/v1/cart-items/${itemId}`);
   }
 
   get(id: string) {

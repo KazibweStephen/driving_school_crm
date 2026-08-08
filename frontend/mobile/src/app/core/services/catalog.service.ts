@@ -105,14 +105,19 @@ export class CatalogService {
     return this.http.get<UserListResponse>('/api/v1/users/', { params });
   }
 
-  listUsers(params?: { role?: string; page_size?: number }) {
+  listUsers(params?: { role?: string; page_size?: number; search?: string }) {
     let httpParams = new HttpParams();
     if (params?.role) httpParams = httpParams.set('role', params.role);
     if (params?.page_size != null) httpParams = httpParams.set('page_size', String(params.page_size));
+    if (params?.search) httpParams = httpParams.set('search', params.search);
     return this.http.get<UserListResponse>('/api/v1/users/', { params: httpParams });
   }
 
   listMyBranches() {
     return this.http.get<Branch[]>('/api/v1/companies/my-branches');
+  }
+
+  getCurrentUser() {
+    return this.http.get<User>('/api/v1/users/me');
   }
 }

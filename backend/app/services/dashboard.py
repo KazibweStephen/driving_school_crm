@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Commission, Payment, Company, Branch
 from app.models.commission import CommissionStatus
 from app.models.user import UserRole
+from app.models.lesson_plan import ClientLesson, ClientLessonPlan
+from app.models.cart import CartItem
+from app.models.consultation import Consultation
 
 
 async def get_mobile_dashboard(
@@ -86,6 +89,47 @@ async def get_mobile_dashboard(
     commission_earned = float((await db.execute(earned_query)).scalar() or 0)
     commission_pending = float((await db.execute(pending_comm_query)).scalar() or 0)
 
+    # Training: lessons completed today / this month + distinct days trained
+    def lesson_count_query():
+        return (
+            select(func.count(ClientLesson.id))
+            .select_from(ClientLesson)
+            .join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
+            .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+            .join(Consultation, CartItem.consultation_id == Consultation.id)
+            .join(Branch, Consultation.branch_id == Branch.id)
+            .where(ClientLesson.completed_at.is_not(None))
+        )
+
+    today_sessions_q = lesson_count_query().where(
+        func.date(ClientLesson.completed_at) == today
+    )
+    month_sessions_q = lesson_count_query().where(
+        func.date(ClientLesson.completed_at) >= month_start,
+        func.date(ClientLesson.completed_at) < next_month,
+    )
+    days_trained_q = (
+        select(func.count(func.distinct(func.date(ClientLesson.completed_at))))
+        .select_from(ClientLesson)
+        .join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
+        .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+        .join(Consultation, CartItem.consultation_id == Consultation.id)
+        .join(Branch, Consultation.branch_id == Branch.id)
+        .where(
+            ClientLesson.completed_at.is_not(None),
+            func.date(ClientLesson.completed_at) >= month_start,
+            func.date(ClientLesson.completed_at) < next_month,
+        )
+    )
+    if company_id is not None:
+        today_sessions_q = today_sessions_q.where(Branch.company_id == company_id)
+        month_sessions_q = month_sessions_q.where(Branch.company_id == company_id)
+        days_trained_q = days_trained_q.where(Branch.company_id == company_id)
+
+    today_sessions = int((await db.execute(today_sessions_q)).scalar() or 0)
+    month_sessions = int((await db.execute(month_sessions_q)).scalar() or 0)
+    days_trained = int((await db.execute(days_trained_q)).scalar() or 0)
+
     return {
         "daily_sales": daily_sales,
         "monthly_sales": monthly_sales,
@@ -93,4 +137,7 @@ async def get_mobile_dashboard(
         "pending_collections": pending_collections,
         "commission_earned": commission_earned,
         "commission_pending": commission_pending,
+        "today_training_sessions": today_sessions,
+        "month_training_sessions": month_sessions,
+        "days_trained": days_trained,
     }

@@ -5,11 +5,14 @@ import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
+import { DialogModule } from 'primeng/dialog';
+import { ActivatedRoute, Router } from '@angular/router';
 import { lastValueFrom } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import {
   ConsultationService,
   ClientInfo,
+  ClientSummary,
   Consultation,
   CartItem,
   FullConsultationItem,
@@ -29,8 +32,9 @@ interface SaleItem {
   installments: { amount: number; due_date: string }[];
 }
 
-type Step = 'home' | 'client' | 'products' | 'payment' | 'done';
+type Step = 'home' | 'client' | 'products' | 'payment' | 'consulting' | 'done';
 type SaleMode = 'sale' | 'consulting';
+type SalesTab = 'active' | 'consultations';
 
 @Component({
   selector: 'app-sales',
@@ -40,6 +44,7 @@ type SaleMode = 'sale' | 'consulting';
     InputTextModule,
     DatePickerModule,
     SelectModule,
+    DialogModule,
     ClientSearch,
     LoadingOverlay,
     PageHeader,
@@ -52,14 +57,23 @@ export class Sales {
   private catalogService = inject(CatalogService);
   private paymentService = inject(PaymentService);
   private messageService = inject(MessageService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
 
   currency = this.auth.currencyCode;
   canBackdate = this.auth.currentUserCanBackdate;
   Math = Math;
 
+  private dateCache = new Map<string, Date>();
+
   parseDate(value: string | null | undefined): Date | null {
     if (!value) return null;
-    return new Date(value + (value.length === 10 ? 'T00:00:00' : ''));
+    let date = this.dateCache.get(value);
+    if (!date) {
+      date = new Date(value + (value.length === 10 ? 'T00:00:00' : ''));
+      this.dateCache.set(value, date);
+    }
+    return date;
   }
 
   step = signal<Step>('home');
@@ -70,6 +84,182 @@ export class Sales {
   products = signal<Product[]>([]);
   productsLoaded = false;
   colleagues = signal<User[]>([]);
+
+  productSearch = signal('');
+  filteredProducts = computed(() => {
+    const q = this.productSearch().trim().toLowerCase();
+    if (!q) return this.products();
+    return this.products().filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.duration_label ?? '').toLowerCase().includes(q),
+    );
+  });
+
+  colleagueOptions = computed(() =>
+    this.colleagues().map((u) => ({
+      label: u.name ? `${u.name} · ${u.phone}` : u.phone,
+      phone: u.phone,
+    })),
+  );
+
+  // home tabs: active clients + consultations
+  salesTab = signal<SalesTab>('active');
+  activeClients = signal<ClientSummary[]>([]);
+  consultations = signal<Consultation[]>([]);
+  activeSearch = signal('');
+  consultationSearch = signal('');
+  activeLoading = signal(false);
+  consultationLoading = signal(false);
+  activeServerHits = signal(false);
+  consultationServerHits = signal(false);
+
+  filteredActiveClients = computed(() => {
+    const q = this.activeSearch().trim().toLowerCase();
+    if (!q) return this.activeClients();
+    return this.activeClients().filter((c) =>
+      `${c.first_name} ${c.middle_name ?? ''} ${c.last_name ?? ''} ${c.phone}`
+        .toLowerCase()
+        .includes(q),
+    );
+  });
+
+  filteredConsultations = computed(() => {
+    const q = this.consultationSearch().trim().toLowerCase();
+    if (!q) return this.consultations();
+    return this.consultations().filter((c) =>
+      `${c.first_name} ${c.middle_name ?? ''} ${c.last_name ?? ''} ${c.phone}`
+        .toLowerCase()
+        .includes(q),
+    );
+  });
+
+  // existing-client prompt (new sale)
+  showExistingDialog = signal(false);
+  existingClientMatch: ClientInfo | null = null;
+
+  constructor() {
+    this.route.queryParams.subscribe((qp) => {
+      if (qp['upsell'] === '1' && qp['id']) {
+        this.startUpsellDeepLink(qp['id']);
+      }
+    });
+  }
+
+  ngOnInit() {
+    this.loadActiveClients();
+    this.loadConsultations();
+  }
+
+  setSalesTab(tab: SalesTab) {
+    this.salesTab.set(tab);
+  }
+
+  onActiveSearch(q: string) {
+    this.activeSearch.set(q);
+    const term = q.trim();
+    if (term === '') {
+      this.activeServerHits.set(false);
+      this.loadActiveClients();
+      return;
+    }
+    if (term.length >= 2 && this.filteredActiveClients().length === 0) {
+      this.activeLoading.set(true);
+      this.consultationService.listClients({ search: term, page_size: 50 }).subscribe({
+        next: (res) => {
+          const hits = res.clients ?? [];
+          this.activeServerHits.set(hits.length > 0);
+          if (hits.length) this.activeClients.set(hits);
+          this.activeLoading.set(false);
+        },
+        error: () => this.activeLoading.set(false),
+      });
+    }
+  }
+
+  onConsultationSearch(q: string) {
+    this.consultationSearch.set(q);
+    const term = q.trim();
+    if (term === '') {
+      this.consultationServerHits.set(false);
+      this.loadConsultations();
+      return;
+    }
+    if (term.length >= 2 && this.filteredConsultations().length === 0) {
+      this.consultationLoading.set(true);
+      this.consultationService.list({ search: term, page_size: 50 }).subscribe({
+        next: (res) => {
+          const hits = res.consultations ?? [];
+          this.consultationServerHits.set(hits.length > 0);
+          if (hits.length) this.consultations.set(hits);
+          this.consultationLoading.set(false);
+        },
+        error: () => this.consultationLoading.set(false),
+      });
+    }
+  }
+
+  openClient(client: ClientSummary) {
+    this.router.navigate(['/consultations', client.id]);
+  }
+
+  openConsultation(c: Consultation) {
+    this.router.navigate(['/consultations', c.id]);
+  }
+
+  private loadActiveClients() {
+    this.consultationService.listClients({ page_size: 50 }).subscribe({
+      next: (res) => this.activeClients.set(res.clients ?? []),
+      error: () => this.activeClients.set([]),
+    });
+  }
+
+  private loadConsultations() {
+    this.consultationService.list({ page_size: 50 }).subscribe({
+      next: (res) => this.consultations.set(res.consultations ?? []),
+      error: () => this.consultations.set([]),
+    });
+  }
+
+  private startUpsellDeepLink(id: string) {
+    if (this.step() !== 'home') return;
+    this.isNewSale.set(false);
+    this.isPrevious.set(false);
+    this.resetFlow();
+    this.step.set('client');
+    this.loading.set(true);
+    this.consultationService.get(id).subscribe({
+      next: (consultation) => {
+        this.client = {
+          phone: consultation.phone,
+          first_name: consultation.first_name,
+          middle_name: consultation.middle_name,
+          last_name: consultation.last_name,
+          location: consultation.location,
+          how_they_knew_us: consultation.how_they_knew_us,
+          interest_level: consultation.interest_level,
+          latest_status: consultation.status,
+          latest_consultation_id: consultation.id,
+        };
+        this.existingConsultation.set(consultation);
+        this.existingItems.set(
+          (consultation.cart_items ?? []).filter((ci) =>
+            ['converted_paid', 'converted_paying'].includes(ci.status),
+          ),
+        );
+        this.loadExistingPayments(consultation.id);
+        this.step.set('products');
+      },
+      error: () => {
+        this.loading.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Could not load client' });
+        this.step.set('home');
+      },
+    });
+    if (!this.productsLoaded) this.loadProducts();
+    if (this.branches().length === 0) this.loadBranches();
+    if (this.colleagues().length === 0) this.loadColleagues();
+  }
 
   // flow type
   isNewSale = signal(true);
@@ -126,6 +316,7 @@ export class Sales {
     this.isNewSale.set(newSale);
     this.isPrevious.set(previous);
     this.resetFlow();
+    this.preselectCurrentUserRoles();
     this.step.set('client');
     if (previous && this.canBackdate()) {
       this.documentDate.set(toISODate(addDays(new Date(), -1)));
@@ -152,18 +343,12 @@ export class Sales {
     this.receiptNumber = '';
     this.resultConsultationId.set(null);
     this.saleMode.set('sale');
+    this.productSearch.set('');
     this.followUpDate.set(todayISO());
     this.followUpNote = '';
     this.converterId.set(null);
     this.primaryRecommenderId.set(null);
     this.secondaryRecommenderId.set(null);
-  }
-
-  setSaleMode(mode: SaleMode) {
-    this.saleMode.set(mode);
-    if (mode === 'consulting') {
-      this.followUpDate.set(this.documentDate());
-    }
   }
 
   onFollowUpDate(date: Date | null) {
@@ -190,23 +375,99 @@ export class Sales {
     this.paymentService.getAccessibleBranches().subscribe({
       next: (branches) => {
         this.branches.set(branches);
-        if (branches.length === 1) this.branchId.set(branches[0].id);
+        this.applyDefaultBranch(branches);
       },
       error: () => {
         this.catalogService.listMyBranches().subscribe((branches) => {
           this.branches.set(branches);
-          if (branches.length === 1) this.branchId.set(branches[0].id);
+          this.applyDefaultBranch(branches);
         });
       },
+    });
+  }
+
+  private applyDefaultBranch(branches: BranchInfo[]) {
+    this.catalogService.getCurrentUser().subscribe({
+      next: (me) => {
+        const assigned = (me.branch_ids ?? [])
+          .map(String)
+          .filter((id) => branches.some((b) => b.id === id));
+        if (assigned.length >= 1) this.branchId.set(assigned[0]);
+        else if (branches.length === 1) this.branchId.set(branches[0].id);
+      },
+      error: () => {
+        if (branches.length === 1) this.branchId.set(branches[0].id);
+      },
+    });
+  }
+
+  private ensureDefaultBranch() {
+    if (this.branchId()) return;
+    const branches = this.branches();
+    if (branches.length === 0) return;
+    this.catalogService.getCurrentUser().subscribe({
+      next: (me) => {
+        const assigned = (me.branch_ids ?? [])
+          .map(String)
+          .filter((id) => branches.some((b) => b.id === id));
+        if (assigned.length >= 1) this.branchId.set(assigned[0]);
+        else this.branchId.set(branches[0].id);
+      },
+      error: () => this.branchId.set(branches[0].id),
     });
   }
 
   private loadColleagues() {
     this.catalogService.listUsers({ page_size: 100 }).subscribe({
       next: (res) => {
-        this.colleagues.set((res.users ?? []).filter((u) => u.status === 'active'));
+        const users = (res.users ?? []).filter((u) => u.status === 'active');
+        this.mergeCurrentUser(users);
       },
-      error: () => this.colleagues.set([]),
+      error: () => this.mergeCurrentUser([]),
+    });
+  }
+
+  private mergeCurrentUser(users: User[]) {
+    this.catalogService.getCurrentUser().subscribe({
+      next: (me) => {
+        if (me && !users.some((u) => u.phone === me.phone)) {
+          users = [...users, me];
+        }
+        this.colleagues.set(users);
+      },
+      error: () => this.colleagues.set(users),
+    });
+  }
+
+  private preselectCurrentUserRoles() {
+    this.catalogService.getCurrentUser().subscribe({
+      next: (me) => {
+        this.converterId.set(me.phone);
+        this.primaryRecommenderId.set(me.phone);
+        this.secondaryRecommenderId.set(me.phone);
+      },
+      error: () => {},
+    });
+  }
+
+  private colleagueServerSearch = '';
+
+  onColleagueFilter(event: { filter?: string }) {
+    const term = (event.filter ?? '').trim();
+    if (term.length < 2) return;
+    const localMatch = this.colleagueOptions().some((o) =>
+      o.label.toLowerCase().includes(term.toLowerCase()),
+    );
+    if (localMatch || term === this.colleagueServerSearch) return;
+    this.colleagueServerSearch = term;
+    this.catalogService.listUsers({ search: term, page_size: 50 }).subscribe({
+      next: (res) => {
+        const extra = (res.users ?? []).filter(
+          (u) => u.status === 'active' && !this.colleagues().some((c) => c.phone === u.phone),
+        );
+        if (extra.length) this.colleagues.update((list) => [...list, ...extra]);
+      },
+      error: () => {},
     });
   }
 
@@ -401,6 +662,8 @@ export class Sales {
         });
         return;
       }
+      this.validateNewClient();
+      return;
     } else {
       if (!this.client || !this.existingConsultation()) {
         this.messageService.add({
@@ -411,6 +674,41 @@ export class Sales {
         return;
       }
     }
+    this.step.set('products');
+  }
+
+  private validateNewClient() {
+    const phone = this.phone.trim();
+    this.loading.set(true);
+    this.consultationService.clientSearch(phone).subscribe({
+      next: (matches) => {
+        this.loading.set(false);
+        if (matches && matches.length > 0) {
+          this.existingClientMatch = matches[0];
+          this.showExistingDialog.set(true);
+        } else {
+          this.step.set('products');
+        }
+      },
+      error: () => {
+        this.loading.set(false);
+        this.step.set('products');
+      },
+    });
+  }
+
+  goToConsultations() {
+    const m = this.existingClientMatch;
+    this.showExistingDialog.set(false);
+    if (m?.latest_consultation_id) {
+      this.router.navigate(['/consultations', m.latest_consultation_id]);
+    } else {
+      this.router.navigate(['/sales']);
+    }
+  }
+
+  continueAsNew() {
+    this.showExistingDialog.set(false);
     this.step.set('products');
   }
 
@@ -426,7 +724,24 @@ export class Sales {
     for (const item of this.selectedItems()) {
       if (item.allocation < 0) item.allocation = 0;
     }
+    this.ensureDefaultBranch();
+    this.saleMode.set('sale');
     this.step.set('payment');
+  }
+
+  nextToConsulting() {
+    if (this.selectedItems().length === 0) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'No products',
+        detail: 'Add at least one product or package',
+      });
+      return;
+    }
+    this.ensureDefaultBranch();
+    this.saleMode.set('consulting');
+    this.followUpDate.set(this.documentDate());
+    this.step.set('consulting');
   }
 
   submitSale() {
@@ -497,7 +812,7 @@ export class Sales {
       document_date: this.documentDate(),
       branch_id: this.branchId(),
       items,
-      payment: !consulting && this.receiptNumber ? { receipt_number: this.receiptNumber } : undefined,
+      payment: !consulting ? { receipt_number: this.receiptNumber || undefined } : undefined,
       follow_up: consulting
         ? {
             follow_up_date: this.followUpDate(),

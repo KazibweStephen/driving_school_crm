@@ -143,9 +143,21 @@ export class Expenses {
     this.paymentService.getAccessibleBranches().subscribe({
       next: (branches) => {
         this.branches.set(branches);
-        if (branches.length === 1 && !this.branchId()) {
-          this.branchId.set(branches[0].id);
-        }
+        this.catalog.getCurrentUser().subscribe({
+          next: (me) => {
+            const assigned = (me.branch_ids ?? []).map(String);
+            const match = assigned.find((id) => branches.some((b) => b.id === id));
+            if (match) this.branchId.set(match);
+            else if (branches.length === 1 && !this.branchId()) {
+              this.branchId.set(branches[0].id);
+            }
+          },
+          error: () => {
+            if (branches.length === 1 && !this.branchId()) {
+              this.branchId.set(branches[0].id);
+            }
+          },
+        });
       },
       error: () => {},
     });

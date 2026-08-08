@@ -1,31 +1,145 @@
 <app-page-header title="Sales" />
 
 @if (step() === 'home') {
-  <div class="space-y-3">
-    <button
-      type="button"
-      class="flex w-full items-center gap-3 rounded-2xl bg-slate-900 p-5 text-left text-white shadow"
-      (click)="startFlow(true, false)"
-      data-testid="new-sale"
-    >
-      <span class="pi pi-tags text-2xl"></span>
-      <span>
-        <span class="block text-base font-semibold">Make a Sale</span>
-        <span class="block text-xs text-slate-300">Sell a product or package to a new client</span>
-      </span>
-    </button>
-    <button
-      type="button"
-      class="flex w-full items-center gap-3 rounded-2xl border border-slate-300 bg-white p-5 text-left text-slate-800"
-      (click)="startFlow(true, true)"
-      data-testid="previous-sale"
-    >
-      <span class="pi pi-history text-2xl"></span>
-      <span>
-        <span class="block text-base font-semibold">Enter Previous Sale</span>
-        <span class="block text-xs text-slate-500">Record a backdated sale</span>
-      </span>
-    </button>
+  <div class="space-y-4">
+    <div class="grid grid-cols-2 gap-2">
+      <button
+        type="button"
+        class="rounded-2xl bg-slate-900 p-4 text-left text-white shadow"
+        (click)="startFlow(true, false)"
+        data-testid="new-sale"
+      >
+        <span class="pi pi-tags text-xl"></span>
+        <span class="mt-1 block text-sm font-semibold">New Sale</span>
+        <span class="block text-[11px] text-slate-300">Sell to a new client</span>
+      </button>
+      <button
+        type="button"
+        class="rounded-2xl border border-slate-300 bg-white p-4 text-left text-slate-800"
+        (click)="startFlow(true, true)"
+        data-testid="previous-sale"
+      >
+        <span class="pi pi-history text-xl"></span>
+        <span class="mt-1 block text-sm font-semibold">Prev Sale</span>
+        <span class="block text-[11px] text-slate-500">Backdated sale</span>
+      </button>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+      <button
+        type="button"
+        class="rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+        [class]="
+          salesTab() === 'active'
+            ? 'bg-slate-900 text-white'
+            : 'bg-white border border-slate-200 text-slate-600'
+        "
+        (click)="setSalesTab('active')"
+        data-testid="active-tab"
+      >
+        Active Clients
+      </button>
+      <button
+        type="button"
+        class="rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+        [class]="
+          salesTab() === 'consultations'
+            ? 'bg-slate-900 text-white'
+            : 'bg-white border border-slate-200 text-slate-600'
+        "
+        (click)="setSalesTab('consultations')"
+        data-testid="consultations-tab"
+      >
+        Consultations
+      </button>
+    </div>
+
+    @if (salesTab() === 'active') {
+      <div class="space-y-3">
+        <input
+          pInputText
+          type="search"
+          [ngModel]="activeSearch()"
+          (ngModelChange)="onActiveSearch($event)"
+          placeholder="Search active clients..."
+          class="w-full"
+          data-testid="active-search"
+        />
+        <div class="space-y-2">
+          @for (client of filteredActiveClients(); track client.id) {
+            <button
+              type="button"
+              class="w-full rounded-xl border border-slate-200 bg-white p-3 text-left"
+              (click)="openClient(client)"
+              data-testid="active-client"
+            >
+              <div class="text-sm font-semibold text-slate-900">
+                {{ client.first_name }} {{ client.last_name }}
+              </div>
+              <div class="text-xs text-slate-500">{{ client.phone }}</div>
+              <div class="mt-1 text-xs text-slate-600">
+                Active products: <span class="font-medium">{{ client.active_products_count }}</span>
+                · Paid: <span class="font-medium text-green-600">{{ money(client.total_paid) }}</span>
+              </div>
+            </button>
+          }
+        </div>
+        @if (activeLoading()) {
+          <p class="text-sm text-slate-500">Searching...</p>
+        }
+        @if (!activeLoading() && filteredActiveClients().length === 0) {
+          <p class="text-sm text-slate-500">
+            {{
+              activeClients().length === 0 && !activeServerHits()
+                ? 'No active clients yet.'
+                : 'No clients match your search.'
+            }}
+          </p>
+        }
+      </div>
+    }
+
+    @if (salesTab() === 'consultations') {
+      <div class="space-y-3">
+        <input
+          pInputText
+          type="search"
+          [ngModel]="consultationSearch()"
+          (ngModelChange)="onConsultationSearch($event)"
+          placeholder="Search consultations..."
+          class="w-full"
+          data-testid="consultation-search"
+        />
+        <div class="space-y-2">
+          @for (c of filteredConsultations(); track c.id) {
+            <button
+              type="button"
+              class="w-full rounded-xl border border-slate-200 bg-white p-3 text-left"
+              (click)="openConsultation(c)"
+              data-testid="consultation-item"
+            >
+              <div class="text-sm font-semibold text-slate-900">
+                {{ c.first_name }} {{ c.middle_name }} {{ c.last_name }}
+              </div>
+              <div class="text-xs text-slate-500">{{ c.phone }}</div>
+              <div class="mt-1 text-xs font-medium text-slate-600">{{ c.status }}</div>
+            </button>
+          }
+        </div>
+        @if (consultationLoading()) {
+          <p class="text-sm text-slate-500">Searching...</p>
+        }
+        @if (!consultationLoading() && filteredConsultations().length === 0) {
+          <p class="text-sm text-slate-500">
+            {{
+              consultations().length === 0 && !consultationServerHits()
+                ? 'No consultations yet.'
+                : 'No consultations match your search.'
+            }}
+          </p>
+        }
+      </div>
+    }
   </div>
 }
 
@@ -159,8 +273,17 @@
       </div>
     }
 
+    <input
+      pInputText
+      type="search"
+      [(ngModel)]="productSearch"
+      placeholder="Search products or packages..."
+      class="w-full"
+      data-testid="product-search"
+    />
+
     <div class="space-y-3">
-      @for (product of products(); track product.id) {
+      @for (product of filteredProducts(); track product.id) {
         <div class="rounded-xl border border-slate-200 bg-white p-4">
           <div class="flex items-center justify-between">
             <div>
@@ -200,8 +323,10 @@
           }
         </div>
       }
-      @if (products().length === 0) {
-        <p class="text-sm text-slate-500">No active products. Add them in the web app first.</p>
+      @if (filteredProducts().length === 0) {
+        <p class="text-sm text-slate-500">
+          {{ products().length === 0 ? 'No active products. Add them in the web app first.' : 'No products match your search.' }}
+        </p>
       }
     </div>
 
@@ -224,12 +349,21 @@
       </div>
     }
 
-    <p-button
-      label="Continue to Payment"
-      styleClass="w-full justify-center"
-      (click)="nextToPayment()"
-      data-testid="continue-payment"
-    />
+    <div class="grid grid-cols-2 gap-2">
+      <p-button
+        label="Paying"
+        styleClass="w-full justify-center"
+        (click)="nextToPayment()"
+        data-testid="continue-payment"
+      />
+      <p-button
+        label="Consulting"
+        styleClass="w-full justify-center"
+        severity="secondary"
+        (click)="nextToConsulting()"
+        data-testid="continue-consulting"
+      />
+    </div>
   </div>
 }
 
@@ -242,178 +376,102 @@
       <h2 class="text-sm font-medium text-slate-700">Step 3 of 3 · Payment</h2>
     </div>
 
-    <div class="flex gap-2">
-      <button
-        type="button"
-        [class.bg-slate-900]="saleMode() === 'sale'"
-        [class.text-white]="saleMode() === 'sale'"
-        [class.bg-white]="saleMode() !== 'sale'"
-        [class.text-slate-500]="saleMode() !== 'sale'"
-        class="flex-1 rounded-lg border border-slate-300 py-2 text-sm"
-        (click)="setSaleMode('sale')"
-        data-testid="sale-mode"
-      >
-        Payment
-      </button>
-      <button
-        type="button"
-        [class.bg-slate-900]="saleMode() === 'consulting'"
-        [class.text-white]="saleMode() === 'consulting'"
-        [class.bg-white]="saleMode() !== 'consulting'"
-        [class.text-slate-500]="saleMode() !== 'consulting'"
-        class="flex-1 rounded-lg border border-slate-300 py-2 text-sm"
-        (click)="setSaleMode('consulting')"
-        data-testid="consulting-mode"
-      >
-        Consulting
-      </button>
+    <div class="space-y-3">
+      @for (item of selectedItems(); track $index) {
+        <div class="rounded-xl border border-slate-200 bg-white p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm font-semibold text-slate-900">
+                {{ item.package?.name || item.product.name }}
+              </div>
+              <div class="text-xs text-slate-500">Price: {{ money(item.price) }}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-semibold text-slate-900">
+                Remaining: {{ money(Math.max(0, item.price - item.allocation)) }}
+              </div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="mb-1 block text-sm font-medium text-slate-700">Amount received</label>
+            <input
+              type="number"
+              min="0"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              [(ngModel)]="item.allocation"
+              data-testid="allocation"
+            />
+            <p-button
+              label="Calculate schedule"
+              size="small"
+              styleClass="mt-2 w-full justify-center"
+              (click)="recomputeSchedule(item)"
+              data-testid="recompute-schedule"
+            />
+          </div>
+          @if (item.price > 0 && item.allocation < item.price) {
+            <div class="mt-3 border-t border-slate-100 pt-3">
+              <div class="mb-2 text-sm font-medium text-slate-700">Future installments</div>
+              @for (inst of item.installments; track $index) {
+                <div class="mb-2 grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    [ngModel]="inst.amount"
+                    (ngModelChange)="setInstallmentAmount(item, $index, $event)"
+                    data-testid="installment-amount"
+                  />
+                  <p-datepicker
+                    [ngModel]="parseDate(inst.due_date)"
+                    (ngModelChange)="setInstallmentDate(item, $index, $event)"
+                    dateFormat="dd/mm/yy"
+                    appendTo="body"
+                    class="w-full"
+                  />
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
     </div>
 
-    @if (saleMode() === 'sale') {
-      <div class="space-y-3">
-        @for (item of selectedItems(); track $index) {
-          <div class="rounded-xl border border-slate-200 bg-white p-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-sm font-semibold text-slate-900">
-                  {{ item.package?.name || item.product.name }}
-                </div>
-                <div class="text-xs text-slate-500">Price: {{ money(item.price) }}</div>
-              </div>
-              <div class="text-right">
-                <div class="text-sm font-semibold text-slate-900">
-                  Remaining: {{ money(Math.max(0, item.price - item.allocation)) }}
-                </div>
-              </div>
-            </div>
-            <div class="mt-3">
-              <label class="mb-1 block text-sm font-medium text-slate-700">Amount received</label>
-              <input
-                type="number"
-                min="0"
-                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                [(ngModel)]="item.allocation"
-                data-testid="allocation"
-              />
-              <p-button
-                label="Calculate schedule"
-                size="small"
-                styleClass="mt-2 w-full justify-center"
-                (click)="recomputeSchedule(item)"
-                data-testid="recompute-schedule"
-              />
-            </div>
-            @if (item.price > 0 && item.allocation < item.price) {
-              <div class="mt-3 border-t border-slate-100 pt-3">
-                <div class="mb-2 text-sm font-medium text-slate-700">Future installments</div>
-                @for (inst of item.installments; track $index) {
-                  <div class="mb-2 grid grid-cols-2 gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      [ngModel]="inst.amount"
-                      (ngModelChange)="setInstallmentAmount(item, $index, $event)"
-                      data-testid="installment-amount"
-                    />
-                    <p-datepicker
-                      [ngModel]="parseDate(inst.due_date)"
-                      (ngModelChange)="setInstallmentDate(item, $index, $event)"
-                      dateFormat="dd/mm/yy"
-                      appendTo="body"
-                      class="w-full"
-                    />
-                  </div>
-                }
-              </div>
-            }
-          </div>
-        }
+    <div class="rounded-xl bg-slate-900 p-4 text-white">
+      <div class="flex justify-between text-sm">
+        <span>Total</span>
+        <span>{{ money(totalPrice()) }}</span>
       </div>
-
-      <div class="rounded-xl bg-slate-900 p-4 text-white">
-        <div class="flex justify-between text-sm">
-          <span>Total</span>
-          <span>{{ money(totalPrice()) }}</span>
-        </div>
-        <div class="flex justify-between text-sm">
-          <span>Paid now</span>
-          <span class="font-semibold">{{ money(totalPaid()) }}</span>
-        </div>
-        <div class="flex justify-between text-sm">
-          <span>Balance</span>
-          <span>{{ money(totalRemaining()) }}</span>
-        </div>
+      <div class="flex justify-between text-sm">
+        <span>Paid now</span>
+        <span class="font-semibold">{{ money(totalPaid()) }}</span>
       </div>
+      <div class="flex justify-between text-sm">
+        <span>Balance</span>
+        <span>{{ money(totalRemaining()) }}</span>
+      </div>
+    </div>
 
-      <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+    <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700">Receipt number (optional)</label>
+        <input pInputText [(ngModel)]="receiptNumber" class="w-full" data-testid="receipt-number" />
+      </div>
+      @if (branches().length > 1) {
         <div>
-          <label class="mb-1 block text-sm font-medium text-slate-700">Receipt number (optional)</label>
-          <input pInputText [(ngModel)]="receiptNumber" class="w-full" data-testid="receipt-number" />
-        </div>
-        @if (branches().length > 1) {
-          <div>
-            <label class="mb-1 block text-sm font-medium text-slate-700">Collecting branch</label>
-            <p-select
-              [options]="branches()"
-              optionLabel="name"
-              optionValue="id"
-              [(ngModel)]="branchId"
-              appendTo="body"
-              class="w-full"
-              data-testid="branch"
-            />
-          </div>
-        }
-      </div>
-    } @else {
-      <div class="rounded-xl border border-slate-200 bg-white p-4">
-        <div class="mb-1 text-sm font-medium text-slate-700">Products to follow up on</div>
-        <ul class="space-y-1">
-          @for (item of selectedItems(); track $index) {
-            <li class="flex justify-between text-sm text-slate-700">
-              <span>{{ item.package?.name || item.product.name }}</span>
-              <span class="text-slate-500">{{ money(item.price) }}</span>
-            </li>
-          }
-        </ul>
-        <p class="mt-2 text-xs text-slate-500">
-          No payment is collected now. The client will be marked as consulting and a follow-up will be scheduled.
-        </p>
-      </div>
-
-      <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-        <div>
-          <label class="mb-1 block text-sm font-medium text-slate-700">Follow-up date</label>
-          <p-datepicker
-            [ngModel]="parseDate(followUpDate())"
-            (ngModelChange)="onFollowUpDate($event)"
-            dateFormat="dd/mm/yy"
+          <label class="mb-1 block text-sm font-medium text-slate-700">Collecting branch</label>
+          <p-select
+            [options]="branches()"
+            optionLabel="name"
+            optionValue="id"
+            [(ngModel)]="branchId"
             appendTo="body"
             class="w-full"
-            data-testid="follow-up-date"
+            data-testid="branch"
           />
         </div>
-        <div>
-          <label class="mb-1 block text-sm font-medium text-slate-700">Follow-up note (optional)</label>
-          <input pInputText [(ngModel)]="followUpNote" class="w-full" data-testid="follow-up-note" />
-        </div>
-        @if (branches().length > 1) {
-          <div>
-            <label class="mb-1 block text-sm font-medium text-slate-700">Branch</label>
-            <p-select
-              [options]="branches()"
-              optionLabel="name"
-              optionValue="id"
-              [(ngModel)]="branchId"
-              appendTo="body"
-              class="w-full"
-              data-testid="branch"
-            />
-          </div>
-        }
-      </div>
-    }
+      }
+    </div>
 
     @if (colleagues().length > 0) {
       <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -421,62 +479,187 @@
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-700">Converter</label>
           <p-select
-            [options]="colleagues()"
-            optionLabel="name"
+            [options]="colleagueOptions()"
+            optionLabel="label"
             optionValue="phone"
             [(ngModel)]="converterId"
             appendTo="body"
             class="w-full"
-            placeholder="Select converter"
+            placeholder="Search converter"
+            filter="true"
+            filterBy="label"
+            filterPlaceholder="Search by name or phone"
+            (onFilter)="onColleagueFilter($event)"
             data-testid="converter"
           />
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-700">Primary recommender</label>
           <p-select
-            [options]="colleagues()"
-            optionLabel="name"
+            [options]="colleagueOptions()"
+            optionLabel="label"
             optionValue="phone"
             [(ngModel)]="primaryRecommenderId"
             appendTo="body"
             class="w-full"
-            placeholder="Select recommender"
+            placeholder="Search recommender"
+            filter="true"
+            filterBy="label"
+            filterPlaceholder="Search by name or phone"
+            (onFilter)="onColleagueFilter($event)"
             data-testid="primary-recommender"
           />
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-700">Secondary recommender</label>
           <p-select
-            [options]="colleagues()"
-            optionLabel="name"
+            [options]="colleagueOptions()"
+            optionLabel="label"
             optionValue="phone"
             [(ngModel)]="secondaryRecommenderId"
             appendTo="body"
             class="w-full"
-            placeholder="Select recommender"
+            placeholder="Search recommender"
+            filter="true"
+            filterBy="label"
+            filterPlaceholder="Search by name or phone"
+            (onFilter)="onColleagueFilter($event)"
             data-testid="secondary-recommender"
           />
         </div>
       </div>
     }
 
-    @if (saleMode() === 'consulting') {
-      <p-button
-        label="Save Consultation"
-        styleClass="w-full justify-center"
-        [loading]="submitting()"
-        (click)="submitSale()"
-        data-testid="submit-consultation"
-      />
-    } @else {
-      <p-button
-        label="Complete Sale"
-        styleClass="w-full justify-center"
-        [loading]="submitting()"
-        (click)="submitSale()"
-        data-testid="submit-sale"
-      />
+    <p-button
+      label="Complete Sale"
+      styleClass="w-full justify-center"
+      [loading]="submitting()"
+      (click)="submitSale()"
+      data-testid="submit-sale"
+    />
+  </div>
+}
+
+@if (step() === 'consulting') {
+  <div class="space-y-4">
+    <div class="flex items-center gap-2">
+      <button type="button" class="text-sm text-slate-500" (click)="backToProducts()">
+        <span class="pi pi-chevron-left"></span> Back
+      </button>
+      <h2 class="text-sm font-medium text-slate-700">Step 3 of 3 · Consulting</h2>
+    </div>
+
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="mb-1 text-sm font-medium text-slate-700">Products to follow up on</div>
+      <ul class="space-y-1">
+        @for (item of selectedItems(); track $index) {
+          <li class="flex justify-between text-sm text-slate-700">
+            <span>{{ item.package?.name || item.product.name }}</span>
+            <span class="text-slate-500">{{ money(item.price) }}</span>
+          </li>
+        }
+      </ul>
+      <p class="mt-2 text-xs text-slate-500">
+        No payment is collected now. The client will be marked as consulting and a follow-up will be scheduled.
+      </p>
+    </div>
+
+    <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700">Follow-up date</label>
+        <p-datepicker
+          [ngModel]="parseDate(followUpDate())"
+          (ngModelChange)="onFollowUpDate($event)"
+          dateFormat="dd/mm/yy"
+          appendTo="body"
+          class="w-full"
+          data-testid="follow-up-date"
+        />
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700">Follow-up note (optional)</label>
+        <input pInputText [(ngModel)]="followUpNote" class="w-full" data-testid="follow-up-note" />
+      </div>
+      @if (branches().length > 1) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Branch</label>
+          <p-select
+            [options]="branches()"
+            optionLabel="name"
+            optionValue="id"
+            [(ngModel)]="branchId"
+            appendTo="body"
+            class="w-full"
+            data-testid="branch"
+          />
+        </div>
+      }
+    </div>
+
+    @if (colleagues().length > 0) {
+      <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <h3 class="text-sm font-semibold text-slate-900">Commission attribution</h3>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Converter</label>
+          <p-select
+            [options]="colleagueOptions()"
+            optionLabel="label"
+            optionValue="phone"
+            [(ngModel)]="converterId"
+            appendTo="body"
+            class="w-full"
+            placeholder="Search converter"
+            filter="true"
+            filterBy="label"
+            filterPlaceholder="Search by name or phone"
+            (onFilter)="onColleagueFilter($event)"
+            data-testid="converter"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Primary recommender</label>
+          <p-select
+            [options]="colleagueOptions()"
+            optionLabel="label"
+            optionValue="phone"
+            [(ngModel)]="primaryRecommenderId"
+            appendTo="body"
+            class="w-full"
+            placeholder="Search recommender"
+            filter="true"
+            filterBy="label"
+            filterPlaceholder="Search by name or phone"
+            (onFilter)="onColleagueFilter($event)"
+            data-testid="primary-recommender"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Secondary recommender</label>
+          <p-select
+            [options]="colleagueOptions()"
+            optionLabel="label"
+            optionValue="phone"
+            [(ngModel)]="secondaryRecommenderId"
+            appendTo="body"
+            class="w-full"
+            placeholder="Search recommender"
+            filter="true"
+            filterBy="label"
+            filterPlaceholder="Search by name or phone"
+            (onFilter)="onColleagueFilter($event)"
+            data-testid="secondary-recommender"
+          />
+        </div>
+      </div>
     }
+
+    <p-button
+      label="Save Consultation"
+      styleClass="w-full justify-center"
+      [loading]="submitting()"
+      (click)="submitSale()"
+      data-testid="submit-consultation"
+    />
   </div>
 }
 
@@ -526,3 +709,37 @@
 
 <app-loading-overlay [visible]="loading()" message="Loading..." />
 <app-loading-overlay [visible]="submitting()" message="Completing sale..." />
+
+<p-dialog
+  [(visible)]="showExistingDialog"
+  [modal]="true"
+  [style]="{ width: '90%', maxWidth: '420px' }"
+  [dismissableMask]="false"
+  [closable]="false"
+  appendTo="body"
+  data-testid="client-exists-dialog"
+>
+  <ng-template pTemplate="header">
+    <div class="text-sm font-semibold">Client already exists</div>
+  </ng-template>
+  <p class="text-sm text-slate-700">
+    <span class="font-medium">{{ existingClientMatch?.first_name }} {{ existingClientMatch?.last_name }}</span>
+    ({{ existingClientMatch?.phone }}) already exists. Move to Consultations to manage payments or
+    products — only products without a payment can be removed — or continue to add a new client.
+  </p>
+  <div class="mt-4 space-y-2">
+    <p-button
+      label="Go to Consultations"
+      styleClass="w-full justify-center"
+      (click)="goToConsultations()"
+      data-testid="go-to-consultations"
+    />
+    <p-button
+      label="Continue as new"
+      styleClass="w-full justify-center"
+      severity="secondary"
+      (click)="continueAsNew()"
+      data-testid="continue-as-new"
+    />
+  </div>
+</p-dialog>

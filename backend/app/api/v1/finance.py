@@ -84,8 +84,22 @@ async def list_expenses(
         company_id=current_user.company_id, current_user_role=current_user.role,
         category=category, category_not=category_not,
     )
+
+    items = []
+    for e in expenses:
+        read = ExpenseRead.model_validate(e)
+        items.append(
+            read.model_copy(
+                update={
+                    "created_by_name": e.created_by_user.name if e.created_by_user else None,
+                    "approved_by_name": e.approved_by_user.name if e.approved_by_user else None,
+                    "paid_by_name": e.paid_by_user.name if e.paid_by_user else None,
+                }
+            )
+        )
+
     return {
-        "items": [ExpenseRead.model_validate(e) for e in expenses],
+        "items": items,
         "total": total,
         "page": page,
         "page_size": page_size,

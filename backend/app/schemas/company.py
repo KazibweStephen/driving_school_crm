@@ -153,6 +153,9 @@ class ExpenseRead(BaseModel):
     receipt_url: str | None = None
     expense_date: datetime
     created_by_phone: str | None = None
+    created_by_name: str | None = None
+    approved_by_name: str | None = None
+    paid_by_name: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

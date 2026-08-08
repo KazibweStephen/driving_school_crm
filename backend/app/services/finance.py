@@ -38,7 +38,11 @@ async def list_expenses(
     category: str | None = None,
     category_not: str | None = None,
 ) -> tuple[list[Expense], int]:
-    query = select(Expense)
+    query = select(Expense).options(
+        selectinload(Expense.created_by_user),
+        selectinload(Expense.approved_by_user),
+        selectinload(Expense.paid_by_user),
+    )
     count_query = select(func.count(Expense.id))
 
     if branch_id:

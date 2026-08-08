@@ -5,6 +5,7 @@ import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
+import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import {
   ConsultationService,
@@ -21,6 +22,7 @@ import { ClientSearch } from '../../shared/client-search/client-search';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { PageHeader } from '../../shared/page-header/page-header';
 import { formatMoney, toISODate, todayISO } from '../../shared/format';
+import { CatalogService } from '../../core/services/catalog.service';
 
 type Step = 'search' | 'overview' | 'collect' | 'result';
 
@@ -42,10 +44,29 @@ export class Payments {
   private auth = inject(AuthService);
   private consultationService = inject(ConsultationService);
   private paymentService = inject(PaymentService);
+  private catalogService = inject(CatalogService);
   private messageService = inject(MessageService);
+  private route = inject(ActivatedRoute);
 
   currency = this.auth.currencyCode;
   canBackdate = this.auth.currentUserCanBackdate;
+
+  constructor() {
+    this.route.queryParams.subscribe((qp) => {
+      const phone = qp['phone'];
+      if (phone && !this.client && this.step() === 'search') {
+        this.consultationService.clientSearch(phone).subscribe({
+          next: (matches) => {
+            if (matches && matches.length > 0) {
+              this.client = matches[0];
+              this.loadOverview();
+            }
+          },
+          error: () => {},
+        });
+      }
+    });
+  }
 
   step = signal<Step>('search');
   loading = signal(false);
@@ -119,7 +140,17 @@ export class Payments {
     this.paymentService.getAccessibleBranches().subscribe({
       next: (branches) => {
         this.branches.set(branches);
-        if (branches.length === 1) this.branchId.set(branches[0].id);
+        this.catalogService.getCurrentUser().subscribe({
+          next: (me) => {
+            const assigned = (me.branch_ids ?? []).map(String);
+            const match = assigned.find((id) => branches.some((b) => b.id === id));
+            if (match) this.branchId.set(match);
+            else if (branches.length === 1) this.branchId.set(branches[0].id);
+          },
+          error: () => {
+            if (branches.length === 1) this.branchId.set(branches[0].id);
+          },
+        });
       },
       error: () => {},
     });
@@ -180,10 +211,8 @@ export class Payments {
     this.collectAmount.set(this.balanceForItem(ci));
     this.receiptNumber = '';
     this.documentDate.set(todayISO());
-    if (this.branches().length === 1) {
+    if (this.branches().length > 0 && !this.branchId()) {
       this.branchId.set(this.branches()[0].id);
-    } else if (this.consultation()?.branch_id && !this.branchId()) {
-      this.branchId.set(this.consultation()!.branch_id);
     }
     this.step.set('collect');
   }

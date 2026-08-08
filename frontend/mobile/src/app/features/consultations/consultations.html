@@ -1,0 +1,89 @@
+<app-page-header title="Consultation" />
+
+@if (!consultation() && loading()) {
+  <div class="py-10 text-center text-sm text-slate-500">Loading...</div>
+}
+
+@let c = consultation();
+@if (c) {
+  <div class="space-y-4">
+    <div class="flex items-center gap-2">
+      <button type="button" class="text-sm text-slate-500" (click)="back()" data-testid="consultation-back">
+        <span class="pi pi-chevron-left"></span> Back
+      </button>
+    </div>
+
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-base font-semibold text-slate-900">{{ clientName() }}</div>
+          <div class="mt-0.5 text-sm text-slate-500">{{ c.phone }}</div>
+        </div>
+        <span class="rounded-full px-2 py-1 text-xs font-medium" [class]="statusClass(c.status)">
+          {{ statusLabel(c.status) }}
+        </span>
+      </div>
+      @if (c.location) {
+        <div class="mt-2 text-xs text-slate-500">📍 {{ c.location }}</div>
+      }
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+      <p-button
+        label="Add product"
+        icon="pi pi-plus"
+        styleClass="w-full justify-center"
+        (click)="addProduct()"
+        data-testid="detail-add-product"
+      />
+      <p-button
+        label="Collect payment"
+        icon="pi pi-credit-card"
+        styleClass="w-full justify-center"
+        severity="secondary"
+        (click)="collectPayment()"
+        data-testid="detail-collect-payment"
+      />
+    </div>
+
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <h3 class="mb-2 text-sm font-semibold text-slate-900">Products</h3>
+      <ul class="space-y-2">
+        @for (ci of (c.cart_items ?? []); track ci.id) {
+          <li class="rounded-lg bg-slate-50 px-3 py-2">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-sm font-medium text-slate-800">{{ itemLabel(ci) }}</div>
+                <span class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium" [class]="statusClass(ci.status)">
+                  {{ statusLabel(ci.status) }}
+                </span>
+                @if (paymentsForItem(ci).length > 0) {
+                  <div class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500">
+                    <span>Total: <span class="text-slate-800">{{ money(totalForItem(ci)) }}</span></span>
+                    <span>Paid: <span class="text-green-600">{{ money(paidForItem(ci)) }}</span></span>
+                    <span>Bal: <span class="text-amber-600">{{ money(balanceForItem(ci)) }}</span></span>
+                  </div>
+                }
+              </div>
+              @if (removable(ci)) {
+                <button
+                  type="button"
+                  class="shrink-0 text-xs font-medium text-red-600"
+                  (click)="onRemove(ci)"
+                  data-testid="remove-product"
+                >
+                  <span class="pi pi-trash mr-1"></span>Remove
+                </button>
+              }
+            </div>
+          </li>
+        } @empty {
+          <li class="text-sm text-slate-500">No products on this consultation.</li>
+        }
+      </ul>
+    </div>
+  </div>
+}
+
+<app-loading-overlay [visible]="loading()" message="Loading..." />
+<app-loading-overlay [visible]="removing()" message="Removing..." />

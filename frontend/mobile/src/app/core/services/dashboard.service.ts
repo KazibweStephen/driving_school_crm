@@ -8,6 +8,9 @@ export interface MobileDashboard {
   pending_collections: number;
   commission_earned: number;
   commission_pending: number;
+  today_training_sessions: number;
+  month_training_sessions: number;
+  days_trained: number;
 }
 
 @Injectable({ providedIn: 'root' })

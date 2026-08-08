@@ -69,6 +69,15 @@
               </div>
               <div class="text-xs text-slate-500">{{ e.category || 'Uncategorized' }}</div>
               <div class="mt-1 text-xs text-slate-400">{{ e.expense_date }}</div>
+              @if (e.created_by_name) {
+                <div class="mt-1 text-xs text-slate-400">Requested by {{ e.created_by_name }}</div>
+              }
+              @if (e.status === 'approved' && e.approved_by_name) {
+                <div class="mt-1 text-xs text-slate-400">Approved by {{ e.approved_by_name }}</div>
+              }
+              @if (e.status === 'paid' && e.paid_by_name) {
+                <div class="mt-1 text-xs text-slate-400">Paid by {{ e.paid_by_name }}</div>
+              }
             </div>
             <div class="text-right">
               <div class="text-sm font-semibold text-slate-900">{{ money(e.amount) }}</div>

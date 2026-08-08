@@ -188,6 +188,15 @@ class Expense(Base):
     )
 
     branch: Mapped["Branch"] = relationship("Branch", back_populates="expenses")
+    created_by_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[created_by_phone], uselist=False
+    )
+    approved_by_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[approved_by], uselist=False
+    )
+    paid_by_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[paid_by], uselist=False
+    )
 
 
 class Sale(Base):

@@ -72,16 +72,75 @@ test('active client opens consultation detail; unpaid product can be removed', a
   await expect(page.getByText('No products on this consultation.')).toBeVisible({ timeout: 10000 });
 });
 
-test('consultations tab search + open detail', async ({ page }) => {
+test('consultations tab touch routes to sales with preloaded products', async ({ page }) => {
+  const phone = `25679${Math.floor(10000000 + Math.random() * 89999999)}`;
+  const res = await api.post('/api/v1/consultations/full', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      phone,
+      first_name: 'TouchTest',
+      branch_id: '00000000-0000-0000-0000-000000000002',
+      items: [{ product_id: PRODUCT_ID, package_id: PACKAGE_ID, allocation: 0, installments: [] }],
+    },
+  });
+  expect(res.ok()).toBeTruthy();
+  const consultation = await res.json();
+
   await login(page);
   await page.goto('/m/sales');
   await page.getByTestId('consultations-tab').click();
   await expect(page.getByTestId('consultation-search')).toBeVisible();
-  await page.getByTestId('consultation-search').fill('Kawuma');
+  await page.getByTestId('consultation-search').fill('TouchTest');
   await expect(page.getByTestId('consultation-item').first()).toBeVisible({ timeout: 10000 });
   await page.getByTestId('consultation-item').first().click();
-  await expect(page.getByText('Consultation')).toBeVisible({ timeout: 10000 });
-  await expect(page.getByTestId('detail-add-product')).toBeVisible();
+
+  await expect(page.getByText('Step 2 of 3 · Products')).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText('Full Package').last()).toBeVisible({ timeout: 10000 });
+
+  await page.getByTestId('remove-selected').first().click();
+  await expect(page.getByText('Adding')).not.toBeVisible();
+  await page.getByTestId('continue-payment').click();
+  await expect(page.getByText('Add at least one product or package')).toBeVisible({ timeout: 10000 });
+});
+
+test('client pays from consultations then appears under Active Clients', async ({ page }) => {
+  const phone = `25678${Math.floor(10000000 + Math.random() * 89999999)}`;
+  const res = await api.post('/api/v1/consultations/full', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      phone,
+      first_name: 'PayTest',
+      branch_id: '00000000-0000-0000-0000-000000000002',
+      items: [{ product_id: PRODUCT_ID, package_id: PACKAGE_ID, allocation: 0, installments: [] }],
+    },
+  });
+  expect(res.ok()).toBeTruthy();
+  const consultation = await res.json();
+
+  const prod = await api.get(`/api/v1/products/${PRODUCT_ID}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const product = await prod.json();
+  const price = Number(product.packages.find((p: any) => p.id === PACKAGE_ID).price);
+
+  await login(page);
+  await page.goto(`/m/consultations/${consultation.id}`);
+  await expect(page.getByText('PayTest')).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('detail-collect-payment').click();
+  await page.waitForURL(/\/m\/payments/, { timeout: 10000 });
+
+  await expect(page.getByTestId('collect-payment').first()).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('collect-payment').first().click();
+  await expect(page.getByTestId('collect-amount')).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('collect-amount').fill(String(price));
+  await page.getByTestId('record-payment').click();
+  await expect(page.getByText('Payment recorded')).toBeVisible({ timeout: 15000 });
+
+  await page.goto('/m/sales');
+  await expect(page.getByTestId('active-search')).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('active-search').fill(phone);
+  await expect(page.getByTestId('active-client').first()).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText('PayTest')).toBeVisible({ timeout: 10000 });
 });
 
 test('new sale with existing phone shows dialog; continue as new works', async ({ page }) => {

@@ -340,7 +340,7 @@
                 <div class="text-sm text-slate-800">{{ item.package?.name || item.product.name }}</div>
                 <div class="text-xs text-slate-500">{{ money(item.price) }}</div>
               </div>
-              <button type="button" class="text-red-600" (click)="removeItem($index)">
+              <button type="button" class="text-red-600" (click)="removeItem($index)" data-testid="remove-selected">
                 <span class="pi pi-times"></span>
               </button>
             </li>

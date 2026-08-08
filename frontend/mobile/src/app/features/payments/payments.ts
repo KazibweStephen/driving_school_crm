@@ -308,19 +308,22 @@ export class Payments {
 
   private finishCollect(consultationId: string, ci: CartItem, paymentId: string) {
     const balance = this.balanceForItem(ci);
-    if (ci.status === 'consulting') {
+    if (['converted_paid', 'converted_paying'].includes(ci.status) && balance <= 0) {
       this.consultationService.updateCartItem(ci.id, { status: 'converted_paid' }).subscribe({
         next: () => this.showResult(true, paymentId, balance),
         error: () => this.showResult(true, paymentId, balance),
       });
-    } else if (balance <= 0 && ci.status === 'converted_paying') {
-      this.consultationService.updateCartItem(ci.id, { status: 'converted_paid' }).subscribe({
-        next: () => this.showResult(true, paymentId, balance),
-        error: () => this.showResult(true, paymentId, balance),
-      });
-    } else {
-      this.showResult(true, paymentId, balance);
+      return;
     }
+    if (!['converted_paid', 'converted_paying', 'lost'].includes(ci.status)) {
+      const nextStatus = balance <= 0 ? 'converted_paid' : 'converted_paying';
+      this.consultationService.updateCartItem(ci.id, { status: nextStatus }).subscribe({
+        next: () => this.showResult(true, paymentId, balance),
+        error: () => this.showResult(true, paymentId, balance),
+      });
+      return;
+    }
+    this.showResult(true, paymentId, balance);
   }
 
   private showResult(success: boolean, paymentId: string, balance: number) {

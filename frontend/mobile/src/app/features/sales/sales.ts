@@ -30,6 +30,7 @@ interface SaleItem {
   price: number;
   allocation: number;
   installments: { amount: number; due_date: string }[];
+  cartItemId?: string;
 }
 
 type Step = 'home' | 'client' | 'products' | 'payment' | 'consulting' | 'done';
@@ -200,11 +201,11 @@ export class Sales {
   }
 
   openClient(client: ClientSummary) {
-    this.router.navigate(['/consultations', client.id]);
+    this.router.navigate(['/sales'], { queryParams: { upsell: '1', id: client.id } });
   }
 
   openConsultation(c: Consultation) {
-    this.router.navigate(['/consultations', c.id]);
+    this.router.navigate(['/sales'], { queryParams: { upsell: '1', id: c.id } });
   }
 
   private loadActiveClients() {
@@ -221,15 +222,18 @@ export class Sales {
     });
   }
 
-  private startUpsellDeepLink(id: string) {
+  private async startUpsellDeepLink(id: string) {
     if (this.step() !== 'home') return;
     this.isNewSale.set(false);
     this.isPrevious.set(false);
     this.resetFlow();
     this.step.set('client');
     this.loading.set(true);
+    if (!this.productsLoaded) await this.loadProducts();
+    if (this.branches().length === 0) this.loadBranches();
+    if (this.colleagues().length === 0) this.loadColleagues();
     this.consultationService.get(id).subscribe({
-      next: (consultation) => {
+      next: async (consultation) => {
         this.client = {
           phone: consultation.phone,
           first_name: consultation.first_name,
@@ -247,6 +251,7 @@ export class Sales {
             ['converted_paid', 'converted_paying'].includes(ci.status),
           ),
         );
+        await this.preloadConsultationItems(consultation.cart_items ?? []);
         this.loadExistingPayments(consultation.id);
         this.step.set('products');
       },
@@ -256,9 +261,37 @@ export class Sales {
         this.step.set('home');
       },
     });
-    if (!this.productsLoaded) this.loadProducts();
-    if (this.branches().length === 0) this.loadBranches();
-    if (this.colleagues().length === 0) this.loadColleagues();
+  }
+
+  private async preloadConsultationItems(items: CartItem[]) {
+    const open = (items ?? []).filter((ci) =>
+      ['interested', 'consulting'].includes(ci.status),
+    );
+    if (open.length === 0) return;
+    const saleItems: SaleItem[] = [];
+    for (const ci of open) {
+      let product = this.products().find((p) => p.id === ci.product_id);
+      if (!product) {
+        try {
+          product = await lastValueFrom(this.catalogService.getProduct(ci.product_id));
+        } catch {
+          continue;
+        }
+      }
+      const pkg = ci.package_id
+        ? (product.packages ?? []).find((pk) => pk.id === ci.package_id) ?? null
+        : null;
+      const price = pkg ? Number(pkg.price) : 0;
+      saleItems.push({
+        product,
+        package: pkg,
+        price,
+        allocation: 0,
+        installments: [],
+        cartItemId: ci.id,
+      });
+    }
+    if (saleItems.length > 0) this.selectedItems.set(saleItems);
   }
 
   // flow type
@@ -355,20 +388,24 @@ export class Sales {
     if (date) this.followUpDate.set(toISODate(date));
   }
 
-  private loadProducts() {
-    this.catalogService
-      .listProducts({ status: 'active', page_size: 100 })
-      .subscribe({
-        next: (res) => {
-          const active = (res.products ?? []).filter((p) => p.status === 'active');
-          this.products.set(active);
-          this.productsLoaded = true;
-        },
-        error: () => {
-          this.products.set([]);
-          this.productsLoaded = true;
-        },
-      });
+  private loadProducts(): Promise<void> {
+    return new Promise((resolve) => {
+      this.catalogService
+        .listProducts({ status: 'active', page_size: 100 })
+        .subscribe({
+          next: (res) => {
+            const active = (res.products ?? []).filter((p) => p.status === 'active');
+            this.products.set(active);
+            this.productsLoaded = true;
+            resolve();
+          },
+          error: () => {
+            this.products.set([]);
+            this.productsLoaded = true;
+            resolve();
+          },
+        });
+    });
   }
 
   private loadBranches() {
@@ -844,6 +881,14 @@ export class Sales {
   private async submitUpsell() {
     const consultation = this.existingConsultation();
     if (!consultation) return;
+    if (this.selectedItems().length === 0) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'No products',
+        detail: 'Add at least one product or package before continuing',
+      });
+      return;
+    }
     this.submitting.set(true);
     const docDate = this.documentDate();
     const consulting = this.saleMode() === 'consulting';
@@ -851,6 +896,10 @@ export class Sales {
       if (consulting) {
         const itemIds: string[] = [];
         for (const item of this.selectedItems()) {
+          if (item.cartItemId) {
+            itemIds.push(item.cartItemId);
+            continue;
+          }
           const cartItem = await lastValueFrom(
             this.consultationService.addCartItem(consultation.id, {
               product_id: item.product.id,
@@ -879,12 +928,18 @@ export class Sales {
         return;
       }
       for (const item of this.selectedItems()) {
-        const cartItem = await lastValueFrom(
-          this.consultationService.addCartItem(consultation.id, {
-            product_id: item.product.id,
-            package_id: item.package?.id,
-          }),
-        );
+        let cartItemId: string;
+        if (item.cartItemId) {
+          cartItemId = item.cartItemId;
+        } else {
+          const cartItem = await lastValueFrom(
+            this.consultationService.addCartItem(consultation.id, {
+              product_id: item.product.id,
+              package_id: item.package?.id,
+            }),
+          );
+          cartItemId = cartItem.id;
+        }
         const payment = await lastValueFrom(
           this.paymentService.createPayment(consultation.id, {
             product_id: item.product.id,
@@ -908,7 +963,7 @@ export class Sales {
           );
         }
         const status = item.allocation >= item.price ? 'converted_paid' : 'converted_paying';
-        await lastValueFrom(this.consultationService.updateCartItem(cartItem.id, { status }));
+        await lastValueFrom(this.consultationService.updateCartItem(cartItemId, { status }));
       }
       this.resultConsultationId.set(consultation.id);
       this.submitting.set(false);
@@ -959,6 +1014,8 @@ export class Sales {
     this.isPrevious.set(false);
     this.resetFlow();
     this.documentDate.set(todayISO());
+    this.loadActiveClients();
+    this.loadConsultations();
   }
 
   itemSubtotal(item: SaleItem) {

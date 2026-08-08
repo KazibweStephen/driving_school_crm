@@ -92,6 +92,10 @@ export class CatalogService {
     return this.http.get<ProductListResponse>('/api/v1/products/', { params: httpParams });
   }
 
+  getProduct(id: string) {
+    return this.http.get<Product>(`/api/v1/products/${id}`);
+  }
+
   listVehicles() {
     return this.http.get<Vehicle[]>('/api/v1/vehicles');
   }

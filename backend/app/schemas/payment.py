@@ -62,6 +62,20 @@ class InstallmentUpdate(BaseModel):
     notes: str | None = None
 
 
+class ClientActiveProduct(BaseModel):
+    cart_item_id: uuid.UUID
+    product_id: str
+    product_name: str = ""
+    package_id: str | None = None
+    package_name: str | None = None
+    status: str
+    total: Decimal = Decimal("0.00")
+    paid: Decimal = Decimal("0.00")
+    balance: Decimal = Decimal("0.00")
+    commission_earned: Decimal = Decimal("0.00")
+    commission_total: Decimal = Decimal("0.00")
+
+
 class ClientSummary(BaseModel):
     id: uuid.UUID
     phone: str
@@ -75,6 +89,7 @@ class ClientSummary(BaseModel):
     total_paid: Decimal = Decimal("0.00")
     last_payment_date: date | None = None
     created_at: datetime
+    products: list[ClientActiveProduct] = []
 
     model_config = {"from_attributes": True}
 

@@ -34,7 +34,7 @@ test.describe('Mobile PWA', () => {
 
   test('office admin can log in and see dashboard', async ({ page }) => {
     await mobileLogin(page);
-    await expect(page.getByText('Daily Sales')).toBeVisible();
+    await expect(page.getByText('Daily Collection')).toBeVisible();
     await expect(page.getByTestId('qa-sale')).toBeVisible();
   });
 

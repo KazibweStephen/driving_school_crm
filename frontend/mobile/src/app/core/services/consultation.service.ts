@@ -83,6 +83,20 @@ export interface FullConsultationCreate {
   secondary_recommender_id?: string;
 }
 
+export interface ClientActiveProduct {
+  cart_item_id: string;
+  product_id: string;
+  product_name: string;
+  package_id: string | null;
+  package_name: string | null;
+  status: string;
+  total: string;
+  paid: string;
+  balance: string;
+  commission_earned: string;
+  commission_total: string;
+}
+
 export interface ClientSummary {
   id: string;
   phone: string;
@@ -96,6 +110,7 @@ export interface ClientSummary {
   total_paid: string;
   last_payment_date: string | null;
   created_at: string;
+  products?: ClientActiveProduct[];
 }
 
 export interface ClientListResponse {

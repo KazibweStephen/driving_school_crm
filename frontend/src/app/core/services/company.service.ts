@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 export interface Company {
@@ -63,6 +63,20 @@ export interface BranchUpdate {
   phone?: string;
   email?: string;
   is_active?: boolean;
+}
+
+export interface BranchMonthlyTarget {
+  id: string;
+  branch_id: string;
+  month: string;
+  target_amount: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BranchMonthlyTargetUpsert {
+  month: string;
+  target_amount: number;
 }
 
 export interface UserBranchAssignment {
@@ -150,6 +164,22 @@ export class CompanyService {
 
   deleteBranch(id: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/branches/${id}`);
+  }
+
+  getBranchMonthlyTargets(branchId: string, month?: string): Observable<BranchMonthlyTarget[]> {
+    let params = new HttpParams();
+    if (month) params = params.set('month', month);
+    return this.http.get<BranchMonthlyTarget[]>(
+      `${this.base}/branches/${branchId}/monthly-targets`,
+      { params },
+    );
+  }
+
+  upsertBranchMonthlyTarget(branchId: string, data: BranchMonthlyTargetUpsert): Observable<BranchMonthlyTarget> {
+    return this.http.put<BranchMonthlyTarget>(
+      `${this.base}/branches/${branchId}/monthly-target`,
+      data,
+    );
   }
 
   assignUser(branchId: string, data: { user_id: string; role?: string }): Observable<UserBranchAssignment> {

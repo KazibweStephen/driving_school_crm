@@ -1,8 +1,8 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -106,6 +106,32 @@ class Branch(Base):
     client_availabilities: Mapped[list["ClientAvailability"]] = relationship(
         "ClientAvailability", back_populates="branch"
     )
+    monthly_targets: Mapped[list["BranchMonthlyTarget"]] = relationship(
+        "BranchMonthlyTarget", back_populates="branch", cascade="all, delete-orphan"
+    )
+
+
+class BranchMonthlyTarget(Base):
+    """Expected New Sales value for a branch in a given month."""
+    __tablename__ = "branch_monthly_targets"
+    __table_args__ = (
+        UniqueConstraint("branch_id", "month", name="uq_branch_monthly_target"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    branch_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    month: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    target_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    branch: Mapped["Branch"] = relationship("Branch", back_populates="monthly_targets")
 
 
 class UserBranchAssignment(Base):

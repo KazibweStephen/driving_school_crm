@@ -4,14 +4,18 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.cart import CartItem, CartItemStatus
+from app.models.commission import Commission
 from app.models.consultation import Consultation
+from app.models.product import Package, Product
 from app.models.user import User
 from app.schemas.payment import (
+    ClientActiveProduct,
     ClientListResponse,
     ClientSummary,
     InstallmentCreate,
@@ -39,12 +43,40 @@ async def list_clients(
         db, search=search, page=page, page_size=page_size,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
+
+    active_statuses = [CartItemStatus.CONVERTED_PAID, CartItemStatus.CONVERTED_PAYING]
+
+    # Batch-resolve product/package names + commissions for all active cart items on this page
+    all_items = [
+        ci for c in consultations
+        for ci in (c.cart_items or [])
+        if ci.status in active_statuses
+    ]
+    products_map: dict[str, Product] = {}
+    packages_map: dict[str, Package] = {}
+    commissions_map: dict[str, Commission] = {}
+    product_ids = {ci.product_id for ci in all_items}
+    package_ids = {ci.package_id for ci in all_items if ci.package_id}
+    if product_ids:
+        res = await db.execute(select(Product).where(Product.id.in_(product_ids)))
+        products_map = {str(p.id): p for p in res.scalars().all()}
+    if package_ids:
+        res = await db.execute(select(Package).where(Package.id.in_(package_ids)))
+        packages_map = {str(p.id): p for p in res.scalars().all()}
+    if all_items:
+        res = await db.execute(
+            select(Commission).where(
+                Commission.cart_item_id.in_([ci.id for ci in all_items])
+            )
+        )
+        commissions_map = {str(cm.cart_item_id): cm for cm in res.scalars().all()}
+
     clients = []
     for c in consultations:
         # Count paid/paying products only
         active_count = sum(
             1 for ci in (c.cart_items or [])
-            if ci.status in (CartItemStatus.CONVERTED_PAID, CartItemStatus.CONVERTED_PAYING)
+            if ci.status in active_statuses
         )
         upgradable_count = sum(
             1 for ci in (c.cart_items or [])
@@ -62,6 +94,42 @@ async def list_clients(
                     if last_payment_date is None or (inst.paid_date and inst.paid_date > last_payment_date):
                         last_payment_date = inst.paid_date
 
+        products: list[ClientActiveProduct] = []
+        for ci in (c.cart_items or []):
+            if ci.status not in active_statuses:
+                continue
+            pays = [
+                p for p in payments
+                if p.product_id == ci.product_id
+                and p.package_id == ci.package_id
+            ]
+            sorted_pays = sorted(pays, key=lambda p: p.created_at)
+            item_total = sorted_pays[0].total_amount if sorted_pays else Decimal("0.00")
+            paid = sum((p.total_paid or Decimal("0.00")) for p in pays)
+            balance = max(Decimal("0.00"), item_total - paid)
+            commission = commissions_map.get(str(ci.id))
+            commission_total = commission.total_amount if commission else Decimal("0.00")
+            commission_earned = Decimal("0.00")
+            if commission_total and item_total > 0:
+                ratio = min(Decimal("1.00"), paid / item_total)
+                commission_earned = (commission_total * ratio).quantize(Decimal("0.01"))
+
+            product_obj = products_map.get(ci.product_id)
+            package_obj = packages_map.get(ci.package_id) if ci.package_id else None
+            products.append(ClientActiveProduct(
+                cart_item_id=ci.id,
+                product_id=ci.product_id,
+                product_name=product_obj.name if product_obj else "",
+                package_id=ci.package_id,
+                package_name=package_obj.name if package_obj else None,
+                status=ci.status.value,
+                total=item_total,
+                paid=paid,
+                balance=balance,
+                commission_earned=commission_earned,
+                commission_total=commission_total,
+            ))
+
         clients.append(ClientSummary(
             id=c.id,
             phone=c.phone,
@@ -75,6 +143,7 @@ async def list_clients(
             total_paid=total_paid,
             last_payment_date=last_payment_date,
             created_at=c.created_at,
+            products=products,
         ))
     return ClientListResponse(
         clients=clients,

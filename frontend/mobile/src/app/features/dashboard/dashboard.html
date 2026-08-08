@@ -6,20 +6,36 @@
 
   <div class="grid grid-cols-2 gap-3">
     <div class="rounded-xl border border-slate-200 bg-white p-4">
-      <div class="text-xs text-slate-500">Daily Sales</div>
-      <div class="mt-1 text-base font-semibold text-slate-900">{{ money(data()?.daily_sales ?? 0) }}</div>
+      <div class="text-xs text-slate-500">Sales</div>
+      <div class="mt-1 text-base font-semibold text-slate-900">{{ money(data()?.sales_today ?? 0) }}</div>
+      <div class="mt-0.5 text-xs text-slate-400">Today</div>
+      <div class="mt-1 border-t border-slate-100 pt-1">
+        <span class="text-sm font-semibold text-slate-900">{{ money(data()?.sales_month ?? 0) }}</span>
+        <span class="text-xs text-slate-400"> this month</span>
+      </div>
+    </div>
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="text-xs text-slate-500">Daily Collection</div>
+      <div class="mt-1 text-base font-semibold text-green-600">{{ money(data()?.daily_collection_total ?? 0) }}</div>
+      <div class="mt-0.5 text-xs text-slate-400">
+        <span class="text-green-700">{{ money(data()?.daily_collection_new ?? 0) }}</span> new
+      </div>
+      <div class="text-xs text-slate-400">
+        <span class="text-slate-700">{{ money(data()?.daily_collection_previous ?? 0) }}</span> previous
+      </div>
+    </div>
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="text-xs text-slate-500">Commission</div>
+      <div class="mt-1 text-base font-semibold text-green-600">{{ money(data()?.commission_earned ?? 0) }}</div>
+      <div class="mt-0.5 text-xs text-slate-400">Earned</div>
+      <div class="mt-1 border-t border-slate-100 pt-1">
+        <span class="text-sm font-semibold text-slate-900">{{ money(data()?.commission_pending ?? 0) }}</span>
+        <span class="text-xs text-slate-400"> pending</span>
+      </div>
     </div>
     <div class="rounded-xl border border-slate-200 bg-white p-4">
       <div class="text-xs text-slate-500">Pending Collections</div>
       <div class="mt-1 text-base font-semibold text-amber-600">{{ money(data()?.pending_collections ?? 0) }}</div>
-    </div>
-    <div class="rounded-xl border border-slate-200 bg-white p-4">
-      <div class="text-xs text-slate-500">Commission Earned</div>
-      <div class="mt-1 text-base font-semibold text-green-600">{{ money(data()?.commission_earned ?? 0) }}</div>
-    </div>
-    <div class="rounded-xl border border-slate-200 bg-white p-4">
-      <div class="text-xs text-slate-500">Commission Pending</div>
-      <div class="mt-1 text-base font-semibold text-slate-900">{{ money(data()?.commission_pending ?? 0) }}</div>
     </div>
     <div class="rounded-xl border border-slate-200 bg-white p-4">
       <div class="text-xs text-slate-500">Training Sessions (month)</div>
@@ -34,12 +50,12 @@
 
   <div class="rounded-xl border border-slate-200 bg-white p-4">
     <div class="mb-2 flex items-center justify-between">
-      <div class="text-sm font-semibold text-slate-900">Monthly Sales vs Target</div>
+      <div class="text-sm font-semibold text-slate-900">Sales vs Target</div>
       <div class="text-xs text-slate-500">{{ progressPct() }}%</div>
     </div>
     <p-progressBar [value]="progressPct()" [showValue]="false" styleClass="h-2" />
     <div class="mt-2 flex justify-between text-xs text-slate-500">
-      <span>{{ money(data()?.monthly_sales ?? 0) }}</span>
+      <span>{{ money(data()?.sales_month ?? 0) }}</span>
       <span>{{ money(data()?.monthly_target ?? 0) }}</span>
     </div>
   </div>

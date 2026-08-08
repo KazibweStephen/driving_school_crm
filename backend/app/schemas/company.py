@@ -78,6 +78,24 @@ class BranchRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Branch Monthly Target ──
+
+class BranchMonthlyTargetUpsert(BaseModel):
+    month: date
+    target_amount: Decimal = Field(..., decimal_places=2, ge=0)
+
+
+class BranchMonthlyTargetRead(BaseModel):
+    id: uuid.UUID
+    branch_id: uuid.UUID
+    month: date
+    target_amount: Decimal
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ── User Branch Assignment ──
 
 class UserBranchAssignmentCreate(BaseModel):

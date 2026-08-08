@@ -11,6 +11,7 @@ from app.models.competency_catalogue import (
 from app.models.cart import CartItem, CartItemStatus, follow_up_cart_items
 from app.models.company import (
     Branch,
+    BranchMonthlyTarget,
     Company,
     CompanySmsSettings,
     Expense,
@@ -77,7 +78,7 @@ from app.models.user import User, UserRole, UserStatus
 
 __all__ = [
     "User", "UserRole", "UserStatus",
-    "Company", "Branch", "UserBranchAssignment", "VehicleBranchAssignment",
+    "Company", "Branch", "UserBranchAssignment", "VehicleBranchAssignment", "BranchMonthlyTarget",
     "Expense", "Sale",
     "CompetencyVersion", "CompetencyCategory", "Competency",
     "CompetencyDifficulty", "CompetencyTrainingCategory", "CompetencyVersionStatus",

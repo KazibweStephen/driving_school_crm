@@ -34,9 +34,12 @@ export class Dashboard {
       },
       error: () => {
         this.data.set({
-          daily_sales: 0,
-          monthly_sales: 0,
+          sales_today: 0,
+          sales_month: 0,
           monthly_target: 0,
+          daily_collection_total: 0,
+          daily_collection_new: 0,
+          daily_collection_previous: 0,
           pending_collections: 0,
           commission_earned: 0,
           commission_pending: 0,
@@ -56,7 +59,7 @@ export class Dashboard {
   progressPct(): number {
     const d = this.data();
     if (!d || !d.monthly_target) return 0;
-    return Math.min(100, Math.round((d.monthly_sales / d.monthly_target) * 100));
+    return Math.min(100, Math.round((d.sales_month / d.monthly_target) * 100));
   }
 
   goTo(route: string) {

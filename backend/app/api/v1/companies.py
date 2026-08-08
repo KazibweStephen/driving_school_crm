@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -8,6 +9,7 @@ from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.company import (
     Branch,
+    BranchMonthlyTarget,
     Company,
     Expense,
     Sale,
@@ -17,6 +19,8 @@ from app.models.company import (
 from app.models.user import User, UserRole
 from app.schemas.company import (
     BranchCreate,
+    BranchMonthlyTargetRead,
+    BranchMonthlyTargetUpsert,
     BranchRead,
     BranchUpdate,
     CompanyCreate,
@@ -325,6 +329,84 @@ async def delete_branch(
         )
     await db.delete(branch)
     await db.commit()
+
+
+# ── Branch Monthly Target ──
+
+
+def _month_start(month: date) -> date:
+    return month.replace(day=1)
+
+
+@router.get(
+    "/branches/{branch_id}/monthly-targets",
+    response_model=list[BranchMonthlyTargetRead],
+)
+async def list_branch_monthly_targets(
+    branch_id: str,
+    month: date | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("branches.view")),
+):
+    try:
+        bid = uuid.UUID(branch_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid branch ID",
+        )
+    query = select(BranchMonthlyTarget).where(BranchMonthlyTarget.branch_id == bid)
+    if month is not None:
+        query = query.where(BranchMonthlyTarget.month == _month_start(month))
+    result = await db.execute(query.order_by(BranchMonthlyTarget.month.desc()))
+    targets = result.scalars().all()
+    return [BranchMonthlyTargetRead.model_validate(t) for t in targets]
+
+
+@router.put(
+    "/branches/{branch_id}/monthly-target",
+    response_model=BranchMonthlyTargetRead,
+)
+async def upsert_branch_monthly_target(
+    branch_id: str,
+    data: BranchMonthlyTargetUpsert,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("branches.edit")),
+):
+    try:
+        bid = uuid.UUID(branch_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid branch ID",
+        )
+    result = await db.execute(select(Branch).where(Branch.id == bid))
+    branch = result.scalar_one_or_none()
+    if branch is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Branch not found",
+        )
+    month = _month_start(data.month)
+    target_result = await db.execute(
+        select(BranchMonthlyTarget).where(
+            BranchMonthlyTarget.branch_id == bid,
+            BranchMonthlyTarget.month == month,
+        )
+    )
+    target = target_result.scalar_one_or_none()
+    if target is None:
+        target = BranchMonthlyTarget(
+            branch_id=bid,
+            month=month,
+            target_amount=data.target_amount,
+        )
+        db.add(target)
+    else:
+        target.target_amount = data.target_amount
+    await db.commit()
+    await db.refresh(target)
+    return BranchMonthlyTargetRead.model_validate(target)
 
 
 # ── User Branch Assignment ──

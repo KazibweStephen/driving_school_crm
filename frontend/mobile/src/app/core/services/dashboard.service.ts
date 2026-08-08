@@ -2,9 +2,12 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
 export interface MobileDashboard {
-  daily_sales: number;
-  monthly_sales: number;
+  sales_today: number;
+  sales_month: number;
   monthly_target: number;
+  daily_collection_total: number;
+  daily_collection_new: number;
+  daily_collection_previous: number;
   pending_collections: number;
   commission_earned: number;
   commission_pending: number;

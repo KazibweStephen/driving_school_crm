@@ -250,6 +250,15 @@ async def create_commission_from_conversion(
     primary_amt = total * rate.primary_recommender_pct / Decimal("100")
     secondary_amt = total * rate.secondary_recommender_pct / Decimal("100")
 
+    # Unassigned recommender shares roll to the converter (e.g. mobile flow where
+    # primary/secondary recommenders are cleared so all commission goes to converter).
+    if recommender_id is None:
+        converter_amt += primary_amt
+        primary_amt = Decimal("0.00")
+    if secondary_recommender_id is None:
+        converter_amt += secondary_amt
+        secondary_amt = Decimal("0.00")
+
     commission = Commission(
         company_id=company_id,
         cart_item_id=cart_item.id,

@@ -117,7 +117,9 @@ async def get_mobile_dashboard(
         sales_today_q = sales_today_q.where(branch_filter)
         sales_month_q = sales_month_q.where(branch_filter)
 
-    # Daily collection = all cash received today (new-client payments vs previous-sale collections)
+    # Daily collection = all cash received today, split by client registration date:
+    # payments for clients registered today (Consultation.document_date == today) are
+    # NEW; payments collected today from clients onboarded on an earlier date are PREVIOUS.
     coll_total_q = (
         select(func.coalesce(func.sum(Payment.total_paid), Decimal("0")))
         .select_from(Payment)
@@ -128,7 +130,10 @@ async def get_mobile_dashboard(
         select(func.coalesce(func.sum(Payment.total_paid), Decimal("0")))
         .select_from(Payment)
         .join(Consultation, Payment.consultation_id == Consultation.id)
-        .where(Payment.document_date == today, ~has_prior)
+        .where(
+            Payment.document_date == today,
+            Consultation.document_date == today,
+        )
     )
     pending_q = (
         select(func.coalesce(func.sum(Payment.balance), Decimal("0")))

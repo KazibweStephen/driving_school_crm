@@ -17,6 +17,7 @@ import {
   PaymentService,
   PaymentRead,
   BranchInfo,
+  InstallmentRead,
 } from '../../core/services/payment.service';
 import { ClientSearch } from '../../shared/client-search/client-search';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
@@ -217,6 +218,41 @@ export class Payments {
     this.step.set('collect');
   }
 
+  scheduledForItem(ci: CartItem): InstallmentRead[] {
+    const pays = this.paymentsForItem(ci);
+    return pays
+      .flatMap((p) => p.installments)
+      .filter((inst) => inst.status !== 'paid');
+  }
+
+  clearScheduled(inst: InstallmentRead) {
+    const ci = this.targetItem();
+    const consultation = this.consultation();
+    if (!ci || !consultation) return;
+    this.submitting.set(true);
+    const docDate = this.documentDate();
+    this.paymentService
+      .updateInstallment(inst.payment_id, inst.id, {
+        paid_date: docDate,
+        paid_amount: parseFloat(inst.amount),
+        notes: 'Scheduled payment cleared on mobile',
+      })
+      .subscribe({
+        next: () => {
+          this.submitting.set(false);
+          this.finishCollect(consultation.id, ci, inst.payment_id);
+        },
+        error: (err) => {
+          this.submitting.set(false);
+          this.resultSuccess.set(false);
+          this.resultPaymentId.set(inst.payment_id);
+          this.resultAmount.set(parseFloat(inst.amount));
+          this.resultMessage.set(err.error?.detail || 'Could not clear the scheduled payment.');
+          this.step.set('result');
+        },
+      });
+  }
+
   onDocumentDate(date: Date | null) {
     if (date) this.documentDate.set(toISODate(date));
   }
@@ -307,23 +343,29 @@ export class Payments {
   }
 
   private finishCollect(consultationId: string, ci: CartItem, paymentId: string) {
-    const balance = this.balanceForItem(ci);
-    if (['converted_paid', 'converted_paying'].includes(ci.status) && balance <= 0) {
-      this.consultationService.updateCartItem(ci.id, { status: 'converted_paid' }).subscribe({
-        next: () => this.showResult(true, paymentId, balance),
-        error: () => this.showResult(true, paymentId, balance),
-      });
-      return;
-    }
-    if (!['converted_paid', 'converted_paying', 'lost'].includes(ci.status)) {
-      const nextStatus = balance <= 0 ? 'converted_paid' : 'converted_paying';
-      this.consultationService.updateCartItem(ci.id, { status: nextStatus }).subscribe({
-        next: () => this.showResult(true, paymentId, balance),
-        error: () => this.showResult(true, paymentId, balance),
-      });
-      return;
-    }
-    this.showResult(true, paymentId, balance);
+    this.paymentService.getPaymentsByConsultation(consultationId).subscribe({
+      next: (payments) => {
+        this.payments.set(payments ?? []);
+        const balance = this.balanceForItem(ci);
+        if (['converted_paid', 'converted_paying'].includes(ci.status) && balance <= 0) {
+          this.consultationService.updateCartItem(ci.id, { status: 'converted_paid' }).subscribe({
+            next: () => this.showResult(true, paymentId, balance),
+            error: () => this.showResult(true, paymentId, balance),
+          });
+          return;
+        }
+        if (!['converted_paid', 'converted_paying', 'lost'].includes(ci.status)) {
+          const nextStatus = balance <= 0 ? 'converted_paid' : 'converted_paying';
+          this.consultationService.updateCartItem(ci.id, { status: nextStatus }).subscribe({
+            next: () => this.showResult(true, paymentId, balance),
+            error: () => this.showResult(true, paymentId, balance),
+          });
+          return;
+        }
+        this.showResult(true, paymentId, balance);
+      },
+      error: () => this.showResult(true, paymentId, this.balanceForItem(ci)),
+    });
   }
 
   private showResult(success: boolean, paymentId: string, balance: number) {

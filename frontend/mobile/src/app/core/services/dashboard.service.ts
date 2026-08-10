@@ -1,5 +1,15 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
+
+export type DashboardPeriod = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month';
+
+export const DASHBOARD_PERIODS: { value: DashboardPeriod; label: string }[] = [
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'this_week', label: 'This Week' },
+  { value: 'last_week', label: 'Last Week' },
+  { value: 'this_month', label: 'This Month' },
+];
 
 export interface MobileDashboard {
   sales_today: number;
@@ -20,7 +30,8 @@ export interface MobileDashboard {
 export class DashboardService {
   constructor(private http: HttpClient) {}
 
-  getMobileDashboard() {
-    return this.http.get<MobileDashboard>('/api/v1/dashboard/mobile');
+  getMobileDashboard(period: DashboardPeriod = 'today') {
+    const params = new HttpParams().set('period', period);
+    return this.http.get<MobileDashboard>('/api/v1/dashboard/mobile', { params });
   }
 }

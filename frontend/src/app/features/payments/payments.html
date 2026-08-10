@@ -68,6 +68,7 @@
         <th pSortableColumn="balance"><span class="flex items-center gap-0.5 whitespace-nowrap">Balance <p-sortIcon field="balance"></p-sortIcon></span></th>
         <th>Status</th>
         <th pSortableColumn="receipt_number"><span class="flex items-center gap-0.5 whitespace-nowrap">Receipt <p-sortIcon field="receipt_number"></p-sortIcon></span></th>
+        <th><span class="whitespace-nowrap">TID</span></th>
         <th pSortableColumn="document_date"><span class="flex items-center gap-0.5 whitespace-nowrap">Txn Date <p-sortIcon field="document_date"></p-sortIcon></span></th>
         <th style="width: 6rem">Actions</th>
       </tr>
@@ -90,6 +91,7 @@
         <td class="font-medium whitespace-nowrap" [class.text-red-500]="hasBalance(p)">{{ formatAmount(p.balance) }}</td>
         <td><p-tag [value]="statusLabel(p)" [severity]="statusSeverity(p)" /></td>
         <td class="text-sm">{{ p.receipt_number || p.system_receipt_number }}</td>
+        <td class="font-mono text-sm">{{ p.transaction_id }}</td>
         <td class="text-sm text-gray-500">
           <div class="flex flex-col">
             <span>{{ formatDate(p.document_date || p.created_at) }}</span>

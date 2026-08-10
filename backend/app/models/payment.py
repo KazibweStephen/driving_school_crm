@@ -45,6 +45,7 @@ class Payment(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     receipt_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     system_receipt_number: Mapped[str] = mapped_column(String(100), nullable=False)
+    transaction_id: Mapped[str] = mapped_column(String(12), nullable=False, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

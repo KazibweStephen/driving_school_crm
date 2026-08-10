@@ -49,6 +49,7 @@ class PaymentRead(BaseModel):
     notes: str | None
     receipt_number: str | None
     system_receipt_number: str
+    transaction_id: str
     created_at: datetime
     updated_at: datetime
     installments: list[InstallmentRead]
@@ -112,6 +113,7 @@ class PaymentWithClient(BaseModel):
     notes: str | None = None
     receipt_number: str | None = None
     system_receipt_number: str
+    transaction_id: str
     created_at: datetime
     updated_at: datetime
 

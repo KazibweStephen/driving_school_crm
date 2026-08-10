@@ -231,8 +231,8 @@ async def generate_receipt_html(
     else:
         watermark_html = '<div class="watermark">PAID</div>'
 
-    # Barcode
-    barcode_svg = _generate_barcode_svg(payment.system_receipt_number)
+    # Barcode (12-digit transaction id)
+    barcode_svg = _generate_barcode_svg(payment.transaction_id)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -308,7 +308,7 @@ async def generate_receipt_html(
     }}
     .receipt-info td.label {{
         width: 30%;
-        opacity: 0.7;
+        font-weight: bold;
     }}
     .receipt-info td.value {{
         width: 70%;
@@ -346,14 +346,14 @@ async def generate_receipt_html(
         justify-content: space-between;
         align-items: baseline;
         padding: 0.8mm 0;
-        border-bottom: 1px dotted #ccc;
+        border-bottom: 1px dashed #000;
     }}
     .item-row:last-child {{
         border-bottom: none;
     }}
     .item-label {{
         font-size: 10px;
-        opacity: 0.7;
+        font-weight: bold;
         flex-shrink: 0;
         padding-right: 2mm;
     }}
@@ -442,6 +442,10 @@ async def generate_receipt_html(
             <td class="label">System No:</td>
             <td class="value">{payment.system_receipt_number}</td>
         </tr>
+        <tr>
+            <td class="label">TID:</td>
+            <td class="value">{payment.transaction_id}</td>
+        </tr>
         {receipt_number_html}
         <tr>
             <td class="label">Date:</td>
@@ -517,7 +521,7 @@ async def generate_receipt_html(
 
 <div class="barcode-section">
     {barcode_svg}
-    <div class="barcode-number">{payment.system_receipt_number}</div>
+    <div class="barcode-number">{payment.transaction_id}</div>
 </div>
 
 <hr>
@@ -768,7 +772,7 @@ async def generate_consolidated_receipt_html(
     }}
     hr.divider {{
         margin: 1mm 0;
-        border-top: 1px dotted #ccc;
+        border-top: 1px dashed #000;
     }}
     .receipt-info table {{
         width: 100%;
@@ -780,7 +784,7 @@ async def generate_consolidated_receipt_html(
     }}
     .receipt-info td.label {{
         width: 30%;
-        opacity: 0.7;
+        font-weight: bold;
     }}
     .receipt-info td.value {{
         width: 70%;
@@ -795,14 +799,14 @@ async def generate_consolidated_receipt_html(
         justify-content: space-between;
         align-items: baseline;
         padding: 0.8mm 0;
-        border-bottom: 1px dotted #ccc;
+        border-bottom: 1px dashed #000;
     }}
     .item-row:last-child {{
         border-bottom: none;
     }}
     .item-label {{
         font-size: 10px;
-        opacity: 0.7;
+        font-weight: bold;
         flex-shrink: 0;
         padding-right: 2mm;
     }}

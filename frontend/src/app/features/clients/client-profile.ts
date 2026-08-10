@@ -2232,8 +2232,8 @@ export class ClientProfile implements OnInit {
       this.addReceiptPaymentIds = paymentIds;
       this.addReceiptTotalPaid.set(this.addTotalAllocated);
       this.addReceiptDate.set(new Date().toLocaleDateString());
-      const currentUser = (this as any).authService?.currentUser?.();
-      this.addReceiptUserName.set(currentUser || 'System');
+      const currentUserName = (this as any).authService?.currentUserName?.();
+      this.addReceiptUserName.set(currentUserName || 'System');
       this.addStep.set(3);
 
       await this.loadConsultation(c.id);

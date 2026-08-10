@@ -1,15 +1,22 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { ProgressBarModule } from 'primeng/progressbar';
+import { SelectModule } from 'primeng/select';
+import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../core/auth/auth.service';
-import { DashboardService, MobileDashboard } from '../../core/services/dashboard.service';
+import {
+  DashboardService,
+  DASHBOARD_PERIODS,
+  DashboardPeriod,
+  MobileDashboard,
+} from '../../core/services/dashboard.service';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { formatMoney } from '../../shared/format';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [ButtonModule, ProgressBarModule, LoadingOverlay],
+  imports: [FormsModule, ButtonModule, SelectModule, ProgressBarModule, LoadingOverlay],
   templateUrl: './dashboard.html',
 })
 export class Dashboard {
@@ -20,14 +27,23 @@ export class Dashboard {
   currency = this.auth.currencyCode;
   data = signal<MobileDashboard | null>(null);
   loading = signal(true);
+  periods = DASHBOARD_PERIODS;
+  period = signal<DashboardPeriod>('today');
+  periodLabel = computed(
+    () => this.periods.find((p) => p.value === this.period())?.label || 'Today',
+  );
 
   constructor() {
     this.load();
   }
 
+  onPeriodChange() {
+    this.load();
+  }
+
   load() {
     this.loading.set(true);
-    this.dashboardService.getMobileDashboard().subscribe({
+    this.dashboardService.getMobileDashboard(this.period()).subscribe({
       next: (res) => {
         this.data.set(res);
         this.loading.set(false);

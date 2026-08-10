@@ -172,4 +172,5 @@ async def get_receipt_link(
     return {
         "url": url,
         "system_receipt_number": payment.system_receipt_number,
+        "transaction_id": payment.transaction_id,
     }

@@ -1,3 +1,4 @@
+import secrets
 import uuid
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -15,6 +16,19 @@ from app.models.user import UserRole
 
 def _generate_system_receipt_number() -> str:
     return f"RCP-{uuid.uuid4().hex[:12].upper()}"
+
+
+async def generate_transaction_id(db: AsyncSession) -> str:
+    """Generate a unique 12-digit numeric transaction id (TID) for a payment."""
+    for _ in range(10):
+        tid = f"{secrets.randbelow(10**12):012d}"
+        exists_result = await db.execute(
+            select(Payment.id).where(Payment.transaction_id == tid)
+        )
+        if not exists_result.scalar_one_or_none():
+            return tid
+    from fastapi import HTTPException
+    raise HTTPException(status_code=500, detail="Could not generate a unique transaction id")
 
 
 async def _recompute_payment_totals(payment: Payment) -> None:
@@ -75,6 +89,7 @@ async def create_payment(
         notes=notes,
         receipt_number=receipt_number or None,
         system_receipt_number=_generate_system_receipt_number(),
+        transaction_id=await generate_transaction_id(db),
     )
     payment_id = payment.id
     db.add(payment)
@@ -173,6 +188,7 @@ async def list_payments(
             Consultation.phone.ilike(f"%{search}%"),
             Payment.receipt_number.ilike(f"%{search}%"),
             Payment.system_receipt_number.ilike(f"%{search}%"),
+            Payment.transaction_id.ilike(f"%{search}%"),
         )
         filters.append(search_filter)
 

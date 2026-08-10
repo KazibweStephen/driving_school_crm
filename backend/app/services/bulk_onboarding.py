@@ -18,7 +18,7 @@ from app.models.payment import Installment, InstallmentStatus, Payment
 from app.models.product import Package
 from app.models.training import TrainingSession
 from app.schemas.bulk_onboarding import BulkOnboardingRequest
-from app.services.payment import _generate_system_receipt_number
+from app.services.payment import _generate_system_receipt_number, generate_transaction_id
 
 
 async def bulk_onboard_clients(
@@ -82,6 +82,7 @@ async def bulk_onboard_clients(
                     document_date=inst_data.document_date,
                     receipt_number=inst_data.receipt_number,
                     system_receipt_number=_generate_system_receipt_number(),
+                    transaction_id=await generate_transaction_id(db),
                 )
                 db.add(payment)
                 await db.flush()

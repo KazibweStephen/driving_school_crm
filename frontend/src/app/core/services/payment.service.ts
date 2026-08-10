@@ -43,6 +43,7 @@ export interface PaymentRead {
   notes: string | null;
   receipt_number: string | null;
   system_receipt_number: string;
+  transaction_id: string;
   created_at: string;
   updated_at: string;
   installments: InstallmentRead[];
@@ -87,6 +88,7 @@ export interface PaymentWithClient {
   notes: string | null;
   receipt_number: string | null;
   system_receipt_number: string;
+  transaction_id: string;
   created_at: string;
   updated_at: string;
 }

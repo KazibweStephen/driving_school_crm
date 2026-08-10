@@ -153,6 +153,7 @@ async def create_full_consultation(
                 notes=f"Paid: {allocation}, Balance: {remaining}",
                 receipt_number=receipt_number,
                 system_receipt_number=transaction_id,
+                transaction_id=await payment_service.generate_transaction_id(db),
             )
             payment_id = payment.id
             db.add(payment)

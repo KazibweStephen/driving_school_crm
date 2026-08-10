@@ -152,6 +152,7 @@ async def list_payments(
             notes=p.notes,
             receipt_number=p.receipt_number,
             system_receipt_number=p.system_receipt_number,
+            transaction_id=p.transaction_id,
             created_at=p.created_at,
             updated_at=p.updated_at,
         ))

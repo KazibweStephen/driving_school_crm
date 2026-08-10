@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_permission
@@ -13,6 +13,7 @@ router = APIRouter(tags=["dashboard"])
 
 @router.get("/dashboard/mobile", response_model=dict)
 async def mobile_dashboard(
+    period: str = Query("today", pattern="^(today|yesterday|this_week|last_week|this_month)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("dashboard.view"))
 ):
@@ -21,5 +22,6 @@ async def mobile_dashboard(
         company_id=current_user.company_id,
         user_id=current_user.phone,
         user_role=current_user.role,
+        period=period,
     )
     return result

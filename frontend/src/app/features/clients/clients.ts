@@ -672,7 +672,7 @@ export class Clients implements OnInit, OnDestroy {
       this.receiptManualNumber.set(this.paymentReceiptNumber());
       this.receiptTotalPaid.set(totalPaid);
       this.receiptDate.set(new Date().toLocaleDateString());
-      this.receiptUserName.set(this.authService.currentUser() || 'System');
+      this.receiptUserName.set(this.authService.currentUserName() || 'System');
       this.createdConsultation.set(c);
       this.createStep.set(4);
     } catch (err: any) {

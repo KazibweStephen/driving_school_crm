@@ -1,6 +1,6 @@
 import uuid
 from decimal import Decimal
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.models.consultation import Consultation
-from app.models.payment import Payment, Installment
+from app.models.payment import Payment, Installment, InstallmentStatus
 from app.models.product import Product
 
 _CODE128_PATTERNS = [
@@ -162,11 +162,7 @@ async def generate_receipt_html(
 
     remaining_balance = max(Decimal("0"), grand_total - cumulative_paid)
 
-    total_amount = format_currency(grand_total)
-    this_payment = format_currency(payment.total_paid)
-    cumulative_paid_fmt = format_currency(cumulative_paid)
     balance_val = remaining_balance
-    balance_fmt = format_currency(balance_val)
 
     # Manual receipt number
     receipt_number_html = ""
@@ -206,6 +202,7 @@ async def generate_receipt_html(
             )
         installments_html = f"""
     <hr class="divider">
+    <div class="section-title">Installments</div>
     <table class="installments-table">
         <thead>
             <tr>
@@ -217,6 +214,48 @@ async def generate_receipt_html(
         </thead>
         <tbody>
             {rows}
+        </tbody>
+    </table>"""
+
+    # Payments Details: full payment history for this item (payments made before
+    # and the current one) plus any pending installments, in the same table format.
+    detail_items: list[tuple] = []
+    for p in all_payments:
+        d = p.document_date or (p.created_at.date() if p.created_at else None)
+        detail_items.append((d, p.total_amount, p.total_paid, "Paid"))
+        for inst in p.installments:
+            if inst.status != InstallmentStatus.PAID:
+                detail_items.append((inst.due_date, inst.amount, Decimal("0"), "Pending"))
+    detail_items.sort(key=lambda x: (x[0] is None, x[0] or date.max))
+
+    payments_details_html = ""
+    if detail_items:
+        drows = ""
+        for d, amount, paid, status in detail_items:
+            date_key = d.isoformat() if d else "—"
+            paid_fmt = format_amount(paid) if paid and paid > 0 else "—"
+            drows += (
+                f'<tr>\n'
+                f'              <td>{date_key}</td>\n'
+                f'              <td class="right">{format_amount(amount)}</td>\n'
+                f'              <td class="right">{paid_fmt}</td>\n'
+                f'              <td class="right">{status}</td>\n'
+                f'            </tr>'
+            )
+        payments_details_html = f"""
+    <hr class="divider">
+    <div class="section-title">Payments Details</div>
+    <table class="installments-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th class="right">Amount</th>
+                <th class="right">Paid</th>
+                <th class="right">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {drows}
         </tbody>
     </table>"""
 
@@ -382,6 +421,13 @@ async def generate_receipt_html(
         border-top: 1px dashed #000;
         padding-top: 1mm;
     }}
+    .section-title {{
+        font-size: 11px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin: 2mm 0 1mm 0;
+    }}
     .installments-table {{
         width: 100%;
         border-collapse: collapse;
@@ -412,11 +458,13 @@ async def generate_receipt_html(
         font-size: 9px;
         margin-top: 0.5mm;
         letter-spacing: 1px;
+        font-weight: bold;
     }}
     .footer {{
         text-align: center;
         margin-top: 3mm;
         font-size: 10px;
+        font-weight: bold;
     }}
     .watermark {{
         text-align: center;
@@ -483,11 +531,11 @@ async def generate_receipt_html(
         <span class="item-value">{format_amount(payment.total_paid)}</span>
     </div>
     <div class="item-row">
-        <span class="item-label">Cum. Paid:</span>
+        <span class="item-label">Cumulative Paid:</span>
         <span class="item-value">{format_amount(cumulative_paid)}</span>
     </div>
     <div class="item-row">
-        <span class="item-label">Balance:</span>
+        <span class="item-label">Balance Due:</span>
         <span class="item-value">{format_amount(remaining_balance)}</span>
     </div>
 </div>
@@ -496,24 +544,7 @@ async def generate_receipt_html(
 
 {watermark_html}
 
-<table class="totals-table">
-    <tr>
-        <td>Grand Total:</td>
-        <td class="right">{total_amount}</td>
-    </tr>
-    <tr>
-        <td>This Payment:</td>
-        <td class="right">{this_payment}</td>
-    </tr>
-    <tr>
-        <td>Cumulative Paid:</td>
-        <td class="right">{cumulative_paid_fmt}</td>
-    </tr>
-    <tr class="total-row">
-        <td>Balance Due:</td>
-        <td class="right">{balance_fmt}</td>
-    </tr>
-</table>
+{payments_details_html}
 
 {installments_html}
 
@@ -639,7 +670,7 @@ async def generate_consolidated_receipt_html(
             <span class="item-value">{format_amount(payment.total_paid)}</span>
         </div>
         <div class="item-row">
-            <span class="item-label">Balance:</span>
+            <span class="item-label">Balance Due:</span>
             <span class="item-value">{format_amount(payment.balance)}</span>
         </div>
     </div>
@@ -679,6 +710,7 @@ async def generate_consolidated_receipt_html(
             )
         installments_html = f"""
     <hr class="divider">
+    <div class="section-title">Installments</div>
     <table class="installments-table">
         <thead>
             <tr>
@@ -835,6 +867,13 @@ async def generate_consolidated_receipt_html(
         border-top: 1px dashed #000;
         padding-top: 1mm;
     }}
+    .section-title {{
+        font-size: 11px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin: 2mm 0 1mm 0;
+    }}
     .installments-table {{
         width: 100%;
         border-collapse: collapse;
@@ -865,11 +904,13 @@ async def generate_consolidated_receipt_html(
         font-size: 9px;
         margin-top: 0.5mm;
         letter-spacing: 1px;
+        font-weight: bold;
     }}
     .footer {{
         text-align: center;
         margin-top: 3mm;
         font-size: 10px;
+        font-weight: bold;
     }}
     .watermark {{
         text-align: center;

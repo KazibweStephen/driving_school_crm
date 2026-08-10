@@ -35,6 +35,8 @@
 - Pay-now amounts on consultation creation entered manually (not auto-filled)
 - Up to 2 future installments auto-suggested (split remaining balance in half, 1 week apart); user can override amounts and dates – recalculated on every allocation change
 - Receipt shows per-item balance column + upcoming installment schedule
+- Per-payment receipt (80mm): item-block rows (Item / Grand Total / This Pmt / Cumulative Paid / Balance Due), a "Payments Details" table (all payments for the item + pending installments, merged by date), then an "Installments" section; no redundant totals-table; barcode serial + footer bold
+- Consolidated receipt: per-payment item-blocks (Balance Due) + aggregate totals-table (Grand Total / Total Paid / Balance Due) + merged installments with "Installments" section title
 - Payment `total_paid` and `balance` computed backend-side and stored on the Payment record; frontend reads them directly
 - `paymentInstallments` is a signal (not plain array) for reliable Angular change detection
 - Lesson plan templates per transmission type (manual/automatic/both); per-client instance with `p-orderList` drag-reorder, add/remove lessons from template pool, toggle, week organization

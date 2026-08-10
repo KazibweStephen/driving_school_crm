@@ -94,6 +94,7 @@ async def _resolve_company_name_from_consultation(db: AsyncSession, consultation
 async def download_receipt(
     payment_id: uuid.UUID,
     download: bool = False,
+    amount: float | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("payments.view")),
 ):
@@ -105,7 +106,13 @@ async def download_receipt(
         if not branch or branch.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Payment not found")
     company_name = await _resolve_company_name(db, payment)
-    html = await generate_receipt_html(db, payment_id, served_by_name=current_user.name, company_name=company_name)
+    html = await generate_receipt_html(
+        db,
+        payment_id,
+        served_by_name=current_user.name,
+        company_name=company_name,
+        actual_paid=amount,
+    )
     filename = f"receipt-{payment_id}.html"
     disposition = "attachment" if download else "inline"
     return HTMLResponse(

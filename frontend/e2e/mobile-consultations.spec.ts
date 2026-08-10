@@ -189,3 +189,121 @@ test('recommender selects preselect current user', async ({ page }) => {
     page.getByTestId('converter').getByRole('combobox').first(),
   ).toHaveAttribute('aria-label', /Super Admin · 0782832711/);
 });
+
+test('partial collect computes schedule and records future installments', async ({ page }) => {
+  const phone = `25690${Math.floor(10000000 + Math.random() * 89999999)}`;
+  const res = await api.post('/api/v1/consultations/full', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      phone,
+      first_name: 'SchedTest',
+      branch_id: '00000000-0000-0000-0000-000000000002',
+      items: [{ product_id: PRODUCT_ID, package_id: PACKAGE_ID, allocation: 0, installments: [] }],
+    },
+  });
+  expect(res.ok()).toBeTruthy();
+  const consultation = await res.json();
+
+  const prod = await api.get(`/api/v1/products/${PRODUCT_ID}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const product = await prod.json();
+  const price = Number(product.packages.find((p: any) => p.id === PACKAGE_ID).price);
+  const partial = Math.round(price / 2);
+
+  await login(page);
+  await page.goto(`/m/consultations/${consultation.id}`);
+  await expect(page.getByText('SchedTest')).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('detail-collect-payment').click();
+  await page.waitForURL(/\/m\/payments/, { timeout: 10000 });
+
+  await expect(page.getByTestId('collect-payment').first()).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('collect-payment').first().click();
+  await expect(page.getByTestId('collect-amount')).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('collect-amount').fill(String(partial));
+
+  // Schedule builder appears for the remaining balance, initially empty
+  await expect(page.getByTestId('calculate-schedule')).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText('No schedule yet')).toBeVisible();
+
+  // Compute splits the remaining balance into two installments
+  await page.getByTestId('calculate-schedule').click();
+  await expect(page.getByTestId('schedule-amount')).toHaveCount(2);
+
+  await page.getByTestId('record-payment').click();
+  await expect(page.getByText('Payment received')).toBeVisible({ timeout: 15000 });
+
+  // Verify the payment now carries 1 paid installment + 2 pending
+  const paysRes = await api.get(`/api/v1/consultations/${consultation.id}/payments`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const payments = await paysRes.json();
+  const p = payments.find((x: any) => x.product_id === PRODUCT_ID);
+  expect(p).toBeTruthy();
+  expect(Number(p.total_amount)).toBe(price);
+  const paidInsts = p.installments.filter((i: any) => i.status === 'paid');
+  const pendingInsts = p.installments.filter((i: any) => i.status === 'pending');
+  expect(paidInsts).toHaveLength(1);
+  expect(pendingInsts).toHaveLength(2);
+  expect(Number(paidInsts[0].paid_amount)).toBe(partial);
+
+  // Cart item should be converted_paying
+  const cRes = await api.get(`/api/v1/consultations/${consultation.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const full = await cRes.json();
+  const item = full.cart_items.find((ci: any) => ci.product_id === PRODUCT_ID);
+  expect(item.status).toBe('converted_paying');
+});
+
+test('calculate schedule is stable across repeated presses (never shrinks)', async ({ page }) => {
+  const phone = `25720${Math.floor(10000000 + Math.random() * 89999999)}`;
+  const res = await api.post('/api/v1/consultations/full', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      phone,
+      first_name: 'StableSched',
+      branch_id: '00000000-0000-0000-0000-000000000002',
+      items: [{ product_id: PRODUCT_ID, package_id: PACKAGE_ID, allocation: 0, installments: [] }],
+    },
+  });
+  expect(res.ok()).toBeTruthy();
+  const consultation = await res.json();
+
+  const prod = await api.get(`/api/v1/products/${PRODUCT_ID}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const product = await prod.json();
+  const price = Number(product.packages.find((p: any) => p.id === PACKAGE_ID).price);
+  const partial = Math.round(price / 2);
+  const remaining = price - partial;
+
+  await login(page);
+  await page.goto(`/m/consultations/${consultation.id}`);
+  await expect(page.getByText('StableSched')).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('detail-collect-payment').click();
+  await page.waitForURL(/\/m\/payments/, { timeout: 10000 });
+  await page.getByTestId('collect-payment').first().click();
+  await page.getByTestId('collect-amount').fill(String(partial));
+
+  // First Calculate: splits the remaining balance into two equal installments
+  await page.getByTestId('calculate-schedule').click();
+  await expect(page.getByTestId('schedule-amount')).toHaveCount(2);
+  const values = () =>
+    page
+      .getByTestId('schedule-amount')
+      .evaluateAll((els) => els.map((el) => Number((el as HTMLInputElement).value)));
+  const first = await values();
+  expect(Math.round(first[0] + first[1])).toBe(remaining);
+
+  // Pressing Calculate again with the same received amount must NOT shrink the schedule
+  await page.getByTestId('calculate-schedule').click();
+  const second = await values();
+  expect(second).toEqual(first);
+
+  // Changing the received amount re-derives installments from (balance - received)
+  await page.getByTestId('collect-amount').fill(String(remaining));
+  await page.getByTestId('calculate-schedule').click();
+  const third = await values();
+  expect(Math.round(third[0] + third[1])).toBe(partial);
+});

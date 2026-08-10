@@ -49,10 +49,17 @@ export interface PaymentRead {
   installments: InstallmentRead[];
 }
 
+export interface InstallmentFutureAdjust {
+  installment_id: string;
+  due_date: string;
+}
+
 export interface InstallmentUpdate {
   paid_date?: string;
   paid_amount?: number;
   notes?: string;
+  push_forward_date?: string;
+  future_installments?: InstallmentFutureAdjust[];
 }
 
 export interface BranchInfo {
@@ -90,8 +97,9 @@ export class PaymentService {
     return this.http.get<BranchInfo[]>('/api/v1/payments/accessible-branches/');
   }
 
-  downloadReceipt(paymentId: string) {
-    return this.http.get(`/api/v1/receipts/${paymentId}/download`, {
+  downloadReceipt(paymentId: string, amount?: number) {
+    const query = amount != null ? `?amount=${encodeURIComponent(String(amount))}` : '';
+    return this.http.get(`/api/v1/receipts/${paymentId}/download${query}`, {
       responseType: 'blob',
     });
   }

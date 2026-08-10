@@ -283,6 +283,11 @@ async def update_installment(
         paid_amount=data.paid_amount,
         notes=data.notes,
         company_id=current_user.company_id, current_user_role=current_user.role,
+        push_forward_date=data.push_forward_date,
+        future_installments=(
+            [a.model_dump() for a in data.future_installments]
+            if data.future_installments else None
+        ),
     )
     if not inst:
         raise HTTPException(status_code=404, detail="Installment not found")

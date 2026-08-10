@@ -545,10 +545,25 @@ export class Sales {
   }
 
   isPurchased(product: Product, pkg?: Package): boolean {
+    // Fully-paid products cannot be re-added; products with an outstanding
+    // balance (converted_paying) can be re-added to collect the balance.
     return this.existingItems().some(
       (ci) =>
         ci.product_id === product.id &&
-        (pkg ? ci.package_id === pkg.id : !ci.package_id),
+        (pkg ? ci.package_id === pkg.id : !ci.package_id) &&
+        (ci.status === 'converted_paid' || this.existingBalanceForItem(ci) <= 0),
+    );
+  }
+
+  private existingBalanceItem(product: Product, pkg?: Package): CartItem | null {
+    return (
+      this.existingItems().find(
+        (ci) =>
+          ci.product_id === product.id &&
+          (pkg ? ci.package_id === pkg.id : !ci.package_id) &&
+          ci.status === 'converted_paying' &&
+          this.existingBalanceForItem(ci) > 0,
+      ) ?? null
     );
   }
 
@@ -593,6 +608,16 @@ export class Sales {
       this.messageService.add({ severity: 'info', summary: 'Already added', detail: pkg.name });
       return;
     }
+    const balanceItem = this.existingBalanceItem(product, pkg);
+    if (balanceItem) {
+      const balance = this.existingBalanceForItem(balanceItem);
+      const price = Number(pkg.price) || balance;
+      this.selectedItems.update((items) => [
+        ...items,
+        { product, package: pkg, price, allocation: balance, installments: [], cartItemId: balanceItem.id },
+      ]);
+      return;
+    }
     if (this.isPurchased(product, pkg)) {
       this.messageService.add({ severity: 'info', summary: 'Already purchased', detail: pkg.name });
       return;
@@ -609,6 +634,16 @@ export class Sales {
       this.messageService.add({ severity: 'info', summary: 'Already added', detail: product.name });
       return;
     }
+    const balanceItem = this.existingBalanceItem(product);
+    if (balanceItem) {
+      const balance = this.existingBalanceForItem(balanceItem);
+      const price = this.existingTotalForItem(balanceItem) || balance;
+      this.selectedItems.update((items) => [
+        ...items,
+        { product, package: null, price, allocation: balance, installments: [], cartItemId: balanceItem.id },
+      ]);
+      return;
+    }
     if (this.isPurchased(product)) {
       this.messageService.add({ severity: 'info', summary: 'Already purchased', detail: product.name });
       return;
@@ -623,16 +658,43 @@ export class Sales {
     this.selectedItems.update((items) => items.filter((_, i) => i !== index));
   }
 
+  hasPriorPayments(item: SaleItem): boolean {
+    return this.existingPaymentsForSaleItem(item).length > 0;
+  }
+
+  private existingPaymentsForSaleItem(item: SaleItem): PaymentRead[] {
+    return this.existingPayments().filter(
+      (p) =>
+        p.product_id === item.product.id &&
+        (item.package ? p.package_id === item.package.id : !p.package_id),
+    );
+  }
+
+  private existingBalanceForSaleItem(item: SaleItem): number {
+    return this.existingPaymentsForSaleItem(item).reduce(
+      (s, p) => s + parseFloat(p.balance || '0'),
+      0,
+    );
+  }
+
   onAllocationChange(item: SaleItem) {
     const base = toISODate(new Date(this.documentDate() + 'T00:00:00'));
     const remaining = Math.max(0, item.price - item.allocation);
     let installments: { amount: number; due_date: string }[] = [];
     if (remaining > 0) {
-      const half = Math.round((remaining / 2) * 100) / 100;
-      installments = [
-        { amount: half, due_date: toISODate(addDays(new Date(base), 7)) },
-        { amount: Math.round((remaining - half) * 100) / 100, due_date: toISODate(addDays(new Date(base), 14)) },
-      ];
+      if (this.hasPriorPayments(item)) {
+        // Subsequent payment on the product: push the balance forward into a
+        // single future installment (the user can adjust the date).
+        installments = [
+          { amount: remaining, due_date: toISODate(addDays(new Date(base), 7)) },
+        ];
+      } else {
+        const half = Math.round((remaining / 2) * 100) / 100;
+        installments = [
+          { amount: half, due_date: toISODate(addDays(new Date(base), 7)) },
+          { amount: Math.round((remaining - half) * 100) / 100, due_date: toISODate(addDays(new Date(base), 14)) },
+        ];
+      }
     }
     this.selectedItems.update((items) =>
       items.map((i) =>
@@ -939,6 +1001,58 @@ export class Sales {
             }),
           );
           cartItemId = cartItem.id;
+        }
+        if (this.hasPriorPayments(item)) {
+          // Subsequent payment on an existing schedule: collect against the
+          // earliest pending installment and push the remainder forward to the
+          // chosen date (no duplicate schedule is created).
+          const pendings = this.existingPaymentsForSaleItem(item)
+            .flatMap((p) => p.installments ?? [])
+            .filter((inst) => inst.status !== 'paid')
+            .sort(
+              (a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime(),
+            );
+          if (pendings.length && item.allocation > 0) {
+            const first = pendings[0];
+            await lastValueFrom(
+              this.paymentService.updateInstallment(first.payment_id, first.id, {
+                paid_date: docDate,
+                paid_amount: item.allocation,
+                push_forward_date: item.installments[0]?.due_date,
+                notes: 'Balance collected on mobile',
+              }),
+            );
+          } else {
+            const payment = await lastValueFrom(
+              this.paymentService.createPayment(consultation.id, {
+                product_id: item.product.id,
+                package_id: item.package?.id,
+                total_amount: item.allocation,
+                notes: `Upsell payment of ${item.allocation}`,
+                receipt_number: this.receiptNumber || undefined,
+                installments: [{ due_date: docDate, amount: item.allocation }],
+                document_date: docDate,
+                branch_id: this.branchId() || undefined,
+              }),
+            );
+            const inst = payment.installments?.[0];
+            if (inst && item.allocation > 0) {
+              await lastValueFrom(
+                this.paymentService.updateInstallment(payment.id, inst.id, {
+                  paid_date: docDate,
+                  paid_amount: item.allocation,
+                  notes: 'Upsell collected on mobile',
+                }),
+              );
+            }
+          }
+          const balanceAfter = Math.max(
+            0,
+            this.existingBalanceForSaleItem(item) - item.allocation,
+          );
+          const status = balanceAfter <= 0 ? 'converted_paid' : 'converted_paying';
+          await lastValueFrom(this.consultationService.updateCartItem(cartItemId, { status }));
+          continue;
         }
         const payment = await lastValueFrom(
           this.paymentService.createPayment(consultation.id, {

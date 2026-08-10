@@ -22,10 +22,19 @@ import {
 import { ClientSearch } from '../../shared/client-search/client-search';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { PageHeader } from '../../shared/page-header/page-header';
-import { formatMoney, toISODate, todayISO } from '../../shared/format';
+import { addDays, formatMoney, toISODate, todayISO } from '../../shared/format';
 import { CatalogService } from '../../core/services/catalog.service';
 
 type Step = 'search' | 'overview' | 'collect' | 'result';
+
+interface CollectScheduleRow {
+  installment_id: string | null;
+  payment_id: string | null;
+  amount: number;
+  due_date: string | null;
+  original_due_date: string | null;
+  original_amount: number | null;
+}
 
 @Component({
   selector: 'app-payments',
@@ -88,6 +97,19 @@ export class Payments {
   documentDateObject = computed(() =>
     this.documentDate() ? new Date(this.documentDate() + 'T00:00:00') : null,
   );
+  // editable schedule of the item's existing pending installments
+  collectSchedule = signal<CollectScheduleRow[]>([]);
+  // product price for consulting items (fetched when the collect dialog opens)
+  consultingPrice = signal(0);
+
+  // balance still owed after this payment — used to build/adjust the schedule
+  remainingAfterCollect = computed(() => {
+    const ci = this.targetItem();
+    if (!ci) return 0;
+    const paid = this.collectAmount() || 0;
+    const base = this.isConsulting(ci) ? this.consultingPrice() : this.balanceForItem(ci);
+    return Math.max(0, Math.round((base - paid) * 100) / 100);
+  });
 
   // result
   resultSuccess = signal<boolean | null>(null);
@@ -215,6 +237,37 @@ export class Payments {
     if (this.branches().length > 0 && !this.branchId()) {
       this.branchId.set(this.branches()[0].id);
     }
+    this.collectSchedule.set(
+      this.scheduledForItem(ci)
+        .slice()
+        .sort(
+          (a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime(),
+        )
+        .map((inst) => ({
+          installment_id: inst.id,
+          payment_id: inst.payment_id,
+          amount: parseFloat(inst.amount),
+          due_date: inst.due_date,
+          original_due_date: inst.due_date,
+          original_amount: parseFloat(inst.amount),
+        })),
+    );
+    if (this.isConsulting(ci)) {
+      this.consultingPrice.set(0);
+      this.catalogService.getProduct(ci.product_id).subscribe({
+        next: (product) => {
+          const pkg = ci.package_id
+            ? product.packages?.find((p) => p.id === ci.package_id)
+            : product.packages && product.packages.length === 1
+              ? product.packages[0]
+              : undefined;
+          this.consultingPrice.set(pkg ? parseFloat(pkg.price) || 0 : 0);
+        },
+        error: () => this.consultingPrice.set(0),
+      });
+    } else {
+      this.consultingPrice.set(0);
+    }
     this.step.set('collect');
   }
 
@@ -222,39 +275,92 @@ export class Payments {
     const pays = this.paymentsForItem(ci);
     return pays
       .flatMap((p) => p.installments)
-      .filter((inst) => inst.status !== 'paid');
+      .filter((inst) => inst.status === 'pending');
   }
 
-  clearScheduled(inst: InstallmentRead) {
+  setScheduleAmount(index: number, value: number) {
+    this.collectSchedule.update((rows) =>
+      rows.map((r, i) => (i === index ? { ...r, amount: value ?? 0 } : r)),
+    );
+  }
+
+  setScheduleDate(index: number, date: Date | null) {
+    this.collectSchedule.update((rows) =>
+      rows.map((r, i) => (i === index ? { ...r, due_date: date ? toISODate(date) : null } : r)),
+    );
+  }
+
+  clearScheduleDate(index: number) {
+    this.collectSchedule.update((rows) =>
+      rows.map((r, i) => (i === index ? { ...r, due_date: null } : r)),
+    );
+  }
+
+  calculateSchedule() {
     const ci = this.targetItem();
-    const consultation = this.consultation();
-    if (!ci || !consultation) return;
-    this.submitting.set(true);
-    const docDate = this.documentDate();
-    this.paymentService
-      .updateInstallment(inst.payment_id, inst.id, {
-        paid_date: docDate,
-        paid_amount: parseFloat(inst.amount),
-        notes: 'Scheduled payment cleared on mobile',
-      })
-      .subscribe({
-        next: () => {
-          this.submitting.set(false);
-          this.finishCollect(consultation.id, ci, inst.payment_id);
+    if (!ci) return;
+    const remaining = this.remainingAfterCollect();
+    const rows = this.collectSchedule();
+    const existing = rows.some((r) => r.installment_id && r.payment_id);
+    if (!existing) {
+      if (remaining <= 0) {
+        this.collectSchedule.set([]);
+        return;
+      }
+      const base = new Date(this.documentDate() + 'T00:00:00');
+      const half = Math.round((remaining / 2) * 100) / 100;
+      this.collectSchedule.set([
+        {
+          installment_id: null,
+          payment_id: null,
+          amount: half,
+          due_date: toISODate(addDays(base, 7)),
+          original_due_date: null,
+          original_amount: null,
         },
-        error: (err) => {
-          this.submitting.set(false);
-          this.resultSuccess.set(false);
-          this.resultPaymentId.set(inst.payment_id);
-          this.resultAmount.set(parseFloat(inst.amount));
-          this.resultMessage.set(err.error?.detail || 'Could not clear the scheduled payment.');
-          this.step.set('result');
+        {
+          installment_id: null,
+          payment_id: null,
+          amount: Math.round((remaining - half) * 100) / 100,
+          due_date: toISODate(addDays(base, 14)),
+          original_due_date: null,
+          original_amount: null,
         },
-      });
+      ]);
+      return;
+    }
+    // Existing DB schedule: preview how the received amount pays it down. Always
+    // recompute from the original amounts so pressing Calculate repeatedly never
+    // keeps shrinking the schedule to a lower total.
+    let paidLeft = Math.max(0, this.collectAmount() || 0);
+    this.collectSchedule.update((items) =>
+      items.map((r) => {
+        const orig = r.original_amount ?? r.amount;
+        const take = Math.min(orig, paidLeft);
+        paidLeft -= take;
+        return {
+          ...r,
+          amount: Math.max(0, Math.round((orig - take) * 100) / 100),
+          original_amount: orig,
+        };
+      }),
+    );
   }
 
   onDocumentDate(date: Date | null) {
     if (date) this.documentDate.set(toISODate(date));
+  }
+
+  private dateCache = new Map<string, Date>();
+
+  parseDate(value: string | null | undefined): Date | null {
+    if (!value) return null;
+    let date = this.dateCache.get(value);
+    if (!date) {
+      date = new Date(value + (value.length === 10 ? 'T00:00:00' : ''));
+      this.dateCache.set(value, date);
+    }
+    return date;
   }
 
   collectPayment() {
@@ -277,26 +383,89 @@ export class Payments {
             });
             return;
           }
-          this.doCollect(consultation.id, ci, amount);
+          this.doSubmit(consultation.id, ci, amount);
         },
-        error: () => this.doCollect(consultation.id, ci, amount),
+        error: () => this.doSubmit(consultation.id, ci, amount),
       });
       return;
     }
-    this.doCollect(consultation.id, ci, amount);
+    this.doSubmit(consultation.id, ci, amount);
+  }
+
+  private doSubmit(consultationId: string, ci: CartItem, amount: number) {
+    const rows = this.collectSchedule();
+    if (
+      rows.length > 0 &&
+      rows[0].installment_id &&
+      rows[0].payment_id
+    ) {
+      this.recordAgainstSchedule(consultationId, ci, amount);
+    } else {
+      this.doCollect(consultationId, ci, amount);
+    }
+  }
+
+  private recordAgainstSchedule(consultationId: string, ci: CartItem, amount: number) {
+    const rows = this.collectSchedule();
+    const earliest = rows[0];
+    if (!earliest?.installment_id || !earliest.payment_id) {
+      this.doCollect(consultationId, ci, amount);
+      return;
+    }
+    const docDate = this.documentDate();
+    const future = rows
+      .slice(1)
+      .filter(
+        (r) =>
+          r.installment_id &&
+          r.due_date &&
+          r.due_date !== r.original_due_date,
+      )
+      .map((r) => ({
+        installment_id: r.installment_id!,
+        due_date: r.due_date!,
+      }));
+    this.submitting.set(true);
+    this.paymentService
+      .updateInstallment(earliest.payment_id, earliest.installment_id, {
+        paid_date: docDate,
+        paid_amount: amount,
+        push_forward_date: earliest.due_date ?? undefined,
+        future_installments: future.length ? future : undefined,
+        notes: 'Payment collected on mobile',
+      })
+      .subscribe({
+        next: () => {
+          this.submitting.set(false);
+          this.finishCollect(consultationId, ci, earliest.payment_id!);
+        },
+        error: (err) => {
+          this.submitting.set(false);
+          this.resultSuccess.set(false);
+          this.resultPaymentId.set(earliest.payment_id);
+          this.resultAmount.set(amount);
+          this.resultMessage.set(err.error?.detail || 'Could not record the payment.');
+          this.step.set('result');
+        },
+      });
   }
 
   private doCollect(consultationId: string, ci: CartItem, amount: number) {
     const docDate = this.documentDate();
+    const futureRows = this.collectSchedule()
+      .filter((r) => !r.installment_id && r.due_date && r.amount > 0)
+      .map((r) => ({ due_date: r.due_date!, amount: r.amount }));
+    const futureTotal = futureRows.reduce((s, r) => s + r.amount, 0);
+    const total = Math.round((amount + futureTotal) * 100) / 100;
     this.submitting.set(true);
     this.paymentService
       .createPayment(consultationId, {
         product_id: ci.product_id,
         package_id: ci.package_id || undefined,
-        total_amount: amount,
+        total_amount: total,
         notes: `Collected on mobile: ${amount}`,
         receipt_number: this.receiptNumber || undefined,
-        installments: [{ due_date: docDate, amount }],
+        installments: [{ due_date: docDate, amount }, ...futureRows],
         document_date: docDate,
         branch_id: this.branchId() || undefined,
       })
@@ -386,7 +555,7 @@ export class Payments {
     const id = this.resultPaymentId();
     if (!id) return;
     this.loading.set(true);
-    this.paymentService.downloadReceipt(id).subscribe({
+    this.paymentService.downloadReceipt(id, this.resultAmount()).subscribe({
       next: (blob) => {
         this.loading.set(false);
         const url = window.URL.createObjectURL(blob);

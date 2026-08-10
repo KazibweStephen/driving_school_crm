@@ -57,10 +57,17 @@ class PaymentRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class FutureInstallmentAdjust(BaseModel):
+    installment_id: uuid.UUID
+    due_date: date
+
+
 class InstallmentUpdate(BaseModel):
     paid_date: date | None = None
     paid_amount: Decimal | None = None
     notes: str | None = None
+    push_forward_date: date | None = None
+    future_installments: list[FutureInstallmentAdjust] | None = None
 
 
 class ClientActiveProduct(BaseModel):

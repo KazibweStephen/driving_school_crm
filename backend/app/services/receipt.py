@@ -94,6 +94,7 @@ async def generate_receipt_html(
     payment_id: uuid.UUID,
     served_by_name: str | None = None,
     company_name: str | None = None,
+    actual_paid: Decimal | float | None = None,
 ) -> str:
     result = await db.execute(
         select(Payment)
@@ -164,6 +165,15 @@ async def generate_receipt_html(
 
     balance_val = remaining_balance
 
+    # The amount actually received in this transaction. For payments that were
+    # collected against multiple times (e.g. mobile "Collect payment" against an
+    # existing schedule), payment.total_paid is the cumulative paid on the
+    # record; the caller passes the exact amount collected now.
+    if actual_paid is not None:
+        this_payment = Decimal(str(actual_paid))
+    else:
+        this_payment = payment.total_paid
+
     # Manual receipt number
     receipt_number_html = ""
     if payment.receipt_number:
@@ -174,42 +184,40 @@ async def generate_receipt_html(
             '            </tr>'
         )
 
-    # Installments table (merged by due_date)
-    installments: list[Installment] = sorted(payment.installments, key=lambda x: x.due_date)
+    # Pending installments for this item across all its payments, merged by due
+    # date, capped at the next 2 scheduled dates (each shows its scheduled amount).
+    from collections import defaultdict
+    pending_insts = [
+        inst
+        for p in all_payments
+        for inst in p.installments
+        if inst.status != InstallmentStatus.PAID
+    ]
+    pending_insts.sort(key=lambda x: (x.due_date, x.created_at))
+    merged_pending: dict[str, dict] = defaultdict(lambda: {"amount": Decimal("0")})
+    for inst in pending_insts:
+        merged_pending[inst.due_date.isoformat()]["amount"] += inst.amount
+    next_due_rows = sorted(merged_pending.items())[:2]
+
+    # Updated Payments Due: only the outstanding (non-paid) schedule for this item
     installments_html = ""
-    if installments:
-        from collections import defaultdict
-        merged: dict[str, dict] = defaultdict(lambda: {"amount": Decimal("0"), "paid": Decimal("0"), "all_paid": True})
-        for inst in installments:
-            key = inst.due_date.isoformat()
-            merged[key]["amount"] += inst.amount
-            if inst.paid_amount:
-                merged[key]["paid"] += inst.paid_amount
-            if inst.status.name != "PAID":
-                merged[key]["all_paid"] = False
+    if next_due_rows:
         rows = ""
-        for date_key in sorted(merged.keys()):
-            m = merged[date_key]
-            status_label = "Paid" if m["all_paid"] else "Pending"
-            paid = format_amount(m["paid"]) if m["paid"] > 0 else "—"
+        for date_key, m in next_due_rows:
             rows += (
                 f'<tr>\n'
                 f'              <td>{date_key}</td>\n'
                 f'              <td class="right">{format_amount(m["amount"])}</td>\n'
-                f'              <td class="right">{paid}</td>\n'
-                f'              <td class="right">{status_label}</td>\n'
                 f'            </tr>'
             )
         installments_html = f"""
     <hr class="divider">
-    <div class="section-title">Installments</div>
+    <div class="section-title">Updated Payments Due</div>
     <table class="installments-table">
         <thead>
             <tr>
                 <th>Due Date</th>
                 <th class="right">Amount</th>
-                <th class="right">Paid</th>
-                <th class="right">Status</th>
             </tr>
         </thead>
         <tbody>
@@ -217,15 +225,25 @@ async def generate_receipt_html(
         </tbody>
     </table>"""
 
-    # Payments Details: full payment history for this item (payments made before
+    # Payments Details: payment history for this item (payments made before
     # and the current one) plus any pending installments, in the same table format.
     detail_items: list[tuple] = []
+    running_paid = Decimal("0")
     for p in all_payments:
+        running_paid += p.total_paid
+        balance_after = max(Decimal("0"), grand_total - running_paid)
         d = p.document_date or (p.created_at.date() if p.created_at else None)
-        detail_items.append((d, p.total_amount, p.total_paid, "Paid"))
-        for inst in p.installments:
-            if inst.status != InstallmentStatus.PAID:
-                detail_items.append((inst.due_date, inst.amount, Decimal("0"), "Pending"))
+        detail_items.append((d, balance_after, p.total_paid, "Paid"))
+
+    for date_key, m in next_due_rows:
+        detail_items.append(
+            (
+                date.fromisoformat(date_key),
+                m["amount"],
+                Decimal("0"),
+                "Pending",
+            )
+        )
     detail_items.sort(key=lambda x: (x[0] is None, x[0] or date.max))
 
     payments_details_html = ""
@@ -243,6 +261,7 @@ async def generate_receipt_html(
                 f'            </tr>'
             )
         payments_details_html = f"""
+    <div class="screen-only">
     <hr class="divider">
     <div class="section-title">Payments Details</div>
     <table class="installments-table">
@@ -257,7 +276,8 @@ async def generate_receipt_html(
         <tbody>
             {drows}
         </tbody>
-    </table>"""
+    </table>
+    </div>"""
 
     # Watermark
     watermark_html = ""
@@ -305,6 +325,9 @@ async def generate_receipt_html(
             padding: 2mm 0;
         }}
         .no-print {{
+            display: none !important;
+        }}
+        .screen-only {{
             display: none !important;
         }}
     }}
@@ -445,6 +468,7 @@ async def generate_receipt_html(
     .installments-table td {{
         padding: 0.3mm 0;
         font-size: 9px;
+        font-weight: bold;
     }}
     .installments-table td.right {{
         text-align: right;
@@ -528,7 +552,7 @@ async def generate_receipt_html(
     </div>
     <div class="item-row">
         <span class="item-label">This Pmt:</span>
-        <span class="item-value">{format_amount(payment.total_paid)}</span>
+        <span class="item-value">{format_amount(this_payment)}</span>
     </div>
     <div class="item-row">
         <span class="item-label">Cumulative Paid:</span>
@@ -684,40 +708,32 @@ async def generate_consolidated_receipt_html(
 
     # Installments table (all payments' installments combined, merged by due_date)
     all_installments.sort(key=lambda x: x.due_date)
+    pending_insts = [inst for inst in all_installments if inst.status != InstallmentStatus.PAID]
+    pending_insts.sort(key=lambda x: (x.due_date, x.created_at))
     installments_html = ""
-    if all_installments:
+    if pending_insts:
         from collections import defaultdict
-        merged: dict[str, dict] = defaultdict(lambda: {"amount": Decimal("0"), "paid": Decimal("0"), "all_paid": True})
-        for inst in all_installments:
+        merged: dict[str, dict] = defaultdict(lambda: {"amount": Decimal("0")})
+        for inst in pending_insts:
             key = inst.due_date.isoformat()
             merged[key]["amount"] += inst.amount
-            if inst.paid_amount:
-                merged[key]["paid"] += inst.paid_amount
-            if inst.status.name != "PAID":
-                merged[key]["all_paid"] = False
         rows = ""
-        for date_key in sorted(merged.keys()):
+        for date_key in sorted(merged.keys())[:2]:
             m = merged[date_key]
-            status_label = "Paid" if m["all_paid"] else "Pending"
-            paid = format_amount(m["paid"]) if m["paid"] > 0 else "—"
             rows += (
                 f'<tr>\n'
                 f'              <td>{date_key}</td>\n'
                 f'              <td class="right">{format_amount(m["amount"])}</td>\n'
-                f'              <td class="right">{paid}</td>\n'
-                f'              <td class="right">{status_label}</td>\n'
                 f'            </tr>'
             )
         installments_html = f"""
     <hr class="divider">
-    <div class="section-title">Installments</div>
+    <div class="section-title">Updated Payments Due</div>
     <table class="installments-table">
         <thead>
             <tr>
                 <th>Due Date</th>
                 <th class="right">Amount</th>
-                <th class="right">Paid</th>
-                <th class="right">Status</th>
             </tr>
         </thead>
         <tbody>
@@ -770,6 +786,9 @@ async def generate_consolidated_receipt_html(
             padding: 2mm 0;
         }}
         .no-print {{
+            display: none !important;
+        }}
+        .screen-only {{
             display: none !important;
         }}
     }}
@@ -891,6 +910,7 @@ async def generate_consolidated_receipt_html(
     .installments-table td {{
         padding: 0.3mm 0;
         font-size: 9px;
+        font-weight: bold;
     }}
     .installments-table td.right {{
         text-align: right;

@@ -101,6 +101,9 @@ async def create_company(
     from app.scripts.seed_company_products import seed_company_products_from_template
     await seed_company_products_from_template(db, company.id)
 
+    from app.scripts.seed_lesson_plans import seed_company_lesson_plans
+    await seed_company_lesson_plans(db, company.id)
+
     await db.commit()
     await db.refresh(company)
     return CompanyRead.model_validate(company)

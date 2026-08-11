@@ -53,3 +53,4 @@ class BulkOnboardingRequest(BaseModel):
 class BulkOnboardingResponse(BaseModel):
     created: int
     consultation_ids: list[uuid.UUID]
+    payment_ids: list[uuid.UUID] = []

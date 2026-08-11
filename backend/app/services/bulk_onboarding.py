@@ -32,6 +32,7 @@ async def bulk_onboard_clients(
     data: BulkOnboardingRequest,
 ) -> dict:
     consultation_ids: list[uuid.UUID] = []
+    payment_ids: list[uuid.UUID] = []
 
     for client_data in data.clients:
         if not client_data.branch_id:
@@ -95,6 +96,7 @@ async def bulk_onboard_clients(
             for inst_data in pkg_data.installments:
                 payment = Payment(
                     consultation_id=consultation.id,
+                    branch_id=consultation.branch_id,
                     created_by_phone=inst_data.received_by_phone,
                     product_id=pkg_data.product_id,
                     package_id=pkg_data.package_id,
@@ -108,6 +110,7 @@ async def bulk_onboard_clients(
                 )
                 db.add(payment)
                 await db.flush()
+                payment_ids.append(payment.id)
 
                 installment = Installment(
                     payment_id=payment.id,
@@ -198,6 +201,7 @@ async def bulk_onboard_clients(
     return {
         "created": len(consultation_ids),
         "consultation_ids": consultation_ids,
+        "payment_ids": payment_ids,
     }
 
 

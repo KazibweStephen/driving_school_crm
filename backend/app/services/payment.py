@@ -153,9 +153,11 @@ async def list_payments(
     date_to: date | None = None,
     client_type: str | None = "all",
     branch_ids: list[uuid.UUID] | None = None,
+    company_id: uuid.UUID | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[Payment], int, Decimal, Decimal, Decimal]:
+    from app.models.company import Branch
     from app.models.product import Product
 
     base_query = select(Payment).join(Consultation, Payment.consultation_id == Consultation.id)
@@ -179,6 +181,12 @@ async def list_payments(
     )
 
     filters: list = []
+
+    if company_id is not None:
+        base_query = base_query.join(Branch, Consultation.branch_id == Branch.id)
+        count_query = count_query.join(Branch, Consultation.branch_id == Branch.id)
+        totals_query = totals_query.join(Branch, Consultation.branch_id == Branch.id)
+        filters.append(Branch.company_id == company_id)
 
     if search:
         search_filter = or_(

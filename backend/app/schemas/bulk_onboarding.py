@@ -12,6 +12,11 @@ class BulkOnboardingLesson(BaseModel):
     instructor_id: str | None = None
     vehicle_id: uuid.UUID | None = None
     notes: str | None = None
+    template_item_id: uuid.UUID | None = None
+    title: str | None = None
+    lesson_objectives: list[str] = []
+    practical_objectives: list[str] = []
+    status: str | None = Field(default=None, pattern=r"^(completed|scheduled|pending)$")
 
 
 class BulkOnboardingInstallment(BaseModel):
@@ -26,6 +31,8 @@ class BulkOnboardingPackage(BaseModel):
     package_id: str | None = None
     installments: list[BulkOnboardingInstallment] = Field(min_length=1)
     lessons: list[BulkOnboardingLesson] = []
+    transmission_type: str | None = Field(default=None, pattern=r"^(manual|automatic|both)$")
+    lesson_plan_template_id: uuid.UUID | None = None
 
 
 class BulkOnboardingClient(BaseModel):

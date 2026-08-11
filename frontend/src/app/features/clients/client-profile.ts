@@ -319,11 +319,15 @@ export class ClientProfile implements OnInit {
 
   async loadProducts() {
     try {
-      const res = await this.productService.listProducts({ status: 'active', page_size: 100 }).toPromise();
+      const res = await this.productService.listProducts({ page_size: 100 }).toPromise();
       if (res) this.products.set(res.products);
     } catch {
       /* products are non-critical for profile view */
     }
+  }
+
+  activeProducts(): Product[] {
+    return this.products().filter(p => p.status === 'active');
   }
 
   async loadPayments() {
@@ -1668,14 +1672,14 @@ export class ClientProfile implements OnInit {
 
   productName(ci: CartItemRead): string {
     const p = this.products().find(pr => pr.id === ci.product_id);
-    return p?.name || ci.product_id;
+    return p?.name || 'Unavailable product';
   }
 
   packageName(ci: CartItemRead): string {
     if (!ci.package_id) return '';
     const p = this.products().find(pr => pr.id === ci.product_id);
     const pkg = p?.packages.find(pk => pk.id === ci.package_id);
-    return pkg?.name || ci.package_id;
+    return pkg?.name || '';
   }
 
   packagePrice(ci: CartItemRead): string {
@@ -1686,10 +1690,12 @@ export class ClientProfile implements OnInit {
   }
 
   cartItemTotal(ci: CartItemRead): number {
-    if (!ci.package_id) return 0;
-    const p = this.products().find(pr => pr.id === ci.product_id);
-    const pkg = p?.packages.find(pk => pk.id === ci.package_id);
-    return pkg?.price ?? 0;
+    if (ci.package_id) {
+      const p = this.products().find(pr => pr.id === ci.product_id);
+      const pkg = p?.packages.find(pk => pk.id === ci.package_id);
+      if (pkg?.price != null) return pkg.price;
+    }
+    return this.totalForProduct(ci);
   }
 
   cartItemPaid(ci: CartItemRead): number {
@@ -2465,9 +2471,7 @@ export class ClientProfile implements OnInit {
   }
 
   openCompleteSaleDialog(ci: CartItemRead) {
-    const p = this.products().find(pr => pr.id === ci.product_id);
-    const pkg = ci.package_id ? p?.packages.find(pk => pk.id === ci.package_id) : null;
-    const total = pkg?.price || 0;
+    const total = this.cartItemTotal(ci);
     this.completeSaleTarget.set(ci);
     this.completeSaleTotal.set(total);
     this.completeSalePaidAmount.set(total);
@@ -3375,7 +3379,7 @@ export class ClientProfile implements OnInit {
 
   paymentProductName(pay: PaymentRead): string {
     const p = this.products().find(pr => pr.id === pay.product_id);
-    return p?.name || pay.product_id;
+    return p?.name || 'Unavailable product';
   }
 
   paymentPaidAmount(pay: PaymentRead): number {

@@ -3,9 +3,11 @@
 
 <!-- Draft Restore Banner -->
 @if (draftRestored()) {
-  <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+  <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
     <div class="flex items-center gap-3">
-      <i class="pi pi-info-circle text-blue-500 text-lg"></i>
+      <span class="w-9 h-9 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0">
+        <i class="pi pi-history text-sm"></i>
+      </span>
       <div>
         <span class="font-medium text-blue-800">Draft restored from local storage</span>
         @if (draftSavedAt()) {
@@ -22,9 +24,16 @@
 
 <!-- Header -->
 <div class="mb-6">
-  <h1 class="text-xl sm:text-2xl font-bold text-gray-800">Bulk Client Onboarding</h1>
-  <p class="text-gray-500 text-sm mt-1">Add multiple existing clients with their payment and lesson history</p>
-  <div class="flex gap-2 mt-3">
+  <div class="flex items-center gap-4">
+    <span class="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
+      <i class="pi pi-users text-xl"></i>
+    </span>
+    <div class="min-w-0">
+      <h1 class="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">Bulk Client Onboarding</h1>
+      <p class="text-gray-500 text-sm mt-1">Add multiple existing clients with their payment and lesson history</p>
+    </div>
+  </div>
+  <div class="flex gap-2 mt-4">
     <p-button label="Save Draft" icon="pi pi-save" severity="secondary" (click)="saveDraft()"
       [disabled]="clients().length === 0" size="small" class="flex-1 sm:flex-none" />
     <p-button label="Add Client" icon="pi pi-plus" (click)="addClient()"
@@ -32,42 +41,109 @@
   </div>
 </div>
 
+<!-- Branch Selection -->
+<div class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mb-4 shadow-sm">
+  <label class="block text-sm font-semibold text-gray-700 mb-2">Branch *</label>
+  @switch (branchStatus()) {
+    @case ('none') {
+      <div class="text-xs text-amber-600 flex items-center gap-1">
+        <i class="pi pi-exclamation-triangle"></i>
+        No branches available. Assign a branch to this user before bulk onboarding.
+      </div>
+    }
+    @case ('single') {
+      <div class="text-sm text-gray-600 flex items-center gap-2 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+        <i class="pi pi-check-circle text-green-500"></i>
+        {{ branches()[0]?.name }} <span class="text-gray-400 text-xs">(auto-assigned)</span>
+      </div>
+    }
+    @case ('multi') {
+      <p-select [options]="branchOptions()" [(ngModel)]="branchId"
+        (ngModelChange)="onBranchChange($event)" placeholder="Select branch"
+        appendTo="body" class="w-full" [filter]="true" filterBy="label"
+        optionLabel="label" optionValue="value" />
+    }
+  }
+</div>
+
 <!-- Validation Banner -->
-@if (hasReceiptWarnings() || hasDateErrors()) {
-  <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-center gap-3 text-sm">
-    <i class="pi pi-exclamation-triangle text-red-500"></i>
-    <span class="text-red-700 font-medium">Please fix validation errors before submitting</span>
+@if (hasReceiptWarnings() || hasPhoneWarnings() || hasDateErrors()) {
+  <div class="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 flex items-start gap-3 text-sm">
+    <span class="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center shrink-0">
+      <i class="pi pi-exclamation-triangle text-xs"></i>
+    </span>
+    <div class="min-w-0">
+      <span class="text-red-700 font-medium">Please fix validation errors before submitting</span>
+      <ul class="text-xs text-red-600 mt-1 space-y-0.5 list-disc pl-4">
+        @for (issue of validationIssues(); track $index) {
+          <li>{{ issue }}</li>
+        }
+      </ul>
+    </div>
   </div>
 }
 
 <!-- Summary Bar -->
 @if (clients().length > 0) {
-  <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 grid grid-cols-2 sm:flex sm:gap-6 text-sm">
-    <span><strong>{{ totalClients() }}</strong> client(s)</span>
-    <span><strong>{{ totalPackages() }}</strong> package(s)</span>
-    <span><strong>{{ totalInstallments() }}</strong> installment(s)</span>
-    <span><strong>{{ totalLessons() }}</strong> lesson(s)</span>
+  <div class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3 mb-4 grid grid-cols-2 sm:flex sm:gap-6 text-sm">
+    <span class="flex items-center gap-1.5"><strong>{{ totalClients() }}</strong><span class="text-gray-500">client(s)</span></span>
+    <span class="flex items-center gap-1.5"><strong>{{ totalPackages() }}</strong><span class="text-gray-500">package(s)</span></span>
+    <span class="flex items-center gap-1.5"><strong>{{ totalInstallments() }}</strong><span class="text-gray-500">installment(s)</span></span>
+    <span class="flex items-center gap-1.5"><strong>{{ totalLessons() }}</strong><span class="text-gray-500">lesson(s)</span></span>
   </div>
 }
 
 <!-- Client Cards with Step Navigation -->
 @for (client of clients(); track $index; let ci = $index) {
-  <div class="border border-gray-200 rounded-lg mb-6 bg-white shadow-sm overflow-hidden">
+  <div class="border border-gray-200 rounded-xl mb-6 bg-white shadow-sm overflow-hidden">
     <!-- Client Header -->
-    <div class="flex items-center justify-between bg-gray-50 px-4 py-3 border-b">
-      <h3 class="font-semibold text-gray-700">Client {{ ci + 1 }}{{ client.first_name ? ' — ' + client.first_name : '' }}</h3>
-      <p-button icon="pi pi-trash" severity="danger" size="small" (click)="removeClient(ci)" />
+    <div class="flex items-center gap-3 bg-gray-50 px-4 py-3 border-b">
+      <span class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
+        {{ clientInitials(client) }}
+      </span>
+      <div class="min-w-0 flex-1">
+        <h3 class="font-semibold text-gray-800 truncate">
+          {{ client.first_name ? client.first_name + (client.last_name ? ' ' + client.last_name : '') : 'Client ' + (ci + 1) }}
+        </h3>
+        <p class="text-xs text-gray-500 truncate">
+          {{ client.phone || 'No phone' }}{{ client.location ? ' · ' + client.location : '' }}
+        </p>
+      </div>
+      @if (clientInfoComplete(client) && clientPaymentsComplete(client)) {
+        <span class="hidden sm:inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+          <i class="pi pi-check-circle"></i> Ready
+        </span>
+      }
+      <p-button icon="pi pi-trash" severity="danger" size="small" [text]="true" (click)="removeClient(ci)" />
     </div>
 
     <!-- Step Navigation Bar -->
-    <p-steps [model]="getStepItems()" [activeIndex]="clientStepIndex()[ci]"
-      (activeIndexChange)="onStepChange(ci, $event)"
-      styleClass="border-0 border-b border-gray-200"
-      [readonly]="false" />
+    <div class="grid grid-cols-4 border-b border-gray-100 bg-white">
+      @for (step of getStepItems(); track $index; let si = $index) {
+        <button type="button"
+          (click)="onStepChange(ci, si)"
+          class="flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors border-r last:border-r-0 cursor-pointer"
+          [title]="stepError(ci, si)"
+          [class.bg-indigo-600]="clientStepIndex()[ci] === si"
+          [class.text-white]="clientStepIndex()[ci] === si"
+          [class.text-indigo-600]="clientStepIndex()[ci] !== si && stepState(ci, si) === 'done'"
+          [class.text-red-500]="clientStepIndex()[ci] !== si && stepState(ci, si) === 'error'"
+          [class.text-gray-400]="clientStepIndex()[ci] !== si && stepState(ci, si) === 'pending'">
+          @if (stepState(ci, si) === 'done') {
+            <i class="pi pi-check text-sm"></i>
+          } @else if (stepState(ci, si) === 'error') {
+            <i class="pi pi-exclamation-triangle text-sm"></i>
+          } @else {
+            <i class="text-sm" [class]="step.icon"></i>
+          }
+          <span>{{ step.label }}</span>
+        </button>
+      }
+    </div>
 
     <!-- Step 1: Client Info -->
     @if (clientStepIndex()[ci] === 0) {
-      <div class="p-4 space-y-4">
+      <div class="p-4 sm:p-5 space-y-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
           <input pInputText [ngModel]="client.phone"
@@ -107,49 +183,68 @@
         </div>
         <div class="flex justify-end pt-2">
           <p-button label="Next: Payments" icon="pi pi-arrow-right" iconPos="right"
-            (click)="onStepChange(ci, 1)" size="small" />
+            (click)="onStepChange(ci, 1)" size="small" [disabled]="!clientInfoComplete(client)" />
         </div>
       </div>
     }
 
     <!-- Step 2: Packages & Payments -->
     @if (clientStepIndex()[ci] === 1) {
-      <div class="p-4">
+      <div class="p-4 sm:p-5">
         <div class="flex items-center justify-between mb-4">
-          <span class="text-sm font-semibold text-gray-600">Packages & Installments</span>
+          <div>
+            <span class="text-sm font-semibold text-gray-800">Packages & Payments</span>
+            <p class="text-xs text-gray-500 mt-0.5">Add a product, its package, and the payments received</p>
+          </div>
           <p-button label="Add Package" icon="pi pi-plus" size="small" severity="secondary"
             (click)="addPackage(ci)" />
         </div>
 
         @if (client.packages.length === 0) {
-          <p class="text-sm text-gray-400 italic text-center py-6">No packages added. Tap "Add Package" to start.</p>
+          <div class="text-center py-8 text-gray-400">
+            <i class="pi pi-box text-3xl mb-2 block"></i>
+            <p class="text-sm">No packages added yet</p>
+            <p class="text-xs mt-1">Tap "Add Package" to start</p>
+          </div>
         }
 
         @for (pkg of client.packages; track $index; let pi = $index) {
-          <div class="border border-gray-200 rounded-lg mb-4 bg-gray-50">
-            <div class="flex items-center justify-between px-4 py-2 border-b border-gray-200">
-              <span class="text-sm font-medium text-gray-600">Package {{ pi + 1 }}</span>
-              <p-button icon="pi pi-trash" severity="danger" size="small" (click)="removePackage(ci, pi)" />
+          <div class="border border-gray-200 rounded-xl mb-4 bg-white overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+              <span class="text-sm font-medium text-gray-700">Package {{ pi + 1 }}</span>
+              <p-button icon="pi pi-trash" severity="danger" size="small" [text]="true" (click)="removePackage(ci, pi)" />
             </div>
 
             <!-- Product/Package Selection -->
-            <div class="p-4 space-y-4">
+            <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Product *</label>
                 <p-select [options]="productOptions()" [(ngModel)]="pkg.product_id"
-                  placeholder="Select Product" appendTo="body" class="w-full" />
+                  placeholder="Select Product" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Package</label>
                 <p-select [options]="getPackagesForProduct(pkg.product_id)" [(ngModel)]="pkg.package_id"
-                  placeholder="Select Package" appendTo="body" class="w-full" />
+                  placeholder="Select Package" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
               </div>
             </div>
 
+            @if (pkg.package_id && packageNameById(pkg.product_id, pkg.package_id)) {
+              <div class="mx-4 mb-3 -mt-1 inline-flex items-center gap-2 rounded-full bg-indigo-50 text-indigo-700 px-3 py-1 text-xs font-medium">
+                <i class="pi pi-tag"></i>
+                {{ packageNameById(pkg.product_id, pkg.package_id) }}
+                <span class="text-indigo-400">·</span>
+                {{ packagePriceById(pkg.product_id, pkg.package_id) | number }}
+              </div>
+            }
+
             <!-- Installments -->
             <div class="px-4 pb-4">
-              <div class="flex items-center justify-between mb-3">
-                <span class="text-sm font-medium text-gray-600">Payment Installments</span>
+              <div class="flex items-center justify-between mb-3 mt-1">
+                <span class="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                  <i class="pi pi-wallet text-gray-400 text-xs"></i>
+                  Payment Installments
+                </span>
                 <p-button label="Add Payment" icon="pi pi-plus" size="small" severity="secondary"
                   (click)="addInstallment(ci, pi)" />
               </div>
@@ -157,14 +252,13 @@
                 <p class="text-xs text-gray-400 italic mb-2">No payments added</p>
               }
               @for (inst of pkg.installments; track $index; let ii = $index) {
-                <div class="bg-white border border-gray-200 rounded-lg p-3 mb-3">
+                <div class="bg-white border border-gray-200 rounded-xl p-3 mb-3">
                   <div class="flex items-center justify-between mb-2">
                     <span class="text-xs font-medium text-gray-500">Payment {{ ii + 1 }}</span>
-                    <p-button icon="pi pi-trash" severity="danger" size="small"
+                    <p-button icon="pi pi-trash" severity="danger" size="small" [text]="true"
                       (click)="removeInstallment(ci, pi, ii)" />
                   </div>
-                  <!-- Stacked layout: full-width fields, one per row -->
-                  <div class="space-y-3">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label class="block text-xs text-gray-500 mb-0.5">Receipt # *</label>
                       <input pInputText [ngModel]="inst.receipt_number"
@@ -198,7 +292,7 @@
                     <div>
                       <label class="block text-xs text-gray-500 mb-0.5">Received By *</label>
                       <p-select [options]="userOptions()" [(ngModel)]="inst.received_by_phone"
-                        placeholder="Select user" appendTo="body" class="w-full" />
+                        placeholder="Select user" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
                     </div>
                   </div>
                 </div>
@@ -210,39 +304,83 @@
         <div class="flex justify-between pt-2">
           <p-button label="Back" icon="pi pi-arrow-left" (click)="onStepChange(ci, 0)" size="small" severity="secondary" />
           <p-button label="Next: Lessons" icon="pi pi-arrow-right" iconPos="right"
-            (click)="onStepChange(ci, 2)" size="small" />
+            (click)="onStepChange(ci, 2)" size="small" [disabled]="!clientPaymentsComplete(client)" />
         </div>
       </div>
     }
 
     <!-- Step 3: Lessons -->
     @if (clientStepIndex()[ci] === 2) {
-      <div class="p-4">
+      <div class="p-4 sm:p-5">
         @if (client.packages.length === 0) {
-          <p class="text-sm text-gray-400 italic text-center py-6">Add a package first in the Payments step.</p>
+          <div class="text-center py-8 text-gray-400">
+            <i class="pi pi-book text-3xl mb-2 block"></i>
+            <p class="text-sm">Add a package first in the Payments step.</p>
+          </div>
         }
 
         @for (pkg of client.packages; track $index; let pi = $index) {
-          <div class="border border-gray-200 rounded-lg mb-4 bg-gray-50">
-            <div class="flex items-center justify-between px-4 py-2 border-b border-gray-200">
-              <span class="text-sm font-medium text-gray-600">Package {{ pi + 1 }} Lessons</span>
-              <p-button label="Add Lesson" icon="pi pi-plus" size="small" severity="secondary"
-                (click)="addLesson(ci, pi)" />
+          <div class="border border-gray-200 rounded-xl mb-4 bg-white overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+              <span class="text-sm font-medium text-gray-700">
+                Package {{ pi + 1 }} Lessons
+                @if (pkg.package_id && packageNameById(pkg.product_id, pkg.package_id)) {
+                  <span class="text-gray-400 font-normal">· {{ packageNameById(pkg.product_id, pkg.package_id) }}</span>
+                }
+              </span>
+              <div class="flex gap-2 flex-wrap justify-end">
+                @if (pkg.lessons.length > 0) {
+                  <p-button label="Edit" icon="pi pi-pencil" size="small" severity="secondary" [text]="true"
+                    (click)="openQuickGenEdit(ci, pi)" />
+                }
+                @if (lessonTemplateOptions().length > 0) {
+                  <p-button label="Pick from Plan" icon="pi pi-book" size="small" severity="info"
+                    (click)="openTemplatePicker(ci, pi)" />
+                }
+                <p-button label="Quick Generate" icon="pi pi-bolt" size="small" severity="warn"
+                  (click)="openQuickGen(ci, pi)" />
+                <p-button label="Add Lesson" icon="pi pi-plus" size="small" severity="secondary"
+                  (click)="addLesson(ci, pi)" />
+              </div>
             </div>
+
+            @if (pkg.package_id && packageNameById(pkg.product_id, pkg.package_id)) {
+              <div class="px-4 py-2.5 bg-gray-50/50 border-b border-gray-100 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+                <span class="text-gray-500 flex items-center gap-1.5">
+                  <i class="pi pi-car text-gray-400"></i>
+                  Manual Training Days:
+                  <strong class="text-gray-700">{{ packageTrainingInfo(pkg.product_id, pkg.package_id).days ?? 0 }}</strong>
+                </span>
+                <span class="text-gray-500 flex items-center gap-1.5">
+                  <i class="pi pi-book text-gray-400"></i>
+                  Theory Duration:
+                  <strong class="text-gray-700">{{ packageTrainingInfo(pkg.product_id, pkg.package_id).hours ?? 0 }} hrs</strong>
+                </span>
+                <span class="text-gray-400">from package (read-only)</span>
+              </div>
+            }
 
             @if (pkg.lessons.length === 0) {
               <p class="text-xs text-gray-400 italic text-center py-4">No lessons added</p>
             }
 
             @for (lesson of pkg.lessons; track $index; let li = $index) {
-              <div class="bg-white border border-gray-200 rounded-lg p-3 m-3">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="text-xs font-medium text-gray-500">Lesson {{ li + 1 }}</span>
-                  <p-button icon="pi pi-trash" severity="danger" size="small"
+              <div class="border-b border-gray-100 p-4 last:border-b-0">
+                <div class="flex items-center justify-between mb-3">
+                  <span class="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500">
+                    <i class="pi pi-calendar text-gray-400"></i>
+                    Lesson {{ li + 1 }}
+                    @if (lesson.title) {
+                      <span class="text-gray-700">· {{ lesson.title }}</span>
+                    }
+                    @if (lesson.status === 'scheduled') {
+                      <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium">Scheduled</span>
+                    }
+                  </span>
+                  <p-button icon="pi pi-trash" severity="danger" size="small" [text]="true"
                     (click)="removeLesson(ci, pi, li)" />
                 </div>
-                <!-- Stacked layout: full-width fields, one per row -->
-                <div class="space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label class="block text-xs text-gray-500 mb-0.5">Date</label>
                     <p-datepicker [ngModel]="lesson.date"
@@ -270,12 +408,12 @@
                   <div>
                     <label class="block text-xs text-gray-500 mb-0.5">Instructor</label>
                     <p-select [options]="userOptions()" [(ngModel)]="lesson.instructor_id"
-                      placeholder="Optional" appendTo="body" class="w-full" />
+                      placeholder="Optional" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
                   </div>
                   <div>
                     <label class="block text-xs text-gray-500 mb-0.5">Vehicle</label>
                     <p-select [options]="vehicleOptions()" [(ngModel)]="lesson.vehicle_id"
-                      placeholder="Optional" appendTo="body" class="w-full" />
+                      placeholder="Optional" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
                   </div>
                 </div>
                 @if (lesson.duration_minutes && lesson.duration_minutes > 30) {
@@ -291,7 +429,127 @@
 
         <div class="flex justify-between pt-2">
           <p-button label="Back" icon="pi pi-arrow-left" (click)="onStepChange(ci, 1)" size="small" severity="secondary" />
-          <p-button label="Done" icon="pi pi-check" (click)="onStepChange(ci, 0)" size="small" />
+          <p-button label="Next: Preview" icon="pi pi-arrow-right" iconPos="right"
+            (click)="onStepChange(ci, 3)" size="small" [disabled]="!clientLessonsComplete(client)" />
+        </div>
+      </div>
+    }
+
+    <!-- Step 4: Preview -->
+    @if (clientStepIndex()[ci] === 3) {
+      <div class="p-4 sm:p-5">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <span class="text-sm font-semibold text-gray-800">Review & Submit</span>
+            <p class="text-xs text-gray-500 mt-0.5">Confirm the details below before submitting. Use "Back" to edit any step.</p>
+          </div>
+          <span class="text-xs px-2.5 py-1 rounded-full font-medium {{ canSubmit() ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600' }}">
+            {{ canSubmit() ? 'Ready to submit' : 'Incomplete' }}
+          </span>
+        </div>
+
+        <div class="border border-gray-200 rounded-xl overflow-hidden mb-4">
+          <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-600 flex items-center gap-1.5">
+            <i class="pi pi-user text-gray-400"></i> Client Information
+          </div>
+          <div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+            <div><span class="text-gray-400 text-xs block">Name</span><span class="font-medium text-gray-800">{{ client.first_name }} {{ client.middle_name }} {{ client.last_name }}</span></div>
+            <div><span class="text-gray-400 text-xs block">Phone</span><span class="text-gray-800">{{ client.phone }}</span></div>
+            <div><span class="text-gray-400 text-xs block">Location</span><span class="text-gray-800">{{ client.location || '—' }}</span></div>
+            <div><span class="text-gray-400 text-xs block">Branch</span><span class="text-gray-800">{{ branchNameById(client.branch_id) || '—' }}</span></div>
+            <div><span class="text-gray-400 text-xs block">Document Date</span><span class="text-gray-800">{{ client.document_date ? (client.document_date | date:'dd/MM/yyyy') : '—' }}</span></div>
+          </div>
+        </div>
+
+        @for (pkg of client.packages; track $index; let pi = $index) {
+          <div class="border border-gray-200 rounded-xl overflow-hidden mb-4">
+            <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-600 flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><i class="pi pi-box text-gray-400"></i> Package {{ pi + 1 }}: {{ packageNameById(pkg.product_id, pkg.package_id) || 'Unnamed' }}</span>
+              <span class="text-gray-400 font-normal">{{ packagePriceById(pkg.product_id, pkg.package_id) | number }} · {{ pkg.transmission_type }}</span>
+            </div>
+            <div class="p-4">
+              <div class="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1.5">
+                <i class="pi pi-wallet text-gray-400"></i> Payments
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-xs text-gray-400 border-b border-gray-100">
+                      <th class="py-1.5 pr-3 font-medium">Receipt</th>
+                      <th class="py-1.5 pr-3 font-medium">Date</th>
+                      <th class="py-1.5 pr-3 font-medium text-right">Amount</th>
+                      <th class="py-1.5 font-medium">Received By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (inst of pkg.installments; track $index) {
+                      <tr class="border-b border-gray-50 last:border-b-0">
+                        <td class="py-1.5 pr-3 text-gray-700">{{ inst.receipt_number }}</td>
+                        <td class="py-1.5 pr-3 text-gray-700">{{ inst.document_date ? (inst.document_date | date:'dd/MM/yyyy') : '—' }}</td>
+                        <td class="py-1.5 pr-3 text-right text-gray-700">{{ (inst.amount ?? 0) | number }}</td>
+                        <td class="py-1.5 text-gray-700">{{ userNameByPhone(inst.received_by_phone) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="2" class="py-2 text-xs font-medium text-gray-500">Total Paid</td>
+                      <td class="py-2 text-right font-semibold text-gray-800">{{ packageTotalAmount(pkg) | number }}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <div class="text-xs font-medium text-gray-500 mt-4 mb-2 flex items-center gap-1.5">
+                <i class="pi pi-book text-gray-400"></i> Lessons
+              </div>
+              @if (pkg.lessons.length === 0) {
+                <p class="text-xs text-gray-400 italic">No lessons added</p>
+              } @else {
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="text-left text-xs text-gray-400 border-b border-gray-100">
+                        <th class="py-1.5 pr-3 font-medium">Date</th>
+                        <th class="py-1.5 pr-3 font-medium">Type</th>
+                        <th class="py-1.5 pr-3 font-medium">Duration</th>
+                        <th class="py-1.5 pr-3 font-medium">Title</th>
+                        <th class="py-1.5 pr-3 font-medium">Instructor</th>
+                        <th class="py-1.5 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (lesson of pkg.lessons; track $index) {
+                        <tr class="border-b border-gray-50 last:border-b-0">
+                          <td class="py-1.5 pr-3 text-gray-700">{{ lesson.date ? (lesson.date | date:'dd/MM/yyyy') : '—' }}</td>
+                          <td class="py-1.5 pr-3">
+                            <span class="text-xs px-1.5 py-0.5 rounded {{ lesson.lesson_type === 'theory' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600' }}">
+                              {{ lesson.lesson_type === 'theory' ? 'Theory' : 'Practical' }}
+                            </span>
+                          </td>
+                          <td class="py-1.5 pr-3 text-gray-700">{{ lesson.duration_minutes }} min</td>
+                          <td class="py-1.5 pr-3 text-gray-700">{{ lesson.title || '—' }}</td>
+                          <td class="py-1.5 pr-3 text-gray-700">{{ lesson.instructor_id ? userNameByPhone(lesson.instructor_id) : '—' }}</td>
+                          <td class="py-1.5">
+                            @if (lesson.status === 'scheduled') {
+                              <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium">Scheduled</span>
+                            } @else {
+                              <span class="text-[11px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 font-medium">Covered</span>
+                            }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        <div class="flex justify-between pt-2">
+          <p-button label="Back: Lessons" icon="pi pi-arrow-left" (click)="onStepChange(ci, 2)" size="small" severity="secondary" />
         </div>
       </div>
     }
@@ -300,10 +558,12 @@
 
 <!-- Empty State -->
 @if (clients().length === 0 && !draftRestored()) {
-  <div class="text-center py-16 text-gray-400">
-    <i class="pi pi-users text-5xl mb-4"></i>
-    <p class="text-lg mb-2">No clients added yet</p>
-    <p class="text-sm mb-4">Tap "Add Client" to start onboarding existing clients</p>
+  <div class="text-center py-16 bg-white border border-dashed border-gray-300 rounded-2xl">
+    <span class="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center mx-auto mb-4">
+      <i class="pi pi-users text-3xl"></i>
+    </span>
+    <p class="text-lg font-semibold text-gray-700 mb-1">No clients added yet</p>
+    <p class="text-sm text-gray-400 mb-6">Add existing clients with their payments and lesson history</p>
     <p-button label="Add First Client" icon="pi pi-plus" (click)="addClient()" size="large" />
   </div>
 }
@@ -318,8 +578,240 @@
         [disabled]="!canSubmit() || submitting()" [loading]="submitting()"
         size="large" class="flex-1" />
     </div>
+    @if (!canSubmit() && !hasReceiptWarnings() && !hasDateErrors() && clients().length > 0) {
+      <p class="text-center text-xs text-gray-400 mt-2">Complete client info, add at least one package with a payment to enable submission</p>
+    }
   </div>
 }
+
+<!-- Quick Generate Lessons Dialog -->
+<p-dialog [(visible)]="showQuickGen" header="Quick Generate Lessons" [modal]="true"
+  [style]="{ width: '92vw', maxWidth: '520px' }">
+  <div class="space-y-4">
+    @if (quickGenPackageInfo().days || quickGenPackageInfo().hours) {
+      <div class="bg-indigo-50/60 border border-indigo-100 rounded-lg px-3 py-2.5 text-xs grid grid-cols-2 gap-x-4 gap-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-gray-500">Driving Training (Days)</span>
+          <strong class="text-indigo-700">{{ quickGenPackageInfo().days ?? 0 }}</strong>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-gray-500">Theory Training (Hours)</span>
+          <strong class="text-indigo-700">{{ quickGenPackageInfo().hours ?? 0 }}</strong>
+        </div>
+      </div>
+      <p class="text-xs text-gray-400 -mt-2.5">From the package — read-only. If days trained are below these totals, the remaining lessons are scheduled.</p>
+    }
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Practical)</label>
+        <p-inputNumber [(ngModel)]="quickGenForm().practicalDays" [min]="0" [max]="999"
+          placeholder="e.g. 4" [style]="{ width: '100%' }"
+          (ngModelChange)="onQuickGenCountsChange()" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Theory)</label>
+        <p-inputNumber [(ngModel)]="quickGenForm().theoryLessons" [min]="0" [max]="999"
+          placeholder="e.g. 2" [style]="{ width: '100%' }"
+          (ngModelChange)="onQuickGenCountsChange()" />
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Start Date</label>
+        <p-datepicker [(ngModel)]="quickGenForm().startDate" dateFormat="yy-mm-dd"
+          placeholder="Start date" appendTo="body" class="w-full"
+          [style]="{ 'border-color': quickGenDateError() ? '#ef4444' : '' }"
+          (ngModelChange)="onQuickGenDateRangeChange()" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Last Date of Training</label>
+        <p-datepicker [(ngModel)]="quickGenForm().lastDate" dateFormat="yy-mm-dd"
+          placeholder="Last date" appendTo="body" class="w-full"
+          [style]="{ 'border-color': quickGenDateError() ? '#ef4444' : '' }"
+          (ngModelChange)="onQuickGenDateRangeChange()" />
+      </div>
+    </div>
+    @if (quickGenDateError()) {
+      <div class="text-xs text-red-500 flex items-center gap-1">
+        <i class="pi pi-exclamation-triangle"></i>
+        {{ quickGenDateError() }}
+      </div>
+    }
+    <div>
+      <label class="block text-xs text-gray-500 mb-0.5">Transmission Trained</label>
+      <p-select [options]="[{ label: 'Manual', value: 'manual' }, { label: 'Automatic', value: 'automatic' }, { label: 'Both', value: 'both' }]"
+        [(ngModel)]="quickGenForm().transmission" appendTo="body" class="w-full"
+        (ngModelChange)="onQuickGenTransmissionChange($event)" />
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Instructor (all lessons)</label>
+        <p-select [options]="userOptions()" [(ngModel)]="quickGenForm().instructor_id"
+          placeholder="Optional" appendTo="body" class="w-full" [showClear]="true" [filter]="true" filterBy="label" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Vehicle (all lessons)</label>
+        <p-select [options]="vehicleOptions()" [(ngModel)]="quickGenForm().vehicle_id"
+          placeholder="Optional" appendTo="body" class="w-full" [showClear]="true" [filter]="true" filterBy="label" />
+      </div>
+    </div>
+    <p class="text-xs text-gray-400 -mt-2">Chosen once here, then applied to every generated lesson.</p>
+
+    <div>
+      <label class="block text-xs text-gray-500 mb-0.5">Lesson Plan (optional)</label>
+      <p-select [options]="quickGenTemplateOptions()" [(ngModel)]="quickGenForm().lesson_plan_template_id"
+        placeholder="Pick lessons from a lesson plan" appendTo="body" class="w-full" [filter]="true" filterBy="label"
+        (ngModelChange)="onQuickGenTemplateChange($event)" />
+      <p class="text-xs text-gray-400 mt-1">Filtered by transmission. Selecting a plan pre-ticks lessons from your Practical/Theory days — adjust the ticks as needed.</p>
+    </div>
+
+    @if (quickGenSelectedTemplate()) {
+      <div class="border border-gray-200 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b">
+          Lessons in {{ quickGenSelectedTemplate()!.name }} — pick the ones covered
+        </div>
+        <div class="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+          @for (item of templateItems(quickGenForm().lesson_plan_template_id); track item.id) {
+            <div class="flex items-center gap-2.5 px-3 py-2">
+              <label class="flex items-start gap-2.5 flex-1 min-w-0 cursor-pointer hover:bg-gray-50">
+                <input type="checkbox" class="mt-0.5" [checked]="isQuickGenItemSelected(item.id)"
+                  (change)="toggleQuickGenItem(item.id)" />
+                <span class="text-sm">
+                  <span class="font-medium text-gray-700">{{ item.title }}</span>
+                  <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded
+                    {{ item.is_theory ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600' }}">
+                    {{ item.is_theory ? 'Theory' : 'Practical' }}
+                  </span>
+                  @if (item.difficulty) {
+                    <span class="ml-1 text-xs text-gray-400">{{ item.difficulty }}</span>
+                  }
+                </span>
+              </label>
+              @if (isQuickGenItemSelected(item.id)) {
+                @if (quickGenItemStatus()[item.id] === 'scheduled') {
+                  <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">Scheduled</span>
+                }
+                <p-datepicker [ngModel]="quickGenItemDates()[item.id]"
+                  (ngModelChange)="onQuickGenItemDateChange(item.id, $event)"
+                  dateFormat="yy-mm-dd" appendTo="body" styleClass="w-56"
+                  [showIcon]="true" icon="pi pi-calendar" />
+              }
+            </div>
+          }
+        </div>
+        <div class="bg-gray-50 px-3 py-1.5 text-xs text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span class="font-medium text-gray-700">{{ quickGenSelectedItemIds().length }} selected</span>
+          <span class="flex items-center gap-1 text-green-600"><i class="pi pi-check-circle" style="font-size: 0.7rem"></i> {{ quickGenCompletedCount() }} covered</span>
+          <span class="flex items-center gap-1 text-orange-600"><i class="pi pi-calendar-plus" style="font-size: 0.7rem"></i> {{ quickGenScheduledCount() }} scheduled</span>
+          <span class="w-full sm:w-auto text-gray-400">pre-ticked from your Practical/Theory days. If days trained are below the package total, the remaining lessons are <span class="text-orange-600 font-medium">Scheduled</span>. Untick to skip, edit the date per lesson.</span>
+        </div>
+      </div>
+    }
+
+    @if (!quickGenSelectedTemplate()) {
+      <p-button label="Compute Lessons" icon="pi pi-calculator" (click)="computeQuickGen()"
+        [loading]="quickGenBusy()" [disabled]="quickGenBusy()" styleClass="w-full" />
+
+      @if (quickGenPreview().length > 0) {
+        <div class="border border-gray-200 rounded-lg overflow-hidden">
+          <div class="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b">
+            Preview — {{ quickGenPreview().length }} lesson(s). Theory always on Saturday.
+          </div>
+          <div class="divide-y divide-gray-100 max-h-56 overflow-y-auto">
+            @for (lesson of quickGenPreview(); track $index; let li = $index) {
+              <div class="flex items-center gap-2 px-3 py-2">
+                <span class="w-8 text-center text-xs font-medium text-gray-500">{{ lesson.dayLabel }}</span>
+                @if (lesson.title) {
+                  <span class="text-xs text-gray-600 flex-1 min-w-0 truncate" [title]="lesson.title">
+                    {{ lesson.title }}
+                  </span>
+                }
+                @if (lesson.status === 'scheduled') {
+                  <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">Scheduled</span>
+                }
+                <p-datepicker [ngModel]="lesson.date" (ngModelChange)="onQuickGenDateChange(lesson, $event)"
+                  dateFormat="yy-mm-dd" appendTo="body" styleClass="w-56" />
+                <p-select [ngModel]="lesson.lesson_type"
+                  (ngModelChange)="onQuickGenTypeChange(lesson, $event)"
+                  [options]="[{ label: 'Practical', value: 'practical' }, { label: 'Theory', value: 'theory' }]"
+                  appendTo="body" styleClass="w-32" />
+                <p-button icon="pi pi-trash" severity="danger" size="small"
+                  (click)="removeQuickGenLesson(li)" />
+              </div>
+            }
+          </div>
+          <div class="bg-blue-50 px-3 py-2 text-xs text-blue-600 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span class="flex items-center gap-1 text-green-600"><i class="pi pi-check-circle" style="font-size: 0.7rem"></i> {{ quickGenPreviewCompletedCount() }} covered</span>
+            <span class="flex items-center gap-1 text-orange-600"><i class="pi pi-calendar-plus" style="font-size: 0.7rem"></i> {{ quickGenPreviewScheduledCount() }} scheduled</span>
+            <span class="text-blue-400">Confirm replaces the existing lessons for this package.</span>
+          </div>
+        </div>
+      }
+    }
+  </div>
+  <ng-template pTemplate="footer">
+    <div class="flex gap-2 justify-end">
+      <p-button label="Cancel" severity="secondary" (click)="showQuickGen.set(false)" />
+      <p-button label="Confirm"
+        [disabled]="quickGenBusy() || quickGenDateError() || (quickGenSelectedTemplate() ? quickGenSelectedItemIds().length === 0 : quickGenPreview().length === 0)"
+        [loading]="quickGenBusy()"
+        (click)="confirmQuickGen()" />
+    </div>
+  </ng-template>
+</p-dialog>
+
+<!-- Pick from Lesson Plan Dialog -->
+<p-dialog [(visible)]="showTemplatePicker" header="Pick Lessons from Plan" [modal]="true"
+  [style]="{ width: '92vw', maxWidth: '520px' }">
+  <div class="space-y-4">
+    <div>
+      <label class="block text-xs text-gray-500 mb-0.5">Lesson Plan</label>
+      <p-select [options]="lessonTemplateOptions()" [(ngModel)]="templatePickerTemplateId"
+        placeholder="Select a lesson plan" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
+    </div>
+
+    @if (templatePickerItems().length > 0) {
+      <div class="border border-gray-200 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b">
+          Lessons in the plan — pick the ones covered
+        </div>
+        <div class="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+          @for (item of templatePickerItems(); track item.id) {
+            <label class="flex items-start gap-2.5 px-3 py-2 cursor-pointer hover:bg-gray-50">
+              <input type="checkbox" class="mt-0.5" [checked]="isTemplateItemSelected(item.id)"
+                (change)="toggleTemplateItem(item.id)" />
+              <span class="text-sm">
+                <span class="font-medium text-gray-700">{{ item.title }}</span>
+                <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded
+                  {{ item.is_theory ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600' }}">
+                  {{ item.is_theory ? 'Theory' : 'Practical' }}
+                </span>
+                @if (item.difficulty) {
+                  <span class="ml-1 text-xs text-gray-400">{{ item.difficulty }}</span>
+                }
+                @if (item.lesson_objectives?.length) {
+                  <p class="text-xs text-gray-400 mt-0.5 truncate">{{ item.lesson_objectives.join('; ') }}</p>
+                }
+              </span>
+            </label>
+          }
+        </div>
+      </div>
+    } @else if (templatePickerTemplateId()) {
+      <p class="text-xs text-gray-400 text-center py-4">This plan has no lessons.</p>
+    }
+  </div>
+  <ng-template pTemplate="footer">
+    <div class="flex gap-2 justify-end">
+      <p-button label="Cancel" severity="secondary" (click)="showTemplatePicker.set(false)" />
+      <p-button label="Add Selected" [disabled]="pickerBusy() || templatePickerSelectedIds().length === 0"
+        [loading]="pickerBusy()"
+        (click)="confirmTemplatePicker()" />
+    </div>
+  </ng-template>
+</p-dialog>
 
 <!-- Success Dialog -->
 <p-dialog [(visible)]="showSuccessDialog" header="Onboarding Complete" [modal]="true"

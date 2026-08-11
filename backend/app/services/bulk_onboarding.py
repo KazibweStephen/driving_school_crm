@@ -3,15 +3,20 @@ import uuid
 from datetime import date, datetime, time
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import HTTPException
+
 from app.models.cart import CartItem, CartItemStatus
+from app.models.company import Branch
 from app.models.consultation import Consultation, ConsultationStatus
 from app.models.lesson_plan import (
     ClientLesson,
     ClientLessonPlan,
     LessonPlanStatus,
     LessonState,
+    LessonTemplateItem,
     TransmissionType,
 )
 from app.models.payment import Installment, InstallmentStatus, Payment
@@ -29,6 +34,23 @@ async def bulk_onboard_clients(
     consultation_ids: list[uuid.UUID] = []
 
     for client_data in data.clients:
+        if not client_data.branch_id:
+            raise HTTPException(
+                status_code=400,
+                detail="A branch is required for each client being onboarded",
+            )
+        branch = await db.get(Branch, client_data.branch_id)
+        if branch is None:
+            raise HTTPException(status_code=400, detail="Branch not found")
+        if (
+            user.company_id is not None
+            and branch.company_id != user.company_id
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Branch does not belong to the user's company",
+            )
+
         consultation = Consultation(
             phone=client_data.phone,
             first_name=client_data.first_name,
@@ -101,9 +123,25 @@ async def bulk_onboard_clients(
             if pkg_data.lessons:
                 lessons_expanded = _expand_lessons(pkg_data.lessons)
 
+                transmission = TransmissionType.MANUAL
+                if pkg_data.transmission_type:
+                    transmission = TransmissionType(pkg_data.transmission_type)
+
+                template_items: dict[uuid.UUID, LessonTemplateItem] = {}
+                if pkg_data.lesson_plan_template_id:
+                    result = await db.execute(
+                        select(LessonTemplateItem).where(
+                            LessonTemplateItem.template_id == pkg_data.lesson_plan_template_id
+                        )
+                    )
+                    template_items = {
+                        item.id: item for item in result.scalars().all()
+                    }
+
                 plan = ClientLessonPlan(
                     cart_item_id=cart_item.id,
-                    transmission_type=TransmissionType.MANUAL,
+                    template_id=pkg_data.lesson_plan_template_id,
+                    transmission_type=transmission,
                     start_date=datetime.combine(pkg_data.lessons[0].date, time.min),
                     status=LessonPlanStatus.ACTIVE,
                     purchased_days=len(lessons_expanded),
@@ -114,31 +152,43 @@ async def bulk_onboard_clients(
 
                 for idx, lesson_info in enumerate(lessons_expanded):
                     original = lesson_info["original"]
+                    template_item = template_items.get(original.get("template_item_id"))
+                    title = original.get("title") or (template_item.title if template_item else f"Lesson {idx + 1}")
+                    lesson_objectives = original.get("lesson_objectives") or (
+                        template_item.lesson_objectives if template_item else []
+                    )
+                    practical_objectives = original.get("practical_objectives") or (
+                        template_item.practical_objectives if template_item else []
+                    )
                     client_lesson = ClientLesson(
                         lesson_plan_id=plan.id,
+                        template_item_id=original.get("template_item_id"),
                         day_number=idx + 1,
                         week_number=(idx // 5) + 1,
-                        title=f"Lesson {idx + 1}",
+                        title=title,
+                        lesson_objectives=lesson_objectives,
+                        practical_objectives=practical_objectives,
                         order=idx,
-                        status=LessonState.COMPLETED,
+                        status=_lesson_state(original.get("status")),
                         scheduled_date=original["date"],
                         duration_minutes=lesson_info["duration"],
                         instructor_id=original.get("instructor_id"),
                         vehicle_id=original.get("vehicle_id"),
                         is_theory=(original["lesson_type"] == "theory"),
-                        completed_at=datetime.combine(original["date"], time.min),
+                        completed_at=_lesson_completed_at(original.get("status"), original["date"]),
                         notes=original.get("notes"),
                     )
                     db.add(client_lesson)
 
                 for original in pkg_data.lessons:
+                    is_scheduled = original.status in ("scheduled", "pending")
                     session = TrainingSession(
                         cart_item_id=cart_item.id,
                         session_date=datetime.combine(original.date, time.min),
                         duration_minutes=original.duration_minutes,
                         driving_minutes=original.duration_minutes if original.lesson_type == "practical" else 0,
                         theory_minutes=original.duration_minutes if original.lesson_type == "theory" else 0,
-                        started_at=datetime.combine(original.date, time.min),
+                        started_at=None if is_scheduled else datetime.combine(original.date, time.min),
                     )
                     db.add(session)
 
@@ -167,9 +217,26 @@ def _expand_lessons(lessons) -> list[dict]:
                     "instructor_id": lesson.instructor_id,
                     "vehicle_id": lesson.vehicle_id,
                     "notes": lesson.notes,
+                    "template_item_id": lesson.template_item_id,
+                    "title": lesson.title,
+                    "lesson_objectives": lesson.lesson_objectives,
+                    "practical_objectives": lesson.practical_objectives,
+                    "status": lesson.status,
                 },
             })
     return expanded
+
+
+def _lesson_state(status: str | None) -> LessonState:
+    if status in ("scheduled", "pending"):
+        return LessonState.SCHEDULED
+    return LessonState.COMPLETED
+
+
+def _lesson_completed_at(status: str | None, lesson_date: date) -> datetime | None:
+    if status in ("scheduled", "pending"):
+        return None
+    return datetime.combine(lesson_date, time.min)
 
 
 def _expand_lessons_for_count(lessons) -> int:

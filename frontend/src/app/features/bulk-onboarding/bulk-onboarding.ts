@@ -13,14 +13,14 @@ import { ToastModule } from 'primeng/toast';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
-import { StepperModule } from 'primeng/stepper';
-import { StepsModule } from 'primeng/steps';
 import { MenuItem } from 'primeng/api';
 import { ConsultationService } from '../../core/services/consultation.service';
 import { ProductService } from '../../core/services/product.service';
 import { UserService } from '../../core/services/user.service';
 import { VehicleService } from '../../core/services/vehicle.service';
 import { AuthService } from '../../core/auth/auth.service';
+import { CompanyService, Branch } from '../../core/services/company.service';
+import { LessonPlanService, LessonPlanTemplate, LessonTemplateItem } from '../../core/services/lesson-plan.service';
 
 interface LessonDraft {
   date: Date | null;
@@ -29,6 +29,11 @@ interface LessonDraft {
   instructor_id: string;
   vehicle_id: string;
   notes: string;
+  template_item_id: string | null;
+  title: string | null;
+  lesson_objectives: string[];
+  practical_objectives: string[];
+  status: 'completed' | 'scheduled';
 }
 
 interface InstallmentDraft {
@@ -43,6 +48,32 @@ interface PackageDraft {
   package_id: string;
   installments: InstallmentDraft[];
   lessons: LessonDraft[];
+  transmission_type: string;
+  lesson_plan_template_id: string | null;
+}
+
+interface QuickGenForm {
+  practicalDays: number | null;
+  theoryLessons: number | null;
+  startDate: Date | null;
+  lastDate: Date | null;
+  transmission: string;
+  lesson_plan_template_id: string | null;
+  instructor_id: string;
+  vehicle_id: string;
+}
+
+type QuickGenSeed = Pick<QuickGenLesson, 'template_item_id' | 'title' | 'lesson_objectives' | 'practical_objectives' | 'status'>;
+
+interface QuickGenLesson {
+  date: Date;
+  lesson_type: 'practical' | 'theory';
+  dayLabel: string;
+  template_item_id: string | null;
+  title: string | null;
+  lesson_objectives: string[];
+  practical_objectives: string[];
+  status: 'completed' | 'scheduled';
 }
 
 interface ClientDraft {
@@ -64,7 +95,6 @@ const STORAGE_KEY = 'bulk_onboarding_draft';
     CommonModule, FormsModule, ButtonModule, DialogModule,
     InputTextModule, InputNumberModule, TextareaModule, ToastModule,
     SelectModule, ConfirmDialogModule, DatePickerModule, TooltipModule,
-    StepperModule, StepsModule,
   ],
   providers: [ConfirmationService, MessageService],
   templateUrl: './bulk-onboarding.html',
@@ -74,6 +104,9 @@ export class BulkOnboardingCmp implements OnInit {
   products = signal<any[]>([]);
   users = signal<any[]>([]);
   vehicles = signal<any[]>([]);
+  branches = signal<Branch[]>([]);
+  lessonTemplates = signal<LessonPlanTemplate[]>([]);
+  branchId = signal('');
   submitting = signal(false);
   draftRestored = signal(false);
   draftSavedAt = signal('');
@@ -85,6 +118,34 @@ export class BulkOnboardingCmp implements OnInit {
   private phoneTimers: Record<number, ReturnType<typeof setTimeout>> = {};
   private receiptTimers: ReturnType<typeof setTimeout>[] = [];
   clientStepIndex = signal<Record<number, number>>({});
+
+  showQuickGen = signal(false);
+  quickGenClientIndex = signal(0);
+  quickGenPkgIndex = signal(0);
+  quickGenForm = signal<QuickGenForm>({
+    practicalDays: null,
+    theoryLessons: null,
+    startDate: null,
+    lastDate: null,
+    transmission: 'manual',
+    lesson_plan_template_id: null,
+    instructor_id: '',
+    vehicle_id: '',
+  });
+  quickGenPreview = signal<QuickGenLesson[]>([]);
+  quickGenSelectedItemIds = signal<string[]>([]);
+  quickGenItemDates = signal<Record<string, Date | null>>({});
+  quickGenItemStatus = signal<Record<string, 'completed' | 'scheduled'>>({});
+  quickGenDateError = computed(() => this.quickGenRangeError() || this.quickGenLessonsError());
+
+  showTemplatePicker = signal(false);
+  templatePickerClientIndex = signal(0);
+  templatePickerPkgIndex = signal(0);
+  templatePickerTemplateId = signal<string | null>(null);
+  templatePickerSelectedIds = signal<string[]>([]);
+
+  quickGenBusy = signal(false);
+  pickerBusy = signal(false);
 
   totalClients = computed(() => this.clients().length);
   totalPackages = computed(() =>
@@ -117,12 +178,18 @@ export class BulkOnboardingCmp implements OnInit {
     return map;
   });
 
-  userOptions = computed(() =>
-    this.users().map(u => ({
+  userOptions = computed(() => {
+    const phone = this.auth.currentUser();
+    const name = this.auth.currentUserName();
+    const options = this.users().map(u => ({
       label: u.name || u.phone,
       value: u.phone,
-    }))
-  );
+    }));
+    if (phone && !options.some(o => o.value === phone)) {
+      options.unshift({ label: name || phone, value: phone });
+    }
+    return options;
+  });
 
   vehicleOptions = computed(() =>
     this.vehicles().map(v => ({
@@ -131,11 +198,24 @@ export class BulkOnboardingCmp implements OnInit {
     }))
   );
 
+  branchOptions = computed(() =>
+    this.branches().map(b => ({ label: b.name, value: b.id }))
+  );
+
+  branchStatus = computed(() => {
+    const b = this.branches();
+    if (b.length === 0) return 'none';
+    if (b.length === 1) return 'single';
+    return 'multi';
+  });
+
   constructor(
     private consultationService: ConsultationService,
     private productService: ProductService,
     private userService: UserService,
     private vehicleService: VehicleService,
+    private companyService: CompanyService,
+    private lessonPlanService: LessonPlanService,
     private auth: AuthService,
     private msg: MessageService,
     private confirm: ConfirmationService,
@@ -151,12 +231,96 @@ export class BulkOnboardingCmp implements OnInit {
     this.productService.listProducts().subscribe((res: any) => {
       this.products.set(res.products || []);
     });
-    this.userService.list().subscribe((res: any) => {
+    this.userService.list({ page_size: 100 }).subscribe((res: any) => {
       this.users.set(res.users || []);
     });
     this.vehicleService.list().subscribe((res: any) => {
       this.vehicles.set(Array.isArray(res) ? res : res.vehicles || []);
     });
+    this.loadLessonTemplates();
+    this.loadBranches();
+  }
+
+  loadLessonTemplates() {
+    this.lessonPlanService.listTemplates().subscribe({
+      next: (templates: any) => {
+        this.lessonTemplates.set(templates || []);
+      },
+      error: () => {
+        this.lessonTemplates.set([]);
+      },
+    });
+  }
+
+  lessonTemplateOptions() {
+    return this.lessonTemplates().map(t => ({ label: t.name, value: t.id }));
+  }
+
+  quickGenTemplateOptions() {
+    const trans = this.quickGenForm().transmission;
+    return this.lessonTemplates()
+      .filter(t => trans === 'both' || !t.transmission_type || t.transmission_type === 'both' || t.transmission_type === trans)
+      .map(t => ({ label: t.name, value: t.id }));
+  }
+
+  onQuickGenTransmissionChange(transmission: string) {
+    this.quickGenForm.update(f => ({ ...f, transmission }));
+    const selectedId = this.quickGenForm().lesson_plan_template_id;
+    if (selectedId) {
+      const tpl = this.lessonTemplates().find(t => t.id === selectedId);
+      if (tpl && tpl.transmission_type && tpl.transmission_type !== 'both' && tpl.transmission_type !== transmission) {
+        this.quickGenForm.update(f => ({ ...f, lesson_plan_template_id: null }));
+        this.quickGenSelectedItemIds.set([]);
+        this.quickGenItemStatus.set({});
+        this.quickGenPreview.set([]);
+      }
+    }
+  }
+
+  templateItems(templateId: string | null): LessonTemplateItem[] {
+    if (!templateId) return [];
+    return this.lessonTemplates().find(t => t.id === templateId)?.lesson_items || [];
+  }
+
+  loadBranches() {
+    this.companyService.myBranches().subscribe({
+      next: (branches) => {
+        this.branches.set(branches || []);
+        if (branches?.length === 1) {
+          this.branchId.set(branches[0].id);
+        } else if (branches?.length > 1) {
+          this.applyDefaultBranch(branches);
+        }
+      },
+      error: () => {
+        this.branches.set([]);
+      },
+    });
+  }
+
+  private applyDefaultBranch(branches: Branch[]) {
+    const phone = this.getCurrentUserPhone();
+    if (!phone) return;
+    this.userService.getByPhone(phone).subscribe({
+      next: (me) => {
+        const assigned = (me.branch_ids || []).filter(id => branches.some(b => b.id === id));
+        if (assigned.length === 1) {
+          this.branchId.set(assigned[0]);
+        } else if (branches.length === 1) {
+          this.branchId.set(branches[0].id);
+        }
+      },
+      error: () => {
+        if (branches.length === 1) {
+          this.branchId.set(branches[0].id);
+        }
+      },
+    });
+  }
+
+  onBranchChange(id: string) {
+    this.branchId.set(id);
+    this.clients.update(clients => clients.map(c => ({ ...c, branch_id: id })));
   }
 
   getPackagesForProduct(productId: string): any[] {
@@ -241,12 +405,32 @@ export class BulkOnboardingCmp implements OnInit {
     const key = this.dateKey(ci, pi, 'lesson', li);
     this.dateErrors.update(e => { const n = { ...e }; delete n[key]; return n; });
     const client = this.clients()[ci];
-    if (!client?.document_date) return;
-    const lesson = client.packages[pi]?.lessons[li];
-    if (!lesson?.date) return;
-    if (lesson.date < client.document_date) {
-      this.dateErrors.update(e => ({ ...e, [key]: `Date cannot be before client document date (${client.document_date!.toISOString().split('T')[0]})` }));
+    const lesson = client?.packages[pi]?.lessons[li];
+    if (!lesson) return;
+    if (!lesson.date) {
+      this.dateErrors.update(e => ({ ...e, [key]: 'Date is required' }));
+      return;
     }
+    const docDate = client?.document_date;
+    if (docDate && lesson.date < docDate) {
+      this.dateErrors.update(e => ({ ...e, [key]: `Date cannot be before client document date (${docDate.toISOString().split('T')[0]})` }));
+      return;
+    }
+    const firstPay = this.packageFirstPaymentDate(ci, pi);
+    if (firstPay && lesson.date < firstPay) {
+      this.dateErrors.update(e => ({ ...e, [key]: `Date cannot be before the first payment date (${firstPay.toISOString().split('T')[0]})` }));
+    }
+  }
+
+  validateAllLessons() {
+    const clients = this.clients();
+    clients.forEach((_, ci) => {
+      (clients[ci]?.packages || []).forEach((_, pi) => {
+        (clients[ci]?.packages[pi]?.lessons || []).forEach((_, li) => {
+          this.validateLessonDate(ci, pi, li);
+        });
+      });
+    });
   }
 
   hasDateErrors(): boolean {
@@ -255,6 +439,10 @@ export class BulkOnboardingCmp implements OnInit {
 
   hasReceiptWarnings(): boolean {
     return Object.keys(this.receiptWarnings()).length > 0;
+  }
+
+  hasPhoneWarnings(): boolean {
+    return Object.keys(this.phoneWarnings()).length > 0;
   }
 
   restoreDraft() {
@@ -269,6 +457,7 @@ export class BulkOnboardingCmp implements OnInit {
         const stepIdx: Record<number, number> = {};
         restored.forEach((_: any, i: number) => { stepIdx[i] = 0; });
         this.clientStepIndex.set(stepIdx);
+        this.validateAllLessons();
       } catch {
         localStorage.removeItem(STORAGE_KEY);
       }
@@ -300,7 +489,14 @@ export class BulkOnboardingCmp implements OnInit {
           instructor_id: l.instructor_id || '',
           vehicle_id: l.vehicle_id || '',
           notes: l.notes || '',
+          template_item_id: l.template_item_id || null,
+          title: l.title || null,
+          lesson_objectives: l.lesson_objectives || [],
+          practical_objectives: l.practical_objectives || [],
+          status: l.status === 'scheduled' ? 'scheduled' : 'completed',
         })),
+        transmission_type: p.transmission_type || 'manual',
+        lesson_plan_template_id: p.lesson_plan_template_id || null,
       })),
     };
   }
@@ -332,7 +528,14 @@ export class BulkOnboardingCmp implements OnInit {
             instructor_id: l.instructor_id,
             vehicle_id: l.vehicle_id,
             notes: l.notes,
+            template_item_id: l.template_item_id,
+            title: l.title,
+            lesson_objectives: l.lesson_objectives,
+            practical_objectives: l.practical_objectives,
+            status: l.status || 'completed',
           })),
+          transmission_type: p.transmission_type || 'manual',
+          lesson_plan_template_id: p.lesson_plan_template_id || null,
         })),
       })),
     };
@@ -368,7 +571,7 @@ export class BulkOnboardingCmp implements OnInit {
         middle_name: '',
         last_name: '',
         location: '',
-        branch_id: '',
+        branch_id: this.branchId(),
         document_date: null,
         packages: [],
       },
@@ -378,7 +581,31 @@ export class BulkOnboardingCmp implements OnInit {
   }
 
   onStepChange(clientIndex: number, stepIndex: number) {
+    const current = this.clientStepIndex()[clientIndex] ?? 0;
+    if (stepIndex > current) {
+      for (let s = 0; s < stepIndex; s++) {
+        if (!this.stepValid(clientIndex, s)) {
+          this.msg.add({
+            severity: 'warn',
+            summary: 'Complete step ' + (s + 1) + ' first',
+            detail: 'Validate all fields in each step before moving forward.',
+          });
+          return;
+        }
+      }
+    }
     this.clientStepIndex.update(s => ({ ...s, [clientIndex]: stepIndex }));
+  }
+
+  private stepValid(clientIndex: number, step: number): boolean {
+    const c = this.clients()[clientIndex];
+    if (!c) return false;
+    switch (step) {
+      case 0: return this.clientInfoComplete(c);
+      case 1: return this.clientPaymentsComplete(c);
+      case 2: return this.clientLessonsComplete(c);
+      default: return true;
+    }
   }
 
   getStepItems(): MenuItem[] {
@@ -386,7 +613,124 @@ export class BulkOnboardingCmp implements OnInit {
       { label: 'Info', icon: 'pi pi-user' },
       { label: 'Payments', icon: 'pi pi-wallet' },
       { label: 'Lessons', icon: 'pi pi-book' },
+      { label: 'Preview', icon: 'pi pi-eye' },
     ];
+  }
+
+  productNameById(id: string): string {
+    return this.products().find(p => p.id === id)?.name || '';
+  }
+
+  userNameByPhone(phone: string): string {
+    const u = this.users().find(x => x.phone === phone);
+    return u ? (u.name || u.phone) : phone;
+  }
+
+  branchNameById(id: string): string {
+    return this.branches().find(b => b.id === id)?.name || '';
+  }
+
+  vehicleNameById(id: string): string {
+    return this.vehicles().find(v => v.id === id)?.name || id;
+  }
+
+  packageNameById(productId: string, packageId: string): string {
+    const p = this.products().find(pr => pr.id === productId);
+    const pkg = p?.packages.find((pk: any) => pk.id === packageId);
+    return pkg?.name || '';
+  }
+
+  packagePriceById(productId: string, packageId: string): number {
+    const p = this.products().find(pr => pr.id === productId);
+    const pkg = p?.packages.find((pk: any) => pk.id === packageId);
+    return pkg?.price ?? 0;
+  }
+
+  packageTrainingInfo(productId: string, packageId: string): { days: number | null; hours: number | null } {
+    const p = this.products().find(pr => pr.id === productId);
+    const pkg = p?.packages.find((pk: any) => pk.id === packageId);
+    return {
+      days: pkg?.driving_training_duration_days ?? null,
+      hours: pkg?.theory_training_hours ?? null,
+    };
+  }
+
+  clientInitials(c: ClientDraft): string {
+    const parts = [c.first_name, c.last_name].filter(Boolean);
+    return parts.length ? parts.map(n => n[0].toUpperCase()).slice(0, 2).join('') : '?';
+  }
+
+  packageTotalAmount(pkg: PackageDraft): number {
+    return pkg.installments.reduce((s, i) => s + (i.amount || 0), 0);
+  }
+
+  clientInfoComplete(c: ClientDraft): boolean {
+    return !!c.phone && !!c.first_name;
+  }
+
+  clientPaymentsComplete(c: ClientDraft): boolean {
+    return c.packages.length > 0 && c.packages.every(pkg =>
+      !!pkg.product_id &&
+      pkg.installments.length > 0 &&
+      pkg.installments.every(inst =>
+        !!inst.receipt_number && !!inst.document_date && !!inst.amount && !!inst.received_by_phone
+      )
+    );
+  }
+
+  clientLessonsComplete(c: ClientDraft): boolean {
+    return c.packages.length > 0 && c.packages.some(pkg =>
+      pkg.lessons.length > 0 && pkg.lessons.every(l => !!l.date && !!l.duration_minutes && l.duration_minutes > 0)
+    );
+  }
+
+  stepState(ci: number, step: number): 'done' | 'active' | 'pending' | 'error' {
+    const c = this.clients()[ci];
+    if (!c) return 'pending';
+    if (this.stepErrorsFor(ci, step).length > 0) return 'error';
+    const done = step === 0 ? this.clientInfoComplete(c)
+      : step === 1 ? this.clientPaymentsComplete(c)
+      : step === 2 ? this.clientLessonsComplete(c)
+      : this.clientInfoComplete(c) && this.clientPaymentsComplete(c) && this.clientLessonsComplete(c);
+    if (done) return 'done';
+    return this.clientStepIndex()[ci] === step ? 'active' : 'pending';
+  }
+
+  private stepErrorsFor(ci: number, step: number): string[] {
+    const c = this.clients()[ci];
+    if (!c) return [];
+    const out: string[] = [];
+    if (step === 0 || step === 3) {
+      if (this.phoneWarnings()[ci]) out.push(this.phoneWarnings()[ci]);
+    }
+    if (step === 1 || step === 3) {
+      const prefix = `${ci}-`;
+      Object.keys(this.receiptWarnings()).filter(k => k.startsWith(prefix)).forEach(k => out.push(this.receiptWarnings()[k]));
+      Object.keys(this.dateErrors()).filter(k => k.startsWith(prefix) && k.includes('-inst-')).forEach(k => out.push(this.dateErrors()[k]));
+    }
+    if (step === 2 || step === 3) {
+      const prefix = `${ci}-`;
+      Object.keys(this.dateErrors()).filter(k => k.startsWith(prefix) && k.includes('-lesson-')).forEach(k => out.push(this.dateErrors()[k]));
+    }
+    return out;
+  }
+
+  stepError(ci: number, step: number): string {
+    return this.stepErrorsFor(ci, step)[0] || '';
+  }
+
+  validationIssues(): string[] {
+    const issues: string[] = [];
+    const clients = this.clients();
+    clients.forEach((_, ci) => {
+      const labels = ['Info', 'Payments', 'Lessons', 'Preview'];
+      for (let s = 0; s < 4; s++) {
+        for (const msg of this.stepErrorsFor(ci, s)) {
+          issues.push(`Client ${ci + 1} (${labels[s]}): ${msg}`);
+        }
+      }
+    });
+    return issues;
   }
 
   removeClient(index: number) {
@@ -410,7 +754,7 @@ export class BulkOnboardingCmp implements OnInit {
         ...updated[clientIndex],
         packages: [
           ...updated[clientIndex].packages,
-          { product_id: '', package_id: '', installments: [], lessons: [] },
+          { product_id: '', package_id: '', installments: [], lessons: [], transmission_type: 'manual', lesson_plan_template_id: null },
         ],
       };
       return updated;
@@ -469,11 +813,17 @@ export class BulkOnboardingCmp implements OnInit {
         instructor_id: '',
         vehicle_id: '',
         notes: '',
+        template_item_id: null,
+        title: null,
+        lesson_objectives: [],
+        practical_objectives: [],
+        status: 'completed',
       });
       pkgs[pkgIndex] = { ...pkgs[pkgIndex], lessons };
       updated[clientIndex] = { ...updated[clientIndex], packages: pkgs };
       return updated;
     });
+    this.validateAllLessons();
   }
 
   removeLesson(clientIndex: number, pkgIndex: number, lessonIndex: number) {
@@ -489,6 +839,618 @@ export class BulkOnboardingCmp implements OnInit {
       updated[clientIndex] = { ...updated[clientIndex], packages: pkgs };
       return updated;
     });
+  }
+
+  openQuickGen(clientIndex: number, pkgIndex: number) {
+    const pkg = this.clients()[clientIndex]?.packages[pkgIndex];
+    this.quickGenClientIndex.set(clientIndex);
+    this.quickGenPkgIndex.set(pkgIndex);
+    this.quickGenForm.set({
+      practicalDays: null,
+      theoryLessons: null,
+      startDate: null,
+      lastDate: null,
+      transmission: pkg?.transmission_type || 'manual',
+      lesson_plan_template_id: pkg?.lesson_plan_template_id || null,
+      instructor_id: '',
+      vehicle_id: '',
+    });
+    this.quickGenPreview.set([]);
+    this.quickGenSelectedItemIds.set([]);
+    this.quickGenItemDates.set({});
+    this.quickGenItemStatus.set({});
+    this.showQuickGen.set(true);
+  }
+
+  openQuickGenEdit(clientIndex: number, pkgIndex: number) {
+    const pkg = this.clients()[clientIndex]?.packages[pkgIndex];
+    const lessons = pkg?.lessons || [];
+    this.quickGenClientIndex.set(clientIndex);
+    this.quickGenPkgIndex.set(pkgIndex);
+
+    let startDate: Date | null = null;
+    let lastDate: Date | null = null;
+    for (const l of lessons) {
+      if (!l.date) continue;
+      const d = this.startOfDay(l.date);
+      if (!startDate || d < startDate) startDate = d;
+      if (!lastDate || d > lastDate) lastDate = d;
+    }
+
+    this.quickGenForm.set({
+      practicalDays: lessons.filter(l => l.lesson_type === 'practical' && l.status === 'completed').length,
+      theoryLessons: lessons.filter(l => l.lesson_type === 'theory' && l.status === 'completed').length,
+      startDate,
+      lastDate,
+      transmission: pkg?.transmission_type || 'manual',
+      lesson_plan_template_id: pkg?.lesson_plan_template_id || null,
+      instructor_id: lessons.find(l => l.instructor_id)?.instructor_id || '',
+      vehicle_id: lessons.find(l => l.vehicle_id)?.vehicle_id || '',
+    });
+
+    const template = this.quickGenSelectedTemplate();
+    if (template && template.lesson_items?.length) {
+      const selected = new Set<string>();
+      const dates: Record<string, Date | null> = {};
+      const statuses: Record<string, 'completed' | 'scheduled'> = {};
+      for (const l of lessons) {
+        if (!l.template_item_id) continue;
+        selected.add(l.template_item_id);
+        if (l.date && !dates[l.template_item_id]) dates[l.template_item_id] = l.date;
+        if (!statuses[l.template_item_id]) {
+          statuses[l.template_item_id] = l.status === 'completed' ? 'completed' : 'scheduled';
+        }
+      }
+      this.quickGenSelectedItemIds.set([...selected]);
+      this.quickGenItemDates.set(dates);
+      this.quickGenItemStatus.set(statuses);
+      this.quickGenPreview.set([]);
+    } else {
+      const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const preview: QuickGenLesson[] = lessons
+        .filter(l => l.date)
+        .map(l => {
+          const d = this.startOfDay(l.date!);
+          return {
+            date: d,
+            lesson_type: (l.lesson_type === 'theory' ? 'theory' : 'practical'),
+            dayLabel: DAYS[d.getDay()],
+            template_item_id: l.template_item_id || null,
+            title: l.title || null,
+            lesson_objectives: l.lesson_objectives || [],
+            practical_objectives: l.practical_objectives || [],
+            status: l.status === 'scheduled' ? 'scheduled' : 'completed',
+          };
+        });
+      this.quickGenPreview.set(preview);
+      this.quickGenSelectedItemIds.set([]);
+      this.quickGenItemDates.set({});
+      this.quickGenItemStatus.set({});
+    }
+    this.showQuickGen.set(true);
+  }
+
+  private startOfDay(d: Date): Date {
+    const copy = new Date(d);
+    copy.setHours(0, 0, 0, 0);
+    return copy;
+  }
+
+  private quickGenDocDate(): Date | null {
+    const d = this.clients()[this.quickGenClientIndex()]?.document_date;
+    return d ? this.startOfDay(d) : null;
+  }
+
+  private packageFirstPaymentDate(ci: number, pi: number): Date | null {
+    const pkg = this.clients()[ci]?.packages[pi];
+    if (!pkg) return null;
+    const dates = pkg.installments
+      .map(i => i.document_date)
+      .filter((d): d is Date => !!d)
+      .map(d => this.startOfDay(d))
+      .sort((a, b) => a.getTime() - b.getTime());
+    return dates[0] || null;
+  }
+
+  private quickGenFirstPaymentDate(): Date | null {
+    return this.packageFirstPaymentDate(this.quickGenClientIndex(), this.quickGenPkgIndex());
+  }
+
+  private quickGenRangeError(): string {
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    const form = this.quickGenForm();
+    const start = form.startDate ? this.startOfDay(form.startDate) : null;
+    const last = form.lastDate ? this.startOfDay(form.lastDate) : null;
+    const docDate = this.quickGenDocDate();
+    const firstPay = this.quickGenFirstPaymentDate();
+    const today = this.startOfDay(new Date());
+
+    if (start && docDate && start < docDate) {
+      return `Start date cannot be before the client's document date (${fmt(docDate)})`;
+    }
+    if (start && firstPay && start < firstPay) {
+      return `Start date cannot be before the first payment date (${fmt(firstPay)})`;
+    }
+    if (last && start && last < start) {
+      return 'Last date must be after start date';
+    }
+    if (last && last > today) {
+      return 'Last date of training cannot be later than today';
+    }
+    return '';
+  }
+
+  private quickGenLessonsError(): string {
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    const template = this.quickGenSelectedTemplate();
+    const docDate = this.quickGenDocDate();
+    const firstPay = this.quickGenFirstPaymentDate();
+    const today = this.startOfDay(new Date());
+
+    const lower = (msgDate: Date | null) => {
+      if (docDate && msgDate && msgDate < docDate) {
+        return `cannot be before the client's document date (${fmt(docDate)})`;
+      }
+      if (firstPay && msgDate && msgDate < firstPay) {
+        return `cannot be before the first payment date (${fmt(firstPay)})`;
+      }
+      return '';
+    };
+
+    if (template) {
+      const selectedIds = this.quickGenSelectedItemIds();
+      const items = (template.lesson_items || []).filter(i => selectedIds.includes(i.id));
+      for (const item of items) {
+        const date = this.quickGenItemDates()[item.id];
+        if (!date) return `Set a date for "${item.title}"`;
+        const d = this.startOfDay(date);
+        const msg = lower(d);
+        if (msg) return `Date for "${item.title}" ${msg}`;
+        if (d > today) {
+          return `Date for "${item.title}" cannot be later than today`;
+        }
+      }
+    } else {
+      for (const lesson of this.quickGenPreview()) {
+        const d = this.startOfDay(lesson.date);
+        const msg = lower(d);
+        if (msg) return `Generated lesson date ${msg}`;
+        if (d > today) {
+          return 'Generated lesson dates cannot be later than today';
+        }
+      }
+    }
+    return '';
+  }
+
+  computeQuickGen() {
+    this.quickGenBusy.set(true);
+    try {
+      const form = this.quickGenForm();
+      const start = form.startDate ? this.startOfDay(form.startDate) : null;
+      const last = form.lastDate ? this.startOfDay(form.lastDate) : null;
+      if (!start || !last) return;
+      const rangeErr = this.quickGenRangeError();
+      if (rangeErr) {
+        this.msg.add({ severity: 'warn', summary: rangeErr });
+        return;
+      }
+
+      const template = this.lessonTemplates().find(t => t.id === form.lesson_plan_template_id);
+      const templateItems = template?.lesson_items || [];
+      const isTemplateMode = !!template && templateItems.length > 0;
+
+      let practical: QuickGenSeed[] = [];
+      let theory: QuickGenSeed[] = [];
+
+      if (isTemplateMode) {
+        const selectedIds = this.quickGenSelectedItemIds();
+        const selectedItems = templateItems.filter(i => selectedIds.includes(i.id));
+        if (selectedItems.length === 0) {
+          this.msg.add({ severity: 'warn', summary: 'Tick at least one lesson in the plan to compute' });
+          return;
+        }
+        practical = selectedItems
+          .filter(i => !i.is_theory)
+          .map(i => ({
+            template_item_id: i.id,
+            title: i.title,
+            lesson_objectives: i.lesson_objectives || [],
+            practical_objectives: i.practical_objectives || [],
+            status: this.quickGenItemStatus()[i.id] || 'completed',
+          }));
+        theory = selectedItems
+          .filter(i => i.is_theory)
+          .map(i => ({
+            template_item_id: i.id,
+            title: i.title,
+            lesson_objectives: i.lesson_objectives || [],
+            practical_objectives: i.practical_objectives || [],
+            status: this.quickGenItemStatus()[i.id] || 'completed',
+          }));
+      } else {
+        const { practical: effectivePractical, theory: effectiveTheory } = this.quickGenEffectiveCounts();
+        const trainedPractical = form.practicalDays ?? 0;
+        const trainedTheory = form.theoryLessons ?? 0;
+        if (effectivePractical + effectiveTheory === 0) {
+          this.msg.add({ severity: 'warn', summary: 'Add at least one practical or theory lesson' });
+          return;
+        }
+        practical = Array.from({ length: effectivePractical }, (_, i) => ({
+          template_item_id: null,
+          title: null,
+          lesson_objectives: [],
+          practical_objectives: [],
+          status: i < trainedPractical ? 'completed' : 'scheduled',
+        }));
+        theory = Array.from({ length: effectiveTheory }, (_, i) => ({
+          template_item_id: null,
+          title: null,
+          lesson_objectives: [],
+          practical_objectives: [],
+          status: i < trainedTheory ? 'completed' : 'scheduled',
+        }));
+      }
+
+      const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      // Working days between start and last (Mon–Fri, 5 days a week — exclude weekends)
+      const practicalDates: Date[] = [];
+      const cursor = new Date(start);
+      while (cursor <= last) {
+        const dow = cursor.getDay();
+        if (dow >= 1 && dow <= 5) practicalDates.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      // If not enough working days, continue past the last date
+      let overflow = new Date(last);
+      while (practicalDates.length < practical.length) {
+        overflow.setDate(overflow.getDate() + 1);
+        if (overflow.getDay() >= 1 && overflow.getDay() <= 5) practicalDates.push(new Date(overflow));
+      }
+
+      const practicalGenerated: QuickGenLesson[] = practical.map((p, i) => ({
+        ...p,
+        date: practicalDates[i],
+        lesson_type: 'practical',
+        dayLabel: DAYS[practicalDates[i].getDay()],
+      }));
+
+      // Theory always on Saturday, starting from the first Saturday >= start,
+      // overflowing past the last date if needed.
+      const theoryDates: Date[] = [];
+      const firstSat = new Date(start);
+      while (firstSat.getDay() !== 6) firstSat.setDate(firstSat.getDate() + 1);
+      let satCursor = new Date(firstSat);
+      while (theoryDates.length < theory.length) {
+        theoryDates.push(new Date(satCursor));
+        satCursor.setDate(satCursor.getDate() + 7);
+      }
+
+      const theoryGenerated: QuickGenLesson[] = theory.map((t, i) => ({
+        ...t,
+        date: theoryDates[i],
+        lesson_type: 'theory',
+        dayLabel: DAYS[theoryDates[i].getDay()],
+      }));
+
+      const generated = [...practicalGenerated, ...theoryGenerated];
+      generated.sort((a, b) => a.date.getTime() - b.date.getTime());
+      this.quickGenPreview.set(generated);
+    } finally {
+      setTimeout(() => this.quickGenBusy.set(false), 400);
+    }
+  }
+
+  confirmQuickGen() {
+    this.quickGenBusy.set(true);
+    const rangeErr = this.quickGenDateError();
+    if (rangeErr) {
+      this.msg.add({ severity: 'warn', summary: rangeErr });
+      this.quickGenBusy.set(false);
+      return;
+    }
+    const ci = this.quickGenClientIndex();
+    const pi = this.quickGenPkgIndex();
+    const form = this.quickGenForm();
+    const template = this.quickGenSelectedTemplate();
+
+    let lessons: LessonDraft[];
+    const instructorId = form.instructor_id || '';
+    const vehicleId = form.vehicle_id || '';
+    if (template) {
+      const selectedIds = this.quickGenSelectedItemIds();
+      const items = (template.lesson_items || []).filter(i => selectedIds.includes(i.id));
+      if (items.length === 0) {
+        this.quickGenBusy.set(false);
+        return;
+      }
+      const dates = this.quickGenItemDates();
+      lessons = items.map(item => {
+        const date = dates[item.id];
+        return {
+          date: date ? new Date(date) : null,
+          duration_minutes: item.is_theory ? 120 : 30,
+          lesson_type: item.is_theory ? 'theory' : 'practical',
+          instructor_id: instructorId,
+          vehicle_id: vehicleId,
+          notes: '',
+          template_item_id: item.id,
+          title: item.title,
+          lesson_objectives: item.lesson_objectives || [],
+          practical_objectives: item.practical_objectives || [],
+          status: this.quickGenItemStatus()[item.id] || 'completed',
+        };
+      });
+    } else {
+      const preview = this.quickGenPreview();
+      if (preview.length === 0) {
+        this.quickGenBusy.set(false);
+        return;
+      }
+      lessons = preview.map(l => ({
+        date: new Date(l.date),
+        duration_minutes: l.lesson_type === 'theory' ? 120 : 30,
+        lesson_type: l.lesson_type,
+        instructor_id: instructorId,
+        vehicle_id: vehicleId,
+        notes: '',
+        template_item_id: l.template_item_id || null,
+        title: l.title || null,
+        lesson_objectives: l.lesson_objectives || [],
+        practical_objectives: l.practical_objectives || [],
+        status: l.status || 'completed',
+      }));
+    }
+
+    this.clients.update(clients => {
+      const updated = [...clients];
+      const pkgs = [...updated[ci].packages];
+      pkgs[pi] = {
+        ...pkgs[pi],
+        lessons,
+        transmission_type: form.transmission || 'manual',
+        lesson_plan_template_id: form.lesson_plan_template_id || pkgs[pi].lesson_plan_template_id || null,
+      };
+      updated[ci] = { ...updated[ci], packages: pkgs };
+      return updated;
+    });
+    this.showQuickGen.set(false);
+    this.quickGenPreview.set([]);
+    this.quickGenItemDates.set({});
+    this.validateAllLessons();
+    setTimeout(() => this.quickGenBusy.set(false), 400);
+  }
+
+  private quickGenEffectiveCounts(): { practical: number; theory: number } {
+    const form = this.quickGenForm();
+    const pkg = this.clients()[this.quickGenClientIndex()]?.packages[this.quickGenPkgIndex()];
+    const info = pkg && pkg.product_id && pkg.package_id
+      ? this.packageTrainingInfo(pkg.product_id, pkg.package_id)
+      : { days: null, hours: null };
+    const practical = Math.max(form.practicalDays ?? 0, info.days ?? 0);
+    const theorySessions = info.hours ? Math.ceil(info.hours / 2) : 0;
+    const theory = Math.max(form.theoryLessons ?? 0, theorySessions);
+    return { practical, theory };
+  }
+
+  quickGenPackageInfo(): { days: number | null; hours: number | null } {
+    const pkg = this.clients()[this.quickGenClientIndex()]?.packages[this.quickGenPkgIndex()];
+    if (!pkg || !pkg.product_id || !pkg.package_id) return { days: null, hours: null };
+    return this.packageTrainingInfo(pkg.product_id, pkg.package_id);
+  }
+
+  quickGenCompletedCount(): number {
+    return Object.values(this.quickGenItemStatus()).filter(s => s === 'completed').length;
+  }
+
+  quickGenScheduledCount(): number {
+    return Object.values(this.quickGenItemStatus()).filter(s => s === 'scheduled').length;
+  }
+
+  quickGenPreviewCompletedCount(): number {
+    return this.quickGenPreview().filter(l => l.status !== 'scheduled').length;
+  }
+
+  quickGenPreviewScheduledCount(): number {
+    return this.quickGenPreview().filter(l => l.status === 'scheduled').length;
+  }
+
+  onQuickGenDateChange(lesson: QuickGenLesson, value: Date) {
+    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    lesson.date = value;
+    lesson.dayLabel = DAYS[value.getDay()];
+    this.quickGenPreview.update(list => [...list]);
+  }
+
+  onQuickGenTypeChange(lesson: QuickGenLesson, value: string) {
+    lesson.lesson_type = value === 'theory' ? 'theory' : 'practical';
+    this.quickGenPreview.update(list => [...list]);
+  }
+
+  removeQuickGenLesson(index: number) {
+    this.quickGenPreview.update(list => list.filter((_, i) => i !== index));
+  }
+
+  quickGenSelectedTemplate(): LessonPlanTemplate | null {
+    return this.lessonTemplates().find(t => t.id === this.quickGenForm().lesson_plan_template_id) || null;
+  }
+
+  isQuickGenItemSelected(itemId: string): boolean {
+    return this.quickGenSelectedItemIds().includes(itemId);
+  }
+
+  toggleQuickGenItem(itemId: string) {
+    this.quickGenSelectedItemIds.update(ids =>
+      ids.includes(itemId) ? ids.filter(id => id !== itemId) : [...ids, itemId]
+    );
+    this.quickGenItemStatus.update(m => {
+      const n = { ...m };
+      if (!n[itemId]) n[itemId] = 'completed';
+      return n;
+    });
+    this.assignQuickGenDates(false);
+  }
+
+  onQuickGenItemDateChange(itemId: string, value: Date | null) {
+    this.quickGenItemDates.update(m => ({ ...m, [itemId]: value }));
+  }
+
+  onQuickGenDateRangeChange() {
+    if (this.quickGenDateError()) return;
+    this.assignQuickGenDates(true);
+  }
+
+  private assignQuickGenDates(force: boolean) {
+    const form = this.quickGenForm();
+    const template = this.quickGenSelectedTemplate();
+    if (!template) return;
+    const start = form.startDate ? this.startOfDay(form.startDate) : null;
+    const last = form.lastDate ? this.startOfDay(form.lastDate) : null;
+    if (!start || !last) return;
+    const selectedIds = this.quickGenSelectedItemIds();
+    const selectedItems = (template.lesson_items || []).filter(i => selectedIds.includes(i.id));
+    const practicals = selectedItems.filter(i => !i.is_theory);
+    const theories = selectedItems.filter(i => i.is_theory);
+
+    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const practicalDates: Date[] = [];
+    const cursor = new Date(start);
+    while (cursor <= last) {
+      const dow = cursor.getDay();
+      if (dow >= 1 && dow <= 5) practicalDates.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    let overflow = new Date(last);
+    while (practicalDates.length < practicals.length) {
+      overflow.setDate(overflow.getDate() + 1);
+      if (overflow.getDay() >= 1 && overflow.getDay() <= 5) practicalDates.push(new Date(overflow));
+    }
+
+    const theoryDates: Date[] = [];
+    const firstSat = new Date(start);
+    while (firstSat.getDay() !== 6) firstSat.setDate(firstSat.getDate() + 1);
+    let satCursor = new Date(firstSat);
+    while (theoryDates.length < theories.length) {
+      theoryDates.push(new Date(satCursor));
+      satCursor.setDate(satCursor.getDate() + 7);
+    }
+
+    this.quickGenItemDates.update(map => {
+      const next = { ...map };
+      practicals.forEach((it, i) => {
+        if (force || !next[it.id]) next[it.id] = practicalDates[i] || null;
+      });
+      theories.forEach((it, i) => {
+        if (force || !next[it.id]) next[it.id] = theoryDates[i] || null;
+      });
+      return next;
+    });
+  }
+
+  onQuickGenCountsChange() {
+    this.syncQuickGenSelection();
+  }
+
+  onQuickGenTemplateChange(templateId: string | null) {
+    this.quickGenForm.update(f => ({ ...f, lesson_plan_template_id: templateId }));
+    this.syncQuickGenSelection();
+  }
+
+  private syncQuickGenSelection() {
+    const form = this.quickGenForm();
+    const template = this.lessonTemplates().find(t => t.id === form.lesson_plan_template_id);
+    if (!template || !template.lesson_items?.length) {
+      this.quickGenSelectedItemIds.set([]);
+      this.quickGenItemDates.set({});
+      this.quickGenItemStatus.set({});
+      return;
+    }
+    const practicalItems = template.lesson_items.filter(i => !i.is_theory);
+    const theoryItems = template.lesson_items.filter(i => i.is_theory);
+    const { practical, theory } = this.quickGenEffectiveCounts();
+    const trainedPractical = form.practicalDays ?? 0;
+    const trainedTheory = form.theoryLessons ?? 0;
+    const selected: string[] = [];
+    const status: Record<string, 'completed' | 'scheduled'> = {};
+    practicalItems.slice(0, practical).forEach((i, idx) => {
+      selected.push(i.id);
+      status[i.id] = idx < trainedPractical ? 'completed' : 'scheduled';
+    });
+    theoryItems.slice(0, theory).forEach((i, idx) => {
+      selected.push(i.id);
+      status[i.id] = idx < trainedTheory ? 'completed' : 'scheduled';
+    });
+    this.quickGenSelectedItemIds.set(selected);
+    this.quickGenItemStatus.set(status);
+    this.assignQuickGenDates(true);
+  }
+
+  openTemplatePicker(clientIndex: number, pkgIndex: number) {
+    const pkg = this.clients()[clientIndex]?.packages[pkgIndex];
+    this.templatePickerClientIndex.set(clientIndex);
+    this.templatePickerPkgIndex.set(pkgIndex);
+    this.templatePickerTemplateId.set(pkg?.lesson_plan_template_id || null);
+    this.templatePickerSelectedIds.set([]);
+    this.showTemplatePicker.set(true);
+  }
+
+  templatePickerItems(): LessonTemplateItem[] {
+    return this.templateItems(this.templatePickerTemplateId());
+  }
+
+  isTemplateItemSelected(itemId: string): boolean {
+    return this.templatePickerSelectedIds().includes(itemId);
+  }
+
+  toggleTemplateItem(itemId: string) {
+    this.templatePickerSelectedIds.update(ids =>
+      ids.includes(itemId) ? ids.filter(id => id !== itemId) : [...ids, itemId]
+    );
+  }
+
+  confirmTemplatePicker() {
+    this.pickerBusy.set(true);
+    const ids = this.templatePickerSelectedIds();
+    if (ids.length === 0) {
+      this.pickerBusy.set(false);
+      return;
+    }
+    const ci = this.templatePickerClientIndex();
+    const pi = this.templatePickerPkgIndex();
+    const templateId = this.templatePickerTemplateId();
+    const items = this.templatePickerItems().filter(i => ids.includes(i.id));
+    this.clients.update(clients => {
+      const updated = [...clients];
+      const pkgs = [...updated[ci].packages];
+      const lessons = [...pkgs[pi].lessons];
+      for (const item of items) {
+        lessons.push({
+          date: null,
+          duration_minutes: item.is_theory ? 120 : 30,
+          lesson_type: item.is_theory ? 'theory' : 'practical',
+          instructor_id: '',
+          vehicle_id: '',
+          notes: '',
+          template_item_id: item.id,
+          title: item.title,
+          lesson_objectives: item.lesson_objectives || [],
+          practical_objectives: item.practical_objectives || [],
+          status: 'completed',
+        });
+      }
+      pkgs[pi] = {
+        ...pkgs[pi],
+        lessons,
+        lesson_plan_template_id: templateId || pkgs[pi].lesson_plan_template_id || null,
+      };
+      updated[ci] = { ...updated[ci], packages: pkgs };
+      return updated;
+    });
+    this.showTemplatePicker.set(false);
+    this.templatePickerSelectedIds.set([]);
+    this.validateAllLessons();
+    setTimeout(() => this.pickerBusy.set(false), 400);
   }
 
   expandLessons(lessons: LessonDraft[]): { date: Date | null; duration: number; chunk: number; total: number }[] {
@@ -520,7 +1482,8 @@ export class BulkOnboardingCmp implements OnInit {
 
   canSubmit(): boolean {
     if (this.clients().length === 0) return false;
-    if (this.hasReceiptWarnings() || this.hasDateErrors()) return false;
+    if (!this.branchId()) return false;
+    if (this.hasReceiptWarnings() || this.hasPhoneWarnings() || this.hasDateErrors()) return false;
     for (const client of this.clients()) {
       if (!client.phone || !client.first_name) return false;
       for (const pkg of client.packages) {
@@ -528,6 +1491,9 @@ export class BulkOnboardingCmp implements OnInit {
         if (pkg.installments.length === 0) return false;
         for (const inst of pkg.installments) {
           if (!inst.receipt_number || !inst.document_date || !inst.amount || !inst.received_by_phone) return false;
+        }
+        for (const lesson of pkg.lessons) {
+          if (!lesson.date || !lesson.duration_minutes || lesson.duration_minutes <= 0) return false;
         }
       }
     }
@@ -551,11 +1517,13 @@ export class BulkOnboardingCmp implements OnInit {
             middle_name: c.middle_name || undefined,
             last_name: c.last_name || undefined,
             location: c.location || undefined,
-            branch_id: c.branch_id || undefined,
+            branch_id: this.branchId() || c.branch_id || undefined,
             document_date: c.document_date?.toISOString()?.split('T')[0] || undefined,
             packages: c.packages.map(p => ({
               product_id: p.product_id,
               package_id: p.package_id || undefined,
+              transmission_type: p.transmission_type || 'manual',
+              lesson_plan_template_id: p.lesson_plan_template_id || undefined,
               installments: p.installments.map(i => ({
                 receipt_number: i.receipt_number,
                 document_date: i.document_date!.toISOString().split('T')[0],
@@ -569,6 +1537,11 @@ export class BulkOnboardingCmp implements OnInit {
                 instructor_id: l.instructor_id || undefined,
                 vehicle_id: l.vehicle_id || undefined,
                 notes: l.notes || undefined,
+                template_item_id: l.template_item_id || undefined,
+                title: l.title || undefined,
+                lesson_objectives: l.lesson_objectives?.length ? l.lesson_objectives : undefined,
+                practical_objectives: l.practical_objectives?.length ? l.practical_objectives : undefined,
+                status: l.status === 'scheduled' ? 'scheduled' : undefined,
               })),
             })),
           })),

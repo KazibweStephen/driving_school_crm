@@ -105,7 +105,7 @@ async def list_payments(
     resolved = await _resolve_branch_ids(db, current_user, branch_ids.split(",") if branch_ids else None)
     payments, total, total_amount_sum, total_paid_sum, total_balance_sum = await payment_service.list_payments(
         db, search=search, date_from=date_from, date_to=date_to,
-        client_type=client_type, branch_ids=resolved, page=page, page_size=page_size,
+        client_type=client_type, branch_ids=resolved, company_id=current_user.company_id, page=page, page_size=page_size,
     )
 
     # Resolve product names and client info
@@ -190,7 +190,7 @@ async def payments_report(
 
     payments, total, total_amount_sum, total_paid_sum, total_balance_sum = await payment_service.list_payments(
         db, search=search, date_from=date_from, date_to=date_to,
-        client_type=client_type, branch_ids=resolved, page=1, page_size=10000,
+        client_type=client_type, branch_ids=resolved, company_id=current_user.company_id, page=1, page_size=10000,
     )
 
     def _fmt(val):

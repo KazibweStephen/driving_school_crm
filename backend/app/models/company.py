@@ -2,7 +2,9 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean, Date, DateTime, Enum, Float, ForeignKey, Numeric, String, Text, UniqueConstraint, func
+)
 from sqlalchemy.dialects.postgresql import UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -69,13 +71,16 @@ class Company(Base):
 
 class Branch(Base):
     __tablename__ = "branches"
+    __table_args__ = (
+        UniqueConstraint("company_id", "code", name="uq_branch_company_code"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     company_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    code: Mapped[str] = mapped_column(String(50), nullable=False)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)

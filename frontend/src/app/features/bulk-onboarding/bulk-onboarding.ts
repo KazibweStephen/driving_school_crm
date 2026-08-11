@@ -142,6 +142,7 @@ export class BulkOnboardingCmp implements OnInit {
   templatePickerClientIndex = signal(0);
   templatePickerPkgIndex = signal(0);
   templatePickerTemplateId = signal<string | null>(null);
+  templatePickerTransmission = signal('manual');
   templatePickerSelectedIds = signal<string[]>([]);
 
   quickGenBusy = signal(false);
@@ -191,12 +192,24 @@ export class BulkOnboardingCmp implements OnInit {
     return options;
   });
 
-  vehicleOptions = computed(() =>
-    this.vehicles().map(v => ({
-      label: `${v.name} (${v.plate_number})`,
-      value: v.id,
-    }))
+  instructorOptions = computed(() =>
+    this.users()
+      .filter(u => u.role === 'instructor')
+      .map(u => ({ label: u.name || u.phone, value: u.phone }))
   );
+
+  quickGenVehicleOptions = computed(() => {
+    const trans = this.quickGenForm().transmission;
+    return this.vehicles()
+      .filter(v => trans === 'both' || v.transmission === trans)
+      .map(v => ({ label: `${v.name} (${v.plate_number})`, value: v.id }));
+  });
+
+  vehicleOptionsFor(transmission: string) {
+    return this.vehicles()
+      .filter(v => transmission === 'both' || v.transmission === transmission)
+      .map(v => ({ label: `${v.name} (${v.plate_number})`, value: v.id }));
+  }
 
   branchOptions = computed(() =>
     this.branches().map(b => ({ label: b.name, value: b.id }))
@@ -253,7 +266,10 @@ export class BulkOnboardingCmp implements OnInit {
   }
 
   lessonTemplateOptions() {
-    return this.lessonTemplates().map(t => ({ label: t.name, value: t.id }));
+    const trans = this.templatePickerTransmission();
+    return this.lessonTemplates()
+      .filter(t => trans === 'both' || !t.transmission_type || t.transmission_type === 'both' || t.transmission_type === trans)
+      .map(t => ({ label: t.name, value: t.id }));
   }
 
   quickGenTemplateOptions() {
@@ -502,7 +518,16 @@ export class BulkOnboardingCmp implements OnInit {
   }
 
   saveDraft() {
-    const data = {
+    this.persistDraft();
+    this.msg.add({ severity: 'success', summary: 'Draft saved' });
+  }
+
+  private persistDraft() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.draftPayload()));
+  }
+
+  private draftPayload() {
+    return {
       saved_at: new Date().toISOString(),
       clients: this.clients().map(c => ({
         phone: c.phone,
@@ -539,8 +564,6 @@ export class BulkOnboardingCmp implements OnInit {
         })),
       })),
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    this.msg.add({ severity: 'success', summary: 'Draft saved' });
   }
 
   clearDraft() {
@@ -1219,6 +1242,7 @@ export class BulkOnboardingCmp implements OnInit {
     this.quickGenPreview.set([]);
     this.quickGenItemDates.set({});
     this.validateAllLessons();
+    this.persistDraft();
     setTimeout(() => this.quickGenBusy.set(false), 400);
   }
 
@@ -1228,10 +1252,16 @@ export class BulkOnboardingCmp implements OnInit {
     const info = pkg && pkg.product_id && pkg.package_id
       ? this.packageTrainingInfo(pkg.product_id, pkg.package_id)
       : { days: null, hours: null };
-    const practical = Math.max(form.practicalDays ?? 0, info.days ?? 0);
+    const practical = info.days != null ? info.days : (form.practicalDays ?? 0);
     const theorySessions = info.hours ? Math.ceil(info.hours / 2) : 0;
     const theory = Math.max(form.theoryLessons ?? 0, theorySessions);
     return { practical, theory };
+  }
+
+  quickGenMaxPracticalDays(): number {
+    const pkg = this.clients()[this.quickGenClientIndex()]?.packages[this.quickGenPkgIndex()];
+    if (!pkg || !pkg.product_id || !pkg.package_id) return 999;
+    return this.packageTrainingInfo(pkg.product_id, pkg.package_id).days ?? 999;
   }
 
   quickGenPackageInfo(): { days: number | null; hours: number | null } {
@@ -1281,6 +1311,21 @@ export class BulkOnboardingCmp implements OnInit {
   }
 
   toggleQuickGenItem(itemId: string) {
+    const template = this.quickGenSelectedTemplate();
+    const item = template?.lesson_items?.find(i => i.id === itemId);
+    if (item && !item.is_theory && !this.isQuickGenItemSelected(itemId)) {
+      const max = this.quickGenMaxPracticalDays();
+      if (max !== 999) {
+        const selected = this.quickGenSelectedItemIds();
+        const selectedPractical = selected.filter(id =>
+          template?.lesson_items?.find(i => i.id === id) && !template.lesson_items.find(i => i.id === id)!.is_theory
+        ).length;
+        if (selectedPractical >= max) {
+          this.msg.add({ severity: 'warn', summary: `This package allows a maximum of ${max} practical lesson(s)` });
+          return;
+        }
+      }
+    }
     this.quickGenSelectedItemIds.update(ids =>
       ids.includes(itemId) ? ids.filter(id => id !== itemId) : [...ids, itemId]
     );
@@ -1353,8 +1398,36 @@ export class BulkOnboardingCmp implements OnInit {
   }
 
   onQuickGenTemplateChange(templateId: string | null) {
+    const prev = this.quickGenForm().lesson_plan_template_id;
     this.quickGenForm.update(f => ({ ...f, lesson_plan_template_id: templateId }));
     this.syncQuickGenSelection();
+    if (templateId !== prev) {
+      const ci = this.quickGenClientIndex();
+      const pi = this.quickGenPkgIndex();
+      const pkg = this.clients()[ci]?.packages[pi];
+      if (pkg && pkg.lessons.length > 0) {
+        this.clearPackageLessons(ci, pi);
+        this.msg.add({
+          severity: 'info',
+          summary: 'Previous lessons removed',
+          detail: 'Changing the lesson plan removed this package\'s existing lessons.',
+        });
+      }
+      if (!templateId) {
+        this.quickGenPreview.set([]);
+      }
+    }
+  }
+
+  private clearPackageLessons(ci: number, pi: number) {
+    this.clients.update(clients => {
+      const updated = [...clients];
+      const pkgs = [...updated[ci].packages];
+      pkgs[pi] = { ...pkgs[pi], lessons: [] };
+      updated[ci] = { ...updated[ci], packages: pkgs };
+      return updated;
+    });
+    this.persistDraft();
   }
 
   private syncQuickGenSelection() {
@@ -1391,8 +1464,21 @@ export class BulkOnboardingCmp implements OnInit {
     this.templatePickerClientIndex.set(clientIndex);
     this.templatePickerPkgIndex.set(pkgIndex);
     this.templatePickerTemplateId.set(pkg?.lesson_plan_template_id || null);
+    this.templatePickerTransmission.set(pkg?.transmission_type || 'manual');
     this.templatePickerSelectedIds.set([]);
     this.showTemplatePicker.set(true);
+  }
+
+  onTemplatePickerTransmissionChange(transmission: string) {
+    this.templatePickerTransmission.set(transmission);
+    const id = this.templatePickerTemplateId();
+    if (id) {
+      const tpl = this.lessonTemplates().find(t => t.id === id);
+      if (tpl && tpl.transmission_type && tpl.transmission_type !== 'both' && tpl.transmission_type !== transmission) {
+        this.templatePickerTemplateId.set(null);
+        this.templatePickerSelectedIds.set([]);
+      }
+    }
   }
 
   templatePickerItems(): LessonTemplateItem[] {
@@ -1419,11 +1505,13 @@ export class BulkOnboardingCmp implements OnInit {
     const ci = this.templatePickerClientIndex();
     const pi = this.templatePickerPkgIndex();
     const templateId = this.templatePickerTemplateId();
+    const transmission = this.templatePickerTransmission();
     const items = this.templatePickerItems().filter(i => ids.includes(i.id));
     this.clients.update(clients => {
       const updated = [...clients];
       const pkgs = [...updated[ci].packages];
-      const lessons = [...pkgs[pi].lessons];
+      const isNewPlan = !!templateId && templateId !== pkgs[pi].lesson_plan_template_id;
+      const lessons = isNewPlan ? [] : [...pkgs[pi].lessons];
       for (const item of items) {
         lessons.push({
           date: null,
@@ -1443,6 +1531,7 @@ export class BulkOnboardingCmp implements OnInit {
         ...pkgs[pi],
         lessons,
         lesson_plan_template_id: templateId || pkgs[pi].lesson_plan_template_id || null,
+        transmission_type: transmission || pkgs[pi].transmission_type || 'manual',
       };
       updated[ci] = { ...updated[ci], packages: pkgs };
       return updated;
@@ -1450,6 +1539,7 @@ export class BulkOnboardingCmp implements OnInit {
     this.showTemplatePicker.set(false);
     this.templatePickerSelectedIds.set([]);
     this.validateAllLessons();
+    this.persistDraft();
     setTimeout(() => this.pickerBusy.set(false), 400);
   }
 

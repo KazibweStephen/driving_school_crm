@@ -1832,7 +1832,7 @@
               <div class="grid grid-cols-2 gap-2">
                 <div>
                   <label class="mb-1 block text-sm font-medium text-gray-700">Product</label>
-                  <p-select [(ngModel)]="selectedProduct" [options]="products()" optionLabel="name" placeholder="Select product" styleClass="w-full" appendTo="body" />
+                  <p-select [(ngModel)]="selectedProduct" [options]="activeProducts()" optionLabel="name" placeholder="Select product" styleClass="w-full" appendTo="body" />
                 </div>
                 <div>
                   <label class="mb-1 block text-sm font-medium text-gray-700">Package</label>

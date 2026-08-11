@@ -179,7 +179,7 @@
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Document Date</label>
           <p-datepicker [(ngModel)]="client.document_date" dateFormat="yy-mm-dd"
-            placeholder="Select date" appendTo="body" class="w-full" />
+            placeholder="Select date" appendTo="body" class="w-56" />
         </div>
         <div class="flex justify-end pt-2">
           <p-button label="Next: Payments" icon="pi pi-arrow-right" iconPos="right"
@@ -407,12 +407,12 @@
                   </div>
                   <div>
                     <label class="block text-xs text-gray-500 mb-0.5">Instructor</label>
-                    <p-select [options]="userOptions()" [(ngModel)]="lesson.instructor_id"
+                    <p-select [options]="instructorOptions()" [(ngModel)]="lesson.instructor_id"
                       placeholder="Optional" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
                   </div>
                   <div>
                     <label class="block text-xs text-gray-500 mb-0.5">Vehicle</label>
-                    <p-select [options]="vehicleOptions()" [(ngModel)]="lesson.vehicle_id"
+                    <p-select [options]="vehicleOptionsFor(pkg.transmission_type)" [(ngModel)]="lesson.vehicle_id"
                       placeholder="Optional" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
                   </div>
                 </div>
@@ -605,9 +605,10 @@
     <div class="grid grid-cols-2 gap-3">
       <div>
         <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Practical)</label>
-        <p-inputNumber [(ngModel)]="quickGenForm().practicalDays" [min]="0" [max]="999"
+        <p-inputNumber [(ngModel)]="quickGenForm().practicalDays" [min]="0" [max]="quickGenMaxPracticalDays()"
           placeholder="e.g. 4" [style]="{ width: '100%' }"
           (ngModelChange)="onQuickGenCountsChange()" />
+        <p class="text-[11px] text-gray-400 mt-0.5">Max {{ quickGenMaxPracticalDays() }} — cannot exceed package practical days.</p>
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Theory)</label>
@@ -648,16 +649,16 @@
     <div class="grid grid-cols-2 gap-3">
       <div>
         <label class="block text-xs text-gray-500 mb-0.5">Instructor (all lessons)</label>
-        <p-select [options]="userOptions()" [(ngModel)]="quickGenForm().instructor_id"
+        <p-select [options]="instructorOptions()" [(ngModel)]="quickGenForm().instructor_id"
           placeholder="Optional" appendTo="body" class="w-full" [showClear]="true" [filter]="true" filterBy="label" />
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-0.5">Vehicle (all lessons)</label>
-        <p-select [options]="vehicleOptions()" [(ngModel)]="quickGenForm().vehicle_id"
+        <p-select [options]="quickGenVehicleOptions()" [(ngModel)]="quickGenForm().vehicle_id"
           placeholder="Optional" appendTo="body" class="w-full" [showClear]="true" [filter]="true" filterBy="label" />
       </div>
     </div>
-    <p class="text-xs text-gray-400 -mt-2">Chosen once here, then applied to every generated lesson.</p>
+    <p class="text-xs text-gray-400 -mt-2">Chosen once here, then applied to every generated lesson. Vehicles are filtered by the selected transmission.</p>
 
     <div>
       <label class="block text-xs text-gray-500 mb-0.5">Lesson Plan (optional)</label>
@@ -665,6 +666,10 @@
         placeholder="Pick lessons from a lesson plan" appendTo="body" class="w-full" [filter]="true" filterBy="label"
         (ngModelChange)="onQuickGenTemplateChange($event)" />
       <p class="text-xs text-gray-400 mt-1">Filtered by transmission. Selecting a plan pre-ticks lessons from your Practical/Theory days — adjust the ticks as needed.</p>
+      <p class="text-xs text-red-400 mt-0.5 flex items-center gap-1">
+        <i class="pi pi-exclamation-circle"></i>
+        Changing the lesson plan removes the previous lessons for this package (including from the saved draft).
+      </p>
     </div>
 
     @if (quickGenSelectedTemplate()) {
@@ -766,11 +771,20 @@
 <p-dialog [(visible)]="showTemplatePicker" header="Pick Lessons from Plan" [modal]="true"
   [style]="{ width: '92vw', maxWidth: '520px' }">
   <div class="space-y-4">
-    <div>
-      <label class="block text-xs text-gray-500 mb-0.5">Lesson Plan</label>
-      <p-select [options]="lessonTemplateOptions()" [(ngModel)]="templatePickerTemplateId"
-        placeholder="Select a lesson plan" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Transmission Trained</label>
+        <p-select [options]="[{ label: 'Manual', value: 'manual' }, { label: 'Automatic', value: 'automatic' }, { label: 'Both', value: 'both' }]"
+          [(ngModel)]="templatePickerTransmission" appendTo="body" class="w-full"
+          (ngModelChange)="onTemplatePickerTransmissionChange($event)" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-0.5">Lesson Plan</label>
+        <p-select [options]="lessonTemplateOptions()" [(ngModel)]="templatePickerTemplateId"
+          placeholder="Select a lesson plan" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
+      </div>
     </div>
+    <p class="text-xs text-gray-400 -mt-2">Plans are filtered by the selected transmission. Picking a different plan replaces this package's existing lessons.</p>
 
     @if (templatePickerItems().length > 0) {
       <div class="border border-gray-200 rounded-lg overflow-hidden">

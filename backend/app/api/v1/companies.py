@@ -95,6 +95,12 @@ async def create_company(
     from app.services.permission import seed_default_permissions
     await seed_default_permissions(db, company.id)
 
+    from app.scripts.seed_competency_catalogue import seed_company_catalogue
+    await seed_company_catalogue(db, company.id)
+
+    from app.scripts.seed_company_products import seed_company_products_from_template
+    await seed_company_products_from_template(db, company.id)
+
     await db.commit()
     await db.refresh(company)
     return CompanyRead.model_validate(company)

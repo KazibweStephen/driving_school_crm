@@ -56,7 +56,7 @@ DEFAULT_TEMPLATES = {
     "consultation_created": {
         "name": "Welcome Message",
         "category": "branch_visit",
-        "body": "Welcome to Driving School, {name}!\n\nWe're excited to have you on board.\nWe'll be in touch shortly.\n\nDrive Safe!",
+        "body": "Welcome to {company_name}, {name}!\n\nWe're excited to have you on board.\nWe'll be in touch shortly.\n\nDrive Safe!",
     },
     "payment_received": {
         "name": "Payment Receipt",

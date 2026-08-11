@@ -214,6 +214,73 @@ PREREQUISITES = {
 }
 
 
+async def seed_company_catalogue(db, company_id: uuid.UUID) -> bool:
+    """Seed the competency catalogue for a single company. Returns True if seeded."""
+    existing = await db.execute(
+        select(CompetencyVersion).where(CompetencyVersion.company_id == company_id)
+    )
+    if existing.scalars().first():
+        print(f"  Catalogue already exists for company {company_id}, skipping.")
+        return False
+
+    version = CompetencyVersion(
+        company_id=company_id,
+        version="1.0",
+        name="Competency Catalogue v1.0",
+        description="Standard driving school competency framework covering 13 domains and 106 competencies.",
+        status=CompetencyVersionStatus.ACTIVE,
+        created_by_phone="0782832711",
+    )
+    db.add(version)
+    await db.flush()
+
+    cat_map = {}
+    for cat_data in CATEGORIES:
+        cat = CompetencyCategory(
+            company_id=company_id,
+            name=cat_data["name"],
+            description=cat_data["description"],
+            display_order=cat_data["display_order"],
+        )
+        db.add(cat)
+        await db.flush()
+        cat_map[cat_data["name"]] = cat
+
+    comp_map = {}
+    for comp_data in COMPETENCIES:
+        comp = Competency(
+            company_id=company_id,
+            version_id=version.id,
+            category_id=cat_map[comp_data["category"]].id,
+            code=comp_data["code"],
+            name=comp_data["name"],
+            description=comp_data["description"],
+            learning_outcome=comp_data.get("learning_outcome"),
+            assessment_criteria=comp_data.get("assessment_criteria", []),
+            difficulty=CompetencyDifficulty(comp_data["difficulty"]),
+            training_category=CompetencyTrainingCategory.DRIVING,
+            display_order=comp_data["display_order"],
+            created_by_phone="0782832711",
+        )
+        db.add(comp)
+        await db.flush()
+        comp_map[comp_data["code"]] = comp
+
+    for comp_code, prereq_codes in PREREQUISITES.items():
+        if comp_code in comp_map:
+            for prereq_code in prereq_codes:
+                if prereq_code in comp_map:
+                    prereq = CompetencyPrerequisite(
+                        competency_id=comp_map[comp_code].id,
+                        prerequisite_id=comp_map[prereq_code].id,
+                    )
+                    db.add(prereq)
+
+    await db.commit()
+    print(f"  Seeded: 1 version, {len(CATEGORIES)} categories, {len(COMPETENCIES)} competencies, {sum(len(v) for v in PREREQUISITES.values())} prerequisites")
+    return True
+
+
 async def seed():
     async with async_session() as db:
         result = await db.execute(select(Company))
@@ -227,74 +294,7 @@ async def seed():
         for company in companies:
             company_id = company.id
             print(f"\nSeeding competency catalogue for company {company_id}...")
-
-            # Check if already seeded
-            existing = await db.execute(
-                select(CompetencyVersion).where(CompetencyVersion.company_id == company_id)
-            )
-            if existing.scalars().first():
-                print(f"  Catalogue already exists for company {company_id}, skipping.")
-                continue
-
-            # Create version
-            version = CompetencyVersion(
-                company_id=company_id,
-                version="1.0",
-                name="Competency Catalogue v1.0",
-                description="Standard driving school competency framework covering 13 domains and 102 competencies.",
-                status=CompetencyVersionStatus.ACTIVE,
-                created_by_phone="0782832711",
-            )
-            db.add(version)
-            await db.flush()
-
-            # Create categories
-            cat_map = {}
-            for cat_data in CATEGORIES:
-                cat = CompetencyCategory(
-                    company_id=company_id,
-                    name=cat_data["name"],
-                    description=cat_data["description"],
-                    display_order=cat_data["display_order"],
-                )
-                db.add(cat)
-                await db.flush()
-                cat_map[cat_data["name"]] = cat
-
-            # Create competencies
-            comp_map = {}
-            for comp_data in COMPETENCIES:
-                comp = Competency(
-                    company_id=company_id,
-                    version_id=version.id,
-                    category_id=cat_map[comp_data["category"]].id,
-                    code=comp_data["code"],
-                    name=comp_data["name"],
-                    description=comp_data["description"],
-                    learning_outcome=comp_data.get("learning_outcome"),
-                    assessment_criteria=comp_data.get("assessment_criteria", []),
-                    difficulty=CompetencyDifficulty(comp_data["difficulty"]),
-                    training_category=CompetencyTrainingCategory.DRIVING,
-                    display_order=comp_data["display_order"],
-                    created_by_phone="0782832711",
-                )
-                db.add(comp)
-                await db.flush()
-                comp_map[comp_data["code"]] = comp
-
-            # Create prerequisites
-            for comp_code, prereq_codes in PREREQUISITES.items():
-                if comp_code in comp_map:
-                    for prereq_code in prereq_codes:
-                        if prereq_code in comp_map:
-                            prereq = CompetencyPrerequisite(
-                                competency_id=comp_map[comp_code].id,
-                                prerequisite_id=comp_map[prereq_code].id,
-                            )
-                            db.add(prereq)
-
-            await db.commit()
-            print(f"  Seeded: 1 version, {len(CATEGORIES)} categories, {len(COMPETENCIES)} competencies, {sum(len(v) for v in PREREQUISITES.values())} prerequisites")
+            await seed_company_catalogue(db, company_id)
 
         print("\nDone!")
 

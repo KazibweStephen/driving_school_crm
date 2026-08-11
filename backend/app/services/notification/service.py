@@ -159,7 +159,12 @@ async def send_template_sms(
                 trigger_event, category, company_id,
             )
             return False
-        message = render_template(template.body, variables)
+        render_vars = dict(variables)
+        if company_id and "company_name" not in render_vars:
+            company = await db.get(Company, company_id)
+            if company:
+                render_vars["company_name"] = company.name
+        message = render_template(template.body, render_vars)
         return await send_sms(
             db, company_id, phone, message,
             trigger_event=trigger_event or category,
@@ -206,8 +211,13 @@ async def on_pin_reset_otp(
     name: str,
     otp: str,
 ) -> bool:
+    company_name = "Driving School CRM"
+    if company_id:
+        company = await db.get(Company, company_id)
+        if company and company.name:
+            company_name = company.name
     message = (
-        f"Dear {name},\n\nYour Driving School CRM PIN reset code is: {otp}\n"
+        f"Dear {name},\n\nYour {company_name} PIN reset code is: {otp}\n"
         f"It expires in 10 minutes. Do not share it with anyone.\n\nDrive Safe!"
     )
     return await send_sms(

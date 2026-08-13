@@ -61,6 +61,7 @@ import { AuthService } from '../../core/auth/auth.service';
             <td>
               <div class="flex gap-1">
                 @if (isSuperUser) {
+                  <p-button icon="pi pi-box" severity="secondary" text (onClick)="seedProducts(c)" pTooltip="Seed default products" [loading]="seedingId() === c.id" />
                   <p-button icon="pi pi-pencil" severity="secondary" text (onClick)="showEdit(c)" pTooltip="Edit" />
                   <p-button icon="pi pi-trash" severity="danger" text (onClick)="confirmDelete(c)" pTooltip="Delete" />
                 } @else {
@@ -116,6 +117,7 @@ export class CompaniesCmp implements OnInit {
   companies = signal<Company[]>([]);
   loading = signal(false);
   saving = signal(false);
+  seedingId = signal<string | null>(null);
   dialogVisible = false;
   editId: string | null = null;
 
@@ -203,5 +205,29 @@ export class CompaniesCmp implements OnInit {
         }
       },
     });
+  }
+
+  async seedProducts(c: Company) {
+    this.seedingId.set(c.id);
+    try {
+      const res = await this.service.seedProducts(c.id).toPromise();
+      if (res?.already_has_products) {
+        this.messageService.add({
+          severity: 'info',
+          summary: 'Skipped',
+          detail: `${c.name} already has products. Nothing was added.`,
+        });
+      } else {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Seeded',
+          detail: `Seeded ${res?.seeded ?? 0} default product(s) into ${c.name}.`,
+        });
+      }
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to seed products' });
+    } finally {
+      this.seedingId.set(null);
+    }
   }
 }

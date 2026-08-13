@@ -1,0 +1,331 @@
+[
+  {
+    "name": "Driving Only",
+    "duration_label": null,
+    "description": null,
+    "status": "active",
+    "is_extension": false,
+    "packages": [
+      {
+        "name": "Driving Only 1 Week",
+        "price": "30000.00",
+        "duration_label": "1 day",
+        "requires_driving_training": true,
+        "requires_theory_training": false,
+        "requires_permit_processing": false,
+        "driving_training_duration_days": 1,
+        "theory_training_hours": null,
+        "permit_processing_duration_days": null,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "Driving Only 1 Week",
+        "price": "100000.00",
+        "duration_label": "5 days",
+        "requires_driving_training": true,
+        "requires_theory_training": true,
+        "requires_permit_processing": false,
+        "driving_training_duration_days": 5,
+        "theory_training_hours": 2,
+        "permit_processing_duration_days": null,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "Driving Only 2 Weeks",
+        "price": "100000.00",
+        "duration_label": "10 days",
+        "requires_driving_training": true,
+        "requires_theory_training": true,
+        "requires_permit_processing": false,
+        "driving_training_duration_days": null,
+        "theory_training_hours": 4,
+        "permit_processing_duration_days": null,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "Driving Only 3 Weeks",
+        "price": "100000.00",
+        "duration_label": "15 days",
+        "requires_driving_training": true,
+        "requires_theory_training": true,
+        "requires_permit_processing": false,
+        "driving_training_duration_days": 15,
+        "theory_training_hours": 6,
+        "permit_processing_duration_days": null,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "Driving Only 1 Month",
+        "price": "380000.00",
+        "duration_label": "1 Month",
+        "requires_driving_training": true,
+        "requires_theory_training": true,
+        "requires_permit_processing": false,
+        "driving_training_duration_days": 20,
+        "theory_training_hours": 8,
+        "permit_processing_duration_days": null,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      }
+    ]
+  },
+  {
+    "name": "Pemit Only",
+    "duration_label": null,
+    "description": null,
+    "status": "active",
+    "is_extension": false,
+    "packages": [
+      {
+        "name": "1 years Permit(B)",
+        "price": "410000.00",
+        "duration_label": null,
+        "requires_driving_training": true,
+        "requires_theory_training": true,
+        "requires_permit_processing": false,
+        "driving_training_duration_days": 1,
+        "theory_training_hours": 8,
+        "permit_processing_duration_days": null,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "5 Years Permit(B)",
+        "price": "610000.00",
+        "duration_label": null,
+        "requires_driving_training": true,
+        "requires_theory_training": true,
+        "requires_permit_processing": true,
+        "driving_training_duration_days": 1,
+        "theory_training_hours": 8,
+        "permit_processing_duration_days": 21,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "3 Years Permit(B)",
+        "price": "510000.00",
+        "duration_label": null,
+        "requires_driving_training": true,
+        "requires_theory_training": true,
+        "requires_permit_processing": true,
+        "driving_training_duration_days": 1,
+        "theory_training_hours": 8,
+        "permit_processing_duration_days": 21,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      }
+    ]
+  },
+  {
+    "name": "Driving and Permit Class B",
+    "duration_label": "1.5 Months",
+    "description": null,
+    "status": "active",
+    "is_extension": false,
+    "packages": [
+      {
+        "name": "1 Month Driving + 5 Year Permit Processing(B)",
+        "price": "810000.00",
+        "duration_label": "1.5Months",
+        "requires_driving_training": true,
+        "requires_theory_training": true,
+        "requires_permit_processing": true,
+        "driving_training_duration_days": 20,
+        "theory_training_hours": 8,
+        "permit_processing_duration_days": 21,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "1 Month Driving + 3 Year Permit Processing(B)",
+        "price": "710000.00",
+        "duration_label": "1.5 Months",
+        "requires_driving_training": true,
+        "requires_theory_training": true,
+        "requires_permit_processing": true,
+        "driving_training_duration_days": 20,
+        "theory_training_hours": 8,
+        "permit_processing_duration_days": 21,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "1 Month Driving + 1 Year Permit Processing(B)",
+        "price": "610000.00",
+        "duration_label": "1.5 Months",
+        "requires_driving_training": true,
+        "requires_theory_training": true,
+        "requires_permit_processing": true,
+        "driving_training_duration_days": 20,
+        "theory_training_hours": 8,
+        "permit_processing_duration_days": 21,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      }
+    ]
+  },
+  {
+    "name": "Class Extension",
+    "duration_label": null,
+    "description": null,
+    "status": "active",
+    "is_extension": false,
+    "packages": [
+      {
+        "name": "Extension From A to B",
+        "price": "380000.00",
+        "duration_label": "2 Weeks",
+        "requires_driving_training": false,
+        "requires_theory_training": false,
+        "requires_permit_processing": true,
+        "driving_training_duration_days": null,
+        "theory_training_hours": null,
+        "permit_processing_duration_days": 15,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      }
+    ]
+  },
+  {
+    "name": "International License Conversion",
+    "duration_label": null,
+    "description": null,
+    "status": "active",
+    "is_extension": false,
+    "packages": [
+      {
+        "name": "Uganda to International",
+        "price": "450000.00",
+        "duration_label": "1 Week",
+        "requires_driving_training": false,
+        "requires_theory_training": false,
+        "requires_permit_processing": false,
+        "driving_training_duration_days": null,
+        "theory_training_hours": null,
+        "permit_processing_duration_days": null,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "International to Uganda",
+        "price": "450000.00",
+        "duration_label": "1 Week",
+        "requires_driving_training": false,
+        "requires_theory_training": false,
+        "requires_permit_processing": false,
+        "driving_training_duration_days": null,
+        "theory_training_hours": null,
+        "permit_processing_duration_days": null,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      }
+    ]
+  },
+  {
+    "name": "Permit Only Class A",
+    "duration_label": null,
+    "description": null,
+    "status": "active",
+    "is_extension": false,
+    "packages": [
+      {
+        "name": "1 years Permit(A)",
+        "price": "270000.00",
+        "duration_label": null,
+        "requires_driving_training": false,
+        "requires_theory_training": true,
+        "requires_permit_processing": false,
+        "driving_training_duration_days": null,
+        "theory_training_hours": 8,
+        "permit_processing_duration_days": null,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "3 years Permit(A)",
+        "price": "320000.00",
+        "duration_label": null,
+        "requires_driving_training": false,
+        "requires_theory_training": true,
+        "requires_permit_processing": true,
+        "driving_training_duration_days": null,
+        "theory_training_hours": 8,
+        "permit_processing_duration_days": 15,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "5 years Permit(A)",
+        "price": "420000.00",
+        "duration_label": null,
+        "requires_driving_training": false,
+        "requires_theory_training": true,
+        "requires_permit_processing": true,
+        "driving_training_duration_days": null,
+        "theory_training_hours": 8,
+        "permit_processing_duration_days": 15,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      }
+    ]
+  },
+  {
+    "name": "Defensive Driving Training",
+    "duration_label": "3 Days",
+    "description": null,
+    "status": "active",
+    "is_extension": false,
+    "packages": [
+      {
+        "name": "Defensive Driving Training(New Client)",
+        "price": "250000.00",
+        "duration_label": "3 Days",
+        "requires_driving_training": false,
+        "requires_theory_training": true,
+        "requires_permit_processing": true,
+        "driving_training_duration_days": null,
+        "theory_training_hours": 16,
+        "permit_processing_duration_days": 3,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      },
+      {
+        "name": "Defensive Driving Training(Upgrade)",
+        "price": "150000.00",
+        "duration_label": "3 days",
+        "requires_driving_training": false,
+        "requires_theory_training": true,
+        "requires_permit_processing": true,
+        "driving_training_duration_days": null,
+        "theory_training_hours": 16,
+        "permit_processing_duration_days": 3,
+        "is_extension": false,
+        "extension_days": null,
+        "status": "active"
+      }
+    ]
+  }
+]

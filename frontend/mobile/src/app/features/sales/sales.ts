@@ -65,6 +65,10 @@ export class Sales {
   canBackdate = this.auth.currentUserCanBackdate;
   Math = Math;
 
+  get today(): Date {
+    return new Date();
+  }
+
   private dateCache = new Map<string, Date>();
 
   parseDate(value: string | null | undefined): Date | null {
@@ -700,23 +704,6 @@ export class Sales {
       items.map((i) =>
         i === item
           ? { ...i, installments }
-          : i,
-      ),
-    );
-  }
-
-  setInstallmentAmount(item: SaleItem, index: number, amount: number | null) {
-    if (!item.installments[index]) return;
-    const value = amount ?? 0;
-    this.selectedItems.update((items) =>
-      items.map((i) =>
-        i === item
-          ? {
-              ...i,
-              installments: i.installments.map((inst, idx) =>
-                idx === index ? { ...inst, amount: value } : inst,
-              ),
-            }
           : i,
       ),
     );

@@ -204,7 +204,8 @@ async def get_mobile_dashboard(
     pending_collections = float((await db.execute(pending_q)).scalar() or 0)
 
     # Target: sum of the user's ASSIGNED branch monthly targets for the month.
-    # Falls back to all accessible branches, then the company target, then default.
+    # If the current month has no target set, roll forward the most recent month
+    # that has one; otherwise fall back to the company target, then a default.
     target = DEFAULT_TARGET
     assigned_branch_ids = await _resolve_assigned_branch_ids(db, company_id, user_id)
     target_branches = assigned_branch_ids or (branch_ids or [])
@@ -216,6 +217,20 @@ async def get_mobile_dashboard(
             )
         )
         target = float(target_result.scalar() or 0)
+        if not target:
+            recent_result = await db.execute(
+                select(
+                    BranchMonthlyTarget.month,
+                    func.sum(BranchMonthlyTarget.target_amount),
+                )
+                .where(BranchMonthlyTarget.branch_id.in_(target_branches))
+                .group_by(BranchMonthlyTarget.month)
+                .order_by(BranchMonthlyTarget.month.desc())
+                .limit(1)
+            )
+            recent = recent_result.first()
+            if recent and recent[1]:
+                target = float(recent[1])
     if not target and company_id is not None:
         company_result = await db.execute(
             select(Company.monthly_sales_target).where(Company.id == company_id)

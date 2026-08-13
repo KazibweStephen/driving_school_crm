@@ -97,6 +97,9 @@ export class Payments {
   documentDateObject = computed(() =>
     this.documentDate() ? new Date(this.documentDate() + 'T00:00:00') : null,
   );
+  get today(): Date {
+    return new Date();
+  }
   // editable schedule of the item's existing pending installments
   collectSchedule = signal<CollectScheduleRow[]>([]);
   // product price for consulting items (fetched when the collect dialog opens)
@@ -276,12 +279,6 @@ export class Payments {
     return pays
       .flatMap((p) => p.installments)
       .filter((inst) => inst.status === 'pending');
-  }
-
-  setScheduleAmount(index: number, value: number) {
-    this.collectSchedule.update((rows) =>
-      rows.map((r, i) => (i === index ? { ...r, amount: value ?? 0 } : r)),
-    );
   }
 
   setScheduleDate(index: number, date: Date | null) {

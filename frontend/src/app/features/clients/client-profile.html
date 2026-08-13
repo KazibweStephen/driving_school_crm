@@ -1912,11 +1912,11 @@
                     <div class="mb-2 flex items-center gap-2">
                       <div class="flex-1">
                         <label class="mb-0.5 block text-xs text-gray-500">Due Date</label>
-                        <p-datepicker [(ngModel)]="inst.due_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                        <p-datepicker [(ngModel)]="inst.due_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [minDate]="today" />
                       </div>
                       <div class="flex-1">
                         <label class="mb-0.5 block text-xs text-gray-500">Amount</label>
-                        <p-inputNumber [(ngModel)]="inst.amount" [min]="0" placeholder="0" styleClass="w-full" />
+                        <p-inputNumber [(ngModel)]="inst.amount" [min]="0" [readonly]="true" placeholder="0" styleClass="w-full" />
                       </div>
                       <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="removePaymentInstallment(i)" styleClass="mt-5" />
                     </div>

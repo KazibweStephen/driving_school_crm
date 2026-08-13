@@ -450,9 +450,9 @@
                   <input
                     type="number"
                     min="0"
-                    class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    readonly
+                    class="rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm"
                     [ngModel]="inst.amount"
-                    (ngModelChange)="setInstallmentAmount(item, $index, $event)"
                     data-testid="installment-amount"
                   />
                   <p-datepicker
@@ -460,6 +460,7 @@
                     (ngModelChange)="setInstallmentDate(item, $index, $event)"
                     dateFormat="dd/mm/yy"
                     appendTo="body"
+                    [minDate]="today"
                     class="w-full"
                   />
                 </div>

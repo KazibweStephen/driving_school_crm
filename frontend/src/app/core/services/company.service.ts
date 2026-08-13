@@ -142,6 +142,13 @@ export class CompanyService {
     return this.http.delete<void>(`${this.base}/${id}`);
   }
 
+  seedProducts(companyId: string): Observable<{ seeded: number; already_has_products: boolean }> {
+    return this.http.post<{ seeded: number; already_has_products: boolean }>(
+      `${this.base}/${companyId}/seed-products`,
+      {},
+    );
+  }
+
   listBranches(companyId: string): Observable<Branch[]> {
     return this.http.get<Branch[]>(`${this.base}/${companyId}/branches`);
   }

@@ -32,8 +32,8 @@ def load_seed_products() -> list[dict]:
         return json.load(f)
 
 
-async def backfill_company(db, company_id: uuid.UUID) -> tuple[int, int]:
-    """Return (created_rates, skipped_already_linked) for one company."""
+async def backfill_company(db, company_id: uuid.UUID) -> tuple[int, int, int]:
+    """Return (created_rates, linked_orphan_rates, skipped_already_linked) for one company."""
     template = load_seed_products()
 
     product_result = await db.execute(
@@ -48,25 +48,36 @@ async def backfill_company(db, company_id: uuid.UUID) -> tuple[int, int]:
     )
     packages = package_result.unique().scalars().all()
 
-    linked_pkg_ids = set()
-    rate_result = await db.execute(
-        select(CommissionRate).where(CommissionRate.company_id == company_id)
-    )
-    rates = list(rate_result.scalars().all())
-    if rates:
-        link_result = await db.execute(
-            select(commission_rate_packages.c.package_id).where(
-                commission_rate_packages.c.commission_rate_id.in_([r.id for r in rates])
-            )
-        )
-        linked_pkg_ids = {row[0] for row in link_result.all()}
-
     pkg_by_key = {
         (p.product.name, p.name, str(Decimal(p.price))): p
         for p in packages
     }
 
+    # Load active rates for this company with their linked packages.
+    today = date.today()
+    rate_result = await db.execute(
+        select(CommissionRate)
+        .options(joinedload(CommissionRate.packages))
+        .where(
+            CommissionRate.company_id == company_id,
+            CommissionRate.active_from <= today,
+            (CommissionRate.active_until.is_(None) | (CommissionRate.active_until >= today)),
+            CommissionRate.deactivated_at.is_(None),
+        )
+    )
+    rates = list(rate_result.unique().scalars().all())
+
+    linked_pkg_ids = set()
+    orphan_rates = []
+    for rate in rates:
+        if rate.packages:
+            for p in rate.packages:
+                linked_pkg_ids.add(p.id)
+        else:
+            orphan_rates.append(rate)
+
     created = 0
+    linked = 0
     skipped = 0
     for product_data in template:
         for pkg_data in product_data.get("packages", []):
@@ -80,6 +91,15 @@ async def backfill_company(db, company_id: uuid.UUID) -> tuple[int, int]:
             if pkg.id in linked_pkg_ids:
                 skipped += 1
                 continue
+
+            # If an active rate exists with no package link, reuse/link it first.
+            if orphan_rates:
+                rate = orphan_rates.pop(0)
+                rate.packages = [pkg]
+                linked += 1
+                linked_pkg_ids.add(pkg.id)
+                continue
+
             rate = CommissionRate(
                 company_id=company_id,
                 total_amount=commission_data["total_amount"],
@@ -94,7 +114,7 @@ async def backfill_company(db, company_id: uuid.UUID) -> tuple[int, int]:
             linked_pkg_ids.add(pkg.id)
             created += 1
 
-    return created, skipped
+    return created, linked, skipped
 
 
 async def run() -> None:
@@ -103,16 +123,21 @@ async def run() -> None:
         companies = list(result.scalars().all())
 
         total_created = 0
+        total_linked = 0
         for company in companies:
-            created, skipped = await backfill_company(db, company.id)
+            created, linked, skipped = await backfill_company(db, company.id)
             total_created += created
+            total_linked += linked
             print(
                 f"  Company {company.id} ({company.name}): "
-                f"created {created}, already-linked/skipped {skipped}"
+                f"created {created}, linked {linked}, already-linked/skipped {skipped}"
             )
 
         await db.commit()
-        print(f"\nDone! {total_created} commission rate(s) created across {len(companies)} company/ies.")
+        print(
+            f"\nDone! {total_created} commission rate(s) created, "
+            f"{total_linked} orphan rate(s) linked across {len(companies)} company/ies."
+        )
 
 
 if __name__ == "__main__":

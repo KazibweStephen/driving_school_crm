@@ -737,8 +737,9 @@ export class LessonPlans implements OnInit {
       this.messageService.add({ severity: 'success', summary: 'Imported', detail: 'Template imported successfully' });
       await this.loadTemplates();
       setTimeout(() => this.showImportDialog.set(false), 1500);
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Import failed' });
+    } catch (err: any) {
+      const detail = err.error?.detail || err.message || 'Import failed';
+      this.messageService.add({ severity: 'error', summary: 'Import failed', detail });
     } finally {
       this.importLoading.set(false);
     }

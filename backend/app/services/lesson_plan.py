@@ -41,6 +41,7 @@ async def create_template(
     items_data: list[dict] | None = None,
     created_by_phone: str | None = None,
     company_id: uuid.UUID | None = None,
+    lenient_competencies: bool = False,
 ) -> LessonPlanTemplate:
     template = LessonPlanTemplate(
         name=name,
@@ -83,7 +84,7 @@ async def create_template(
                 if comp_strings and company_id:
                     from app.services.competency_catalogue import resolve_competency_strings, set_lesson_competencies
                     matched_ids, missing = await resolve_competency_strings(db, company_id, comp_strings)
-                    if missing:
+                    if missing and not lenient_competencies:
                         raise ValueError(f"Lesson '{item['title']}': Missing competencies: {', '.join(missing)}")
                     if matched_ids:
                         links = [{"competency_id": cid, "order": idx} for idx, cid in enumerate(matched_ids)]
@@ -1184,6 +1185,15 @@ async def import_template_json(
     created_by_phone: str | None = None,
     company_id: uuid.UUID | None = None,
 ) -> tuple[LessonPlanTemplate, ImportLog]:
+    # Ensure the company has a competency catalogue so code-based curricula
+    # (e.g. the curricula-pack-v1 JSONs) resolve during import. Idempotent:
+    # no-ops when the company already has a version.
+    if company_id:
+        from app.services.competency_catalogue import get_active_version
+        from app.scripts.seed_competency_catalogue import seed_company_catalogue
+        if not await get_active_version(db, company_id):
+            await seed_company_catalogue(db, company_id)
+
     import_log = ImportLog(
         import_type="lesson_plan_template",
         raw_json=data,
@@ -1232,6 +1242,7 @@ async def import_template_json(
             items_data=items_data,
             created_by_phone=created_by_phone,
             company_id=company_id,
+            lenient_competencies=True,
         )
 
         import_log.status = ImportStatus.COMPLETED

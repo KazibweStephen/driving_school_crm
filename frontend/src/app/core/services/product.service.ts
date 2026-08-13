@@ -97,6 +97,56 @@ export interface PackageUpdate {
   extension_days?: number | null;
 }
 
+export interface PackageWithRateUpdate extends PackageUpdate {
+  rate_total_amount?: number;
+  rate_converter_pct?: number;
+  rate_primary_recommender_pct?: number;
+  rate_secondary_recommender_pct?: number;
+  rate_active_from?: string;
+  rate_active_until?: string;
+  rate_notes?: string;
+  clear_rate?: boolean;
+}
+
+export interface CommissionRate {
+  id: string;
+  company_id: string;
+  package_ids: string[];
+  total_amount: number;
+  converter_pct: number;
+  primary_recommender_pct: number;
+  secondary_recommender_pct: number;
+  active_from: string;
+  active_until: string | null;
+  deactivated_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  package_names: string[];
+}
+
+export interface CommissionRateCreate {
+  package_ids: string[];
+  total_amount: number;
+  converter_pct: number;
+  primary_recommender_pct: number;
+  secondary_recommender_pct: number;
+  active_from: string;
+  active_until?: string;
+  notes?: string;
+}
+
+export interface CommissionRateUpdate {
+  package_ids?: string[];
+  total_amount?: number;
+  converter_pct?: number;
+  primary_recommender_pct?: number;
+  secondary_recommender_pct?: number;
+  active_from?: string;
+  active_until?: string;
+  notes?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ProductService {
   constructor(private http: HttpClient) {}
@@ -143,6 +193,14 @@ export class ProductService {
 
   updatePackage(id: string, data: PackageUpdate) {
     return this.http.patch<Package>(`/api/v1/packages/${id}`, data);
+  }
+
+  updatePackageWithRate(id: string, data: PackageWithRateUpdate) {
+    return this.http.patch<Package>(`/api/v1/packages/${id}/with-rate`, data);
+  }
+
+  getPackageCommissionRate(id: string) {
+    return this.http.get<CommissionRate | null>(`/api/v1/packages/${id}/commission-rate`);
   }
 
   deactivatePackage(id: string) {

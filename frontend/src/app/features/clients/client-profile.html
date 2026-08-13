@@ -1865,6 +1865,25 @@
                 <p-checkbox [binary]="true" [(ngModel)]="addConvertNow" inputId="addConvertNow" />
                 <label for="addConvertNow" class="cursor-pointer text-sm text-gray-700">Convert Now (process payment)</label>
               </div>
+              <div class="rounded-lg border p-3">
+                <label class="mb-2 block text-sm font-semibold text-gray-700">Commission attribution</label>
+                <div class="flex flex-col gap-3">
+                  <div>
+                    <label class="mb-1 block text-xs text-gray-600">Converter</label>
+                    <p-select [(ngModel)]="addConverterId" [options]="colleagueOptions()" optionLabel="label" optionValue="value" placeholder="Select converter" styleClass="w-full" appendTo="body" filter="true" filterBy="label" />
+                  </div>
+                  <div class="grid grid-cols-2 gap-2">
+                    <div>
+                      <label class="mb-1 block text-xs text-gray-600">Primary recommender</label>
+                      <p-select [(ngModel)]="addPrimaryRecommenderId" [options]="colleagueOptions()" optionLabel="label" optionValue="value" placeholder="Select" styleClass="w-full" appendTo="body" filter="true" filterBy="label" [showClear]="true" />
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs text-gray-600">Secondary recommender</label>
+                      <p-select [(ngModel)]="addSecondaryRecommenderId" [options]="colleagueOptions()" optionLabel="label" optionValue="value" placeholder="Select" styleClass="w-full" appendTo="body" filter="true" filterBy="label" [showClear]="true" />
+                    </div>
+                  </div>
+                </div>
+              </div>
               <p-button [label]="addConvertNow() ? 'Next: Payment' : 'Add Products'" [icon]="addConvertNow() ? 'pi pi-arrow-right' : 'pi pi-check'"
                         [loading]="loading()" (onClick)="nextAddStep()" styleClass="w-full justify-center"
                         [disabled]="!addSelectedProducts().length" />

@@ -25,12 +25,18 @@ export interface CartItemCreate {
   package_id?: string;
   notes?: string;
   is_important?: boolean;
+  converter_id?: string;
+  primary_recommender_id?: string;
+  secondary_recommender_id?: string;
 }
 
 export interface CartItemUpdate {
   status?: string;
   notes?: string;
   recovery_reason?: string;
+  converter_id?: string;
+  primary_recommender_id?: string;
+  secondary_recommender_id?: string;
 }
 
 @Injectable({ providedIn: 'root' })

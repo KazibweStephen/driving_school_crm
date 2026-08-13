@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { DecimalPipe, DatePipe } from '@angular/common';
@@ -26,6 +26,7 @@ import { CartItemService } from '../../core/services/cart.service';
 import { PaymentService, PaymentRead } from '../../core/services/payment.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
+import { UserService, User } from '../../core/services/user.service';
 import { APP_CONFIG } from '../../core/config';
 
 interface SelectedProduct {
@@ -114,6 +115,22 @@ export class Clients implements OnInit, OnDestroy {
   paymentReceiptNumber = signal('');
   paymentTransactionDate = signal<Date>(new Date());
   paymentInstallments = signal<{ due_date: Date | null; amount: number }[]>([]);
+
+  // Recommender attribution (same default logic as mobile sales)
+  users = signal<User[]>([]);
+  converterId = signal<string>('');
+  primaryRecommenderId = signal<string>('');
+  secondaryRecommenderId = signal<string>('');
+
+  userOptions = computed(() => {
+    const phone = this.authService.currentUser();
+    const name = this.authService.currentUserName();
+    const options = this.users().map(u => ({ label: u.name || u.phone, value: u.phone }));
+    if (phone && !options.some(o => o.value === phone)) {
+      options.unshift({ label: name || phone, value: phone });
+    }
+    return options;
+  });
 
   // Receipt validation
   receiptChecking = signal(false);
@@ -231,6 +248,7 @@ export class Clients implements OnInit, OnDestroy {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private router: Router,
+    private userService: UserService,
   ) {
     this.searchSub = this.searchSubject.pipe(
       debounceTime(400),
@@ -271,6 +289,16 @@ export class Clients implements OnInit, OnDestroy {
     this.loadConsultations();
     this.loadProducts();
     this.loadBranches();
+    this.loadUsers();
+  }
+
+  async loadUsers() {
+    try {
+      const res = await this.userService.list({ status: 'active', page_size: 100 }).toPromise();
+      this.users.set(res?.users || []);
+    } catch {
+      this.users.set([]);
+    }
   }
 
   private loadBranches() {
@@ -378,6 +406,7 @@ export class Clients implements OnInit, OnDestroy {
   }
 
   openCreate() {
+    const currentPhone = this.authService.currentUser() || '';
     this.form = {
       phone: this.search(),
       first_name: '',
@@ -410,6 +439,9 @@ export class Clients implements OnInit, OnDestroy {
     this.receiptDate.set('');
     this.receiptUserName.set('');
     this.receiptInstallments.set([]);
+    this.converterId.set(currentPhone);
+    this.primaryRecommenderId.set(currentPhone);
+    this.secondaryRecommenderId.set(currentPhone);
     this.createStep.set(1);
     this.showCreateDialog.set(true);
   }
@@ -658,6 +690,9 @@ export class Clients implements OnInit, OnDestroy {
           ? this.formatDate(this.paymentTransactionDate())
           : this.formatDate(new Date()),
       };
+      payload.converter_id = this.converterId() || undefined;
+      payload.primary_recommender_id = this.primaryRecommenderId() || undefined;
+      payload.secondary_recommender_id = this.secondaryRecommenderId() || undefined;
 
       const c = await this.consultationService.createFull(payload).toPromise();
       if (!c) throw new Error('Failed to create consultation');
@@ -739,6 +774,9 @@ export class Clients implements OnInit, OnDestroy {
           await this.cartItemService.create(c.id, {
             product_id: sp.product.id,
             package_id: sp.packageId || undefined,
+            converter_id: this.converterId() || undefined,
+            primary_recommender_id: this.primaryRecommenderId() || undefined,
+            secondary_recommender_id: this.secondaryRecommenderId() || undefined,
           }).toPromise();
         }
       }

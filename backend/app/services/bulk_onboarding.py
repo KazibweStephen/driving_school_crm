@@ -23,6 +23,7 @@ from app.models.payment import Installment, InstallmentStatus, Payment
 from app.models.product import Package
 from app.models.training import TrainingSession
 from app.schemas.bulk_onboarding import BulkOnboardingRequest
+from app.services.commission import create_commission_from_conversion
 from app.services.payment import _generate_system_receipt_number, generate_transaction_id
 
 
@@ -82,6 +83,9 @@ async def bulk_onboard_clients(
                 product_id=pkg_data.product_id,
                 package_id=pkg_data.package_id,
                 status=CartItemStatus.CONVERTED_PAID if is_fully_paid else CartItemStatus.CONVERTED_PAYING,
+                converter_id=client_data.converter_id,
+                primary_recommender_id=client_data.primary_recommender_id,
+                secondary_recommender_id=client_data.secondary_recommender_id,
             )
             if package:
                 cart_item.requires_driving_training = package.requires_driving_training
@@ -92,6 +96,15 @@ async def bulk_onboard_clients(
                 cart_item.permit_processing_duration_days = package.permit_processing_duration_days
             db.add(cart_item)
             await db.flush()
+
+            await create_commission_from_conversion(
+                db,
+                cart_item,
+                company_id=branch.company_id,
+                converter_id=client_data.converter_id,
+                recommender_id=client_data.primary_recommender_id,
+                secondary_recommender_id=client_data.secondary_recommender_id,
+            )
 
             for inst_data in pkg_data.installments:
                 payment = Payment(

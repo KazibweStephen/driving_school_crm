@@ -94,6 +94,16 @@ export class ClientProfile implements OnInit {
   addReceiptDate = signal('');
   addReceiptUserName = signal('');
 
+  // Commission attribution for Add to Cart (mirrors mobile sales)
+  colleagues = signal<User[]>([]);
+  addConverterId = signal<string>('');
+  addPrimaryRecommenderId = signal<string>('');
+  addSecondaryRecommenderId = signal<string>('');
+
+  colleagueOptions = computed(() =>
+    this.colleagues().map(u => ({ label: u.name || u.phone, value: u.phone }))
+  );
+
   showEditDialog = signal(false);
   editForm: any = {};
 
@@ -300,6 +310,35 @@ export class ClientProfile implements OnInit {
       if (branches) this.branches.set(branches);
     } catch {
       /* branches are non-critical */
+    }
+  }
+
+  async loadUsers() {
+    try {
+      const res = await this.userService.list({ status: 'active', page_size: 100 }).toPromise();
+      const users = res?.users?.filter((u: User) => u.status === 'active') || [];
+      const mePhone = this.authService.currentUser();
+      if (mePhone && !users.some((u: User) => u.phone === mePhone)) {
+        const me: User = {
+          phone: mePhone,
+          name: this.authService.currentUserName() || mePhone,
+          first_name: '',
+          last_name: '',
+          role: '',
+          status: 'active',
+          is_company_admin: false,
+          can_backdate: false,
+          company_id: null,
+          created_by_phone: null,
+          created_at: '',
+          updated_at: '',
+          branch_ids: [],
+        };
+        users.unshift(me);
+      }
+      this.colleagues.set(users);
+    } catch {
+      this.colleagues.set([]);
     }
   }
 
@@ -1866,6 +1905,11 @@ export class ClientProfile implements OnInit {
     this.addReceiptTotalPaid.set(0);
     this.addReceiptDate.set('');
     this.addReceiptUserName.set('');
+    const currentPhone = this.authService.currentUser() || '';
+    this.addConverterId.set(currentPhone);
+    this.addPrimaryRecommenderId.set(currentPhone);
+    this.addSecondaryRecommenderId.set(currentPhone);
+    this.loadUsers();
     this.addStep.set(1);
     this.showAddProductDialog.set(true);
   }
@@ -2056,6 +2100,9 @@ export class ClientProfile implements OnInit {
       package_id: sp.packageId || undefined,
       notes: this.addNote() || undefined,
       is_important: this.addIsImportant(),
+      converter_id: this.addConverterId() || undefined,
+      primary_recommender_id: this.addPrimaryRecommenderId() || undefined,
+      secondary_recommender_id: this.addSecondaryRecommenderId() || undefined,
     }).toPromise();
     return item?.id;
   }
@@ -2184,6 +2231,9 @@ export class ClientProfile implements OnInit {
         if (ciId) {
           await this.cartItemService.update(ciId, {
             status: isFullyPaid ? 'converted_paid' : 'converted_paying',
+            converter_id: this.addConverterId() || undefined,
+            primary_recommender_id: this.addPrimaryRecommenderId() || undefined,
+            secondary_recommender_id: this.addSecondaryRecommenderId() || undefined,
           }).toPromise();
         }
 

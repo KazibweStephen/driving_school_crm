@@ -10,7 +10,8 @@ from app.schemas.fuel import (
     PackageFuelRateRead,
     PackageFuelRateUpdate,
 )
-from app.schemas.product import PackageCreate, PackageRead, PackageUpdate, PackageWithRateCreate
+from app.schemas.product import PackageCreate, PackageRead, PackageUpdate, PackageWithRateCreate, PackageWithRateUpdate
+from app.schemas.commission import CommissionRateRead
 from app.services import fuel as fuel_service
 from app.services import product as product_service
 from app.utils.tenant import resolve_company_id
@@ -229,6 +230,102 @@ async def update_package(
         theory_training_hours=data.theory_training_hours,
         permit_processing_duration_days=data.permit_processing_duration_days,
     )
+    return PackageRead.model_validate(updated)
+
+
+def _to_commission_rate_read(rate) -> CommissionRateRead:
+    return CommissionRateRead(
+        id=rate.id,
+        company_id=rate.company_id,
+        package_ids=[p.id for p in (rate.packages or [])],
+        total_amount=rate.total_amount,
+        converter_pct=rate.converter_pct,
+        primary_recommender_pct=rate.primary_recommender_pct,
+        secondary_recommender_pct=rate.secondary_recommender_pct,
+        active_from=rate.active_from,
+        active_until=rate.active_until,
+        deactivated_at=rate.deactivated_at,
+        notes=rate.notes,
+        created_at=rate.created_at,
+        updated_at=rate.updated_at,
+        package_names=[p.name for p in (rate.packages or [])],
+    )
+
+
+@router.get("/{package_id}/commission-rate", response_model=CommissionRateRead | None)
+async def get_package_commission_rate(
+    package_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("products.view")),
+):
+    from uuid import UUID
+    try:
+        pid = UUID(package_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid package ID",
+        )
+    pkg = await product_service.get_package_by_id(db, pid, company_id=current_user.company_id)
+    if pkg is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Package not found",
+        )
+    rate = await product_service.get_package_commission_rate(db, pid, company_id=current_user.company_id)
+    if not rate:
+        return None
+    return _to_commission_rate_read(rate)
+
+
+@router.patch("/{package_id}/with-rate", response_model=PackageRead)
+async def update_package_with_rate(
+    package_id: str,
+    data: PackageWithRateUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("products.edit")),
+):
+    from uuid import UUID
+    try:
+        pid = UUID(package_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid package ID",
+        )
+    pkg = await product_service.get_package_by_id(db, pid, company_id=current_user.company_id)
+    if pkg is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Package not found",
+        )
+    company_id = await resolve_company_id(db, current_user)
+    try:
+        updated = await product_service.update_package_with_rate(
+            db,
+            pkg,
+            company_id=company_id,
+            name=data.name,
+            price=data.price,
+            duration_label=data.duration_label,
+            status=data.status,
+            requires_driving_training=data.requires_driving_training,
+            requires_theory_training=data.requires_theory_training,
+            requires_permit_processing=data.requires_permit_processing,
+            driving_training_duration_days=data.driving_training_duration_days,
+            theory_training_hours=data.theory_training_hours,
+            permit_processing_duration_days=data.permit_processing_duration_days,
+            rate_total_amount=data.rate_total_amount,
+            rate_converter_pct=data.rate_converter_pct,
+            rate_primary_recommender_pct=data.rate_primary_recommender_pct,
+            rate_secondary_recommender_pct=data.rate_secondary_recommender_pct,
+            rate_active_from=data.rate_active_from,
+            rate_active_until=data.rate_active_until,
+            rate_notes=data.rate_notes,
+            clear_rate=data.clear_rate,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return PackageRead.model_validate(updated)
 
 

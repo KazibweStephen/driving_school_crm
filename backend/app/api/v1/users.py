@@ -10,6 +10,10 @@ from app.schemas.user import (
     UserListResponse,
     UserPinChange,
     UserRead,
+    UserTransferListResponse,
+    UserTransferRead,
+    UserTransferRequest,
+    UserTransferReverse,
     UserUpdate,
 )
 from app.services import user as user_service
@@ -252,3 +256,130 @@ async def change_own_pin(
             detail=str(e),
         )
     return {"message": "PIN changed successfully"}
+
+
+@router.post("/{phone}/transfer", response_model=UserTransferRead)
+async def transfer_user(
+    phone: str,
+    data: UserTransferRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("users.manage")),
+):
+    if phone == current_user.phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot transfer yourself",
+        )
+    user = await user_service.get_user_by_phone(db, phone)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    # Only super users can transfer across companies; company_super_user can only
+    # transfer users out of their own company but not into another company.
+    if current_user.role != UserRole.SUPER_USER:
+        if user.company_id != current_user.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only transfer users from your own company",
+            )
+        if data.target_company_id != current_user.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only super users can transfer users to a different company",
+            )
+    try:
+        transfer = await user_service.transfer_user_to_company(
+            db, user, data.target_company_id, data.target_branch_ids,
+            data.reason, current_user.phone,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    await db.commit()
+    return UserTransferRead.model_validate(transfer)
+
+
+@router.get("/{phone}/transfers", response_model=UserTransferListResponse)
+async def get_user_transfers(
+    phone: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("users.view")),
+):
+    user = await user_service.get_user_by_phone(db, phone)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    # Company users can only view transfers for users in their company
+    if current_user.role != UserRole.SUPER_USER and user.company_id != current_user.company_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view transfers for users in your company",
+        )
+    transfers, total = await user_service.get_user_transfer_history(
+        db, user_phone=phone, page=page, page_size=page_size,
+    )
+    return UserTransferListResponse(
+        transfers=[UserTransferRead.model_validate(t) for t in transfers],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=max(1, (total + page_size - 1) // page_size),
+    )
+
+
+@router.post("/transfers/{transfer_id}/reverse", response_model=UserTransferRead)
+async def reverse_user_transfer(
+    transfer_id: UUID,
+    data: UserTransferReverse,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("users.manage")),
+):
+    try:
+        transfer = await user_service.reverse_user_transfer(
+            db, transfer_id, data.reason, current_user.phone,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    await db.commit()
+    return UserTransferRead.model_validate(transfer)
+
+
+@router.get("/transfers/history", response_model=UserTransferListResponse)
+async def list_transfer_history(
+    company_id: UUID | None = Query(None),
+    user_phone: str | None = Query(None, max_length=20),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("users.view")),
+):
+    effective_company_id = None
+    if current_user.role == UserRole.SUPER_USER:
+        effective_company_id = company_id
+    else:
+        effective_company_id = current_user.company_id
+    transfers, total = await user_service.get_user_transfer_history(
+        db,
+        user_phone=user_phone,
+        company_id=effective_company_id,
+        page=page,
+        page_size=page_size,
+    )
+    return UserTransferListResponse(
+        transfers=[UserTransferRead.model_validate(t) for t in transfers],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=max(1, (total + page_size - 1) // page_size),
+    )

@@ -54,6 +54,42 @@ export interface UserListResponse {
   total_pages: number;
 }
 
+export interface CompanyBasic {
+  id: string;
+  name: string;
+}
+
+export interface UserTransfer {
+  id: string;
+  user_phone: string;
+  from_company: CompanyBasic;
+  to_company: CompanyBasic;
+  from_branch_ids: string[];
+  to_branch_ids: string[];
+  role_before: string;
+  role_after: string;
+  reason?: string;
+  transferred_by: string;
+  is_reversed: boolean;
+  reversed_by?: string;
+  reversed_at?: string;
+  created_at: string;
+}
+
+export interface UserTransferRequest {
+  target_company_id: string;
+  target_branch_ids: string[];
+  reason?: string;
+}
+
+export interface UserTransferListResponse {
+  transfers: UserTransfer[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class UserService {
   constructor(private http: HttpClient) {}
@@ -111,5 +147,34 @@ export class UserService {
 
   getProfile() {
     return this.http.get<User>('/api/v1/users/me');
+  }
+
+  transferUser(phone: string, data: UserTransferRequest) {
+    return this.http.post<UserTransfer>(`/api/v1/users/${phone}/transfer`, data);
+  }
+
+  getUserTransfers(phone: string, params?: { page?: number; page_size?: number }) {
+    let httpParams = new HttpParams();
+    if (params?.page) httpParams = httpParams.set('page', params.page);
+    if (params?.page_size) httpParams = httpParams.set('page_size', params.page_size);
+    return this.http.get<UserTransferListResponse>(`/api/v1/users/${phone}/transfers`, { params: httpParams });
+  }
+
+  reverseTransfer(transferId: string, reason?: string) {
+    return this.http.post<UserTransfer>(`/api/v1/users/transfers/${transferId}/reverse`, { reason });
+  }
+
+  getTransferHistory(params?: {
+    company_id?: string;
+    user_phone?: string;
+    page?: number;
+    page_size?: number;
+  }) {
+    let httpParams = new HttpParams();
+    if (params?.company_id) httpParams = httpParams.set('company_id', params.company_id);
+    if (params?.user_phone) httpParams = httpParams.set('user_phone', params.user_phone);
+    if (params?.page) httpParams = httpParams.set('page', params.page);
+    if (params?.page_size) httpParams = httpParams.set('page_size', params.page_size);
+    return this.http.get<UserTransferListResponse>('/api/v1/users/transfers/history', { params: httpParams });
   }
 }

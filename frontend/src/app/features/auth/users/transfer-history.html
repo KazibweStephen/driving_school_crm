@@ -1,0 +1,158 @@
+<div class="p-4 sm:p-6">
+  <!-- Header -->
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-gray-900">Transfer History</h1>
+    <p-button
+      label="Back to Users"
+      icon="pi pi-users"
+      severity="secondary"
+      routerLink="/users"
+      styleClass="p-button-sm"
+    />
+  </div>
+
+  <!-- Filters -->
+  <div class="mb-4 flex flex-wrap items-center gap-2">
+    <span class="p-input-icon-left">
+      <i class="pi pi-search text-gray-400"></i>
+      <input
+        pInputText
+        [(ngModel)]="userPhoneFilter"
+        (keyup.enter)="onSearch()"
+        placeholder="Search user phone..."
+        class="w-56"
+      />
+    </span>
+    @if (isSuperUser) {
+      <p-select
+        [(ngModel)]="companyFilter"
+        [options]="companyOptions"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="All companies"
+        styleClass="w-48"
+        appendTo="body"
+        (onChange)="onSearch()"
+      />
+    }
+    @if (userPhoneFilter() || companyFilter()) {
+      <p-button
+        label="Clear"
+        icon="pi pi-times"
+        severity="secondary"
+        (onClick)="userPhoneFilter.set(''); companyFilter.set(null); onSearch();"
+        styleClass="p-button-sm"
+      />
+    }
+  </div>
+
+  <!-- Desktop table -->
+  <div class="hidden sm:block">
+    <p-table
+      [value]="transfers()"
+      [paginator]="true"
+      [rows]="pageSize()"
+      [totalRecords]="total()"
+      [lazy]="true"
+      (onPage)="onPageChange($event)"
+      [loading]="loading()"
+      stripedRows
+      styleClass="p-datatable-sm"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Date</th>
+          <th>User</th>
+          <th>From Company</th>
+          <th>To Company</th>
+          <th>Branches</th>
+          <th>By</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-transfer>
+        <tr>
+          <td class="text-sm text-gray-500">{{ transfer.created_at | date: 'mediumDate' }}</td>
+          <td>
+            <a [routerLink]="['/users']" [queryParams]="{ search: transfer.user_phone }" class="font-mono text-sm text-blue-600 hover:underline">
+              {{ transfer.user_phone }}
+            </a>
+          </td>
+          <td class="text-sm">{{ transfer.from_company.name }}</td>
+          <td class="text-sm">{{ transfer.to_company.name }}</td>
+          <td class="text-xs text-gray-500">
+            <span class="block">From: {{ branchNames(transfer.from_branch_ids) }}</span>
+            <span class="block">To: {{ branchNames(transfer.to_branch_ids) }}</span>
+          </td>
+          <td class="font-mono text-xs text-gray-500">{{ transfer.transferred_by }}</td>
+          <td>
+            <p-tag
+              [value]="transfer.is_reversed ? 'Reversed' : 'Active'"
+              [severity]="statusSeverity(transfer.is_reversed)"
+            />
+          </td>
+          <td>
+            @if (canReverse && !transfer.is_reversed) {
+              <p-button
+                icon="pi pi-replay"
+                severity="danger"
+                [loading]="reversingId() === transfer.id"
+                (onClick)="confirmReverse(transfer)"
+                styleClass="p-button-sm p-button-rounded p-button-text"
+                pTooltip="Reverse transfer"
+                tooltipPosition="top"
+              />
+            }
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- Mobile card list -->
+  <div class="sm:hidden">
+    @for (transfer of transfers(); track transfer.id) {
+      <div class="mb-3 rounded-xl border bg-white p-4 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div class="min-w-0 flex-1">
+            <p class="font-mono text-sm text-gray-900">{{ transfer.user_phone }}</p>
+            <p class="mt-0.5 text-xs text-gray-500">{{ transfer.created_at | date: 'mediumDate' }}</p>
+          </div>
+          <p-tag
+            [value]="transfer.is_reversed ? 'Reversed' : 'Active'"
+            [severity]="statusSeverity(transfer.is_reversed)"
+          />
+        </div>
+        <div class="mt-2 text-xs text-gray-500">
+          <p><span class="font-medium">From:</span> {{ transfer.from_company.name }}</p>
+          <p><span class="font-medium">To:</span> {{ transfer.to_company.name }}</p>
+          <p><span class="font-medium">From branches:</span> {{ branchNames(transfer.from_branch_ids) }}</p>
+          <p><span class="font-medium">To branches:</span> {{ branchNames(transfer.to_branch_ids) }}</p>
+          <p><span class="font-medium">By:</span> {{ transfer.transferred_by }}</p>
+        </div>
+        @if (canReverse && !transfer.is_reversed) {
+          <div class="mt-3 border-t pt-3">
+            <p-button
+              label="Reverse"
+              icon="pi pi-replay"
+              severity="danger"
+              [loading]="reversingId() === transfer.id"
+              (onClick)="confirmReverse(transfer)"
+              styleClass="p-button-sm"
+            />
+          </div>
+        }
+      </div>
+    }
+    @if (transfers().length === 0 && !loading()) {
+      <div class="py-12 text-center text-gray-400">
+        <span class="pi pi-arrow-right-arrow-left mb-2 block text-3xl"></span>
+        <p>No transfer history found</p>
+      </div>
+    }
+  </div>
+
+  <p-confirmDialog />
+  <p-toast />
+</div>

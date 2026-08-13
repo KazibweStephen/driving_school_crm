@@ -32,6 +32,15 @@ export interface Package {
   created_by_phone: string | null;
   created_at: string;
   updated_at: string;
+  commission_rate?: {
+    id: string;
+    total_amount: number;
+    converter_pct: number;
+    primary_recommender_pct: number;
+    secondary_recommender_pct: number;
+    active_from: string;
+    active_until: string | null;
+  } | null;
 }
 
 export interface ProductCreate {

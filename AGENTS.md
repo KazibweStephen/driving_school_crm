@@ -205,7 +205,9 @@ All endpoints have been fixed with multi-company scoping. Each endpoint verifies
 - Dashboard summary at `/api/v1/commission/my-dashboard/summary`.
 - Leads CRUD at `/api/v1/leads`.
 - Contests CRUD at `/api/v1/commission/contests`.
-- Frontend not yet built.
+- Backend `PackageRead` now includes the active `commission_rate` inline (selected from `commission_rates`), so the Products page can display and pre-fill without a separate fetch.
+- Frontend Products page shows the active commission rate (amount + split) inline on each package row/card and pre-fills the Edit Package stepper from that inline data.
+- Frontend commissions management page (`/commissions`), lead submission, commission dashboard, and contests still pending.
 
 ## Fine-Grained RBAC (Complete — backend + frontend)
 - **Permission catalog** in `backend/app/core/permissions.py`: 28 groups, 142 codes, `<group>.manage` (all-actions master) + per-action codes like `<group>.create/edit/delete/approve/reject/pay` (bare-`manage` groups: `bulk_onboarding`, `schedule_breaks`, `permissions`). `expand_permissions()`/`expand_set()` expand a granted `.manage` to every code in its group (including itself, so stored and effective sets stay aligned); the implied-code expansion replaces the old `.view`-only implication.
@@ -219,7 +221,7 @@ All endpoints have been fixed with multi-company scoping. Each endpoint verifies
 - Ad-hoc role checks replaced: clients bulk-delete→`consultations.delete`, payments print→`reports.view`, products admin→`products.manage`, companies edit→`companies.manage`, transfers receive/cancel→`transfers.manage`, competency writes→`competency.manage`. Super_user-only cross-company selectors (company-settings, users role option, competency/companies/permissions company pickers) and payments `canViewAllBranches` keep role checks (no permission equivalent).
 
 ## Remaining
-- Build frontend for commission rates management, lead submission, commission dashboard, contests.
+- Build frontend commissions management page (`/commissions`), lead submission, commission dashboard, and contests.
 - User creation API doesn't return the auto-generated initial PIN — frontend needs to call reset-pin to get a PIN, or the API should return it in the response.
 - Build frontend Sale page under branches (Expense page is done).
 - Add `appendTo="body"` to remaining `p-select` and `p-datepicker` dropdowns for mobile.

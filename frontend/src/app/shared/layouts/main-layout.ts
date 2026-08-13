@@ -108,6 +108,7 @@ export class MainLayout implements OnInit, OnDestroy {
       label: 'Management', icon: 'pi pi-cog', expanded: false,
       children: [
         { path: '/users', label: 'Users', icon: 'pi pi-users', permission: 'users.view' },
+        { path: '/users/transfers', label: 'Transfer History', icon: 'pi pi-arrow-right-arrow-left', permission: 'users.view' },
         { path: '/branches', label: 'Branches', icon: 'pi pi-sitemap', permission: 'branches.view' },
         { path: '/companies', label: 'Companies', icon: 'pi pi-building', permission: 'companies.view' },
         { path: '/products', label: 'Products', icon: 'pi pi-box', permission: 'products.view' },

@@ -28,6 +28,12 @@ export const routes: Routes = [
           import('./features/auth/users/users').then((c) => c.Users),
       },
       {
+        path: 'users/transfers',
+        data: { permission: 'users.view' },
+        loadComponent: () =>
+          import('./features/auth/users/transfer-history').then((c) => c.TransferHistory),
+      },
+      {
         path: 'products',
         data: { permission: 'products.view' },
         loadComponent: () =>

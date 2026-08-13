@@ -163,6 +163,8 @@ async def create_package_with_rate(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    # Eager-load commission rates so PackageRead can validate without lazy-loading.
+    pkg = await product_service.get_package_by_id(db, pkg.id, company_id=company_id)
     return PackageRead.model_validate(pkg)
 
 
@@ -192,6 +194,8 @@ async def create_package(
         theory_training_hours=data.theory_training_hours,
         permit_processing_duration_days=data.permit_processing_duration_days,
     )
+    # Eager-load commission rates so PackageRead can validate without lazy-loading.
+    pkg = await product_service.get_package_by_id(db, pkg.id, company_id=current_user.company_id)
     return PackageRead.model_validate(pkg)
 
 
@@ -230,6 +234,8 @@ async def update_package(
         theory_training_hours=data.theory_training_hours,
         permit_processing_duration_days=data.permit_processing_duration_days,
     )
+    # Eager-load commission rates so PackageRead can validate without lazy-loading.
+    updated = await product_service.get_package_by_id(db, updated.id, company_id=current_user.company_id)
     return PackageRead.model_validate(updated)
 
 
@@ -328,6 +334,8 @@ async def update_package_with_rate(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    # Eager-load commission rates so PackageRead can validate without lazy-loading.
+    updated = await product_service.get_package_by_id(db, updated.id, company_id=company_id)
     return PackageRead.model_validate(updated)
 
 

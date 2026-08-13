@@ -56,13 +56,17 @@ export class Users implements OnInit {
   showCreateDialog = signal(false);
   showEditDialog = signal(false);
   showResetPinDialog = signal(false);
+  showTransferDialog = signal(false);
 
   editingUser = signal<User | null>(null);
+  transferringUser = signal<User | null>(null);
 
   companies = signal<Company[]>([]);
   branches = signal<Branch[]>([]);
+  allBranches = signal<Branch[]>([]);
   newUser: { phone: string; first_name: string; last_name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; branch_ids: string[] } = { phone: '', first_name: '', last_name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
   editData: { first_name: string; last_name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; branch_ids: string[] } = { first_name: '', last_name: '', role: '', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
+  transferData: { target_company_id: string | null; target_branch_ids: string[]; reason: string } = { target_company_id: null, target_branch_ids: [], reason: '' };
   get isSuperUser(): boolean {
     return this.auth.currentUserRole() === 'super_user';
   }
@@ -78,11 +82,25 @@ export class Users implements OnInit {
   get canResetPin(): boolean {
     return this.auth.hasPermission('users.reset_pin');
   }
+  get canTransfer(): boolean {
+    return this.auth.hasPermission('users.manage') && (this.isSuperUser || this.auth.currentUserRole() === 'company_super_user');
+  }
   get roleOptions() {
     return this.isSuperUser ? this.roles : this.roles.filter(r => r.value !== 'company_super_user');
   }
   get companyOptions() {
     return this.companies().map((c) => ({ label: c.name, value: c.id }));
+  }
+  get transferCompanyOptions() {
+    if (this.isSuperUser) {
+      return this.companies().map((c) => ({ label: c.name, value: c.id }));
+    }
+    return this.companies().filter(c => c.id !== this.auth.currentUserCompanyId()).map((c) => ({ label: c.name, value: c.id }));
+  }
+  get transferBranchOptions() {
+    const companyId = this.transferData.target_company_id;
+    if (!companyId) return [];
+    return this.allBranches().filter(b => b.company_id === companyId).map((b) => ({ label: b.name, value: b.id }));
   }
   resetPinResult = signal<string | null>(null);
   @ViewChild('changePinDialog') changePinDialog!: ChangePinDialog;
@@ -97,7 +115,7 @@ export class Users implements OnInit {
     { label: 'Reception', value: 'reception' },
   ];
 
-  companyName(id: string | null): string {
+  companyName(id: string | null | undefined): string {
     if (!id) return '-';
     return this.companies().find(c => c.id === id)?.name || id.substring(0, 8);
   }
@@ -130,6 +148,7 @@ export class Users implements OnInit {
     this.loadUsers();
     this.loadCompanies();
     this.loadBranches();
+    this.loadAllBranches();
   }
 
   async loadBranches() {
@@ -137,6 +156,26 @@ export class Users implements OnInit {
       const res = await this.companyService.myBranches().toPromise();
       this.branches.set(res || []);
     } catch {}
+  }
+
+  async loadAllBranches() {
+    try {
+      const res = await this.companyService.listBranches('').toPromise();
+      this.allBranches.set(res || []);
+    } catch {
+      // Fallback: load per company if global list is not supported
+      try {
+        const companies = await this.companyService.list().toPromise();
+        const all: Branch[] = [];
+        if (companies) {
+          for (const c of companies) {
+            const branches = await this.companyService.listBranches(c.id).toPromise();
+            if (branches) all.push(...branches);
+          }
+        }
+        this.allBranches.set(all);
+      } catch {}
+    }
   }
 
   async loadCompanies() {
@@ -373,6 +412,49 @@ export class Users implements OnInit {
 
   roleLabel(value: string): string {
     return this.roles.find((r) => r.value === value)?.label || value;
+  }
+
+  openTransfer(user: User) {
+    this.transferringUser.set(user);
+    this.transferData = { target_company_id: null, target_branch_ids: [], reason: '' };
+    this.showTransferDialog.set(true);
+  }
+
+  async transferUser() {
+    const user = this.transferringUser();
+    if (!user || !this.transferData.target_company_id) return;
+    if (this.transferData.target_branch_ids.length === 0) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Please select at least one target branch',
+      });
+      return;
+    }
+    this.loading.set(true);
+    try {
+      await this.userService.transferUser(user.phone, {
+        target_company_id: this.transferData.target_company_id,
+        target_branch_ids: this.transferData.target_branch_ids,
+        reason: this.transferData.reason || undefined,
+      }).toPromise();
+      this.showTransferDialog.set(false);
+      this.transferringUser.set(null);
+      await this.loadUsers();
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Transferred',
+        detail: `${user.name} has been transferred to the new company`,
+      });
+    } catch (e: any) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: e?.error?.detail || 'Failed to transfer user',
+      });
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   statusSeverity(status: string): 'success' | 'warn' | 'danger' | 'info' {

@@ -266,13 +266,14 @@ async def get_package_commission_rate(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid package ID",
         )
-    pkg = await product_service.get_package_by_id(db, pid, company_id=current_user.company_id)
+    scope_company = None if current_user.role == "super_user" else current_user.company_id
+    pkg = await product_service.get_package_by_id(db, pid, company_id=scope_company)
     if pkg is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Package not found",
         )
-    rate = await product_service.get_package_commission_rate(db, pid, company_id=current_user.company_id)
+    rate = await product_service.get_package_commission_rate(db, pid, company_id=scope_company)
     if not rate:
         return None
     return _to_commission_rate_read(rate)
@@ -293,13 +294,14 @@ async def update_package_with_rate(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid package ID",
         )
-    pkg = await product_service.get_package_by_id(db, pid, company_id=current_user.company_id)
+    scope_company = None if current_user.role == "super_user" else current_user.company_id
+    pkg = await product_service.get_package_by_id(db, pid, company_id=scope_company)
     if pkg is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Package not found",
         )
-    company_id = await resolve_company_id(db, current_user)
+    company_id = pkg.product.company_id if pkg.product else await resolve_company_id(db, current_user)
     try:
         updated = await product_service.update_package_with_rate(
             db,

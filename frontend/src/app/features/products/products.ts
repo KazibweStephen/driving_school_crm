@@ -58,6 +58,8 @@ export class Products implements OnInit {
   showEditPackageDialog = signal(false);
   createPackageStep = signal(0);
   cs = this.createPackageStep;
+  editPackageStep = signal(0);
+  eps = this.editPackageStep;
 
   // Commission rate form (Step 2 of Package creation)
   rateForm = {
@@ -338,6 +340,10 @@ export class Products implements OnInit {
     this.createPackageStep.set(step);
   }
 
+  goToEditStep(step: number) {
+    this.editPackageStep.set(step);
+  }
+
   getRateTotalPct(): number {
     return this.rateForm.converter_pct + this.rateForm.primary_recommender_pct + this.rateForm.secondary_recommender_pct;
   }
@@ -399,6 +405,7 @@ export class Products implements OnInit {
   async openEditPackage(pkg: Package) {
     this.editingPackage.set(pkg);
     this.editingPackageRate.set(null);
+    this.editPackageStep.set(0);
     this.packageForm = {
       name: pkg.name,
       price: pkg.price,

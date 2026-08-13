@@ -75,6 +75,9 @@ async def get_dashboard_summary(
 
     ongoing = select(func.count()).select_from(
         select(ClientLesson.id)
+        .join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
+        .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+        .join(Consultation, CartItem.consultation_id == Consultation.id)
         .where(ClientLesson.status == LessonState.STARTED)
         .subquery()
     )
@@ -113,6 +116,14 @@ async def get_dashboard_summary(
                 .where(Consultation.branch_id.in_(select(branch_subq.c.id)))
             )
         )
+        ongoing = ongoing.where(
+            ClientLesson.lesson_plan_id.in_(
+                select(ClientLessonPlan.id)
+                .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+                .join(Consultation, CartItem.consultation_id == Consultation.id)
+                .where(Consultation.branch_id.in_(select(branch_subq.c.id)))
+            )
+        )
 
     if branch_ids:
         today_payments = today_payments.where(
@@ -130,6 +141,22 @@ async def get_dashboard_summary(
         pending_followups = pending_followups.where(
             FollowUp.consultation_id.in_(
                 select(Consultation.id).where(Consultation.branch_id.in_(branch_ids))
+            )
+        )
+        upcoming_today = upcoming_today.where(
+            ClientLessonPlan.id.in_(
+                select(ClientLessonPlan.id)
+                .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+                .join(Consultation, CartItem.consultation_id == Consultation.id)
+                .where(Consultation.branch_id.in_(branch_ids))
+            )
+        )
+        ongoing = ongoing.where(
+            ClientLesson.lesson_plan_id.in_(
+                select(ClientLessonPlan.id)
+                .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
+                .join(Consultation, CartItem.consultation_id == Consultation.id)
+                .where(Consultation.branch_id.in_(branch_ids))
             )
         )
 

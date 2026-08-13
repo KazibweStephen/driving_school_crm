@@ -206,6 +206,47 @@ async def delete_company(
     await db.commit()
 
 
+@router.post("/{company_id}/seed-products")
+async def seed_products_for_company(
+    company_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("products.manage")),
+):
+    """Seed the bundled default products/packages into a company (no-op if it has products)."""
+    try:
+        cid = uuid.UUID(company_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid company ID",
+        )
+    if current_user.role != UserRole.SUPER_USER:
+        if current_user.company_id != cid:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company not found",
+            )
+    result = await db.execute(select(Company).where(Company.id == cid))
+    company = result.scalar_one_or_none()
+    if company is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found",
+        )
+
+    from app.models.product import Product
+    existing = await db.execute(
+        select(Product).where(Product.company_id == cid).limit(1)
+    )
+    if existing.scalar_one_or_none():
+        return {"seeded": 0, "already_has_products": True}
+
+    from app.scripts.seed_company_products import seed_company_products_from_template
+    created = await seed_company_products_from_template(db, cid, current_user.phone)
+    await db.commit()
+    return {"seeded": created, "already_has_products": False}
+
+
 # ── Branch ──
 
 

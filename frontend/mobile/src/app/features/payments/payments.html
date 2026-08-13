@@ -150,9 +150,9 @@
                       <input
                         type="number"
                         min="0"
-                        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        readonly
+                        class="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm"
                         [ngModel]="row.amount"
-                        (ngModelChange)="setScheduleAmount(i, $event)"
                         data-testid="schedule-amount"
                       />
                       <p-button
@@ -169,6 +169,7 @@
                         (ngModelChange)="setScheduleDate(i, $event)"
                         dateFormat="dd/mm/yy"
                         appendTo="body"
+                        [minDate]="today"
                         class="w-full"
                         data-testid="schedule-date"
                       />

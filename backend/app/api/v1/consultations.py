@@ -103,6 +103,16 @@ async def create_full_consultation(
 
     receipt_number = data.payment.receipt_number if data.payment else None
     transaction_id = payment_service._generate_system_receipt_number()
+    transaction_date = (
+        (data.payment.transaction_date if data.payment else None)
+        or data.document_date
+        or date_type.today()
+    )
+    if transaction_date < (data.document_date or date_type.today()):
+        raise HTTPException(
+            status_code=400,
+            detail="Transaction Date cannot be before Document Date",
+        )
 
     cart_item_map = {}
     for item_data in data.items:
@@ -149,7 +159,7 @@ async def create_full_consultation(
                 product_id=item_data.product_id,
                 package_id=item_data.package_id,
                 total_amount=package_price,
-                document_date=data.document_date or date_type.today(),
+                document_date=transaction_date,
                 notes=f"Paid: {allocation}, Balance: {remaining}",
                 receipt_number=receipt_number,
                 system_receipt_number=transaction_id,
@@ -162,10 +172,10 @@ async def create_full_consultation(
             # Create paid installment for today's payment
             paid_inst = Installment(
                 payment_id=payment_id,
-                due_date=date.today(),
+                due_date=transaction_date,
                 amount=allocation,
                 status=InstallmentStatus.PAID,
-                paid_date=date.today(),
+                paid_date=transaction_date,
                 paid_amount=allocation,
                 notes='Initial payment',
             )

@@ -82,7 +82,17 @@ async def get_consultation_by_id(
     if branch_id:
         query = query.where(Consultation.branch_id == branch_id)
     if company_id is not None:
-        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
+        # Consultations with no branch are not tied to any company; allow access.
+        query = (
+            query
+            .outerjoin(Branch, Consultation.branch_id == Branch.id)
+            .where(
+                or_(
+                    Consultation.branch_id.is_(None),
+                    Branch.company_id == company_id,
+                )
+            )
+        )
     result = await db.execute(query)
     return result.scalar_one_or_none()
 

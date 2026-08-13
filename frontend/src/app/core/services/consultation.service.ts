@@ -33,6 +33,7 @@ export interface Consultation {
   interest_level: string | null;
   interested_products: InterestedProduct[] | null;
   start_date: string | null;
+  document_date: string | null;
   notes: string | null;
   status: string;
   branch_id: string | null;
@@ -76,6 +77,7 @@ export interface FullConsultationItem {
 
 export interface FullConsultationPayment {
   receipt_number?: string;
+  transaction_date?: string;
 }
 
 export interface FullConsultationCreate {

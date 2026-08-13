@@ -139,6 +139,11 @@ export class ClientProfile implements OnInit {
   makePaymentDocumentDate = signal<Date | null>(null);
   makePaymentInstallments: { due_date: Date | null; amount: number }[] = [];
 
+  makePaymentExistingSchedule = computed(() => {
+    const ci = this.makePaymentTarget();
+    return ci ? this.pendingScheduleFor(ci) : [];
+  });
+
   showPayAllDialog = signal(false);
   payAllItems = signal<{ cartItem: CartItemRead; payNow: number; balance: number; productName: string; packageName: string }[]>([]);
   payAllReceiptNumber = signal('');
@@ -2480,7 +2485,7 @@ export class ClientProfile implements OnInit {
     this.completeSaleInstallments = [];
     this.completeSaleReceiptNumber.set('');
     this.completeSaleSystemReceiptNumber.set('');
-    this.completeSaleDocumentDate.set(null);
+    this.completeSaleDocumentDate.set(new Date());
     this.collectionBranchId.set(this.consultation()?.branch_id ?? null);
     this.receiptChecking.set(false);
     this.receiptAvailable.set(null);
@@ -2550,11 +2555,44 @@ export class ClientProfile implements OnInit {
   canCompleteSale(): boolean {
     const paid = this.completeSalePaidAmount();
     if (!paid || paid <= 0) return false;
+    if (this.completeSaleTransactionInvalid) return false;
     const receipt = this.completeSaleReceiptNumber();
     if (receipt && receipt.trim().length >= 2) {
       if (this.receiptChecking() || this.receiptAvailable() !== true) return false;
     }
     return true;
+  }
+
+  get consultationDocumentDate(): Date | null {
+    const d = this.consultation()?.document_date;
+    return d ? new Date(d + 'T00:00:00') : null;
+  }
+
+  get paymentDialogMinDate(): Date {
+    return this.consultationDocumentDate || new Date();
+  }
+
+  private stripDate(d: Date): number {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  }
+
+  transactionBeforeDocument(date: Date | null): boolean {
+    if (!date) return false;
+    const doc = this.consultationDocumentDate;
+    if (!doc) return false;
+    return this.stripDate(date) < this.stripDate(doc);
+  }
+
+  get completeSaleTransactionInvalid(): boolean {
+    return this.transactionBeforeDocument(this.completeSaleDocumentDate());
+  }
+
+  get makePaymentTransactionInvalid(): boolean {
+    return this.transactionBeforeDocument(this.makePaymentDocumentDate());
+  }
+
+  get payAllTransactionInvalid(): boolean {
+    return this.transactionBeforeDocument(this.payAllDocumentDate());
   }
 
   canAddCompleteSaleInstallment(): boolean {
@@ -2568,6 +2606,11 @@ export class ClientProfile implements OnInit {
     const ci = this.completeSaleTarget();
     const c = this.consultation();
     if (!ci || !c) return;
+
+    if (this.completeSaleTransactionInvalid) {
+      this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Transaction Date cannot be before Document Date' });
+      return;
+    }
 
     const total = this.completeSaleTotal();
     const paid = this.completeSalePaidAmount();
@@ -2627,7 +2670,7 @@ export class ClientProfile implements OnInit {
       await this.loadConsultation(c.id);
 
       if (receiptId) {
-        this.openReceipt(receiptId);
+        this.openReceipt(receiptId, paid);
       }
 
       this.messageService.add({
@@ -2649,7 +2692,7 @@ export class ClientProfile implements OnInit {
     this.makePaymentAmount.set(balance);
     this.makePaymentBalance.set(balance);
     this.makePaymentReceiptNumber.set('');
-    this.makePaymentDocumentDate.set(null);
+    this.makePaymentDocumentDate.set(new Date());
     this.collectionBranchId.set(this.consultation()?.branch_id ?? null);
     this.makePaymentInstallments = [];
     this.receiptChecking.set(false);
@@ -2664,39 +2707,78 @@ export class ClientProfile implements OnInit {
     const amount = this.makePaymentAmount();
     if (!amount || amount <= 0) return;
 
+    if (this.makePaymentTransactionInvalid) {
+      this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Transaction Date cannot be before Document Date' });
+      return;
+    }
+
     this.loading.set(true);
     try {
-      const installments = [
-        { due_date: this.formatDate(new Date()), amount },
-        ...this.makePaymentInstallments
-          .filter(inst => inst.amount > 0 && inst.due_date)
-          .map(inst => ({
-            due_date: this.formatDate(inst.due_date!),
-            amount: inst.amount,
-          })),
-      ];
+      const docDate = this.makePaymentDocumentDate()
+        ? this.formatDate(this.makePaymentDocumentDate()!)
+        : this.formatDate(new Date());
+      let receiptId: string | null = null;
 
-      const paymentResult = await this.paymentService
-        .createPayment(c.id, {
-          product_id: ci.product_id,
-          package_id: ci.package_id || undefined,
-          total_amount: amount + this.makePaymentInstallmentTotal,
-          notes: `Additional payment of ${amount}`,
-          receipt_number: this.makePaymentReceiptNumber() || undefined,
-          installments,
-          document_date: this.makePaymentDocumentDate() ? this.formatDate(this.makePaymentDocumentDate()!) : undefined,
-          branch_id: this.collectionBranchId() || undefined,
-        })
-        .toPromise();
+      const schedule = this.pendingScheduleFor(ci);
+      if (schedule.length) {
+        // Pay against the existing schedule so the earliest pending installment's
+        // amount is reduced (or cleared), instead of creating a new payment that
+        // would compound the outstanding installments.
+        const earliest = schedule[0];
+        const userFuture = this.makePaymentInstallments.filter(inst => inst.amount > 0 && inst.due_date);
+        const future = schedule
+          .slice(1)
+          .map((row, i) => {
+            const uf = userFuture[i];
+            return uf ? { installment_id: row.id, due_date: this.formatDate(uf.due_date!) } : null;
+          })
+          .filter((x): x is { installment_id: string; due_date: string } => !!x);
 
-      if (paymentResult?.installments.length) {
         await this.paymentService
-          .updateInstallment(paymentResult.id, paymentResult.installments[0].id, {
-            paid_date: this.formatDate(new Date()),
+          .updateInstallment(earliest.payment_id, earliest.id, {
+            paid_date: docDate,
             paid_amount: amount,
+            push_forward_date: earliest.due_date,
+            future_installments: future.length ? future : undefined,
             notes: 'Paid',
           })
           .toPromise();
+        receiptId = earliest.payment_id;
+      } else {
+        // No existing schedule: record a new payment with its own installments.
+        const installments = [
+          { due_date: this.formatDate(new Date()), amount },
+          ...this.makePaymentInstallments
+            .filter(inst => inst.amount > 0 && inst.due_date)
+            .map(inst => ({
+              due_date: this.formatDate(inst.due_date!),
+              amount: inst.amount,
+            })),
+        ];
+
+        const paymentResult = await this.paymentService
+          .createPayment(c.id, {
+            product_id: ci.product_id,
+            package_id: ci.package_id || undefined,
+            total_amount: amount + this.makePaymentRemainingBalance,
+            notes: `Additional payment of ${amount}`,
+            receipt_number: this.makePaymentReceiptNumber() || undefined,
+            installments,
+            document_date: this.makePaymentDocumentDate() ? this.formatDate(this.makePaymentDocumentDate()!) : undefined,
+            branch_id: this.collectionBranchId() || undefined,
+          })
+          .toPromise();
+
+        if (paymentResult?.installments.length) {
+          await this.paymentService
+            .updateInstallment(paymentResult.id, paymentResult.installments[0].id, {
+              paid_date: this.formatDate(new Date()),
+              paid_amount: amount,
+              notes: 'Paid',
+            })
+            .toPromise();
+        }
+        receiptId = paymentResult?.id ?? null;
       }
 
       this.showMakePaymentDialog.set(false);
@@ -2709,14 +2791,13 @@ export class ClientProfile implements OnInit {
       const updatedCi = updatedCartItems.find(item => item.id === ci.id);
       const totalPaid = this.paidForProduct(ci);
       const totalAmt = this.cartItemTotal(ci);
-      const receiptId = paymentResult?.id;
       if (totalPaid >= totalAmt && updatedCi?.status === 'converted_paying') {
         await this.cartItemService.update(ci.id, { status: 'converted_paid' }).toPromise();
         await this.loadConsultation(c.id);
       }
 
       if (receiptId) {
-        this.openReceipt(receiptId);
+        this.openReceipt(receiptId, amount);
       }
 
       this.messageService.add({
@@ -2812,7 +2893,7 @@ export class ClientProfile implements OnInit {
     this.payAllItems.set(items);
     this.payAllReceiptNumber.set('');
     this.payAllInstallments = [];
-    this.payAllDocumentDate.set(null);
+    this.payAllDocumentDate.set(new Date());
     this.collectionBranchId.set(this.consultation()?.branch_id ?? null);
     this.receiptChecking.set(false);
     this.receiptAvailable.set(null);
@@ -2896,14 +2977,40 @@ export class ClientProfile implements OnInit {
     const receipt = this.payAllReceiptNumber();
     if (receipt && receipt.trim().length >= 2 && this.receiptAvailable() !== true) return;
 
+    if (this.payAllTransactionInvalid) {
+      this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Transaction Date cannot be before Document Date' });
+      return;
+    }
+
     this.loading.set(true);
-    const receiptIds: string[] = [];
+    const receiptPayments: { id: string; amount: number }[] = [];
     const totalRemaining = this.payAllRemainingBalance;
     try {
       for (const it of items) {
         const ci = it.cartItem;
         const amount = it.payNow;
         const remaining = Math.max(0, it.balance - amount);
+        const docDate = this.payAllDocumentDate()
+          ? this.formatDate(this.payAllDocumentDate()!)
+          : this.formatDate(new Date());
+
+        const schedule = this.pendingScheduleFor(ci);
+        if (schedule.length) {
+          // Pay against the existing schedule so pending installments are reduced
+          // instead of compounding via a new payment record.
+          const earliest = schedule[0];
+          await this.paymentService
+            .updateInstallment(earliest.payment_id, earliest.id, {
+              paid_date: docDate,
+              paid_amount: amount,
+              notes: 'Paid',
+            })
+            .toPromise();
+          if (!receipt) {
+            receiptPayments.push({ id: earliest.payment_id, amount });
+          }
+          continue;
+        }
 
         // Build installments: one immediate + proportionally distributed scheduled
         const installments: { due_date: string; amount: number }[] = [
@@ -2942,7 +3049,7 @@ export class ClientProfile implements OnInit {
             })
             .toPromise();
         }
-        if (paymentResult?.id) receiptIds.push(paymentResult.id);
+        if (paymentResult?.id) receiptPayments.push({ id: paymentResult.id, amount });
       }
 
       this.showPayAllDialog.set(false);
@@ -2964,8 +3071,8 @@ export class ClientProfile implements OnInit {
       if (receipt) {
         this.openConsolidatedAddReceipt(receipt);
       } else {
-        for (const id of receiptIds) {
-          if (id) this.openReceipt(id);
+        for (const rp of receiptPayments) {
+          if (rp.id) this.openReceipt(rp.id, rp.amount);
         }
       }
 
@@ -3239,6 +3346,17 @@ export class ClientProfile implements OnInit {
     return Math.max(0, this.totalForProduct(ci) - this.paidForProduct(ci));
   }
 
+  pendingScheduleFor(ci: CartItemRead): { payment_id: string; id: string; due_date: string; amount: string }[] {
+    const pays = this.paymentsForProduct(ci);
+    return pays
+      .flatMap(p =>
+        (p.installments || [])
+          .filter(i => i.status === 'pending')
+          .map(i => ({ payment_id: p.id, id: i.id, due_date: i.due_date, amount: i.amount })),
+      )
+      .sort((a, b) => a.due_date.localeCompare(b.due_date));
+  }
+
   paymentDate(pay: PaymentRead): Date {
     return new Date(pay.document_date || pay.created_at);
   }
@@ -3260,13 +3378,13 @@ export class ClientProfile implements OnInit {
     return shared.length > 1 ? payment.receipt_number : null;
   }
 
-  openReceipt(paymentId: string) {
+  openReceipt(paymentId: string, amount?: number) {
     const sharedRn = this.sharedReceiptNumber(paymentId);
     if (sharedRn) {
       this.openConsolidatedAddReceipt(sharedRn);
       return;
     }
-    this.paymentService.getReceipt(paymentId).subscribe({
+    this.paymentService.getReceipt(paymentId, false, amount).subscribe({
       next: (html) => {
         const win = window.open('', '_blank');
         if (win) {
@@ -3278,13 +3396,13 @@ export class ClientProfile implements OnInit {
     });
   }
 
-  downloadReceipt(paymentId: string) {
+  downloadReceipt(paymentId: string, amount?: number) {
     const sharedRn = this.sharedReceiptNumber(paymentId);
     if (sharedRn) {
       this.downloadConsolidatedAddReceipt(sharedRn);
       return;
     }
-    this.paymentService.getReceipt(paymentId, true).subscribe({
+    this.paymentService.getReceipt(paymentId, true, amount).subscribe({
       next: (html) => {
         const blob = new Blob([html], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
@@ -3300,13 +3418,13 @@ export class ClientProfile implements OnInit {
     });
   }
 
-  reprintReceipt(paymentId: string) {
+  reprintReceipt(paymentId: string, amount?: number) {
     const sharedRn = this.sharedReceiptNumber(paymentId);
     if (sharedRn) {
       this.reprintConsolidatedAddReceipt(sharedRn);
       return;
     }
-    this.paymentService.getReceipt(paymentId).subscribe({
+    this.paymentService.getReceipt(paymentId, false, amount).subscribe({
       next: (html) => {
         const win = window.open('', '_blank');
         if (win) {

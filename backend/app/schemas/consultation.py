@@ -173,6 +173,7 @@ class FullConsultationItem(BaseModel):
 
 class FullConsultationPayment(BaseModel):
     receipt_number: str | None = None
+    transaction_date: date | None = None
 
 
 class FullConsultationCreate(BaseModel):

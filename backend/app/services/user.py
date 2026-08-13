@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.security import hash_pin, generate_otp, verify_pin
-from app.models.company import Branch, UserBranchAssignment
-from app.models.user import User, UserRole, UserStatus
+from app.models.company import Branch, Company, UserBranchAssignment
+from app.models.user import User, UserRole, UserStatus, UserTransferHistory
 
 
 def generate_initial_pin() -> str:
@@ -288,3 +288,174 @@ async def verify_pin_reset_otp(
     user.failed_login_attempts = 0
     await db.flush()
     return user
+
+
+async def transfer_user_to_company(
+    db: AsyncSession,
+    user: User,
+    target_company_id: uuid.UUID,
+    target_branch_ids: list[uuid.UUID],
+    reason: str | None,
+    transferred_by_phone: str,
+) -> UserTransferHistory:
+    """Transfer a user to another company and record the change in history.
+
+    Historical transactions remain with the original company because they are
+    scoped through branch_id -> Branch.company_id, not the user's company_id.
+    """
+    if user.role == UserRole.SUPER_USER:
+        raise ValueError("Cannot transfer super users between companies")
+
+    if user.company_id == target_company_id:
+        raise ValueError("User already belongs to the target company")
+
+    target_company = await db.get(Company, target_company_id)
+    if target_company is None:
+        raise ValueError("Target company not found")
+    if not target_company.is_active:
+        raise ValueError("Target company is not active")
+
+    if not target_branch_ids:
+        raise ValueError("At least one target branch is required")
+
+    # Validate all target branches belong to target company
+    result = await db.execute(
+        select(Branch).where(
+            Branch.id.in_(target_branch_ids),
+            Branch.company_id == target_company_id,
+        )
+    )
+    valid_branches = {b.id for b in result.scalars().all()}
+    invalid_ids = set(target_branch_ids) - valid_branches
+    if invalid_ids:
+        raise ValueError("One or more target branches do not belong to the target company")
+
+    from_company_id = user.company_id
+    if from_company_id is None:
+        raise ValueError("User has no company to transfer from")
+
+    from_branch_ids = [str(a.branch_id) for a in user.branch_assignments]
+    role_before = user.role.value
+
+    # Create audit record before mutating user
+    history = UserTransferHistory(
+        user_phone=user.phone,
+        from_company_id=from_company_id,
+        to_company_id=target_company_id,
+        from_branch_ids=from_branch_ids,
+        to_branch_ids=[str(b) for b in target_branch_ids],
+        role_before=role_before,
+        role_after=role_before,
+        reason=reason,
+        transferred_by=transferred_by_phone,
+    )
+    db.add(history)
+
+    # Update user's company and branch assignments
+    user.company_id = target_company_id
+    await sync_user_branches(
+        db, user.phone, list(target_branch_ids),
+        company_id=target_company_id,
+        current_user_role=UserRole.SUPER_USER,
+    )
+
+    await db.flush()
+    await db.refresh(
+        history,
+        attribute_names=["from_company", "to_company", "transferred_by_user", "reversed_by_user"],
+    )
+    return history
+
+
+async def reverse_user_transfer(
+    db: AsyncSession,
+    transfer_id: uuid.UUID,
+    reason: str | None,
+    reversed_by_phone: str,
+) -> UserTransferHistory:
+    """Reverse a previous transfer, restoring the user's original company/branches."""
+    result = await db.execute(
+        select(UserTransferHistory).where(UserTransferHistory.id == transfer_id)
+    )
+    transfer = result.scalar_one_or_none()
+    if transfer is None:
+        raise ValueError("Transfer record not found")
+    if transfer.is_reversed:
+        raise ValueError("Transfer has already been reversed")
+
+    user = await get_user_by_phone(db, transfer.user_phone)
+    if user is None:
+        raise ValueError("User not found")
+
+    # Validate original company still exists and is active
+    from_company = await db.get(Company, transfer.from_company_id)
+    if from_company is None:
+        raise ValueError("Original company no longer exists")
+    if not from_company.is_active:
+        raise ValueError("Original company is not active")
+
+    # Validate original branches still exist and belong to original company
+    original_branch_ids = transfer.from_branch_ids or []
+    if original_branch_ids:
+        result = await db.execute(
+            select(Branch).where(
+                Branch.id.in_(original_branch_ids),
+                Branch.company_id == transfer.from_company_id,
+            )
+        )
+        valid_branches = {b.id for b in result.scalars().all()}
+        invalid_ids = set(original_branch_ids) - valid_branches
+        if invalid_ids:
+            raise ValueError("One or more original branches no longer exist or belong to the original company")
+
+    # Restore user's company and branches
+    user.company_id = transfer.from_company_id
+    await sync_user_branches(
+        db, user.phone, [uuid.UUID(b) for b in original_branch_ids],
+        company_id=transfer.from_company_id,
+        current_user_role=UserRole.SUPER_USER,
+    )
+
+    transfer.is_reversed = True
+    transfer.reversed_by = reversed_by_phone
+    transfer.reversed_at = datetime.now(timezone.utc)
+
+    await db.flush()
+    await db.refresh(
+        transfer,
+        attribute_names=["from_company", "to_company", "transferred_by_user", "reversed_by_user"],
+    )
+    return transfer
+
+
+async def get_user_transfer_history(
+    db: AsyncSession,
+    user_phone: str | None = None,
+    company_id: uuid.UUID | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[UserTransferHistory], int]:
+    query = select(UserTransferHistory).options(
+        selectinload(UserTransferHistory.from_company),
+        selectinload(UserTransferHistory.to_company),
+        selectinload(UserTransferHistory.transferred_by_user),
+        selectinload(UserTransferHistory.reversed_by_user),
+    )
+
+    if user_phone:
+        query = query.where(UserTransferHistory.user_phone == user_phone)
+    if company_id:
+        query = query.where(
+            or_(
+                UserTransferHistory.from_company_id == company_id,
+                UserTransferHistory.to_company_id == company_id,
+            )
+        )
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar() or 0
+
+    query = query.order_by(UserTransferHistory.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    return list(result.scalars().all()), total

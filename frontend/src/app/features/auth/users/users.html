@@ -176,6 +176,16 @@
                   tooltipPosition="top"
                 />
               }
+              @if (canTransfer && user.role !== 'super_user') {
+                <p-button
+                  icon="pi pi-arrow-right-arrow-left"
+                  severity="info"
+                  (onClick)="openTransfer(user)"
+                  styleClass="p-button-sm p-button-rounded p-button-text"
+                  pTooltip="Transfer company"
+                  tooltipPosition="top"
+                />
+              }
             </div>
           </td>
         </tr>
@@ -251,6 +261,16 @@
               (onClick)="confirmResetPin(user)"
               styleClass="p-button-sm p-button-rounded p-button-text"
               pTooltip="Reset PIN"
+              tooltipPosition="top"
+            />
+          }
+          @if (canTransfer && user.role !== 'super_user') {
+            <p-button
+              icon="pi pi-arrow-right-arrow-left"
+              severity="info"
+              (onClick)="openTransfer(user)"
+              styleClass="p-button-sm p-button-rounded p-button-text"
+              pTooltip="Transfer company"
               tooltipPosition="top"
             />
           }
@@ -458,6 +478,69 @@
         styleClass="w-full justify-center"
       />
     </div>
+  </p-dialog>
+
+  <!-- Transfer User Dialog -->
+  <p-dialog
+    header="Transfer User to Another Company"
+    [(visible)]="showTransferDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '420px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    @if (transferringUser()) {
+      <div class="flex flex-col gap-4 pt-2">
+        <div class="rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
+          <p><span class="font-medium">User:</span> {{ transferringUser()?.name }}</p>
+          <p><span class="font-medium">Phone:</span> <span class="font-mono">{{ transferringUser()?.phone }}</span></p>
+          <p><span class="font-medium">Current company:</span> {{ companyName(transferringUser()?.company_id) }}</p>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Target Company</label>
+          <p-select
+            [(ngModel)]="transferData.target_company_id"
+            [options]="transferCompanyOptions"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Select target company"
+            styleClass="w-full"
+            appendTo="body"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Target Branches</label>
+          <p-multiSelect
+            [(ngModel)]="transferData.target_branch_ids"
+            [options]="transferBranchOptions"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Select target branches"
+            styleClass="w-full"
+            appendTo="body"
+            [showClear]="true"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Reason (optional)</label>
+          <textarea
+            [(ngModel)]="transferData.reason"
+            rows="2"
+            class="w-full rounded-md border border-gray-300 p-2 text-sm focus:border-blue-500 focus:outline-none"
+            placeholder="Why is this user being transferred?"
+          ></textarea>
+        </div>
+        <p class="text-xs text-orange-600">
+          Historical transactions stay with the original company. The user's role will remain unchanged.
+        </p>
+        <p-button
+          label="Transfer User"
+          [loading]="loading()"
+          (onClick)="transferUser()"
+          styleClass="w-full justify-center"
+        />
+      </div>
+    }
   </p-dialog>
 
   <app-change-pin-dialog #changePinDialog />

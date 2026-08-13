@@ -67,3 +67,47 @@ class UserListResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+class CompanyBasic(BaseModel):
+    id: uuid.UUID
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+class UserTransferRequest(BaseModel):
+    target_company_id: uuid.UUID
+    target_branch_ids: list[uuid.UUID]
+    reason: str | None = Field(None, max_length=500)
+
+
+class UserTransferReverse(BaseModel):
+    reason: str | None = Field(None, max_length=500)
+
+
+class UserTransferRead(BaseModel):
+    id: uuid.UUID
+    user_phone: str
+    from_company: CompanyBasic
+    to_company: CompanyBasic
+    from_branch_ids: list[uuid.UUID] | None = None
+    to_branch_ids: list[uuid.UUID] | None = None
+    role_before: str | None = None
+    role_after: str | None = None
+    reason: str | None = None
+    transferred_by: str
+    is_reversed: bool
+    reversed_by: str | None = None
+    reversed_at: datetime | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class UserTransferListResponse(BaseModel):
+    transfers: list[UserTransferRead]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

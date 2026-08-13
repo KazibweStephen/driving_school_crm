@@ -2,8 +2,8 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import UUID as Uuid
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -71,7 +71,62 @@ class User(Base):
     branch_assignments: Mapped[list["UserBranchAssignment"]] = relationship(
         "UserBranchAssignment", back_populates="user", cascade="all, delete-orphan"
     )
+    transfer_history: Mapped[list["UserTransferHistory"]] = relationship(
+        "UserTransferHistory",
+        back_populates="user",
+        foreign_keys="UserTransferHistory.user_phone",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def branch_ids(self) -> list[uuid.UUID]:
         return [a.branch_id for a in self.branch_assignments]
+
+
+class UserTransferHistory(Base):
+    __tablename__ = "user_transfer_history"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_phone: Mapped[str] = mapped_column(
+        String(20), ForeignKey("users.phone", ondelete="CASCADE"), nullable=False, index=True
+    )
+    from_company_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
+    )
+    to_company_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False
+    )
+    from_branch_ids: Mapped[list[uuid.UUID] | None] = mapped_column(JSONB, nullable=True)
+    to_branch_ids: Mapped[list[uuid.UUID] | None] = mapped_column(JSONB, nullable=True)
+    role_before: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    role_after: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transferred_by: Mapped[str] = mapped_column(
+        String(20), ForeignKey("users.phone", ondelete="SET NULL"), nullable=False
+    )
+    is_reversed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    reversed_by: Mapped[str | None] = mapped_column(
+        String(20), ForeignKey("users.phone", ondelete="SET NULL"), nullable=True
+    )
+    reversed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user: Mapped["User"] = relationship(
+        "User", back_populates="transfer_history", foreign_keys=[user_phone]
+    )
+    from_company: Mapped["Company"] = relationship(
+        "Company", foreign_keys=[from_company_id]
+    )
+    to_company: Mapped["Company"] = relationship(
+        "Company", foreign_keys=[to_company_id]
+    )
+    transferred_by_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[transferred_by], uselist=False
+    )
+    reversed_by_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[reversed_by], uselist=False
+    )

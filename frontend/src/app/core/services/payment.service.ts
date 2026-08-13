@@ -53,6 +53,8 @@ export interface InstallmentUpdate {
   paid_date?: string;
   paid_amount?: number;
   notes?: string;
+  push_forward_date?: string;
+  future_installments?: { installment_id: string; due_date: string }[];
 }
 
 export interface ClientSummary {
@@ -163,8 +165,12 @@ export class PaymentService {
     return this.http.get<{ exists: boolean }>(`/api/v1/payments/check-receipt/${encodeURIComponent(receiptNumber)}`);
   }
 
-  getReceipt(paymentId: string, download: boolean = false) {
-    const url = `/api/v1/receipts/${paymentId}/download${download ? '?download=1' : ''}`;
+  getReceipt(paymentId: string, download: boolean = false, amount?: number) {
+    let url = `/api/v1/receipts/${paymentId}/download`;
+    const params: string[] = [];
+    if (download) params.push('download=1');
+    if (amount !== undefined && amount !== null) params.push(`amount=${encodeURIComponent(String(amount))}`);
+    if (params.length) url += '?' + params.join('&');
     return this.http.get(url, { responseType: 'text' });
   }
 

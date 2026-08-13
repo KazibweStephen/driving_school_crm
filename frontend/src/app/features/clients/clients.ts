@@ -1,7 +1,7 @@
 import { Component, HostListener, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, DatePipe } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
@@ -54,6 +54,7 @@ interface ReceiptItem {
     FormsModule,
     RouterLink,
     DecimalPipe,
+    DatePipe,
     ButtonModule,
     DialogModule,
     InputTextModule,
@@ -111,6 +112,7 @@ export class Clients implements OnInit, OnDestroy {
 
   packageAllocations = signal<PackageAllocation[]>([]);
   paymentReceiptNumber = signal('');
+  paymentTransactionDate = signal<Date>(new Date());
   paymentInstallments = signal<{ due_date: Date | null; amount: number }[]>([]);
 
   // Receipt validation
@@ -386,7 +388,7 @@ export class Clients implements OnInit, OnDestroy {
       notes: '',
       interest_level: '',
       start_date: null,
-      document_date: null,
+      document_date: new Date(),
     };
     this.selectedProduct.set(null);
     this.selectedPackageId.set(null);
@@ -394,6 +396,7 @@ export class Clients implements OnInit, OnDestroy {
     this.convertNow.set(false);
     this.packageAllocations.set([]);
     this.paymentReceiptNumber.set('');
+    this.paymentTransactionDate.set(new Date());
     this.paymentInstallments.set([]);
     this.createdConsultation.set(null);
     this.receiptChecking.set(false);
@@ -423,8 +426,36 @@ export class Clients implements OnInit, OnDestroy {
     return Math.max(0, this.selectedProductTotal - this.totalAllocated);
   }
 
+  get today(): Date {
+    return new Date();
+  }
+
+  get canBackdate(): boolean {
+    return this.authService.currentUserCanBackdate();
+  }
+
+  get paymentMinDate(): Date {
+    const doc = this.form.document_date as Date | null;
+    return doc || new Date();
+  }
+
+  get transactionDateInvalid(): boolean {
+    const doc = this.form.document_date as Date | null;
+    const tx = this.paymentTransactionDate();
+    if (!doc || !tx) return false;
+    return this.stripTime(tx) < this.stripTime(doc);
+  }
+
+  private stripTime(d: Date): number {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  }
+
   canCompletePayment(): boolean {
     if (this.totalAllocated <= 0) return false;
+    const doc = this.form.document_date as Date | null;
+    const tx = this.paymentTransactionDate();
+    if (!doc || !tx) return false;
+    if (this.stripTime(tx) < this.stripTime(doc)) return false;
     const receipt = this.paymentReceiptNumber();
     if (receipt && receipt.trim().length >= 2) {
       if (this.receiptChecking() || this.receiptAvailable() !== true) return false;
@@ -620,9 +651,12 @@ export class Clients implements OnInit, OnDestroy {
       if (this.form.notes) payload.notes = this.form.notes;
       if (this.form.branch_id) payload.branch_id = this.form.branch_id;
       payload.items = items;
-      if (this.paymentReceiptNumber()) {
-        payload.payment = { receipt_number: this.paymentReceiptNumber() };
-      }
+      payload.payment = {
+        receipt_number: this.paymentReceiptNumber() || undefined,
+        transaction_date: this.paymentTransactionDate()
+          ? this.formatDate(this.paymentTransactionDate())
+          : this.formatDate(new Date()),
+      };
 
       const c = await this.consultationService.createFull(payload).toPromise();
       if (!c) throw new Error('Failed to create consultation');
@@ -647,12 +681,10 @@ export class Clients implements OnInit, OnDestroy {
       // Get system receipt and all payment IDs
       let systemReceipt = '';
       const paymentIds: string[] = [];
-      if (c.cart_items && c.cart_items.length > 0) {
-        const payments = await this.paymentService.getPaymentsByConsultation(c.id).toPromise();
-        if (payments && payments.length > 0) {
-          systemReceipt = payments[0].system_receipt_number;
-          payments.forEach(p => paymentIds.push(p.id));
-        }
+      const payments = await this.paymentService.getPaymentsByConsultation(c.id).toPromise();
+      if (payments && payments.length > 0) {
+        systemReceipt = payments[0].system_receipt_number;
+        payments.forEach(p => paymentIds.push(p.id));
       }
 
       // Build receipt installment data
@@ -722,13 +754,21 @@ export class Clients implements OnInit, OnDestroy {
     }
   }
 
-  closeReceipt() {
+  viewClient() {
     const c = this.createdConsultation();
     this.showCreateDialog.set(false);
     if (c) {
       this.search.set(this.form.phone);
       this.onSearch();
       this.router.navigate(['/consultations', c.id]);
+    }
+  }
+
+  closeReceipt() {
+    this.showCreateDialog.set(false);
+    if (this.form.phone) {
+      this.search.set(this.form.phone);
+      this.onSearch();
     }
   }
 

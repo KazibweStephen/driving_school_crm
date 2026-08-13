@@ -102,8 +102,11 @@ async def download_receipt(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
     if current_user.company_id is not None:
-        branch = payment.consultation.branch if payment.consultation else None
-        if not branch or branch.company_id != current_user.company_id:
+        consultation = payment.consultation if payment.consultation else None
+        if not consultation:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        # Payments for branch-less consultations (not tied to any company) stay accessible.
+        if consultation.branch is not None and consultation.branch.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Payment not found")
     company_name = await _resolve_company_name(db, payment)
     html = await generate_receipt_html(
@@ -144,7 +147,8 @@ async def download_consolidated_receipt(
     if not consultation:
         raise HTTPException(status_code=404, detail="Consultation not found")
     if current_user.company_id is not None:
-        if not consultation.branch or consultation.branch.company_id != current_user.company_id:
+        # Consultations with no branch are not tied to any company; allow access.
+        if consultation.branch is not None and consultation.branch.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Consultation not found")
 
     company_name = await _resolve_company_name_from_consultation(db, consultation)
@@ -171,8 +175,11 @@ async def get_receipt_link(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
     if current_user.company_id is not None:
-        branch = payment.consultation.branch if payment.consultation else None
-        if not branch or branch.company_id != current_user.company_id:
+        consultation = payment.consultation if payment.consultation else None
+        if not consultation:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        # Payments for branch-less consultations (not tied to any company) stay accessible.
+        if consultation.branch is not None and consultation.branch.company_id != current_user.company_id:
             raise HTTPException(status_code=404, detail="Payment not found")
 
     url = await get_receipt_download_url(payment_id)

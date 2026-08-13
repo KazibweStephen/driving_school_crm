@@ -225,15 +225,40 @@ async def generate_receipt_html(
         </tbody>
     </table>"""
 
-    # Payments Details: payment history for this item (payments made before
-    # and the current one) plus any pending installments, in the same table format.
+    # Payments Details: payment history for this item reconstructed from the
+    # paid installments (each collection records one PAID installment on the
+    # shared payment record). The first row shows the product cost and each
+    # following row shows the reducing balance before that payment.
     detail_items: list[tuple] = []
-    running_paid = Decimal("0")
+    events: list[tuple] = []
     for p in all_payments:
-        running_paid += p.total_paid
-        balance_after = max(Decimal("0"), grand_total - running_paid)
-        d = p.document_date or (p.created_at.date() if p.created_at else None)
-        detail_items.append((d, balance_after, p.total_paid, "Paid"))
+        for inst in p.installments:
+            if inst.status == InstallmentStatus.PAID:
+                ev_amt = inst.paid_amount or inst.amount or Decimal("0")
+                if ev_amt > 0:
+                    ev_date = inst.paid_date or inst.due_date or p.document_date or (
+                        p.created_at.date() if p.created_at else None
+                    )
+                    events.append((ev_date, ev_amt))
+            elif inst.paid_amount and inst.paid_amount > 0:
+                # Legacy partial recorded directly on a pending installment
+                ev_date = inst.paid_date or inst.due_date or p.document_date or (
+                    p.created_at.date() if p.created_at else None
+                )
+                events.append((ev_date, inst.paid_amount))
+    events.sort(key=lambda x: (x[0] is None, x[0] or date.max))
+
+    running_balance = grand_total
+    for ev_date, ev_amt in events:
+        detail_items.append(
+            (
+                ev_date,
+                max(Decimal("0"), running_balance),
+                ev_amt,
+                "Paid",
+            )
+        )
+        running_balance = max(Decimal("0"), running_balance - ev_amt)
 
     for date_key, m in next_due_rows:
         detail_items.append(

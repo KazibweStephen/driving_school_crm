@@ -37,6 +37,8 @@ async def _recompute_payment_totals(payment: Payment) -> None:
     for inst in payment.installments:
         if inst.status == InstallmentStatus.PAID:
             total_paid += inst.paid_amount or inst.amount
+        else:
+            total_paid += inst.paid_amount or Decimal("0")
     payment.total_paid = total_paid
     payment.balance = max(Decimal("0"), payment.total_amount - total_paid)
 
@@ -77,6 +79,17 @@ async def create_payment(
         if company_id is not None and branch.company_id != company_id:
             from fastapi import HTTPException
             raise HTTPException(status_code=403, detail="Branch not in your company")
+    if document_date is not None:
+        c_row = await db.execute(
+            select(Consultation.document_date).where(Consultation.id == consultation_id)
+        )
+        c_doc = c_row.scalar_one_or_none()
+        if c_doc is not None and document_date < c_doc:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=400,
+                detail="Transaction Date cannot be before Document Date",
+            )
     payment = Payment(
         id=uuid.uuid4(),
         consultation_id=consultation_id,
@@ -129,10 +142,17 @@ async def get_payments_by_consultation(
     current_user_role: UserRole | None = None,
 ) -> list[Payment]:
     if company_id is not None:
+        # A consultation with no branch is not tied to any company; allow access
+        # so payments remain reachable from the onboarding receipt step.
         c_result = await db.execute(
-            select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
+            select(Consultation)
+            .outerjoin(Branch, Consultation.branch_id == Branch.id)
+            .where(
                 Consultation.id == consultation_id,
-                Branch.company_id == company_id,
+                or_(
+                    Consultation.branch_id.is_(None),
+                    Branch.company_id == company_id,
+                ),
             )
         )
         if not c_result.scalar_one_or_none():
@@ -282,13 +302,6 @@ async def mark_installment_paid(
     if paid_amount <= 0:
         raise HTTPException(status_code=400, detail="Payment amount must be greater than zero")
 
-    amount = inst.amount
-    inst.status = InstallmentStatus.PAID
-    inst.paid_date = paid_date or now
-    inst.paid_amount = paid_amount
-    if notes is not None:
-        inst.notes = notes
-
     payment_id = inst.payment_id
 
     # Load the parent payment (with installments) to drive cascade + recompute
@@ -300,70 +313,85 @@ async def mark_installment_paid(
     payment = pay_result.scalar_one()
     touched_ids: set[uuid.UUID] = {payment.id}
 
-    if paid_amount < amount:
-        # Partial: push the unpaid remainder forward to a new PENDING installment
-        remainder = amount - paid_amount
-        new_due = push_forward_date or inst.due_date
-        push_inst = Installment(
-            payment_id=payment_id,
-            due_date=new_due,
-            amount=remainder,
-            notes=f"Pushed forward from {inst.due_date.isoformat()} "
-                  f"({paid_amount} paid on {(paid_date or now).isoformat()})",
+    effective_paid_date = paid_date or now
+    if (
+        payment.consultation is not None
+        and payment.consultation.document_date is not None
+        and effective_paid_date < payment.consultation.document_date
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Transaction Date cannot be before Document Date",
         )
-        db.add(push_inst)
-    elif paid_amount > amount:
-        # Overpayment: surplus pays down the earliest future scheduled installments
-        surplus = paid_amount - amount
-        pkg_match = (
-            Payment.package_id == payment.package_id
-            if payment.package_id is not None
-            else Payment.package_id.is_(None)
-        )
-        future_result = await db.execute(
-            select(Installment)
-            .join(Payment, Installment.payment_id == Payment.id)
-            .where(
-                Payment.consultation_id == payment.consultation_id,
-                Payment.product_id == payment.product_id,
-                pkg_match,
-                Installment.id != inst.id,
-                Installment.status == InstallmentStatus.PENDING,
-            )
-            .order_by(Installment.due_date, Installment.created_at)
-        )
-        for f_inst in future_result.scalars().all():
-            if surplus <= 0:
-                break
-            if f_inst.amount <= surplus:
-                surplus -= f_inst.amount
-                touched_ids.add(f_inst.payment_id)
-                await db.delete(f_inst)
-            else:
-                f_inst.amount -= surplus
-                surplus = Decimal("0")
-                touched_ids.add(f_inst.payment_id)
 
-    # Apply due-date overrides for other future installments
+    # Apply the collection across pending installments of THIS payment in
+    # due-date order. The first pending installment (the one this payment is
+    # applied to) absorbs the collection record when it is fully settled — its
+    # paid_amount carries the collected value so the receipt can reconstruct the
+    # per-collection history. Partial settlements leave it PENDING and create a
+    # dedicated PAID collection installment. Excess beyond the first installments
+    # cascades into the remaining ones, reducing them in place.
+    pending_installments = sorted(
+        [i for i in payment.installments if i.status == InstallmentStatus.PENDING],
+        key=lambda i: (i.due_date, i.created_at),
+    )
+
+    remaining = paid_amount
+    collection_inst: Installment | None = None
+    for index, target in enumerate(pending_installments):
+        if remaining <= 0:
+            break
+        if index == 0:
+            if remaining >= target.amount:
+                target.paid_amount = paid_amount
+                remaining -= target.amount
+                target.amount = Decimal("0")
+                target.status = InstallmentStatus.PAID
+                target.paid_date = paid_date or now
+                if notes is not None:
+                    target.notes = notes
+            else:
+                target.amount = max(Decimal("0"), target.amount - remaining)
+                remaining = Decimal("0")
+                if notes is not None:
+                    target.notes = notes
+                collection_inst = Installment(
+                    payment_id=payment_id,
+                    due_date=paid_date or now,
+                    amount=paid_amount,
+                    paid_amount=paid_amount,
+                    status=InstallmentStatus.PAID,
+                    paid_date=paid_date or now,
+                    notes=notes or "Payment collected",
+                )
+        else:
+            if remaining >= target.amount:
+                remaining -= target.amount
+                target.amount = Decimal("0")
+                target.status = InstallmentStatus.PAID
+                target.paid_date = paid_date or now
+                if notes is not None:
+                    target.notes = notes
+            else:
+                target.amount = max(Decimal("0"), target.amount - remaining)
+                remaining = Decimal("0")
+                if notes is not None:
+                    target.notes = notes
+
+    if collection_inst is not None:
+        db.add(collection_inst)
+
+    # Apply due-date overrides for remaining future installments of this payment.
     if future_installments:
-        pkg_match = (
-            Payment.package_id == payment.package_id
-            if payment.package_id is not None
-            else Payment.package_id.is_(None)
-        )
         for adj in future_installments:
             adj_id = adj.get("installment_id")
             adj_date = adj.get("due_date")
             if not adj_id or not adj_date:
                 continue
             a_result = await db.execute(
-                select(Installment)
-                .join(Payment, Installment.payment_id == Payment.id)
-                .where(
+                select(Installment).where(
                     Installment.id == adj_id,
-                    Payment.consultation_id == payment.consultation_id,
-                    Payment.product_id == payment.product_id,
-                    pkg_match,
+                    Installment.payment_id == payment_id,
                 )
             )
             adj_inst = a_result.scalar_one_or_none()
@@ -373,13 +401,17 @@ async def mark_installment_paid(
 
     await db.flush()
 
-    # Recompute totals for every touched payment
+    # Recompute totals for every touched payment. Use populate_existing so the
+    # selectinload re-fetches installments even though the Payment object is
+    # already in the identity map — otherwise the freshly added collection
+    # installment is missing and total_paid/balance are computed too low.
     paid_payment = None
     for pid in touched_ids:
         reloaded = await db.execute(
             select(Payment)
             .where(Payment.id == pid)
             .options(selectinload(Payment.installments), selectinload(Payment.consultation))
+            .execution_options(populate_existing=True)
         )
         pay = reloaded.scalar_one()
         await _recompute_payment_totals(pay)

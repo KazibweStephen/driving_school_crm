@@ -188,9 +188,7 @@
             <div><label class="mb-1 block text-sm font-medium text-gray-700">Location</label><input pInputText [(ngModel)]="form.location" class="w-full" placeholder="e.g. Kampala" /></div>
             <div><label class="mb-1 block text-sm font-medium text-gray-700">How did they find us?</label><p-select [(ngModel)]="form.how_they_knew_us" [options]="howTheyKnewUsOptions" optionLabel="label" optionValue="value" placeholder="Select" styleClass="w-full" appendTo="body" /></div>
             <div><label class="mb-1 block text-sm font-medium text-gray-700">Branch</label><p-select [(ngModel)]="form.branch_id" [options]="branches()" optionLabel="name" optionValue="id" placeholder="Select branch" styleClass="w-full" [showClear]="true" appendTo="body" /></div>
-            @if (authService.currentUserCanBackdate()) {
-              <div><label class="mb-1 block text-sm font-medium text-gray-700">Transaction Date</label><p-datepicker [(ngModel)]="form.document_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [showClear]="true" /></div>
-            }
+            <div><label class="mb-1 block text-sm font-medium text-gray-700">Document Date *</label><p-datepicker [(ngModel)]="form.document_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [showClear]="false" [minDate]="canBackdate ? null : today" /></div>
             <p-button label="Next: Add Products" icon="pi pi-arrow-right" [loading]="loading()" (onClick)="nextStep()" styleClass="w-full justify-center" />
           </div>
         }
@@ -290,11 +288,11 @@
                   <div class="mb-2 flex items-center gap-2">
                     <div class="flex-1">
                       <label class="mb-0.5 block text-xs text-gray-500">Due Date</label>
-                      <p-datepicker [(ngModel)]="inst.due_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" />
+                      <p-datepicker [(ngModel)]="inst.due_date" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [minDate]="today" />
                     </div>
                     <div class="flex-1">
                       <label class="mb-0.5 block text-xs text-gray-500">Amount</label>
-                      <p-inputNumber [(ngModel)]="inst.amount" [min]="0" placeholder="0" styleClass="w-full" />
+                      <p-inputNumber [(ngModel)]="inst.amount" [min]="0" [readonly]="true" placeholder="0" styleClass="w-full" />
                     </div>
                     <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="removePaymentInstallment(i)" styleClass="mt-5" />
                   </div>
@@ -312,6 +310,14 @@
                 }
               </div>
             }
+
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Transaction Date *</label>
+              <p-datepicker [(ngModel)]="paymentTransactionDate" dateFormat="dd/mm/yy" styleClass="w-full" appendTo="body" [showClear]="false" [minDate]="paymentMinDate" />
+              @if (transactionDateInvalid) {
+                <p class="mt-1 text-xs text-red-500">Transaction Date cannot be before Document Date ({{ form.document_date | date:'dd/MM/yyyy' }})</p>
+              }
+            </div>
 
             <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">Receipt Number (optional)</label>
@@ -409,7 +415,8 @@
                   <p-button icon="pi pi-download" (onClick)="downloadReceipt(pid)" styleClass="flex-1 justify-center" severity="secondary" pTooltip="Download" />
                 }
               }
-              <p-button label="Close" icon="pi pi-check" (onClick)="closeReceipt()" styleClass="flex-1 justify-center" severity="success" />
+              <p-button label="View Client" icon="pi pi-user" (onClick)="viewClient()" styleClass="flex-1 justify-center" severity="info" />
+              <p-button label="Close" icon="pi pi-times" (onClick)="closeReceipt()" styleClass="flex-1 justify-center" severity="secondary" />
             </div>
           </div>
         }

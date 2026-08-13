@@ -28,7 +28,9 @@ async def create_product(
     db.add(product)
     await db.flush()
     result = await db.execute(
-        select(Product).where(Product.id == product.id).options(selectinload(Product.packages))
+        select(Product)
+        .where(Product.id == product.id)
+        .options(selectinload(Product.packages).selectinload(Package.commission_rates))
     )
     return result.scalar_one()
 
@@ -92,7 +94,9 @@ async def update_product(
         product.status = status
     await db.flush()
     result = await db.execute(
-        select(Product).where(Product.id == product.id).options(selectinload(Product.packages))
+        select(Product)
+        .where(Product.id == product.id)
+        .options(selectinload(Product.packages).selectinload(Package.commission_rates))
     )
     return result.scalar_one()
 
@@ -101,7 +105,9 @@ async def deactivate_product(db: AsyncSession, product: Product) -> Product:
     product.status = EntityStatus.INACTIVE
     await db.flush()
     result = await db.execute(
-        select(Product).where(Product.id == product.id).options(selectinload(Product.packages))
+        select(Product)
+        .where(Product.id == product.id)
+        .options(selectinload(Product.packages).selectinload(Package.commission_rates))
     )
     return result.scalar_one()
 
@@ -200,7 +206,11 @@ async def create_package(
 
 
 async def get_package_by_id(db: AsyncSession, package_id: uuid.UUID, company_id: uuid.UUID | None = None) -> Package | None:
-    query = select(Package).where(Package.id == package_id).options(selectinload(Package.product))
+    query = (
+        select(Package)
+        .where(Package.id == package_id)
+        .options(selectinload(Package.product), selectinload(Package.commission_rates))
+    )
     if company_id:
         query = query.join(Package.product).where(Product.company_id == company_id)
     result = await db.execute(query)
@@ -359,5 +369,9 @@ async def update_package_with_rate(
 async def deactivate_package(db: AsyncSession, pkg: Package) -> Package:
     pkg.status = EntityStatus.INACTIVE
     await db.flush()
-    await db.refresh(pkg)
-    return pkg
+    result = await db.execute(
+        select(Package)
+        .where(Package.id == pkg.id)
+        .options(selectinload(Package.commission_rates))
+    )
+    return result.scalar_one()

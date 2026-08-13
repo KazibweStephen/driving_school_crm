@@ -93,6 +93,9 @@ export interface FullConsultationCreate {
   branch_id?: string | null;
   items: FullConsultationItem[];
   payment?: FullConsultationPayment;
+  converter_id?: string;
+  primary_recommender_id?: string;
+  secondary_recommender_id?: string;
 }
 
 export interface ConsultationUpdate {
@@ -164,6 +167,9 @@ export interface BulkOnboardingClient {
   location?: string;
   branch_id?: string;
   document_date?: string;
+  converter_id?: string;
+  primary_recommender_id?: string;
+  secondary_recommender_id?: string;
   packages: BulkOnboardingPackage[];
 }
 

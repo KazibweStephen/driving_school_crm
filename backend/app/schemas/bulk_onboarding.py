@@ -43,6 +43,9 @@ class BulkOnboardingClient(BaseModel):
     location: str | None = None
     branch_id: uuid.UUID | None = None
     document_date: date | None = None
+    converter_id: str | None = None
+    primary_recommender_id: str | None = None
+    secondary_recommender_id: str | None = None
     packages: list[BulkOnboardingPackage] = Field(min_length=1)
 
 

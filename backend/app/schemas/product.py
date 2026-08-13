@@ -48,6 +48,18 @@ class PackageWithRateCreate(PackageCreate):
     rate_notes: str | None = None
 
 
+class PackageWithRateUpdate(PackageUpdate):
+    """Extends PackageUpdate with optional commission rate fields."""
+    rate_total_amount: Decimal | None = None
+    rate_converter_pct: Decimal | None = None
+    rate_primary_recommender_pct: Decimal | None = None
+    rate_secondary_recommender_pct: Decimal | None = None
+    rate_active_from: date | None = None
+    rate_active_until: date | None = None
+    rate_notes: str | None = None
+    clear_rate: bool = False
+
+
 class PackageRead(BaseModel):
     id: uuid.UUID
     product_id: uuid.UUID

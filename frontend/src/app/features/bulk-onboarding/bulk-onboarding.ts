@@ -84,6 +84,9 @@ interface ClientDraft {
   location: string;
   branch_id: string;
   document_date: Date | null;
+  converter_id: string;
+  primary_recommender_id: string;
+  secondary_recommender_id: string;
   packages: PackageDraft[];
 }
 
@@ -481,6 +484,7 @@ export class BulkOnboardingCmp implements OnInit {
   }
 
   private restoreClientDraft(c: any): ClientDraft {
+    const currentPhone = this.auth.currentUser() || '';
     return {
       phone: c.phone || '',
       first_name: c.first_name || '',
@@ -489,6 +493,9 @@ export class BulkOnboardingCmp implements OnInit {
       location: c.location || '',
       branch_id: c.branch_id || '',
       document_date: c.document_date ? new Date(c.document_date) : null,
+      converter_id: c.converter_id || currentPhone,
+      primary_recommender_id: c.primary_recommender_id || currentPhone,
+      secondary_recommender_id: c.secondary_recommender_id || currentPhone,
       packages: (c.packages || []).map((p: any) => ({
         product_id: p.product_id || '',
         package_id: p.package_id || '',
@@ -537,6 +544,9 @@ export class BulkOnboardingCmp implements OnInit {
         location: c.location,
         branch_id: c.branch_id,
         document_date: c.document_date?.toISOString()?.split('T')[0] || null,
+        converter_id: c.converter_id,
+        primary_recommender_id: c.primary_recommender_id,
+        secondary_recommender_id: c.secondary_recommender_id,
         packages: c.packages.map(p => ({
           product_id: p.product_id,
           package_id: p.package_id,
@@ -586,6 +596,7 @@ export class BulkOnboardingCmp implements OnInit {
   }
 
   addClient() {
+    const currentPhone = this.auth.currentUser() || '';
     this.clients.update(clients => [
       ...clients,
       {
@@ -596,6 +607,9 @@ export class BulkOnboardingCmp implements OnInit {
         location: '',
         branch_id: this.branchId(),
         document_date: null,
+        converter_id: currentPhone,
+        primary_recommender_id: currentPhone,
+        secondary_recommender_id: currentPhone,
         packages: [],
       },
     ]);
@@ -1602,14 +1616,17 @@ export class BulkOnboardingCmp implements OnInit {
 
         const payload: any = {
           clients: this.clients().map(c => ({
-            phone: c.phone,
-            first_name: c.first_name,
-            middle_name: c.middle_name || undefined,
-            last_name: c.last_name || undefined,
-            location: c.location || undefined,
-            branch_id: this.branchId() || c.branch_id || undefined,
-            document_date: c.document_date?.toISOString()?.split('T')[0] || undefined,
-            packages: c.packages.map(p => ({
+        phone: c.phone,
+        first_name: c.first_name,
+        middle_name: c.middle_name || undefined,
+        last_name: c.last_name || undefined,
+        location: c.location || undefined,
+        branch_id: this.branchId() || c.branch_id || undefined,
+        document_date: c.document_date?.toISOString()?.split('T')[0] || undefined,
+        converter_id: c.converter_id || undefined,
+        primary_recommender_id: c.primary_recommender_id || undefined,
+        secondary_recommender_id: c.secondary_recommender_id || undefined,
+        packages: c.packages.map(p => ({
               product_id: p.product_id,
               package_id: p.package_id || undefined,
               transmission_type: p.transmission_type || 'manual',

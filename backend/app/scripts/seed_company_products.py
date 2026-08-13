@@ -10,11 +10,13 @@ Usage:
 import asyncio
 import json
 import uuid
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy import select
 
 from app.core.database import async_session
+from app.models.commission import CommissionRate
 from app.models.product import EntityStatus, Package, Product
 
 SEED_PRODUCTS_PATH = Path(__file__).resolve().parents[1] / "data" / "seed_products.json"
@@ -45,6 +47,7 @@ async def seed_company_products_from_template(
     data = load_seed_products()
     created_count = 0
     package_count = 0
+    rate_count = 0
     for product_data in data:
         new_product = Product(
             company_id=target_company_id,
@@ -77,12 +80,28 @@ async def seed_company_products_from_template(
                 created_by_phone=created_by_phone,
             )
             db.add(new_pkg)
+            await db.flush()
             package_count += 1
+
+            commission_data = pkg_data.get("commission")
+            if commission_data:
+                rate = CommissionRate(
+                    company_id=target_company_id,
+                    total_amount=commission_data["total_amount"],
+                    converter_pct=commission_data["converter_pct"],
+                    primary_recommender_pct=commission_data.get("primary_recommender_pct", 0),
+                    secondary_recommender_pct=commission_data.get("secondary_recommender_pct", 0),
+                    active_from=date.today(),
+                    notes="Seeded default scheme",
+                )
+                rate.packages = [new_pkg]
+                db.add(rate)
+                rate_count += 1
 
     await db.flush()
     print(
-        f"  Seeded {created_count} product(s) and {package_count} package(s) "
-        f"to company {target_company_id}."
+        f"  Seeded {created_count} product(s), {package_count} package(s) "
+        f"and {rate_count} commission rate(s) to company {target_company_id}."
     )
     return created_count
 

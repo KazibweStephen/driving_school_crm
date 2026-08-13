@@ -18,7 +18,13 @@
         "permit_processing_duration_days": null,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "500.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "Driving Only 1 Week",
@@ -32,7 +38,13 @@
         "permit_processing_duration_days": null,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "2500.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "Driving Only 2 Weeks",
@@ -46,7 +58,13 @@
         "permit_processing_duration_days": null,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "2500.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "Driving Only 3 Weeks",
@@ -60,7 +78,13 @@
         "permit_processing_duration_days": null,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "2500.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "Driving Only 1 Month",
@@ -74,7 +98,13 @@
         "permit_processing_duration_days": null,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "10000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       }
     ]
   },
@@ -97,7 +127,13 @@
         "permit_processing_duration_days": null,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "5000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "5 Years Permit(B)",
@@ -111,7 +147,13 @@
         "permit_processing_duration_days": 21,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "5000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "3 Years Permit(B)",
@@ -125,7 +167,13 @@
         "permit_processing_duration_days": 21,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "5000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       }
     ]
   },
@@ -148,7 +196,13 @@
         "permit_processing_duration_days": 21,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "10000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "1 Month Driving + 3 Year Permit Processing(B)",
@@ -162,7 +216,13 @@
         "permit_processing_duration_days": 21,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "10000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "1 Month Driving + 1 Year Permit Processing(B)",
@@ -176,7 +236,13 @@
         "permit_processing_duration_days": 21,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "10000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       }
     ]
   },
@@ -199,7 +265,13 @@
         "permit_processing_duration_days": 15,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "5000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       }
     ]
   },
@@ -222,7 +294,13 @@
         "permit_processing_duration_days": null,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "10000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "International to Uganda",
@@ -236,7 +314,13 @@
         "permit_processing_duration_days": null,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "10000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       }
     ]
   },
@@ -259,7 +343,13 @@
         "permit_processing_duration_days": null,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "5000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "3 years Permit(A)",
@@ -273,7 +363,13 @@
         "permit_processing_duration_days": 15,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "5000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "5 years Permit(A)",
@@ -287,7 +383,13 @@
         "permit_processing_duration_days": 15,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "5000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       }
     ]
   },
@@ -310,7 +412,13 @@
         "permit_processing_duration_days": 3,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "10000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       },
       {
         "name": "Defensive Driving Training(Upgrade)",
@@ -324,7 +432,13 @@
         "permit_processing_duration_days": 3,
         "is_extension": false,
         "extension_days": null,
-        "status": "active"
+        "status": "active",
+        "commission": {
+          "total_amount": "5000.00",
+          "converter_pct": 50,
+          "primary_recommender_pct": 25,
+          "secondary_recommender_pct": 25
+        }
       }
     ]
   }

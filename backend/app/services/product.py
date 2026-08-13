@@ -34,7 +34,11 @@ async def create_product(
 
 
 async def get_product_by_id(db: AsyncSession, product_id: uuid.UUID, company_id: uuid.UUID | None = None) -> Product | None:
-    query = select(Product).where(Product.id == product_id).options(selectinload(Product.packages))
+    query = (
+        select(Product)
+        .where(Product.id == product_id)
+        .options(selectinload(Product.packages).selectinload(Package.commission_rates))
+    )
     if company_id:
         query = query.where(Product.company_id == company_id)
     result = await db.execute(query)
@@ -49,7 +53,10 @@ async def list_products(
     page_size: int = 20,
     company_id: uuid.UUID | None = None,
 ) -> tuple[list[Product], int]:
-    query = select(Product).options(selectinload(Product.packages))
+    query = (
+        select(Product)
+        .options(selectinload(Product.packages).selectinload(Package.commission_rates))
+    )
 
     if company_id:
         query = query.where(Product.company_id == company_id)

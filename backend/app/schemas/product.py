@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.product import EntityStatus
 
@@ -60,6 +60,18 @@ class PackageWithRateUpdate(PackageUpdate):
     clear_rate: bool = False
 
 
+class PackageCommissionRateRead(BaseModel):
+    id: uuid.UUID
+    total_amount: Decimal
+    converter_pct: Decimal
+    primary_recommender_pct: Decimal
+    secondary_recommender_pct: Decimal
+    active_from: date
+    active_until: date | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class PackageRead(BaseModel):
     id: uuid.UUID
     product_id: uuid.UUID
@@ -78,8 +90,32 @@ class PackageRead(BaseModel):
     created_by_phone: str | None
     created_at: datetime
     updated_at: datetime
+    commission_rate: PackageCommissionRateRead | None = Field(
+        default=None, validation_alias="commission_rates"
+    )
 
     model_config = {"from_attributes": True}
+
+    @field_validator("commission_rate", mode="before")
+    @classmethod
+    def _pick_active_rate(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, list):
+            today = date.today()
+            for rate in v:
+                active_from = getattr(rate, "active_from", None)
+                deactivated_at = getattr(rate, "deactivated_at", None)
+                active_until = getattr(rate, "active_until", None)
+                if (
+                    active_from
+                    and active_from <= today
+                    and not deactivated_at
+                    and (active_until is None or active_until >= today)
+                ):
+                    return rate
+            return None
+        return v
 
 
 class ProductCreate(BaseModel):

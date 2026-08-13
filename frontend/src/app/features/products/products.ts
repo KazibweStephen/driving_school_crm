@@ -15,7 +15,7 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import { TableModule } from 'primeng/table';
 import { CurrencyService } from '../../core/services/currency.service';
 import { DatePickerModule } from 'primeng/datepicker';
-import { ProductService, Product, Package, CommissionRate } from '../../core/services/product.service';
+import { ProductService, Product, Package } from '../../core/services/product.service';
 import { LessonPlanService, LessonPlanTemplate, LessonPlanTemplateCreate, LessonTemplateItem } from '../../core/services/lesson-plan.service';
 import { LessonLibraryService, LessonLibrary } from '../../core/services/lesson-library.service';
 import { AuthService } from '../../core/auth/auth.service';
@@ -75,7 +75,7 @@ export class Products implements OnInit {
   expandedProducts = signal<Set<string>>(new Set());
   editingProduct = signal<Product | null>(null);
   editingPackage = signal<Package | null>(null);
-  editingPackageRate = signal<CommissionRate | null>(null);
+  editingPackageRate = signal<Package['commission_rate']>(null);
   selectedProductForPackage = signal<Product | null>(null);
 
   productForm = { name: '', duration_label: '', description: '' };
@@ -404,7 +404,7 @@ export class Products implements OnInit {
 
   async openEditPackage(pkg: Package) {
     this.editingPackage.set(pkg);
-    this.editingPackageRate.set(null);
+    this.editingPackageRate.set(pkg.commission_rate || null);
     this.editPackageStep.set(0);
     this.packageForm = {
       name: pkg.name,
@@ -417,33 +417,31 @@ export class Products implements OnInit {
       theory_training_hours: pkg.theory_training_hours,
       permit_processing_duration_days: pkg.permit_processing_duration_days,
     };
-    this.rateForm = {
-      total_amount: null,
-      converter_pct: 0,
-      primary_recommender_pct: 0,
-      secondary_recommender_pct: 0,
-      active_from: null,
-      active_until: null,
-      notes: '',
-    };
-    this.showEditPackageDialog.set(true);
-    try {
-      const rate = await this.productService.getPackageCommissionRate(pkg.id).toPromise();
-      if (rate) {
-        this.editingPackageRate.set(rate);
-        this.rateForm = {
-          total_amount: Number(rate.total_amount) || null,
-          converter_pct: Number(rate.converter_pct) || 0,
-          primary_recommender_pct: Number(rate.primary_recommender_pct) || 0,
-          secondary_recommender_pct: Number(rate.secondary_recommender_pct) || 0,
-          active_from: rate.active_from ? this.parseDate(rate.active_from) : null,
-          active_until: rate.active_until ? this.parseDate(rate.active_until) : null,
-          notes: rate.notes || '',
-        };
-      }
-    } catch {
-      // Rate is optional; ignore load errors
+
+    if (pkg.commission_rate) {
+      const rate = pkg.commission_rate;
+      this.rateForm = {
+        total_amount: Number(rate.total_amount) || null,
+        converter_pct: Number(rate.converter_pct) || 0,
+        primary_recommender_pct: Number(rate.primary_recommender_pct) || 0,
+        secondary_recommender_pct: Number(rate.secondary_recommender_pct) || 0,
+        active_from: rate.active_from ? this.parseDate(rate.active_from) : null,
+        active_until: rate.active_until ? this.parseDate(rate.active_until) : null,
+        notes: '',
+      };
+    } else {
+      this.rateForm = {
+        total_amount: null,
+        converter_pct: 0,
+        primary_recommender_pct: 0,
+        secondary_recommender_pct: 0,
+        active_from: null,
+        active_until: null,
+        notes: '',
+      };
     }
+
+    this.showEditPackageDialog.set(true);
   }
 
   private parseDate(value: string): Date {

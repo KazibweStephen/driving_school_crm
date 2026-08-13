@@ -131,16 +131,27 @@
                     <th>Price</th>
                     <th>Duration</th>
                     <th>Status</th>
+                    <th>Commission</th>
                     <th>Actions</th>
                   </tr>
                 </ng-template>
                 <ng-template pTemplate="body" let-pkg>
                   <tr>
                     <td class="font-medium">{{ pkg.name }}</td>
-                    <td>{{ pkg.price | number:'1.0-0' }}</td>
+                    <td>{{ pkg.price | number:'1.0-0' }} {{ currencyService.symbol() }}</td>
                     <td class="text-sm text-gray-500">{{ pkg.duration_label || '—' }}</td>
                     <td>
                       <p-tag [value]="pkg.status" [severity]="packageStatusSeverity(pkg.status)" />
+                    </td>
+                    <td class="text-sm text-gray-600">
+                      @if (pkg.commission_rate) {
+                        <span class="font-medium">{{ pkg.commission_rate.total_amount | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
+                        <span class="text-xs text-gray-400 block">
+                          {{ pkg.commission_rate.converter_pct }}/{{ pkg.commission_rate.primary_recommender_pct }}/{{ pkg.commission_rate.secondary_recommender_pct }}%
+                        </span>
+                      } @else {
+                        <span class="text-gray-400">—</span>
+                      }
                     </td>
                     <td>
                       <div class="flex items-center gap-1">
@@ -170,7 +181,7 @@
                 </ng-template>
                 <ng-template pTemplate="emptydata">
                   <tr>
-                    <td colspan="5" class="text-center text-gray-400 py-4">No packages for this product</td>
+                    <td colspan="6" class="text-center text-gray-400 py-4">No packages for this product</td>
                   </tr>
                 </ng-template>
               </p-table>
@@ -235,6 +246,12 @@
                     <p class="text-sm font-semibold text-gray-700">{{ pkg.price | number:'1.0-0' }} {{ currencyService.symbol() }}</p>
                     @if (pkg.duration_label) {
                       <p class="text-xs text-gray-500">{{ pkg.duration_label }}</p>
+                    }
+                    @if (pkg.commission_rate) {
+                      <p class="mt-1 text-xs text-gray-600">
+                        Commission: <span class="font-medium">{{ pkg.commission_rate.total_amount | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
+                        ({{ pkg.commission_rate.converter_pct }}/{{ pkg.commission_rate.primary_recommender_pct }}/{{ pkg.commission_rate.secondary_recommender_pct }}%)
+                      </p>
                     }
                   </div>
                   <div class="flex flex-col items-end gap-1">

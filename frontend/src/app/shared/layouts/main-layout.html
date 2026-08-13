@@ -39,6 +39,13 @@
     </button>
     <button
       class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
+      (click)="switchToMobile()"
+      aria-label="Switch to mobile version"
+    >
+      <span class="pi pi-mobile text-xl"></span>
+    </button>
+    <button
+      class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
       (click)="auth.logout()"
       aria-label="Logout"
     >
@@ -77,6 +84,15 @@
           {{ toReceiveCount() > 9 ? '9+' : toReceiveCount() }}
         </span>
       }
+    </button>
+    <button
+      class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
+      (click)="switchToMobile()"
+      aria-label="Switch to mobile version"
+      pTooltip="Switch to mobile version"
+      tooltipPosition="bottom"
+    >
+      <span class="pi pi-mobile text-xl"></span>
     </button>
     <div class="ml-1 flex items-center gap-2 border-l pl-3">
       <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">

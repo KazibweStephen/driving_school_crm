@@ -270,6 +270,13 @@ export class MainLayout implements OnInit, OnDestroy {
     });
   }
 
+  switchToMobile() {
+    if (typeof document !== 'undefined') {
+      document.cookie = 'prefer_desktop=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    }
+    window.location.href = '/m/';
+  }
+
   toggleSidebar() {
     this.sidebarOpen.update((v) => !v);
   }

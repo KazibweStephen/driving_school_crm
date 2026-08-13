@@ -45,7 +45,7 @@ async def get_dashboard_summary(
         Expense.status == ExpenseStatus.PAID,
     )
 
-    active_clients = select(func.count()).select_from(
+    active_clients_subq = (
         select(Consultation.id)
         .distinct()
         .join(CartItem, CartItem.consultation_id == Consultation.id)
@@ -56,33 +56,30 @@ async def get_dashboard_summary(
                 CartItemStatus.CONVERTED_PAYING,
             ])
         )
-        .subquery()
     )
 
     pending_followups = select(func.count()).select_from(FollowUp).where(
         FollowUp.status == FollowUpStatus.PENDING
     )
 
-    upcoming_today = select(func.count()).select_from(
+    upcoming_today_subq = (
         select(ClientLesson.id)
         .join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
         .where(
             ClientLesson.status == LessonState.SCHEDULED,
             func.date(ClientLesson.scheduled_date) == today_start.date(),
         )
-        .subquery()
     )
 
-    ongoing = select(func.count()).select_from(
+    ongoing_subq = (
         select(ClientLesson.id)
         .join(ClientLessonPlan, ClientLesson.lesson_plan_id == ClientLessonPlan.id)
         .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
         .join(Consultation, CartItem.consultation_id == Consultation.id)
         .where(ClientLesson.status == LessonState.STARTED)
-        .subquery()
     )
 
-    if user_role != "super_user" and company_id is not None:
+    if company_id is not None:
         branch_subq = select(Branch.id).where(Branch.company_id == company_id).subquery()
         today_payments = today_payments.where(
             Payment.consultation_id.in_(
@@ -100,7 +97,7 @@ async def get_dashboard_summary(
         month_expenses = month_expenses.where(
             Expense.branch_id.in_(select(branch_subq.c.id))
         )
-        active_clients = active_clients.where(
+        active_clients_subq = active_clients_subq.where(
             Consultation.branch_id.in_(select(branch_subq.c.id))
         )
         pending_followups = pending_followups.where(
@@ -108,7 +105,7 @@ async def get_dashboard_summary(
                 select(Consultation.id).where(Consultation.branch_id.in_(select(branch_subq.c.id)))
             )
         )
-        upcoming_today = upcoming_today.where(
+        upcoming_today_subq = upcoming_today_subq.where(
             ClientLessonPlan.id.in_(
                 select(ClientLessonPlan.id)
                 .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
@@ -116,13 +113,8 @@ async def get_dashboard_summary(
                 .where(Consultation.branch_id.in_(select(branch_subq.c.id)))
             )
         )
-        ongoing = ongoing.where(
-            ClientLesson.lesson_plan_id.in_(
-                select(ClientLessonPlan.id)
-                .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
-                .join(Consultation, CartItem.consultation_id == Consultation.id)
-                .where(Consultation.branch_id.in_(select(branch_subq.c.id)))
-            )
+        ongoing_subq = ongoing_subq.where(
+            Consultation.branch_id.in_(select(branch_subq.c.id))
         )
 
     if branch_ids:
@@ -137,13 +129,13 @@ async def get_dashboard_summary(
             )
         )
         month_expenses = month_expenses.where(Expense.branch_id.in_(branch_ids))
-        active_clients = active_clients.where(Consultation.branch_id.in_(branch_ids))
+        active_clients_subq = active_clients_subq.where(Consultation.branch_id.in_(branch_ids))
         pending_followups = pending_followups.where(
             FollowUp.consultation_id.in_(
                 select(Consultation.id).where(Consultation.branch_id.in_(branch_ids))
             )
         )
-        upcoming_today = upcoming_today.where(
+        upcoming_today_subq = upcoming_today_subq.where(
             ClientLessonPlan.id.in_(
                 select(ClientLessonPlan.id)
                 .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
@@ -151,14 +143,11 @@ async def get_dashboard_summary(
                 .where(Consultation.branch_id.in_(branch_ids))
             )
         )
-        ongoing = ongoing.where(
-            ClientLesson.lesson_plan_id.in_(
-                select(ClientLessonPlan.id)
-                .join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
-                .join(Consultation, CartItem.consultation_id == Consultation.id)
-                .where(Consultation.branch_id.in_(branch_ids))
-            )
-        )
+        ongoing_subq = ongoing_subq.where(Consultation.branch_id.in_(branch_ids))
+
+    active_clients = select(func.count()).select_from(active_clients_subq.subquery())
+    upcoming_today = select(func.count()).select_from(upcoming_today_subq.subquery())
+    ongoing = select(func.count()).select_from(ongoing_subq.subquery())
 
     result = {}
 

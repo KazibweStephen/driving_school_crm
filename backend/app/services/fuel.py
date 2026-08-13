@@ -223,7 +223,7 @@ async def get_fuel_alerts(
     user_role: str | None = None,
 ) -> list[dict]:
     vehicle_query = select(Vehicle)
-    if user_role != "super_user" and company_id is not None:
+    if company_id is not None:
         vehicle_query = vehicle_query.where(Vehicle.company_id == company_id)
     vehicles_result = await db.execute(vehicle_query)
     vehicles = vehicles_result.scalars().all()

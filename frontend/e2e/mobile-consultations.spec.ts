@@ -27,6 +27,72 @@ async function login(page: import('@playwright/test').Page) {
   await page.waitForTimeout(2500);
 }
 
+// Create a consultation whose package is partially paid (converted_paying, balance > 0)
+async function createPartialPaidClient(name: string, prefix: string) {
+  const phone = `${prefix}${Math.floor(10000000 + Math.random() * 89999999)}`;
+  const res = await api.post('/api/v1/consultations/full', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      phone,
+      first_name: name,
+      branch_id: '00000000-0000-0000-0000-000000000002',
+      items: [{ product_id: PRODUCT_ID, package_id: PACKAGE_ID, allocation: 0, installments: [] }],
+    },
+  });
+  expect(res.ok()).toBeTruthy();
+  const consultation = await res.json();
+
+  const prod = await api.get(`/api/v1/products/${PRODUCT_ID}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const product = await prod.json();
+  const price = Number(product.packages.find((p: any) => p.id === PACKAGE_ID).price);
+  const partial = Math.round(price / 2);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const week = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
+  const payRes = await api.post(`/api/v1/consultations/${consultation.id}/payments`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      product_id: PRODUCT_ID,
+      package_id: PACKAGE_ID,
+      total_amount: price,
+      document_date: today,
+      installments: [
+        { due_date: today, amount: partial },
+        { due_date: week, amount: price - partial },
+      ],
+    },
+  });
+  expect(payRes.ok()).toBeTruthy();
+  const payment = await payRes.json();
+  const inst = payment.installments[0];
+
+  const updRes = await api.patch(
+    `/api/v1/payments/${payment.id}/installments/${inst.id}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { paid_date: today, paid_amount: partial, notes: 'test partial' },
+    },
+  );
+  expect(updRes.ok()).toBeTruthy();
+
+  // create_full returns an empty cart_items array, so reload to get the real item id
+  const cRes = await api.get(`/api/v1/consultations/${consultation.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const full = await cRes.json();
+  const ci = full.cart_items[0];
+  if (ci) {
+    await api.patch(`/api/v1/cart-items/${ci.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { status: 'converted_paying' },
+    });
+  }
+  return { phone, consultation, price, partial };
+}
+
 test('sales home: side-by-side buttons + tabs + active clients list', async ({ page }) => {
   await login(page);
   await page.goto('/m/sales');
@@ -306,4 +372,35 @@ test('calculate schedule is stable across repeated presses (never shrinks)', asy
   await page.getByTestId('calculate-schedule').click();
   const third = await values();
   expect(Math.round(third[0] + third[1])).toBe(partial);
+});
+
+test('payments page lists clients with payments due; tap opens overview', async ({ page }) => {
+  const { phone } = await createPartialPaidClient('OutstandingTest', '25650');
+
+  await login(page);
+  await page.goto('/m/payments');
+  await expect(page.getByText('Clients with payments due')).toBeVisible();
+  await expect(page.getByTestId('outstanding-client').first()).toBeVisible({ timeout: 15000 });
+
+  // searching refines the outstanding list to the fixture client
+  await page.getByTestId('client-search').fill(phone);
+  await expect(
+    page.getByTestId('outstanding-client').filter({ hasText: phone }),
+  ).toBeVisible({ timeout: 10000 });
+
+  await page.getByTestId('outstanding-client').first().click();
+  await expect(page.getByTestId('collect-payment').first()).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText(/Balance:.*150,000/).first()).toBeVisible({ timeout: 10000 });
+});
+
+test('upsell shows Pay button on unpaid items that opens the collect flow', async ({ page }) => {
+  const { consultation } = await createPartialPaidClient('PayBtnTest', '25660');
+
+  await login(page);
+  await page.goto(`/m/sales?upsell=1&id=${consultation.id}`);
+  await expect(page.getByText('Already purchased')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId('pay-existing').first()).toBeVisible();
+  await page.getByTestId('pay-existing').first().click();
+  await page.waitForURL(/\/m\/payments/, { timeout: 10000 });
+  await expect(page.getByTestId('collect-amount')).toBeVisible({ timeout: 10000 });
 });

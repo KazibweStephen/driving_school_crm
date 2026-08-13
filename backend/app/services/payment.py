@@ -484,6 +484,7 @@ async def list_clients(
     page_size: int = 20,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
+    outstanding_only: bool = False,
 ) -> tuple[list[Consultation], int]:
     # Clients are consultations with at least one converted_paid or converted_paying cart item
     active_statuses = [CartItemStatus.CONVERTED_PAID, CartItemStatus.CONVERTED_PAYING]
@@ -499,6 +500,16 @@ async def list_clients(
         selectinload(Consultation.cart_items),
         selectinload(Consultation.follow_ups),
     )
+
+    if outstanding_only:
+        query = query.where(
+            exists(
+                select(Payment.id).where(
+                    Payment.consultation_id == Consultation.id,
+                    Payment.balance > 0,
+                )
+            )
+        )
 
     if company_id is not None:
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)

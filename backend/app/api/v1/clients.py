@@ -36,12 +36,14 @@ async def list_clients(
     search: str | None = Query(None, max_length=50),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    outstanding_only: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("consultations.view")),
 ):
     consultations, total = await payment_service.list_clients(
         db, search=search, page=page, page_size=page_size,
         company_id=current_user.company_id, current_user_role=current_user.role,
+        outstanding_only=outstanding_only,
     )
 
     active_statuses = [CartItemStatus.CONVERTED_PAID, CartItemStatus.CONVERTED_PAYING]

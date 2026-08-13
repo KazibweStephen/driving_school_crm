@@ -616,6 +616,7 @@ export class Clients implements OnInit, OnDestroy {
 
   async completePayment() {
     if (!this.canCompletePayment()) return;
+    if (this.loading()) return;
 
     this.loading.set(true);
     try {

@@ -35,7 +35,34 @@ async def create_consultation(
     notes: str | None = None,
     branch_id: uuid.UUID | None = None,
     created_by_phone: str | None = None,
+    company_id: uuid.UUID | None = None,
 ) -> Consultation:
+    from fastapi import HTTPException
+
+    # Serialize same-phone creations so a double-submit can't race past the
+    # duplicate check (xact-scoped lock, auto-released on commit/rollback).
+    await db.execute(func.pg_advisory_xact_lock(func.hashtext(phone)))
+
+    query = select(Consultation.id).where(
+        Consultation.phone == phone,
+        Consultation.status != ConsultationStatus.LOST,
+    )
+    if company_id is not None:
+        query = query.where(
+            or_(
+                Consultation.branch_id.is_(None),
+                Consultation.branch_id.in_(
+                    select(Branch.id).where(Branch.company_id == company_id)
+                ),
+            )
+        )
+    existing = (await db.execute(query.limit(1))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="A client with this phone number already exists. Open the existing client and add products instead.",
+        )
+
     consultation = Consultation(
         phone=phone,
         first_name=first_name,

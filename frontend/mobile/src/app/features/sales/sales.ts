@@ -880,6 +880,7 @@ export class Sales {
   }
 
   private submitNewSale() {
+    if (this.submitting()) return;
     this.submitting.set(true);
     const consulting = this.saleMode() === 'consulting';
     const items: FullConsultationItem[] = this.selectedItems().map((item) => ({
@@ -928,6 +929,7 @@ export class Sales {
   }
 
   private async submitUpsell() {
+    if (this.submitting()) return;
     const consultation = this.existingConsultation();
     if (!consultation) return;
     if (this.selectedItems().length === 0) {

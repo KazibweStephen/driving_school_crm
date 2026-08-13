@@ -62,6 +62,7 @@ async def create_consultation(
         notes=data.notes,
         branch_id=data.branch_id,
         created_by_phone=current_user.phone,
+        company_id=current_user.company_id,
     )
 
     if current_user.company_id:
@@ -96,6 +97,7 @@ async def create_full_consultation(
         notes=data.notes,
         branch_id=data.branch_id,
         created_by_phone=current_user.phone,
+        company_id=current_user.company_id,
     )
 
     # Create cart items and payments

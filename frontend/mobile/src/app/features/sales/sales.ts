@@ -607,6 +607,17 @@ export class Sales {
     return Math.max(0, this.existingTotalForItem(ci) - this.existingPaidForItem(ci));
   }
 
+  payForExisting(ci: CartItem) {
+    const consultation = this.existingConsultation();
+    if (!consultation) {
+      this.messageService.add({ severity: 'error', summary: 'Client not loaded' });
+      return;
+    }
+    this.router.navigate(['/payments'], {
+      queryParams: { consultationId: consultation.id, cartItemId: ci.id },
+    });
+  }
+
   addPackage(product: Product, pkg: Package) {
     if (this.selectedItems().some((i) => i.package?.id === pkg.id)) {
       this.messageService.add({ severity: 'info', summary: 'Already added', detail: pkg.name });

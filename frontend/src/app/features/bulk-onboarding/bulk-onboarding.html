@@ -550,7 +550,12 @@
 
         <div class="flex justify-between pt-2">
           <p-button label="Back: Lessons" icon="pi pi-arrow-left" (click)="onStepChange(ci, 2)" size="small" severity="secondary" />
+          <p-button label="Submit All" icon="pi pi-check" (click)="submit()"
+            [disabled]="!canSubmit() || submitting()" [loading]="submitting()" size="small" />
         </div>
+        @if (!canSubmit() && !hasReceiptWarnings() && !hasDateErrors() && clients().length > 0) {
+          <p class="text-center text-xs text-gray-400 mt-2">Complete client info, add at least one package with a payment to enable submission</p>
+        }
       </div>
     }
   </div>
@@ -571,16 +576,8 @@
 <!-- Bottom Actions -->
 @if (clients().length > 0) {
   <div class="sticky bottom-0 bg-white border-t border-gray-200 pt-3 pb-4 px-4 -mx-4 mt-6 shadow-lg z-10">
-    <div class="flex gap-3">
-      <p-button label="Save Draft" icon="pi pi-save" severity="secondary" (click)="saveDraft()"
-        size="large" class="flex-1" />
-      <p-button label="Submit All" icon="pi pi-check" (click)="submit()"
-        [disabled]="!canSubmit() || submitting()" [loading]="submitting()"
-        size="large" class="flex-1" />
-    </div>
-    @if (!canSubmit() && !hasReceiptWarnings() && !hasDateErrors() && clients().length > 0) {
-      <p class="text-center text-xs text-gray-400 mt-2">Complete client info, add at least one package with a payment to enable submission</p>
-    }
+    <p-button label="Save Draft" icon="pi pi-save" severity="secondary" (click)="saveDraft()"
+      size="large" class="w-full" />
   </div>
 }
 

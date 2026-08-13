@@ -64,6 +64,7 @@ export class ClientSearch {
 
   placeholder = 'Search client by name or phone';
   selected = output<ClientInfo>();
+  queryChange = output<string>();
 
   query = signal('');
   results = signal<ClientInfo[]>([]);
@@ -73,6 +74,7 @@ export class ClientSearch {
 
   onQuery(value: string) {
     this.query.set(value);
+    this.queryChange.emit(value);
     if (this.debounce) clearTimeout(this.debounce);
     if (value.trim().length < 2) {
       this.results.set([]);

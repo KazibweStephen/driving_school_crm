@@ -146,11 +146,12 @@ export class ConsultationService {
     return this.http.get<ConsultationListResponse>('/api/v1/consultations/', { params: hp });
   }
 
-  listClients(params?: { search?: string; page?: number; page_size?: number }) {
+  listClients(params?: { search?: string; page?: number; page_size?: number; outstanding_only?: boolean }) {
     let hp = new HttpParams();
     if (params?.search) hp = hp.set('search', params.search);
     if (params?.page) hp = hp.set('page', params.page);
     if (params?.page_size) hp = hp.set('page_size', params.page_size);
+    if (params?.outstanding_only) hp = hp.set('outstanding_only', 'true');
     return this.http.get<ClientListResponse>('/api/v1/clients/', { params: hp });
   }
 

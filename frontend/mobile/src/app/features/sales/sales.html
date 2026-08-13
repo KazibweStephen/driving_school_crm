@@ -288,6 +288,17 @@
                 <span>Paid: <span class="text-green-600">{{ money(existingPaidForItem(ci)) }}</span></span>
                 <span>Bal: <span class="text-amber-600">{{ money(existingBalanceForItem(ci)) }}</span></span>
               </div>
+              @if (existingBalanceForItem(ci) > 0) {
+                <div class="mt-2 flex justify-end">
+                  <p-button
+                    label="Pay"
+                    icon="pi pi-wallet"
+                    size="small"
+                    (click)="payForExisting(ci)"
+                    data-testid="pay-existing"
+                  />
+                </div>
+              }
             </li>
           }
         </ul>

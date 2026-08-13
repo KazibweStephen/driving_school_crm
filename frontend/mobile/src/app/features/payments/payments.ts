@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
+import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
 import { ActivatedRoute } from '@angular/router';
@@ -12,6 +13,7 @@ import {
   ClientInfo,
   Consultation,
   CartItem,
+  ClientSummary,
 } from '../../core/services/consultation.service';
 import {
   PaymentService,
@@ -42,6 +44,7 @@ interface CollectScheduleRow {
     FormsModule,
     ButtonModule,
     InputTextModule,
+    ProgressSpinnerModule,
     DatePickerModule,
     SelectModule,
     ClientSearch,
@@ -62,7 +65,13 @@ export class Payments {
   canBackdate = this.auth.currentUserCanBackdate;
 
   constructor() {
+    this.loadOutstanding(true);
     this.route.queryParams.subscribe((qp) => {
+      const consultationId = qp['consultationId'];
+      if (consultationId && this.step() === 'search') {
+        this.loadConsultation(consultationId, qp['cartItemId']);
+        return;
+      }
       const phone = qp['phone'];
       if (phone && !this.client && this.step() === 'search') {
         this.consultationService.clientSearch(phone).subscribe({
@@ -87,6 +96,18 @@ export class Payments {
   private consultationId = '';
   payments = signal<PaymentRead[]>([]);
   branches = signal<BranchInfo[]>([]);
+
+  // outstanding-balance clients list (search step)
+  outstandingClients = signal<ClientSummary[]>([]);
+  outstandingTotal = signal(0);
+  outstandingPage = signal(1);
+  outstandingLoading = signal(false);
+  outstandingQuery = signal('');
+  outstandingHasMore = computed(
+    () => this.outstandingClients().length < this.outstandingTotal(),
+  );
+  private outstandingQueryDebounce: ReturnType<typeof setTimeout> | null = null;
+  private outstandingRequestInFlight = false;
 
   // collect dialog
   targetItem = signal<CartItem | null>(null);
@@ -125,15 +146,90 @@ export class Payments {
     this.loadOverview();
   }
 
+  onOutstandingQuery(query: string) {
+    this.outstandingQuery.set(query);
+    if (this.outstandingQueryDebounce) clearTimeout(this.outstandingQueryDebounce);
+    this.outstandingQueryDebounce = setTimeout(() => this.loadOutstanding(true), 350);
+  }
+
+  onOutstandingScroll(event: Event) {
+    const el = event.target as HTMLElement;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
+      this.loadOutstanding(false);
+    }
+  }
+
+  loadOutstanding(reset: boolean) {
+    if (this.outstandingRequestInFlight) return;
+    if (!reset && !this.outstandingHasMore()) return;
+    const page = reset ? 1 : this.outstandingPage() + 1;
+    this.outstandingRequestInFlight = true;
+    this.outstandingLoading.set(true);
+    const q = this.outstandingQuery().trim();
+    this.consultationService
+      .listClients({
+        search: q || undefined,
+        page,
+        page_size: 20,
+        outstanding_only: true,
+      })
+      .subscribe({
+        next: (res) => {
+          this.outstandingRequestInFlight = false;
+          this.outstandingLoading.set(false);
+          this.outstandingPage.set(page);
+          this.outstandingTotal.set(res.total ?? 0);
+          const clients = res.clients ?? [];
+          this.outstandingClients.update((prev) =>
+            reset ? clients : [...prev, ...clients],
+          );
+        },
+        error: () => {
+          this.outstandingRequestInFlight = false;
+          this.outstandingLoading.set(false);
+        },
+      });
+  }
+
+  outstandingBalanceFor(client: ClientSummary): number {
+    return (client.products ?? []).reduce(
+      (sum, p) => sum + parseFloat(p.balance || '0'),
+      0,
+    );
+  }
+
+  outstandingItemsCount(client: ClientSummary): number {
+    return (client.products ?? []).filter((p) => parseFloat(p.balance || '0') > 0).length;
+  }
+
+  openOutstandingClient(client: ClientSummary) {
+    this.client = {
+      phone: client.phone,
+      first_name: client.first_name,
+      middle_name: client.middle_name,
+      last_name: client.last_name,
+      location: client.location,
+      how_they_knew_us: null,
+      interest_level: client.interest_level,
+      latest_status: null,
+      latest_consultation_id: client.id,
+    };
+    this.loadOverview();
+  }
+
   loadOverview() {
     const client = this.client;
     if (!client || !client.latest_consultation_id) return;
+    this.loadConsultation(client.latest_consultation_id);
+  }
+
+  private loadConsultation(id: string, targetCartItemId?: string) {
     this.loading.set(true);
-    this.consultationService.get(client.latest_consultation_id).subscribe({
+    this.consultationService.get(id).subscribe({
       next: (consultation) => {
         this.consultation.set(consultation);
         this.consultationId = consultation.id;
-        this.loadPayments(consultation.id);
+        this.loadPayments(consultation.id, targetCartItemId);
       },
       error: (err) => {
         this.loading.set(false);
@@ -146,13 +242,19 @@ export class Payments {
     });
   }
 
-  private loadPayments(consultationId: string) {
+  private loadPayments(consultationId: string, targetCartItemId?: string) {
     this.paymentService.getPaymentsByConsultation(consultationId).subscribe({
       next: (payments) => {
         this.payments.set(payments ?? []);
         this.loading.set(false);
         this.step.set('overview');
         if (this.branches().length === 0) this.loadBranches();
+        if (targetCartItemId) {
+          const ci = (this.consultation()?.cart_items ?? []).find(
+            (c) => c.id === targetCartItemId,
+          );
+          if (ci) this.openCollect(ci);
+        }
       },
       error: () => {
         this.loading.set(false);
@@ -594,6 +696,7 @@ export class Payments {
     this.consultation.set(null);
     this.consultationId = '';
     this.payments.set([]);
+    this.loadOutstanding(true);
   }
 
   money(value: string | number) {

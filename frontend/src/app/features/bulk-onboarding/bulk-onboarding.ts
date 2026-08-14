@@ -1,7 +1,8 @@
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { NavigationStart, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
@@ -102,7 +103,8 @@ const STORAGE_KEY = 'bulk_onboarding_draft';
   providers: [ConfirmationService, MessageService],
   templateUrl: './bulk-onboarding.html',
 })
-export class BulkOnboardingCmp implements OnInit {
+export class BulkOnboardingCmp implements OnInit, OnDestroy {
+  private routerSub: Subscription | null = null;
   clients = signal<ClientDraft[]>([]);
   products = signal<any[]>([]);
   users = signal<any[]>([]);
@@ -241,6 +243,20 @@ export class BulkOnboardingCmp implements OnInit {
   ngOnInit() {
     this.loadData();
     this.restoreDraft();
+    this.routerSub = this.router.events.subscribe((event) => {
+      if (event instanceof NavigationStart) {
+        this.persistDraft();
+      }
+    });
+  }
+
+  ngOnDestroy() {
+    this.routerSub?.unsubscribe();
+  }
+
+  @HostListener('window:beforeunload')
+  onBeforeUnload() {
+    this.persistDraft();
   }
 
   loadData() {

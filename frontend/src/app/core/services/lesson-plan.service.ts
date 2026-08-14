@@ -156,6 +156,7 @@ export interface ClientLessonPlan {
   start_date: string | null;
   status: string;
   purchased_days: number | null;
+  purchased_theory_sessions: number | null;
   auto_generated: boolean;
   is_extension: boolean;
   extension_of_plan_id: string | null;
@@ -178,6 +179,8 @@ export interface ClientLessonPlanCreate {
   extension_days_added?: number;
   notes?: string;
   manual_days?: number;
+  purchased_days?: number;
+  purchased_theory_sessions?: number;
   lessons?: { day_number: number; week_number: number; title: string; lesson_objectives?: string[]; practical_objectives?: string[]; order?: number; is_active?: boolean; is_theory?: boolean; preferred_location?: string; enforce_prerequisites?: boolean; scheduled_date?: string; duration_minutes?: number; instructor_id?: string; vehicle_id?: string; template_item_id?: string; is_locked?: boolean }[];
 }
 
@@ -185,6 +188,7 @@ export interface ClientLessonPlanUpdate {
   start_date?: string;
   status?: string;
   purchased_days?: number;
+  purchased_theory_sessions?: number;
   is_extension?: boolean;
   extension_of_plan_id?: string;
   extension_days_added?: number;

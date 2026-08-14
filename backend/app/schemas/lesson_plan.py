@@ -350,6 +350,7 @@ class ClientLessonPlanUpdate(BaseModel):
     start_date: datetime | None = None
     status: str | None = None
     purchased_days: int | None = None
+    purchased_theory_sessions: int | None = None
     is_extension: bool | None = None
     extension_of_plan_id: str | None = None
     extension_days_added: int | None = None
@@ -365,6 +366,7 @@ class ClientLessonPlanRead(BaseModel):
     start_date: datetime | None
     status: str
     purchased_days: int | None
+    purchased_theory_sessions: int | None
     auto_generated: bool
     is_extension: bool
     extension_of_plan_id: str | None

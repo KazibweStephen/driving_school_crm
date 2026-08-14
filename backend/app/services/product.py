@@ -253,11 +253,21 @@ async def update_package(
         pkg.permit_processing_duration_days = permit_processing_duration_days
     await db.flush()
 
-    # Propagate training fields to all cart items referencing this package (no price change)
-    from app.models.cart import CartItem
+    # Propagate training fields to active cart items referencing this package (no price change)
+    # Skip completed/lost items — their training snapshot is frozen
+    from app.models.cart import CartItem, CartItemStatus
     from sqlalchemy import select
+    pkg_id_str = str(pkg.id)
     result = await db.execute(
-        select(CartItem).where(CartItem.package_id == pkg.id)
+        select(CartItem).where(
+            CartItem.package_id == pkg_id_str,
+            CartItem.status.notin_([
+                CartItemStatus.CONVERTED_PAID,
+                CartItemStatus.CONVERTED_PAYING,
+                CartItemStatus.CONVERTED,
+                CartItemStatus.LOST,
+            ]),
+        )
     )
     cart_items = result.scalars().all()
     for ci in cart_items:

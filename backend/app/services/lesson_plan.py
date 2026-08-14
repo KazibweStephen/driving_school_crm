@@ -447,6 +447,7 @@ async def create_client_plan(
     notes: str | None = None,
     lessons_data: list[dict] | None = None,
     purchased_days: int | None = None,
+    purchased_theory_sessions: int | None = None,
     manual_days: int | None = 5,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
@@ -472,6 +473,7 @@ async def create_client_plan(
         extension_days_added=extension_days_added,
         notes=notes,
         purchased_days=purchased_days,
+        purchased_theory_sessions=purchased_theory_sessions,
         manual_days=manual_days,
     )
     db.add(plan)
@@ -514,6 +516,13 @@ async def create_client_plan(
             elif not isinstance(template_item_id_val, uuid.UUID | None):
                 template_item_id_val = None
 
+            # Determine status: use provided status, or default based on lock state
+            lesson_status = lesson.get("status")
+            if is_locked and not lesson_status:
+                lesson_status = "pending"
+            elif not lesson_status:
+                lesson_status = "pending"
+
             client_lesson = ClientLesson(
                 lesson_plan_id=plan.id,
                 day_number=lesson["day_number"],
@@ -532,6 +541,7 @@ async def create_client_plan(
                 vehicle_id=lesson.get("vehicle_id"),
                 template_item_id=template_item_id_val,
                 is_locked=is_locked,
+                status=lesson_status,
             )
             db.add(client_lesson)
         await db.flush()
@@ -813,6 +823,7 @@ async def update_client_plan(
     start_date: datetime | None = None,
     status: str | None = None,
     purchased_days: int | None = None,
+    purchased_theory_sessions: int | None = None,
     notes: str | None = None,
 ) -> ClientLessonPlan:
     if start_date is not None:
@@ -821,6 +832,8 @@ async def update_client_plan(
         plan.status = LessonPlanStatus(status)
     if purchased_days is not None:
         plan.purchased_days = purchased_days
+    if purchased_theory_sessions is not None:
+        plan.purchased_theory_sessions = purchased_theory_sessions
     if notes is not None:
         plan.notes = notes
     await db.flush()
@@ -879,15 +892,32 @@ async def delete_client_plan(
 async def upgrade_plan(
     db: AsyncSession,
     plan: ClientLessonPlan,
-    new_purchased_days: int,
+    new_purchased_days: int | None = None,
+    new_purchased_theory_sessions: int | None = None,
 ) -> ClientLessonPlan:
-    plan.purchased_days = new_purchased_days
+    if new_purchased_days is not None:
+        plan.purchased_days = new_purchased_days
+    if new_purchased_theory_sessions is not None:
+        plan.purchased_theory_sessions = new_purchased_theory_sessions
     await db.flush()
 
-    # Unlock lessons that are now within purchased range
+    # Unlock practical lessons that are now within purchased range
     for lesson in plan.lessons:
-        if lesson.day_number <= new_purchased_days and lesson.is_locked:
-            lesson.is_locked = False
+        if lesson.is_locked and not lesson.is_theory:
+            if plan.purchased_days is not None and lesson.day_number <= plan.purchased_days:
+                lesson.is_locked = False
+        # Unlock theory lessons that are now within purchased theory sessions
+        if lesson.is_locked and lesson.is_theory:
+            if plan.purchased_theory_sessions is not None:
+                # Count theory lessons by order; unlock up to purchased_theory_sessions
+                theory_lessons = sorted(
+                    [l for l in plan.lessons if l.is_theory and l.is_active],
+                    key=lambda l: l.order
+                )
+                for idx, tl in enumerate(theory_lessons):
+                    if tl.id == lesson.id and idx < plan.purchased_theory_sessions:
+                        lesson.is_locked = False
+                        break
     await db.flush()
 
     result = await db.execute(

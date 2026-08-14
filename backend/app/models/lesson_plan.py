@@ -221,6 +221,7 @@ class ClientLessonPlan(Base):
         default=LessonPlanStatus.ACTIVE, nullable=False
     )
     purchased_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    purchased_theory_sessions: Mapped[int | None] = mapped_column(Integer, nullable=True)
     auto_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_extension: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     extension_of_plan_id: Mapped[uuid.UUID | None] = mapped_column(

@@ -29,7 +29,7 @@ interface QuickGenLesson {
   title: string | null;
   lesson_objectives: string[];
   practical_objectives: string[];
-  status: 'completed' | 'scheduled';
+  status: 'completed' | 'pending';
 }
 
 @Component({
@@ -148,7 +148,7 @@ interface QuickGenLesson {
                     </span>
                   </label>
                   @if (isItemSelected(item.id)) {
-                    @if (itemStatus()[item.id] === 'scheduled') {
+                    @if (itemStatus()[item.id] === 'pending') {
                       <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">Scheduled</span>
                     }
                     <p-datepicker [ngModel]="itemDates()[item.id]"
@@ -186,7 +186,7 @@ interface QuickGenLesson {
                         {{ lesson.title }}
                       </span>
                     }
-                    @if (lesson.status === 'scheduled') {
+                    @if (lesson.status === 'pending') {
                       <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">Scheduled</span>
                     }
                     <p-datepicker [ngModel]="lesson.date" (ngModelChange)="onPreviewDateChange(lesson, $event)"
@@ -238,7 +238,7 @@ export class LessonQuickGenDialog {
   preview = signal<QuickGenLesson[]>([]);
   selectedItemIds = signal<string[]>([]);
   itemDates = signal<Record<string, Date | null>>({});
-  itemStatus = signal<Record<string, 'completed' | 'scheduled'>>({});
+  itemStatus = signal<Record<string, 'completed' | 'pending'>>({});
 
   trainingDays = 0;
   trainingHours = 0;
@@ -277,15 +277,15 @@ export class LessonQuickGenDialog {
   }
 
   get scheduledCount(): () => number {
-    return () => Object.values(this.itemStatus()).filter(s => s === 'scheduled').length;
+    return () => Object.values(this.itemStatus()).filter(s => s === 'pending').length;
   }
 
   get previewCompletedCount(): () => number {
-    return () => this.preview().filter(l => l.status !== 'scheduled').length;
+    return () => this.preview().filter(l => l.status !== 'pending').length;
   }
 
   get previewScheduledCount(): () => number {
-    return () => this.preview().filter(l => l.status === 'scheduled').length;
+    return () => this.preview().filter(l => l.status === 'pending').length;
   }
 
   async open(
@@ -436,7 +436,7 @@ export class LessonQuickGenDialog {
     );
     this.itemStatus.update(m => {
       const n = { ...m };
-      if (!n[itemId]) n[itemId] = 'completed';
+      if (!n[itemId]) n[itemId] = 'pending';
       return n;
     });
     this.assignDates(false);
@@ -507,7 +507,7 @@ export class LessonQuickGenDialog {
         title: null,
         lesson_objectives: [],
         practical_objectives: [],
-        status: i < (f.practicalDays ?? 0) ? 'completed' : 'scheduled',
+        status: i < (f.practicalDays ?? 0) ? 'completed' : 'pending',
       }));
 
       const theories: QuickGenLesson[] = theoryDates.slice(0, theoryCount).map((d, i) => ({
@@ -518,7 +518,7 @@ export class LessonQuickGenDialog {
         title: null,
         lesson_objectives: [],
         practical_objectives: [],
-        status: i < (f.theoryLessons ?? 0) ? 'completed' : 'scheduled',
+        status: i < (f.theoryLessons ?? 0) ? 'completed' : 'pending',
       }));
 
       const generated = [...practicals, ...theories].sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -672,14 +672,14 @@ export class LessonQuickGenDialog {
     const practicalToSelect = Math.min(practicalItems.length, maxPractical);
     const theoryToSelect = Math.min(theoryItems.length, maxTheory);
     const selected: string[] = [];
-    const status: Record<string, 'completed' | 'scheduled'> = {};
+    const status: Record<string, 'completed' | 'pending'> = {};
     practicalItems.slice(0, practicalToSelect).forEach((i: any, idx: number) => {
       selected.push(i.id);
-      status[i.id] = idx < trainedPractical ? 'completed' : 'scheduled';
+      status[i.id] = idx < trainedPractical ? 'completed' : 'pending';
     });
     theoryItems.slice(0, theoryToSelect).forEach((i: any, idx: number) => {
       selected.push(i.id);
-      status[i.id] = idx < trainedTheory ? 'completed' : 'scheduled';
+      status[i.id] = idx < trainedTheory ? 'completed' : 'pending';
     });
     this.selectedItemIds.set(selected);
     this.itemStatus.set(status);

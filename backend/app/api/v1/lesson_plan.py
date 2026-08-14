@@ -489,7 +489,8 @@ async def delete_client_plan(
 @router.post("/api/v1/lesson-plans/{plan_id}/upgrade", response_model=ClientLessonPlanRead)
 async def upgrade_plan(
     plan_id: str,
-    purchased_days: int,
+    purchased_days: int | None = None,
+    purchased_theory_sessions: int | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
@@ -500,9 +501,13 @@ async def upgrade_plan(
     plan = await lesson_service.get_client_plan_by_id(db, pid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not plan:
         raise HTTPException(status_code=404, detail="Lesson plan not found")
-    if purchased_days <= (plan.purchased_days or 0):
+    if purchased_days is not None and purchased_days <= (plan.purchased_days or 0):
         raise HTTPException(status_code=400, detail="New purchased days must be greater than current")
-    updated = await lesson_service.upgrade_plan(db, plan, purchased_days)
+    if purchased_theory_sessions is not None and purchased_theory_sessions <= (plan.purchased_theory_sessions or 0):
+        raise HTTPException(status_code=400, detail="New purchased theory sessions must be greater than current")
+    if purchased_days is None and purchased_theory_sessions is None:
+        raise HTTPException(status_code=400, detail="Provide purchased_days or purchased_theory_sessions")
+    updated = await lesson_service.upgrade_plan(db, plan, purchased_days, purchased_theory_sessions)
     return ClientLessonPlanRead.model_validate(updated)
 
 

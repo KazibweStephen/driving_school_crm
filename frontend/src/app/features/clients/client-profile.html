@@ -727,10 +727,6 @@
                       }
                     </div>
                     <div class="flex items-center gap-2 shrink-0 ml-auto">
-                      @if (previewPlanId() === plan.id) {
-                        <p-button label="Save" icon="pi pi-check" size="small" severity="success" (onClick)="savePreview()" [loading]="loading()" />
-                        <p-button label="Cancel" icon="pi pi-times" size="small" severity="secondary" (onClick)="cancelPreview()" [disabled]="loading()" />
-                      } @else {
                         <p-button icon="pi pi-pencil" size="small" severity="secondary" (onClick)="openLessonEditDialog(plan, lessonEditDialog)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Edit lessons" tooltipPosition="top" />
                         @if (templateLessons.length > 0) {
                           <p-button icon="pi pi-plus" severity="secondary" (onClick)="showAddFromTemplateLessonDialog.set(true); selectedPlanForTemplateLessons.set(plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Add from template" tooltipPosition="top" />
@@ -738,7 +734,6 @@
                         <p-button icon="pi pi-print" severity="secondary" (onClick)="printLessonPlan(ci, plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Print PDF" tooltipPosition="top" />
                         <p-button icon="pi pi-trash" severity="danger" (click)="deleteClientPlan(plan.id)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Delete plan" tooltipPosition="top" />
                         <span class="text-xs text-gray-400">{{ activeLessons.length }} active</span>
-                      }
                     </div>
                   </div>
 
@@ -759,91 +754,7 @@
                     </div>
                   }
 
-                @if (previewPlanId() === plan.id) {
-                  <!-- Preview Mode: editable rows after dialog confirm -->
-                  <div class="border border-blue-200 rounded-lg bg-blue-50/30 p-3 mb-2">
-                    <div class="flex items-center gap-2 mb-2 text-xs text-blue-600">
-                      <i class="pi pi-eye"></i>
-                      <span class="font-medium">Preview — review and adjust before saving</span>
-                    </div>
-                    <div class="space-y-0">
-                      @for (lesson of previewLessons(); track $index; let li = $index) {
-                        <div class="border-b border-gray-200 p-3 last:border-b-0 rounded bg-white"
-                             [class.bg-amber-50]="lesson.is_theory"
-                             [class.border-l-2]="lesson.is_theory"
-                             [class.border-l-amber-400]="lesson.is_theory">
-                          <div class="flex items-center justify-between mb-2">
-                            <span class="inline-flex items-center gap-1.5 text-xs font-medium"
-                                  [class.text-amber-700]="lesson.is_theory"
-                                  [class.text-gray-500]="!lesson.is_theory">
-                              <i class="pi" [class.pi-book]="lesson.is_theory" [class.pi-car]="!lesson.is_theory"
-                                 [class.text-amber-500]="lesson.is_theory" [class.text-gray-400]="!lesson.is_theory"></i>
-                              Lesson {{ li + 1 }}
-                              @if (lesson.is_theory) {
-                                <span class="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">Theory</span>
-                              }
-                              @if (lesson.title) {
-                                <span [class.text-amber-600]="lesson.is_theory" [class.text-gray-700]="!lesson.is_theory">· {{ lesson.title }}</span>
-                              }
-                              @if (lesson.status === 'completed' || lesson.status === 'started') {
-                                <span class="text-[11px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 font-medium">Done</span>
-                              } @else if (lesson.status === 'scheduled') {
-                                <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium">Scheduled</span>
-                              }
-                            </span>
-                            <p-button icon="pi pi-trash" severity="danger" size="small" [text]="true"
-                              (click)="previewRemoveLesson(li)" />
-                          </div>
-                          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div>
-                              <label class="block text-xs text-gray-500 mb-0.5">Date</label>
-                              <p-datepicker [ngModel]="lesson.scheduled_date"
-                                (ngModelChange)="lesson.scheduled_date = $event"
-                                dateFormat="yy-mm-dd" placeholder="Date" appendTo="body" styleClass="w-full" />
-                            </div>
-                            <div>
-                              <label class="block text-xs text-gray-500 mb-0.5">Duration (min)</label>
-                              <p-inputNumber [ngModel]="lesson.duration_minutes"
-                                (ngModelChange)="lesson.duration_minutes = $event"
-                                [min]="1" [max]="480" placeholder="Minutes" styleClass="w-full" />
-                            </div>
-                            <div>
-                              <label class="block text-xs text-gray-500 mb-0.5">Type</label>
-                              <p-select [options]="[{label:'Practical',value:'practical'},{label:'Theory',value:'theory'}]"
-                                [ngModel]="lesson.is_theory ? 'theory' : 'practical'"
-                                (ngModelChange)="onPreviewLessonTypeChange(li, $event)"
-                                appendTo="body" styleClass="w-full" />
-                            </div>
-                            <div>
-                              <label class="block text-xs text-gray-500 mb-0.5">Instructor</label>
-                              <p-select [options]="availableInstructors().map(u => ({label: u.name, value: u.phone}))"
-                                [ngModel]="lesson.instructor_id"
-                                (ngModelChange)="lesson.instructor_id = $event"
-                                placeholder="Optional" appendTo="body" styleClass="w-full" [filter]="true" filterBy="label" />
-                            </div>
-                            <div>
-                              <label class="block text-xs text-gray-500 mb-0.5">Vehicle</label>
-                              <p-select [options]="vehicleOptionsForTransmission(plan.transmission_type)"
-                                [ngModel]="lesson.vehicle_id"
-                                (ngModelChange)="lesson.vehicle_id = $event"
-                                placeholder="Optional" appendTo="body" styleClass="w-full" [filter]="true" filterBy="label" />
-                            </div>
-                          </div>
-                        </div>
-                      }
-                      @if (previewLessons().length === 0) {
-                        <p class="py-4 text-center text-sm text-gray-400">No lessons. Click "Add Lesson" to create one.</p>
-                      }
-                      <div class="pt-2">
-                        <p-button label="Add Lesson" icon="pi pi-plus" size="small" severity="secondary" (onClick)="previewAddLesson()" />
-                      </div>
-                    </div>
-                  </div>
-                }
-
-                <!-- View Mode: drag-and-drop reorder list -->
-                @if (previewPlanId() !== plan.id) {
-                  @if (activeLessons.length > 0) {
+                @if (activeLessons.length > 0) {
                     <p-orderList
                       [value]="activeLessons"
                       (onReorder)="onPlanLessonsReorder(plan.id, $event)"
@@ -894,7 +805,6 @@
                   } @else {
                     <p class="py-4 text-center text-sm text-gray-400">No active lessons. Add lessons from the template to get started.</p>
                   }
-                }
               </div>
             }
           }
@@ -1551,10 +1461,6 @@
                            }
                         </div>
                     <div class="flex items-center gap-2 shrink-0 ml-auto">
-                      @if (previewPlanId() === plan.id) {
-                        <p-button label="Save" icon="pi pi-check" size="small" severity="success" (onClick)="savePreview()" [loading]="loading()" />
-                        <p-button label="Cancel" icon="pi pi-times" size="small" severity="secondary" (onClick)="cancelPreview()" [disabled]="loading()" />
-                      } @else {
                         @if (!planIsLocked(plan)) {
                           <p-button icon="pi pi-calendar-clock" severity="secondary" (onClick)="openScheduleDialog(plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Schedule" tooltipPosition="top" />
                         }
@@ -1565,7 +1471,6 @@
                            <p-button icon="pi pi-print" severity="secondary" (onClick)="printLessonPlan(ci, plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Print PDF" tooltipPosition="top" />
                            <p-button icon="pi pi-trash" severity="danger" (click)="deleteClientPlan(plan.id)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Delete plan" tooltipPosition="top" />
                            <span class="text-xs text-gray-400">{{ activeLessons.length }} active</span>
-                      }
                        </div>
                       </div>
 
@@ -1586,90 +1491,7 @@
                         </div>
                       }
 
-                      @if (previewPlanId() === plan.id) {
-                        <!-- Preview Mode -->
-                        <div class="border border-blue-200 rounded-lg bg-blue-50/30 p-3 mb-2">
-                          <div class="flex items-center gap-2 mb-2 text-xs text-blue-600">
-                            <i class="pi pi-eye"></i>
-                            <span class="font-medium">Preview — review and adjust before saving</span>
-                          </div>
-                          <div class="space-y-0">
-                            @for (lesson of previewLessons(); track $index; let li = $index) {
-                              <div class="border-b border-gray-200 p-3 last:border-b-0 rounded bg-white"
-                                   [class.bg-amber-50]="lesson.is_theory"
-                                   [class.border-l-2]="lesson.is_theory"
-                                   [class.border-l-amber-400]="lesson.is_theory">
-                                <div class="flex items-center justify-between mb-2">
-                                  <span class="inline-flex items-center gap-1.5 text-xs font-medium"
-                                        [class.text-amber-700]="lesson.is_theory"
-                                        [class.text-gray-500]="!lesson.is_theory">
-                                    <i class="pi" [class.pi-book]="lesson.is_theory" [class.pi-car]="!lesson.is_theory"
-                                       [class.text-amber-500]="lesson.is_theory" [class.text-gray-400]="!lesson.is_theory"></i>
-                                    Lesson {{ li + 1 }}
-                                    @if (lesson.is_theory) {
-                                      <span class="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">Theory</span>
-                                    }
-                                    @if (lesson.title) {
-                                      <span [class.text-amber-600]="lesson.is_theory" [class.text-gray-700]="!lesson.is_theory">· {{ lesson.title }}</span>
-                                    }
-                                    @if (lesson.status === 'completed' || lesson.status === 'started') {
-                                      <span class="text-[11px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 font-medium">Done</span>
-                                    } @else if (lesson.status === 'scheduled') {
-                                      <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium">Scheduled</span>
-                                    }
-                                  </span>
-                                  <p-button icon="pi pi-trash" severity="danger" size="small" [text]="true"
-                                    (click)="previewRemoveLesson(li)" />
-                                </div>
-                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                  <div>
-                                    <label class="block text-xs text-gray-500 mb-0.5">Date</label>
-                                    <p-datepicker [ngModel]="lesson.scheduled_date"
-                                      (ngModelChange)="lesson.scheduled_date = $event"
-                                      dateFormat="yy-mm-dd" placeholder="Date" appendTo="body" styleClass="w-full" />
-                                  </div>
-                                  <div>
-                                    <label class="block text-xs text-gray-500 mb-0.5">Duration (min)</label>
-                                    <p-inputNumber [ngModel]="lesson.duration_minutes"
-                                      (ngModelChange)="lesson.duration_minutes = $event"
-                                      [min]="1" [max]="480" placeholder="Minutes" styleClass="w-full" />
-                                  </div>
-                                  <div>
-                                    <label class="block text-xs text-gray-500 mb-0.5">Type</label>
-                                    <p-select [options]="[{label:'Practical',value:'practical'},{label:'Theory',value:'theory'}]"
-                                      [ngModel]="lesson.is_theory ? 'theory' : 'practical'"
-                                      (ngModelChange)="onPreviewLessonTypeChange(li, $event)"
-                                      appendTo="body" styleClass="w-full" />
-                                  </div>
-                                  <div>
-                                    <label class="block text-xs text-gray-500 mb-0.5">Instructor</label>
-                                    <p-select [options]="availableInstructors().map(u => ({label: u.name, value: u.phone}))"
-                                      [ngModel]="lesson.instructor_id"
-                                      (ngModelChange)="lesson.instructor_id = $event"
-                                      placeholder="Optional" appendTo="body" styleClass="w-full" [filter]="true" filterBy="label" />
-                                  </div>
-                                  <div>
-                                    <label class="block text-xs text-gray-500 mb-0.5">Vehicle</label>
-                                    <p-select [options]="vehicleOptionsForTransmission(plan.transmission_type)"
-                                      [ngModel]="lesson.vehicle_id"
-                                      (ngModelChange)="lesson.vehicle_id = $event"
-                                      placeholder="Optional" appendTo="body" styleClass="w-full" [filter]="true" filterBy="label" />
-                                  </div>
-                                </div>
-                              </div>
-                            }
-                            @if (previewLessons().length === 0) {
-                              <p class="py-4 text-center text-sm text-gray-400">No lessons. Click "Add Lesson" to create one.</p>
-                            }
-                            <div class="pt-2">
-                              <p-button label="Add Lesson" icon="pi pi-plus" size="small" severity="secondary" (onClick)="previewAddLesson()" />
-                            </div>
-                          </div>
-                        </div>
-                      }
-
                       <!-- View Mode -->
-                      @if (previewPlanId() !== plan.id) {
                         @if (activeLessons.length > 0) {
                           <p-orderList
                             [value]="activeLessons"
@@ -1721,7 +1543,6 @@
                         } @else {
                           <p class="py-4 text-center text-sm text-gray-400">No active lessons. Add lessons from the template to get started.</p>
                         }
-                      }
                       </div>
                     }
                   }
@@ -1734,8 +1555,8 @@
           </div>
         </div>
       }
-      <!-- Lesson Edit Dialog -->
-      <app-lesson-edit-dialog #lessonEditDialog (confirmed)="onDialogConfirm($event)" />
+      <!-- Lesson Quick Generate Dialog -->
+      <app-lesson-quick-gen-dialog #lessonEditDialog (saved)="onQuickGenSaved()" />
 
       <!-- Lesson Execution Dialog -->
       <p-dialog header="Lesson Execution" [(visible)]="showExecutionDialog" [modal]="true"

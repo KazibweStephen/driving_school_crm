@@ -35,7 +35,7 @@ import { UserService, User } from '../../core/services/user.service';
 import { SchedulingService, ClientAvailability, FindAndLockResult } from '../../core/services/scheduling.service';
 import { VehicleScheduleService } from '../../core/services/vehicle-schedule.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
-import { LessonEditDialog } from '../../shared/components/lesson-edit-dialog';
+import { LessonQuickGenDialog } from '../../shared/components/lesson-quick-gen-dialog';
 
 @Component({
   selector: 'app-client-profile',
@@ -60,7 +60,7 @@ import { LessonEditDialog } from '../../shared/components/lesson-edit-dialog';
     InputNumberModule,
     ProgressBarModule,
     OrderListModule,
-    LessonEditDialog,
+    LessonQuickGenDialog,
   ],
   providers: [MessageService, ConfirmationService],
   templateUrl: './client-profile.html',
@@ -730,11 +730,6 @@ export class ClientProfile implements OnInit {
   editingLesson = signal<ClientLesson | null>(null);
   lessonEditForm: ClientLessonUpdate = {};
 
-  // ── Lesson Edit Dialog + Preview ──
-  lessonEditPlan = signal<ClientLessonPlan | null>(null);
-  previewLessons = signal<ClientLesson[]>([]);
-  previewPlanId = signal<string | null>(null);
-
   // ── Permit Progress ────────────────────────────────────────
 
   permitProgress = signal<Map<string, PermitProgress>>(new Map());
@@ -936,122 +931,28 @@ export class ClientProfile implements OnInit {
 
   // ── Lesson Edit Dialog ──
 
-  openLessonEditDialog(plan: ClientLessonPlan, dialog: LessonEditDialog) {
-    const activeLessons = plan.lessons.filter(l => l.is_active).map(l => ({ ...l }));
+  openLessonEditDialog(plan: ClientLessonPlan, dialog: LessonQuickGenDialog) {
     const cartItem = this.trainableCartItems().find(ci =>
       this.lessonPlansForCartItem(ci.id).some(p => p.id === plan.id)
     );
     const days = cartItem?.driving_training_duration_days ?? 0;
     const hours = cartItem?.theory_training_hours ?? 0;
     this.loadVehiclesAndInstructors();
-    dialog.open(
-      activeLessons,
-      this.availableInstructors(),
-      this.availableVehicles(),
-      days,
-      hours,
-      plan.transmission_type,
-    );
-    this.lessonEditPlan.set(plan);
-  }
-
-  onDialogConfirm(lessons: ClientLesson[]) {
-    this.previewLessons.set(lessons);
-    this.previewPlanId.set(this.lessonEditPlan()?.id || null);
-    this.lessonEditPlan.set(null);
-  }
-
-  cancelPreview() {
-    this.previewLessons.set([]);
-    this.previewPlanId.set(null);
-  }
-
-  onPreviewLessonTypeChange(lessonIndex: number, newType: string) {
-    this.previewLessons.update(lessons => {
-      const updated = [...lessons];
-      updated[lessonIndex] = {
-        ...updated[lessonIndex],
-        is_theory: newType === 'theory',
-        duration_minutes: newType === 'theory' ? 120 : 30,
-      };
-      return updated;
+    this.lessonPlanService.listTemplates().subscribe(templates => {
+      dialog.open(
+        plan,
+        this.availableInstructors(),
+        this.availableVehicles(),
+        templates || [],
+        days,
+        hours,
+      );
     });
   }
 
-  previewAddLesson() {
-    this.previewLessons.update(lessons => [...lessons, {
-      id: '',
-      lesson_plan_id: '',
-      template_item_id: null,
-      lesson_library_id: null,
-      day_number: lessons.length + 1,
-      week_number: 1,
-      title: `Lesson ${lessons.length + 1}`,
-      lesson_objectives: [],
-      practical_objectives: [],
-      order: lessons.length + 1,
-      is_active: true,
-      is_locked: false,
-      status: 'pending',
-      difficulty: null,
-      vehicle_inspection_minutes: null,
-      cockpit_drill_minutes: null,
-      video_illustration_minutes: null,
-      practical_driving_minutes: null,
-      assessment_minutes: null,
-      driving_minutes: null,
-      theory_minutes: null,
-      mileage_km: null,
-      is_theory: false,
-      combined_with_next: false,
-      skills_achieved: null,
-      outcome: null,
-      instructor_id: null,
-      vehicle_id: null,
-      completed_at: null,
-      scheduled_date: null,
-      scheduled_start_time: null,
-      scheduled_end_time: null,
-      duration_minutes: 30,
-      plan_locked_time: null,
-      notes: null,
-      preferred_location: null,
-      enforce_prerequisites: true,
-      created_at: '',
-      updated_at: '',
-    }]);
-  }
-
-  previewRemoveLesson(lessonIndex: number) {
-    this.previewLessons.update(lessons => lessons.filter((_, i) => i !== lessonIndex));
-  }
-
-  async savePreview() {
-    const planId = this.previewPlanId();
-    const lessons = this.previewLessons();
-    if (!planId || lessons.length === 0) return;
-    this.loading.set(true);
-    try {
-      const promises = lessons.map((lesson, idx) =>
-        this.lessonPlanService.updateClientLesson(lesson.id, {
-          scheduled_date: lesson.scheduled_date,
-          duration_minutes: lesson.duration_minutes,
-          is_theory: lesson.is_theory,
-          instructor_id: lesson.instructor_id || undefined,
-          vehicle_id: lesson.vehicle_id || undefined,
-          order: idx + 1,
-        }).toPromise()
-      );
-      await Promise.all(promises);
-      this.previewLessons.set([]);
-      this.previewPlanId.set(null);
-      await this.loadLessonPlans();
-      this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Lesson plan updated' });
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save lesson plan' });
-    } finally {
-      this.loading.set(false);
-    }
+  async onQuickGenSaved() {
+    await this.loadLessonPlans();
+    this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Lesson plan updated' });
   }
 
   vehicleOptionsForTransmission(transmission: string) {

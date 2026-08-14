@@ -203,6 +203,8 @@ export interface ClientLessonUpdate {
   is_locked?: boolean;
   status?: string;
   difficulty?: string;
+  scheduled_date?: string | null;
+  duration_minutes?: number | null;
   vehicle_inspection_minutes?: number | null;
   cockpit_drill_minutes?: number | null;
   video_illustration_minutes?: number | null;

@@ -728,6 +728,10 @@ export class ClientProfile implements OnInit {
   editingLesson = signal<ClientLesson | null>(null);
   lessonEditForm: ClientLessonUpdate = {};
 
+  // ── Bulk Lesson Edit ──
+  bulkEditPlanId = signal<string | null>(null);
+  bulkEditLessons = signal<ClientLesson[]>([]);
+
   // ── Permit Progress ────────────────────────────────────────
 
   permitProgress = signal<Map<string, PermitProgress>>(new Map());
@@ -925,6 +929,114 @@ export class ClientProfile implements OnInit {
       }
       return next;
     });
+  }
+
+  // ── Bulk Edit Lessons ──
+
+  startBulkEdit(plan: ClientLessonPlan) {
+    const editableLessons = plan.lessons
+      .filter(l => l.is_active)
+      .map(l => ({ ...l }));
+    this.bulkEditLessons.set(editableLessons);
+    this.bulkEditPlanId.set(plan.id);
+    this.loadVehiclesAndInstructors();
+  }
+
+  cancelBulkEdit() {
+    this.bulkEditPlanId.set(null);
+    this.bulkEditLessons.set([]);
+  }
+
+  async saveBulkEdit(plan: ClientLessonPlan) {
+    const lessons = this.bulkEditLessons();
+    this.loading.set(true);
+    try {
+      const promises = lessons.map((lesson, idx) =>
+        this.lessonPlanService.updateClientLesson(lesson.id, {
+          scheduled_date: lesson.scheduled_date,
+          duration_minutes: lesson.duration_minutes,
+          is_theory: lesson.is_theory,
+          instructor_id: lesson.instructor_id || undefined,
+          vehicle_id: lesson.vehicle_id || undefined,
+          order: idx + 1,
+        }).toPromise()
+      );
+      await Promise.all(promises);
+      this.bulkEditPlanId.set(null);
+      this.bulkEditLessons.set([]);
+      await this.loadLessonPlans();
+      this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Lesson plan updated' });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save lesson plan' });
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  onBulkEditLessonTypeChange(lessonIndex: number, newType: string) {
+    this.bulkEditLessons.update(lessons => {
+      const updated = [...lessons];
+      updated[lessonIndex] = {
+        ...updated[lessonIndex],
+        is_theory: newType === 'theory',
+        duration_minutes: newType === 'theory' ? 120 : 30,
+      };
+      return updated;
+    });
+  }
+
+  bulkEditAddLesson() {
+    this.bulkEditLessons.update(lessons => [...lessons, {
+      id: '',
+      lesson_plan_id: '',
+      template_item_id: null,
+      lesson_library_id: null,
+      day_number: lessons.length + 1,
+      week_number: 1,
+      title: `Lesson ${lessons.length + 1}`,
+      lesson_objectives: [],
+      practical_objectives: [],
+      order: lessons.length + 1,
+      is_active: true,
+      is_locked: false,
+      status: 'pending',
+      difficulty: null,
+      vehicle_inspection_minutes: null,
+      cockpit_drill_minutes: null,
+      video_illustration_minutes: null,
+      practical_driving_minutes: null,
+      assessment_minutes: null,
+      driving_minutes: null,
+      theory_minutes: null,
+      mileage_km: null,
+      is_theory: false,
+      combined_with_next: false,
+      skills_achieved: null,
+      outcome: null,
+      instructor_id: null,
+      vehicle_id: null,
+      completed_at: null,
+      scheduled_date: null,
+      scheduled_start_time: null,
+      scheduled_end_time: null,
+      duration_minutes: 30,
+      plan_locked_time: null,
+      notes: null,
+      preferred_location: null,
+      enforce_prerequisites: true,
+      created_at: '',
+      updated_at: '',
+    }]);
+  }
+
+  bulkEditRemoveLesson(lessonIndex: number) {
+    this.bulkEditLessons.update(lessons => lessons.filter((_, i) => i !== lessonIndex));
+  }
+
+  vehicleOptionsForTransmission(transmission: string) {
+    return this.availableVehicles()
+      .filter(v => transmission === 'both' || v.transmission === transmission)
+      .map(v => ({ label: `${v.name} (${v.plate_number})`, value: v.id }));
   }
 
   getTemplateLessonsNotInPlan(plan: ClientLessonPlan): ClientLesson[] {

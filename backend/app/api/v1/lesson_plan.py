@@ -535,6 +535,8 @@ async def update_client_lesson(
         is_locked=data.is_locked,
         status=data.status,
         difficulty=data.difficulty,
+        scheduled_date=data.scheduled_date,
+        duration_minutes=data.duration_minutes,
         vehicle_inspection_minutes=data.vehicle_inspection_minutes,
         cockpit_drill_minutes=data.cockpit_drill_minutes,
         video_illustration_minutes=data.video_illustration_minutes,

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import select, update
@@ -867,6 +867,8 @@ async def update_client_lesson(
     is_locked: bool | None = None,
     status: str | None = None,
     difficulty: str | None = None,
+    scheduled_date: date | None = None,
+    duration_minutes: int | None = None,
     vehicle_inspection_minutes: int | None = None,
     cockpit_drill_minutes: int | None = None,
     video_illustration_minutes: int | None = None,
@@ -968,6 +970,10 @@ async def update_client_lesson(
     if difficulty is not None:
         from app.models.lesson_plan import LessonDifficulty
         lesson.difficulty = LessonDifficulty(difficulty)
+    if scheduled_date is not None:
+        lesson.scheduled_date = scheduled_date
+    if duration_minutes is not None:
+        lesson.duration_minutes = duration_minutes
     if vehicle_inspection_minutes is not None:
         lesson.vehicle_inspection_minutes = vehicle_inspection_minutes
     if cockpit_drill_minutes is not None:

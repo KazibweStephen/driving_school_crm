@@ -52,6 +52,13 @@ class Payment(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cancelled_by: Mapped[str | None] = mapped_column(
+        String(20), ForeignKey("users.phone", ondelete="SET NULL"), nullable=True, index=True
+    )
+    cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     consultation: Mapped["Consultation"] = relationship("Consultation", backref="payments")
     branch: Mapped["Branch | None"] = relationship("Branch")

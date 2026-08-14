@@ -13,7 +13,7 @@ from app.models.company import Branch, Company, UserBranchAssignment
 from app.models.product import Product
 from app.models.user import User, UserRole
 from app.schemas.company import BranchRead
-from app.schemas.payment import PaymentListResponse, PaymentTotals, PaymentWithClient
+from app.schemas.payment import PaymentListResponse, PaymentRead, PaymentTotals, PaymentWithClient
 from app.services import payment as payment_service
 
 router = APIRouter(tags=["payments"])
@@ -309,3 +309,26 @@ async def check_receipt(
         if result.scalar_one_or_none() is None:
             return {"exists": False}
     return {"exists": True}
+
+
+@router.post("/api/v1/payments/{payment_id}/cancel", response_model=PaymentRead)
+async def cancel_payment(
+    payment_id: str,
+    reason: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("payments.view")),
+):
+    if current_user.role != UserRole.SUPER_USER and not current_user.is_company_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only super admins and company admins can cancel payments",
+        )
+    try:
+        pid = uuid.UUID(payment_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payment ID")
+    try:
+        payment = await payment_service.cancel_payment(db, pid, current_user.phone, reason)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return PaymentRead.model_validate(payment)

@@ -129,11 +129,20 @@ async def create_payment(
     return payment
 
 
+async def get_payment_by_id(db: AsyncSession, payment_id: uuid.UUID) -> Payment | None:
+    result = await db.execute(
+        select(Payment)
+        .where(Payment.id == payment_id)
+        .options(selectinload(Payment.installments), selectinload(Payment.consultation))
+    )
+    return result.scalar_one_or_none()
+
+
 async def get_payment_by_receipt(db: AsyncSession, receipt_number: str) -> Payment | None:
     result = await db.execute(
         select(Payment).where(Payment.receipt_number == receipt_number)
     )
-    return result.scalars().first()
+    return result.scalar_one_or_none()
 
 
 async def get_payments_by_consultation(
@@ -180,13 +189,13 @@ async def list_payments(
     from app.models.company import Branch
     from app.models.product import Product
 
-    base_query = select(Payment).join(Consultation, Payment.consultation_id == Consultation.id)
-    count_query = select(func.count(Payment.id)).join(Consultation, Payment.consultation_id == Consultation.id)
+    base_query = select(Payment).join(Consultation, Payment.consultation_id == Consultation.id).where(Payment.cancelled_at.is_(None))
+    count_query = select(func.count(Payment.id)).join(Consultation, Payment.consultation_id == Consultation.id).where(Payment.cancelled_at.is_(None))
     totals_query = select(
         func.coalesce(func.sum(Payment.total_amount), 0),
         func.coalesce(func.sum(Payment.total_paid), 0),
         func.coalesce(func.sum(Payment.balance), 0),
-    ).join(Consultation, Payment.consultation_id == Consultation.id)
+    ).join(Consultation, Payment.consultation_id == Consultation.id).where(Payment.cancelled_at.is_(None))
 
     # Build prior-payments subquery for client_type filter
     p2 = aliased(Payment)
@@ -553,3 +562,25 @@ async def get_client_detail(
         query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
     result = await db.execute(query)
     return result.scalar_one_or_none()
+
+
+async def cancel_payment(
+    db: AsyncSession,
+    payment_id: uuid.UUID,
+    cancelled_by_phone: str,
+    reason: str | None = None,
+) -> Payment:
+    from datetime import datetime, timezone
+    payment = await get_payment_by_id(db, payment_id)
+    if payment is None:
+        raise ValueError("Payment not found")
+    if payment.cancelled_at is not None:
+        raise ValueError("Payment already cancelled")
+    payment.cancelled_at = datetime.now(timezone.utc)
+    payment.cancelled_by = cancelled_by_phone
+    payment.cancellation_reason = reason or None
+    for inst in payment.installments:
+        inst.status = InstallmentStatus.CANCELLED
+    await db.flush()
+    await db.refresh(payment)
+    return payment

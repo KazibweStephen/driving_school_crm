@@ -198,4 +198,10 @@ export class PaymentService {
     const url = `/api/v1/receipts/by-number/${encodeURIComponent(receiptNumber)}`;
     return this.http.get(url, { responseType: 'text', params });
   }
+
+  cancelPayment(paymentId: string, reason?: string) {
+    let params = new HttpParams();
+    if (reason) params = params.set('reason', reason);
+    return this.http.post<PaymentRead>(`/api/v1/payments/${paymentId}/cancel`, {}, { params });
+  }
 }

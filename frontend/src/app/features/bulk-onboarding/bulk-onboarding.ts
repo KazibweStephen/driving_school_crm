@@ -1000,7 +1000,6 @@ export class BulkOnboardingCmp implements OnInit {
     const last = form.lastDate ? this.startOfDay(form.lastDate) : null;
     const docDate = this.quickGenDocDate();
     const firstPay = this.quickGenFirstPaymentDate();
-    const today = this.startOfDay(new Date());
 
     if (start && docDate && start < docDate) {
       return `Start date cannot be before the client's document date (${fmt(docDate)})`;
@@ -1011,9 +1010,6 @@ export class BulkOnboardingCmp implements OnInit {
     if (last && start && last < start) {
       return 'Last date must be after start date';
     }
-    if (last && last > today) {
-      return 'Last date of training cannot be later than today';
-    }
     return '';
   }
 
@@ -1022,7 +1018,6 @@ export class BulkOnboardingCmp implements OnInit {
     const template = this.quickGenSelectedTemplate();
     const docDate = this.quickGenDocDate();
     const firstPay = this.quickGenFirstPaymentDate();
-    const today = this.startOfDay(new Date());
 
     const lower = (msgDate: Date | null) => {
       if (docDate && msgDate && msgDate < docDate) {
@@ -1043,18 +1038,12 @@ export class BulkOnboardingCmp implements OnInit {
         const d = this.startOfDay(date);
         const msg = lower(d);
         if (msg) return `Date for "${item.title}" ${msg}`;
-        if (d > today) {
-          return `Date for "${item.title}" cannot be later than today`;
-        }
       }
     } else {
       for (const lesson of this.quickGenPreview()) {
         const d = this.startOfDay(lesson.date);
         const msg = lower(d);
         if (msg) return `Generated lesson date ${msg}`;
-        if (d > today) {
-          return 'Generated lesson dates cannot be later than today';
-        }
       }
     }
     return '';
@@ -1139,14 +1128,10 @@ export class BulkOnboardingCmp implements OnInit {
         if (dow >= 1 && dow <= 5) practicalDates.push(new Date(cursor));
         cursor.setDate(cursor.getDate() + 1);
       }
-      // If not enough working days, continue past the last date
-      let overflow = new Date(last);
-      while (practicalDates.length < practical.length) {
-        overflow.setDate(overflow.getDate() + 1);
-        if (overflow.getDay() >= 1 && overflow.getDay() <= 5) practicalDates.push(new Date(overflow));
-      }
-
-      const practicalGenerated: QuickGenLesson[] = practical.map((p, i) => ({
+      // Only schedule practical lessons within the start–last window.
+      // If there are fewer working days than practical lessons, cut short.
+      const practicalCount = Math.min(practical.length, practicalDates.length);
+      const practicalGenerated: QuickGenLesson[] = practical.slice(0, practicalCount).map((p, i) => ({
         ...p,
         date: practicalDates[i],
         lesson_type: 'practical',

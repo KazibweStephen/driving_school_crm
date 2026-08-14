@@ -27,8 +27,8 @@ async def get_dashboard_summary(
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     month_start = today_start.replace(day=1)
 
-    today_payments = select(func.coalesce(func.sum(Payment.total_paid), 0))
-    month_payments = select(func.coalesce(func.sum(Payment.total_paid), 0))
+    today_payments = select(func.coalesce(func.sum(Payment.total_paid), 0)).where(Payment.cancelled_at.is_(None))
+    month_payments = select(func.coalesce(func.sum(Payment.total_paid), 0)).where(Payment.cancelled_at.is_(None))
 
     today_commissions = select(func.coalesce(func.sum(Commission.total_amount), 0)).where(
         Commission.created_at >= today_start

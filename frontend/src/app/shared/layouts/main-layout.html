@@ -1,3 +1,9 @@
+@if (routeLoading()) {
+  <div class="fixed inset-0 z-[60] flex items-center justify-center bg-white/70 backdrop-blur-sm">
+    <span class="pi pi-spin pi-spinner text-4xl text-blue-600"></span>
+  </div>
+}
+
 <!-- Mobile header -->
 <header class="fixed top-0 left-0 right-0 z-40 flex h-14 items-center justify-between border-b bg-white px-4 shadow-sm lg:hidden">
   <button
@@ -32,24 +38,10 @@
     </button>
     <button
       class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
-      (click)="changePin.open()"
-      aria-label="Change PIN"
+      (click)="toggleActions()"
+      aria-label="Actions"
     >
-      <span class="pi pi-key text-xl"></span>
-    </button>
-    <button
-      class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
-      (click)="switchToMobile()"
-      aria-label="Switch to mobile version"
-    >
-      <span class="pi pi-mobile text-xl"></span>
-    </button>
-    <button
-      class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
-      (click)="auth.logout()"
-      aria-label="Logout"
-    >
-      <span class="pi pi-sign-out text-xl"></span>
+      <span class="pi pi-ellipsis-v text-xl"></span>
     </button>
   </div>
 </header>
@@ -85,15 +77,6 @@
         </span>
       }
     </button>
-    <button
-      class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
-      (click)="switchToMobile()"
-      aria-label="Switch to mobile version"
-      pTooltip="Switch to mobile version"
-      tooltipPosition="bottom"
-    >
-      <span class="pi pi-mobile text-xl"></span>
-    </button>
     <div class="ml-1 flex items-center gap-2 border-l pl-3">
       <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
         {{ displayInitial }}
@@ -104,20 +87,12 @@
       </div>
       <button
         class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-blue-600"
-        (click)="changePin.open()"
-        pTooltip="Change PIN"
+        (click)="toggleActions()"
+        pTooltip="Actions"
         tooltipPosition="bottom"
-        aria-label="Change PIN"
+        aria-label="Actions"
       >
-        <span class="pi pi-key text-lg"></span>
-      </button>
-      <button
-        class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-red-600"
-        (click)="auth.logout()"
-        pTooltip="Logout"
-        tooltipPosition="bottom"
-      >
-        <span class="pi pi-sign-out text-lg"></span>
+        <span class="pi pi-ellipsis-v text-lg"></span>
       </button>
     </div>
   </div>
@@ -215,6 +190,47 @@
       >
         View all transfers
       </button>
+    </div>
+  </div>
+}
+
+<!-- Actions dropdown panel -->
+@if (actionsOpen()) {
+  <div class="fixed inset-0 z-40" (click)="closeActions()"></div>
+  <div class="fixed top-16 right-2 z-50 flex w-[calc(100vw-1rem)] max-w-xs flex-col overflow-hidden rounded-xl border bg-white shadow-2xl lg:top-16 lg:right-6">
+    <div class="border-b px-4 py-3">
+      <p class="text-sm font-semibold text-gray-900">Actions</p>
+    </div>
+    <div class="flex-1">
+      <ul class="divide-y">
+        <li>
+          <button
+            class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50"
+            (click)="switchToMobile(); closeActions()"
+          >
+            <span class="pi pi-mobile text-lg text-gray-500"></span>
+            <span class="text-sm text-gray-700">Switch to mobile</span>
+          </button>
+        </li>
+        <li>
+          <button
+            class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50"
+            (click)="changePin.open(); closeActions()"
+          >
+            <span class="pi pi-key text-lg text-gray-500"></span>
+            <span class="text-sm text-gray-700">Change PIN</span>
+          </button>
+        </li>
+        <li>
+          <button
+            class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50"
+            (click)="auth.logout()"
+          >
+            <span class="pi pi-sign-out text-lg text-red-500"></span>
+            <span class="text-sm text-red-600">Logout</span>
+          </button>
+        </li>
+      </ul>
     </div>
   </div>
 }

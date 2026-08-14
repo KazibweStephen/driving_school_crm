@@ -101,8 +101,14 @@
           </div>
         </td>
         <td>
-          <p-button icon="pi pi-receipt" rounded="true" text="true" severity="info"
-            pTooltip="View Receipt" (onClick)="openReceipt(p)" />
+          <div class="flex items-center gap-1">
+            <p-button icon="pi pi-receipt" rounded="true" text="true" severity="info"
+              pTooltip="View Receipt" (onClick)="openReceipt(p)" />
+            @if (canCancel()) {
+              <p-button icon="pi pi-times" rounded="true" text="true" severity="danger"
+                pTooltip="Cancel Payment" (onClick)="cancelPayment(p)" />
+            }
+          </div>
         </td>
       </tr>
     </ng-template>

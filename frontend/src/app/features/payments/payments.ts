@@ -61,6 +61,11 @@ export class PaymentsCmp implements OnInit {
     return role === 'super_user' || role === 'office_admin' || role === 'manager' || role === 'branch_supervisor';
   });
 
+  canCancel = computed(() => {
+    const role = this.authService.currentUserRole();
+    return role === 'super_user' || role === 'company_super_user';
+  });
+
   presets: Preset[] = [
     { label: 'Today', key: 'today' },
     { label: 'This Week', key: 'this_week' },
@@ -274,5 +279,17 @@ export class PaymentsCmp implements OnInit {
       },
       error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
     });
+  }
+
+  async cancelPayment(p: PaymentWithClient) {
+    const reason = window.prompt('Enter cancellation reason (optional):');
+    if (reason === null) return;
+    try {
+      await this.paymentService.cancelPayment(p.id, reason || undefined).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Cancelled', detail: 'Payment cancelled successfully' });
+      this.loadPayments();
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to cancel payment' });
+    }
   }
 }

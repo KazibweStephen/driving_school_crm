@@ -52,6 +52,9 @@ class PaymentRead(BaseModel):
     transaction_id: str
     created_at: datetime
     updated_at: datetime
+    cancelled_at: datetime | None = None
+    cancelled_by: str | None = None
+    cancellation_reason: str | None = None
     installments: list[InstallmentRead]
 
     model_config = {"from_attributes": True}
@@ -123,6 +126,9 @@ class PaymentWithClient(BaseModel):
     transaction_id: str
     created_at: datetime
     updated_at: datetime
+    cancelled_at: datetime | None = None
+    cancelled_by: str | None = None
+    cancellation_reason: str | None = None
 
     model_config = {"from_attributes": True}
 

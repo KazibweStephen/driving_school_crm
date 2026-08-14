@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Event as RouterEvent, NavigationCancel, NavigationEnd, NavigationError, NavigationStart, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TooltipModule } from 'primeng/tooltip';
 import { TagModule } from 'primeng/tag';
@@ -46,6 +46,8 @@ export class MainLayout implements OnInit, OnDestroy {
   companies = signal<Company[]>([]);
   companySwitcherOpen = signal(false);
   switchingCompany = signal(false);
+  routeLoading = signal(false);
+  actionsOpen = signal(false);
   private _pollTimer: any = null;
   @ViewChild('changePin') changePin!: ChangePinDialog;
 
@@ -154,6 +156,13 @@ export class MainLayout implements OnInit, OnDestroy {
     if (typeof window !== 'undefined') {
       this._pollTimer = setInterval(() => this.refreshNotifications(), 60000);
     }
+    this.router.events.subscribe((event: RouterEvent) => {
+      if (event instanceof NavigationStart) {
+        this.routeLoading.set(true);
+      } else if (event instanceof NavigationEnd || event instanceof NavigationCancel || event instanceof NavigationError) {
+        this.routeLoading.set(false);
+      }
+    });
   }
 
   ngOnDestroy() {
@@ -182,6 +191,14 @@ export class MainLayout implements OnInit, OnDestroy {
 
   closeNotifications() {
     this.notificationsOpen.set(false);
+  }
+
+  toggleActions() {
+    this.actionsOpen.set(!this.actionsOpen());
+  }
+
+  closeActions() {
+    this.actionsOpen.set(false);
   }
 
   goToTransfers() {

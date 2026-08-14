@@ -336,7 +336,7 @@ export class Payments {
 
   openCollect(ci: CartItem) {
     this.targetItem.set(ci);
-    this.collectAmount.set(this.balanceForItem(ci));
+    this.collectAmount.set(0);
     this.receiptNumber = '';
     this.documentDate.set(todayISO());
     if (this.branches().length > 0 && !this.branchId()) {

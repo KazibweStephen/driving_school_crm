@@ -151,6 +151,7 @@ async def get_mobile_dashboard(
         .where(
             Payment.document_date.between(period_start, period_end),
             ~has_prior,
+            Payment.cancelled_at.is_(None),
         )
     )
     sales_month_q = (
@@ -161,6 +162,7 @@ async def get_mobile_dashboard(
             Payment.document_date >= month_start,
             Payment.document_date < next_month,
             ~has_prior,
+            Payment.cancelled_at.is_(None),
         )
     )
     if branch_filter is not None:
@@ -174,7 +176,10 @@ async def get_mobile_dashboard(
         select(func.coalesce(func.sum(Payment.total_paid), Decimal("0")))
         .select_from(Payment)
         .join(Consultation, Payment.consultation_id == Consultation.id)
-        .where(Payment.document_date.between(period_start, period_end))
+        .where(
+            Payment.document_date.between(period_start, period_end),
+            Payment.cancelled_at.is_(None),
+        )
     )
     coll_new_q = (
         select(func.coalesce(func.sum(Payment.total_paid), Decimal("0")))
@@ -183,13 +188,17 @@ async def get_mobile_dashboard(
         .where(
             Payment.document_date.between(period_start, period_end),
             Consultation.document_date.between(period_start, period_end),
+            Payment.cancelled_at.is_(None),
         )
     )
     pending_q = (
         select(func.coalesce(func.sum(Payment.balance), Decimal("0")))
         .select_from(Payment)
         .join(Consultation, Payment.consultation_id == Consultation.id)
-        .where(Payment.balance > 0)
+        .where(
+            Payment.balance > 0,
+            Payment.cancelled_at.is_(None),
+        )
     )
     if branch_filter is not None:
         coll_total_q = coll_total_q.where(branch_filter)

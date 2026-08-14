@@ -178,7 +178,7 @@ export interface ClientLessonPlanCreate {
   extension_days_added?: number;
   notes?: string;
   manual_days?: number;
-  lessons?: { day_number: number; week_number: number; title: string; lesson_objectives?: string[]; practical_objectives?: string[]; order?: number; is_active?: boolean; is_theory?: boolean; preferred_location?: string; enforce_prerequisites?: boolean }[];
+  lessons?: { day_number: number; week_number: number; title: string; lesson_objectives?: string[]; practical_objectives?: string[]; order?: number; is_active?: boolean; is_theory?: boolean; preferred_location?: string; enforce_prerequisites?: boolean; scheduled_date?: string; duration_minutes?: number; instructor_id?: string; vehicle_id?: string; template_item_id?: string; is_locked?: boolean }[];
 }
 
 export interface ClientLessonPlanUpdate {

@@ -247,6 +247,12 @@ class ClientLessonCreate(BaseModel):
     is_theory: bool = False
     preferred_location: str | None = None
     enforce_prerequisites: bool = True
+    scheduled_date: date | None = None
+    duration_minutes: int = 30
+    instructor_id: str | None = None
+    vehicle_id: str | None = None
+    template_item_id: str | None = None
+    is_locked: bool = False
 
 
 class ClientLessonUpdate(BaseModel):

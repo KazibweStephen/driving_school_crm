@@ -252,6 +252,30 @@ async def update_package(
     if permit_processing_duration_days is not None:
         pkg.permit_processing_duration_days = permit_processing_duration_days
     await db.flush()
+
+    # Propagate training fields to all cart items referencing this package (no price change)
+    from app.models.cart import CartItem
+    from sqlalchemy import select
+    result = await db.execute(
+        select(CartItem).where(CartItem.package_id == pkg.id)
+    )
+    cart_items = result.scalars().all()
+    for ci in cart_items:
+        if requires_driving_training is not None:
+            ci.requires_driving_training = requires_driving_training
+        if requires_theory_training is not None:
+            ci.requires_theory_training = requires_theory_training
+        if requires_permit_processing is not None:
+            ci.requires_permit_processing = requires_permit_processing
+        if driving_training_duration_days is not None:
+            ci.driving_training_duration_days = driving_training_duration_days
+        if theory_training_hours is not None:
+            ci.theory_training_hours = theory_training_hours
+        if permit_processing_duration_days is not None:
+            ci.permit_processing_duration_days = permit_processing_duration_days
+    if cart_items:
+        await db.flush()
+
     await db.refresh(pkg)
     return pkg
 

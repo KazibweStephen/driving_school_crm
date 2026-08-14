@@ -454,6 +454,14 @@ async def create_client_plan(
     if not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Cart item not found")
+
+    # Look up cart item training limits for locking excess lessons
+    from app.models.cart import CartItem
+    ci_result = await db.execute(select(CartItem).where(CartItem.id == cart_item_id))
+    cart_item = ci_result.scalar_one_or_none()
+    max_practical = cart_item.driving_training_duration_days if cart_item else None
+    max_theory = (cart_item.theory_training_hours // 2) if cart_item and cart_item.theory_training_hours else None
+
     plan = ClientLessonPlan(
         cart_item_id=cart_item_id,
         template_id=template_id,
@@ -470,9 +478,42 @@ async def create_client_plan(
     await db.flush()
 
     if lessons_data:
+        practical_count = 0
+        theory_count = 0
         for lesson in lessons_data:
             lo = lesson.get("lesson_objectives", [])
             po = lesson.get("practical_objectives", [])
+            is_theory = lesson.get("is_theory", False)
+
+            # Lock excess lessons beyond package training limits
+            is_locked = lesson.get("is_locked", False)
+            if not is_locked and max_practical is not None and not is_theory:
+                if practical_count >= max_practical:
+                    is_locked = True
+                practical_count += 1
+            if not is_locked and max_theory is not None and is_theory:
+                if theory_count >= max_theory:
+                    is_locked = True
+                theory_count += 1
+
+            # Parse scheduled_date
+            scheduled_date_val = lesson.get("scheduled_date")
+            if isinstance(scheduled_date_val, str) and scheduled_date_val:
+                from datetime import date as _date
+                scheduled_date_val = _date.fromisoformat(scheduled_date_val)
+            elif isinstance(scheduled_date_val, datetime):
+                scheduled_date_val = scheduled_date_val.date()
+
+            # Parse template_item_id
+            template_item_id_val = lesson.get("template_item_id")
+            if isinstance(template_item_id_val, str) and template_item_id_val:
+                try:
+                    template_item_id_val = uuid.UUID(template_item_id_val)
+                except ValueError:
+                    template_item_id_val = None
+            elif not isinstance(template_item_id_val, uuid.UUID | None):
+                template_item_id_val = None
+
             client_lesson = ClientLesson(
                 lesson_plan_id=plan.id,
                 day_number=lesson["day_number"],
@@ -482,9 +523,15 @@ async def create_client_plan(
                 practical_objectives=po if isinstance(po, list) else [po] if po else [],
                 order=lesson.get("order", 0),
                 is_active=lesson.get("is_active", True),
-                is_theory=lesson.get("is_theory", False),
+                is_theory=is_theory,
                 preferred_location=lesson.get("preferred_location"),
                 enforce_prerequisites=lesson.get("enforce_prerequisites", True),
+                scheduled_date=scheduled_date_val,
+                duration_minutes=lesson.get("duration_minutes", 120 if is_theory else 30),
+                instructor_id=lesson.get("instructor_id"),
+                vehicle_id=lesson.get("vehicle_id"),
+                template_item_id=template_item_id_val,
+                is_locked=is_locked,
             )
             db.add(client_lesson)
         await db.flush()

@@ -310,26 +310,25 @@ export class LessonQuickGenDialog {
       .filter(t => trans === 'both' || !t.transmission_type || t.transmission_type === 'both' || t.transmission_type === trans)
       .map(t => ({ label: t.name, value: t.id }));
 
-    const firstLesson = this.existingLessons[0];
-    const lastLesson = this.existingLessons[this.existingLessons.length - 1];
+    // Load start/end dates: first try plan.start_date, then scan existing lessons
     let startDate: Date | null = null;
     let lastDate: Date | null = null;
-    if (firstLesson?.scheduled_date) startDate = new Date(firstLesson.scheduled_date);
-    if (lastLesson?.scheduled_date) lastDate = new Date(lastLesson.scheduled_date);
+    if (plan.start_date) {
+      startDate = new Date(plan.start_date);
+    }
     if (!startDate) {
       for (const l of this.existingLessons) {
         if (l.scheduled_date) { startDate = new Date(l.scheduled_date); break; }
       }
     }
-    if (!lastDate) {
-      for (const l of [...this.existingLessons].reverse()) {
-        if (l.scheduled_date) { lastDate = new Date(l.scheduled_date); break; }
-      }
+    for (const l of [...this.existingLessons].reverse()) {
+      if (l.scheduled_date) { lastDate = new Date(l.scheduled_date); break; }
     }
 
     const practicalCount = this.existingLessons.filter(l => !l.is_theory && (l.status === 'completed' || l.status === 'started')).length;
     const theoryCount = this.existingLessons.filter(l => l.is_theory && (l.status === 'completed' || l.status === 'started')).length;
 
+    const firstLesson = this.existingLessons[0];
     this.form.set({
       practicalDays: practicalCount || null,
       theoryLessons: theoryCount || null,
@@ -406,14 +405,30 @@ export class LessonQuickGenDialog {
   toggleItem(itemId: string) {
     const template = this.selectedTemplate();
     const item = template?.lesson_items?.find((i: any) => i.id === itemId);
-    if (item && !item.is_theory && !this.isItemSelected(itemId)) {
-      const max = this.maxPracticalDays();
-      if (max !== 999) {
-        const selected = this.selectedItemIds();
-        const selectedPractical = selected.filter(id =>
-          template?.lesson_items?.find((i: any) => i.id === id) && !template.lesson_items.find((i: any) => i.id === id)!.is_theory
-        ).length;
-        if (selectedPractical >= max) return;
+    if (item && !this.isItemSelected(itemId)) {
+      // Check practical limit
+      if (!item.is_theory) {
+        const max = this.trainingDays || 999;
+        if (max !== 999) {
+          const selected = this.selectedItemIds();
+          const selectedPractical = selected.filter(id => {
+            const it = template?.lesson_items?.find((i: any) => i.id === id);
+            return it && !it.is_theory;
+          }).length;
+          if (selectedPractical >= max) return;
+        }
+      }
+      // Check theory limit
+      if (item.is_theory) {
+        const maxTheory = this.trainingHours ? Math.ceil(this.trainingHours / 2) : 999;
+        if (maxTheory !== 999) {
+          const selected = this.selectedItemIds();
+          const selectedTheory = selected.filter(id => {
+            const it = template?.lesson_items?.find((i: any) => i.id === id);
+            return it && it.is_theory;
+          }).length;
+          if (selectedTheory >= maxTheory) return;
+        }
       }
     }
     this.selectedItemIds.update(ids =>
@@ -579,6 +594,7 @@ export class LessonQuickGenDialog {
           practical_objectives: ls.practical_objectives.length ? ls.practical_objectives : undefined,
           order: ls.order,
           is_active: true,
+          is_locked: false,
           scheduled_date: ls.scheduled_date ? ls.scheduled_date.toISOString().split('T')[0] : undefined,
           duration_minutes: ls.duration_minutes,
           is_theory: ls.is_theory,
@@ -647,18 +663,21 @@ export class LessonQuickGenDialog {
     }
     const practicalItems = template.lesson_items.filter((i: any) => !i.is_theory);
     const theoryItems = template.lesson_items.filter((i: any) => i.is_theory);
-    const practical = this.trainingDays || (f.practicalDays ?? 0);
-    const theorySessions = this.trainingHours ? Math.ceil(this.trainingHours / 2) : 0;
-    const theory = Math.max(f.theoryLessons ?? 0, theorySessions);
+    // Cap at package training limits
+    const maxPractical = this.trainingDays || 999;
+    const maxTheory = this.trainingHours ? Math.ceil(this.trainingHours / 2) : 999;
     const trainedPractical = f.practicalDays ?? 0;
     const trainedTheory = f.theoryLessons ?? 0;
+    // Select up to package limit; user-entered trained count determines completed vs scheduled
+    const practicalToSelect = Math.min(practicalItems.length, maxPractical);
+    const theoryToSelect = Math.min(theoryItems.length, maxTheory);
     const selected: string[] = [];
     const status: Record<string, 'completed' | 'scheduled'> = {};
-    practicalItems.slice(0, practical).forEach((i: any, idx: number) => {
+    practicalItems.slice(0, practicalToSelect).forEach((i: any, idx: number) => {
       selected.push(i.id);
       status[i.id] = idx < trainedPractical ? 'completed' : 'scheduled';
     });
-    theoryItems.slice(0, theory).forEach((i: any, idx: number) => {
+    theoryItems.slice(0, theoryToSelect).forEach((i: any, idx: number) => {
       selected.push(i.id);
       status[i.id] = idx < trainedTheory ? 'completed' : 'scheduled';
     });

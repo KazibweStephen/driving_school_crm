@@ -35,6 +35,7 @@ import { UserService, User } from '../../core/services/user.service';
 import { SchedulingService, ClientAvailability, FindAndLockResult } from '../../core/services/scheduling.service';
 import { VehicleScheduleService } from '../../core/services/vehicle-schedule.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
+import { LessonEditDialog } from '../../shared/components/lesson-edit-dialog';
 
 @Component({
   selector: 'app-client-profile',
@@ -59,6 +60,7 @@ import { CompanyService, Branch } from '../../core/services/company.service';
     InputNumberModule,
     ProgressBarModule,
     OrderListModule,
+    LessonEditDialog,
   ],
   providers: [MessageService, ConfirmationService],
   templateUrl: './client-profile.html',
@@ -728,9 +730,10 @@ export class ClientProfile implements OnInit {
   editingLesson = signal<ClientLesson | null>(null);
   lessonEditForm: ClientLessonUpdate = {};
 
-  // ── Bulk Lesson Edit ──
-  bulkEditPlanId = signal<string | null>(null);
-  bulkEditLessons = signal<ClientLesson[]>([]);
+  // ── Lesson Edit Dialog + Preview ──
+  lessonEditPlan = signal<ClientLessonPlan | null>(null);
+  previewLessons = signal<ClientLesson[]>([]);
+  previewPlanId = signal<string | null>(null);
 
   // ── Permit Progress ────────────────────────────────────────
 
@@ -931,50 +934,40 @@ export class ClientProfile implements OnInit {
     });
   }
 
-  // ── Bulk Edit Lessons ──
+  // ── Lesson Edit Dialog ──
 
-  startBulkEdit(plan: ClientLessonPlan) {
-    const editableLessons = plan.lessons
-      .filter(l => l.is_active)
-      .map(l => ({ ...l }));
-    this.bulkEditLessons.set(editableLessons);
-    this.bulkEditPlanId.set(plan.id);
+  openLessonEditDialog(plan: ClientLessonPlan, dialog: LessonEditDialog) {
+    const activeLessons = plan.lessons.filter(l => l.is_active).map(l => ({ ...l }));
+    const cartItem = this.trainableCartItems().find(ci =>
+      this.lessonPlansForCartItem(ci.id).some(p => p.id === plan.id)
+    );
+    const days = cartItem?.driving_training_duration_days ?? 0;
+    const hours = cartItem?.theory_training_hours ?? 0;
     this.loadVehiclesAndInstructors();
+    dialog.open(
+      activeLessons,
+      this.availableInstructors(),
+      this.availableVehicles(),
+      days,
+      hours,
+      plan.transmission_type,
+    );
+    this.lessonEditPlan.set(plan);
   }
 
-  cancelBulkEdit() {
-    this.bulkEditPlanId.set(null);
-    this.bulkEditLessons.set([]);
+  onDialogConfirm(lessons: ClientLesson[]) {
+    this.previewLessons.set(lessons);
+    this.previewPlanId.set(this.lessonEditPlan()?.id || null);
+    this.lessonEditPlan.set(null);
   }
 
-  async saveBulkEdit(plan: ClientLessonPlan) {
-    const lessons = this.bulkEditLessons();
-    this.loading.set(true);
-    try {
-      const promises = lessons.map((lesson, idx) =>
-        this.lessonPlanService.updateClientLesson(lesson.id, {
-          scheduled_date: lesson.scheduled_date,
-          duration_minutes: lesson.duration_minutes,
-          is_theory: lesson.is_theory,
-          instructor_id: lesson.instructor_id || undefined,
-          vehicle_id: lesson.vehicle_id || undefined,
-          order: idx + 1,
-        }).toPromise()
-      );
-      await Promise.all(promises);
-      this.bulkEditPlanId.set(null);
-      this.bulkEditLessons.set([]);
-      await this.loadLessonPlans();
-      this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Lesson plan updated' });
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save lesson plan' });
-    } finally {
-      this.loading.set(false);
-    }
+  cancelPreview() {
+    this.previewLessons.set([]);
+    this.previewPlanId.set(null);
   }
 
-  onBulkEditLessonTypeChange(lessonIndex: number, newType: string) {
-    this.bulkEditLessons.update(lessons => {
+  onPreviewLessonTypeChange(lessonIndex: number, newType: string) {
+    this.previewLessons.update(lessons => {
       const updated = [...lessons];
       updated[lessonIndex] = {
         ...updated[lessonIndex],
@@ -985,8 +978,8 @@ export class ClientProfile implements OnInit {
     });
   }
 
-  bulkEditAddLesson() {
-    this.bulkEditLessons.update(lessons => [...lessons, {
+  previewAddLesson() {
+    this.previewLessons.update(lessons => [...lessons, {
       id: '',
       lesson_plan_id: '',
       template_item_id: null,
@@ -1029,8 +1022,36 @@ export class ClientProfile implements OnInit {
     }]);
   }
 
-  bulkEditRemoveLesson(lessonIndex: number) {
-    this.bulkEditLessons.update(lessons => lessons.filter((_, i) => i !== lessonIndex));
+  previewRemoveLesson(lessonIndex: number) {
+    this.previewLessons.update(lessons => lessons.filter((_, i) => i !== lessonIndex));
+  }
+
+  async savePreview() {
+    const planId = this.previewPlanId();
+    const lessons = this.previewLessons();
+    if (!planId || lessons.length === 0) return;
+    this.loading.set(true);
+    try {
+      const promises = lessons.map((lesson, idx) =>
+        this.lessonPlanService.updateClientLesson(lesson.id, {
+          scheduled_date: lesson.scheduled_date,
+          duration_minutes: lesson.duration_minutes,
+          is_theory: lesson.is_theory,
+          instructor_id: lesson.instructor_id || undefined,
+          vehicle_id: lesson.vehicle_id || undefined,
+          order: idx + 1,
+        }).toPromise()
+      );
+      await Promise.all(promises);
+      this.previewLessons.set([]);
+      this.previewPlanId.set(null);
+      await this.loadLessonPlans();
+      this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Lesson plan updated' });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save lesson plan' });
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   vehicleOptionsForTransmission(transmission: string) {

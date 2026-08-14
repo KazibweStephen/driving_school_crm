@@ -514,6 +514,17 @@ async def generate_theory_sessions(
     if current_user.role.value != 'super_user' and not await _verify_plan_access(db, pid, current_user.company_id, current_user.role.value):
         raise HTTPException(status_code=404, detail="Lesson plan not found")
 
+    # Cap theory sessions to package hours (each session = 2 hours = 120 min)
+    plan_result = await db.execute(
+        select(ClientLessonPlan).where(ClientLessonPlan.id == pid)
+        .options(selectinload(ClientLessonPlan.cart_item))
+    )
+    plan = plan_result.scalar_one_or_none()
+    if plan and plan.cart_item:
+        max_weeks = (plan.cart_item.theory_training_hours or 0) // 2
+        if max_weeks > 0 and data.total_weeks > max_weeks:
+            data.total_weeks = max_weeks
+
     topics = [
         "Road Signs & Markings",
         "Traffic Rules & Regulations",

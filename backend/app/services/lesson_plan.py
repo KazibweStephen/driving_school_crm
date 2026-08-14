@@ -582,11 +582,18 @@ async def create_merged_client_plan(
     if not await _verify_template_company(db, theory_template_id, company_id, current_user_role):
         raise ValueError("Theory template not found")
     """Merge a practical and theory template into one plan.
-    
-    Theory lessons are placed on days 6, 12, 18, 24 (Saturdays).
+
+    Theory lessons are placed on Saturdays. Each theory lesson is 2 hours (120 min).
+    The number of theory lessons is capped to the cart item's theory_training_hours / 2.
     Practical lessons keep their relative order but are shifted to accommodate
     theory day insertions.
     """
+    # Fetch cart item to determine allowed theory lessons (each = 2 hours)
+    cart_result = await db.execute(select(CartItem).where(CartItem.id == cart_item_id))
+    cart_item = cart_result.scalar_one_or_none()
+    theory_hours = cart_item.theory_training_hours if cart_item else 0
+    max_theory_lessons = (theory_hours or 0) // 2
+
     # Fetch both templates
     tpl_result = await db.execute(
         select(LessonPlanTemplate)
@@ -601,11 +608,16 @@ async def create_merged_client_plan(
     theory_days = [6, 12, 18, 24]
     theory_items = list(theory_tpl.lesson_items)
 
+    # Cap theory lessons to package hours (each theory lesson = 2 hours)
+    theory_count = min(len(theory_items), max_theory_lessons)
+    actual_theory_days = theory_days[:theory_count]
+    actual_theory_items = theory_items[:theory_count]
+
     # Build merged lesson items sorted by (day, order)
     merged = []
     for item in practical_tpl.lesson_items:
         # Count how many theory days are inserted before this item's current day
-        shift = sum(1 for td in theory_days if td <= item.day_number)
+        shift = sum(1 for td in actual_theory_days if td <= item.day_number)
         new_day = item.day_number + shift
         new_week = (new_day - 1) // 5 + 1
         merged.append({
@@ -622,21 +634,20 @@ async def create_merged_client_plan(
         })
 
     # Insert theory items at their designated days
-    for idx, td in enumerate(theory_days):
-        if idx < len(theory_items):
-            item = theory_items[idx]
-            merged.append({
-                "template_item_id": item.id,
-                "day_number": td,
-                "week_number": (td - 1) // 5 + 1,
-                "title": item.title,
-                "lesson_objectives": item.lesson_objectives,
-                "practical_objectives": item.practical_objectives,
-                "order": item.order,
-                "is_theory": True,
-                "preferred_location": item.preferred_location,
-                "enforce_prerequisites": item.enforce_prerequisites,
-            })
+    for idx, td in enumerate(actual_theory_days):
+        item = actual_theory_items[idx]
+        merged.append({
+            "template_item_id": item.id,
+            "day_number": td,
+            "week_number": (td - 1) // 5 + 1,
+            "title": item.title,
+            "lesson_objectives": item.lesson_objectives,
+            "practical_objectives": item.practical_objectives,
+            "order": item.order,
+            "is_theory": True,
+            "preferred_location": item.preferred_location,
+            "enforce_prerequisites": item.enforce_prerequisites,
+        })
 
     # Sort by day_number then order
     merged.sort(key=lambda x: (x["day_number"], x["order"]))

@@ -34,6 +34,12 @@ export const routes: Routes = [
           import('./features/auth/users/transfer-history').then((c) => c.TransferHistory),
       },
       {
+        path: 'discounts',
+        data: { permission: 'discounts.view' },
+        loadComponent: () =>
+          import('./features/discounts/discounts').then((c) => c.DiscountsCmp),
+      },
+      {
         path: 'products',
         data: { permission: 'products.view' },
         loadComponent: () =>

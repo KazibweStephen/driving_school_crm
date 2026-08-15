@@ -48,17 +48,21 @@
         <div class="space-y-3">
           @for (ci of paidCartItems(); track ci.id) {
             <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3" [class.bg-green-50]="ci.status === 'converted_paid'" [class.bg-amber-50]="ci.status === 'converted_paying'">
-              <div class="min-w-0 flex-1">
+                <div class="min-w-0 flex-1">
                 <div class="text-sm font-medium text-gray-900">{{ productName(ci) }}</div>
                 <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
                   @if (packageName(ci)) { <span>{{ packageName(ci) }}</span> }
-                  <span>Total: <strong>{{ cartItemTotal(ci) | number:'1.0-0' }}</strong></span>
+                  @if (getCartItemDiscountTotal(ci) > 0) {
+                    <span>Total: <strong class="text-gray-400 line-through">{{ cartItemTotal(ci) | number:'1.0-0' }}</strong> <strong class="text-green-600">{{ cartItemDiscountedTotal(ci) | number:'1.0-0' }}</strong></span>
+                  } @else {
+                    <span>Total: <strong>{{ cartItemTotal(ci) | number:'1.0-0' }}</strong></span>
+                  }
                   <span>Paid: <strong class="text-green-600">{{ cartItemPaid(ci) | number:'1.0-0' }}</strong></span>
-                  <span>Bal: <strong [class.text-green-600]="cartItemBalance(ci) === 0" [class.text-amber-600]="cartItemBalance(ci) > 0">{{ cartItemBalance(ci) | number:'1.0-0' }}</strong></span>
+                  <span>Bal: <strong [class.text-green-600]="cartItemDiscountedBalance(ci) === 0" [class.text-amber-600]="cartItemDiscountedBalance(ci) > 0">{{ cartItemDiscountedBalance(ci) | number:'1.0-0' }}</strong></span>
                 </div>
               </div>
               <div class="flex items-center gap-1">
-                @if (cartItemBalance(ci) > 0) {
+                @if (cartItemDiscountedBalance(ci) > 0) {
                   <p-button label="Pay" icon="pi pi-dollar" size="small" severity="success" (onClick)="openMakePaymentDialog(ci)" styleClass="p-button-sm whitespace-nowrap" />
                 } @else {
                   <p-tag value="Paid" severity="success" />
@@ -115,7 +119,13 @@
                 <td class="text-sm text-gray-600">{{ packageName(ci) || '—' }}</td>
                 <td class="text-sm text-gray-600">{{ packagePrice(ci) }}</td>
                 <td class="text-sm text-green-600 font-medium">{{ cartItemPaid(ci) | number:'1.0-0' }}</td>
-                <td class="text-sm" [class.text-green-600]="cartItemBalance(ci) === 0" [class.text-amber-600]="cartItemBalance(ci) > 0">{{ cartItemBalance(ci) | number:'1.0-0' }}</td>
+                <td class="text-sm" [class.text-green-600]="cartItemBalance(ci) === 0" [class.text-amber-600]="cartItemBalance(ci) > 0">
+                  @if (getCartItemDiscountTotal(ci) > 0) {
+                    {{ Math.max(0, cartItemDiscountedTotal(ci) - cartItemPaid(ci)) | number:'1.0-0' }}
+                  } @else {
+                    {{ cartItemBalance(ci) | number:'1.0-0' }}
+                  }
+                </td>
                 <td class="text-sm text-gray-600">{{ packageDuration(ci) }}</td>
                 <td class="text-sm text-gray-600">
                   @if (ci.notes) {
@@ -162,6 +172,21 @@
                     }
                     <p-button icon="pi pi-trash" severity="danger" (onClick)="removeCartItem(ci)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" [disabled]="ci.status === 'converted'" />
                   </div>
+                  @if (getCartItemDiscounts(ci).length > 0) {
+                    <div class="mt-1 flex flex-wrap gap-1">
+                      @for (d of getCartItemDiscounts(ci); track d.id) {
+                        <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                          <span class="pi pi-percentage text-[10px]"></span>
+                          {{ d.discount_code }} ({{ d.applied_amount | number:'1.0-0' }})
+                          @if (authService.hasPermission('discounts.apply')) {
+                            <button class="ml-0.5 text-green-500 hover:text-green-700" (click)="removeDiscount(d.id, ci)">
+                              <span class="pi pi-times text-[10px]"></span>
+                            </button>
+                          }
+                        </span>
+                      }
+                    </div>
+                  }
                 </td>
               </tr>
             </ng-template>
@@ -188,8 +213,29 @@
               </div>
               <p class="text-xs text-gray-500">{{ packageName(ci) || '—' }}</p>
               <p class="text-xs text-gray-500">
-                {{ packagePrice(ci) }}{{ packagePrice(ci) !== '—' ? ' · ' : '' }}{{ packageDuration(ci) }}
+                @if (getCartItemDiscountTotal(ci) > 0) {
+                  <span class="text-green-600 font-medium">{{ cartItemDiscountedTotal(ci) | number:'1.0-0' }} UGX</span>
+                  <span class="ml-1 text-gray-400 line-through">{{ cartItemTotal(ci) | number:'1.0-0' }}</span>
+                } @else {
+                  {{ packagePrice(ci) }}
+                }
+                {{ packagePrice(ci) !== '—' ? ' · ' : '' }}{{ packageDuration(ci) }}
               </p>
+              @if (getCartItemDiscounts(ci).length > 0) {
+                <div class="mt-1 flex flex-wrap gap-1">
+                  @for (d of getCartItemDiscounts(ci); track d.id) {
+                    <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                      <span class="pi pi-percentage text-[10px]"></span>
+                      {{ d.discount_code }} ({{ d.applied_amount | number:'1.0-0' }})
+                      @if (authService.hasPermission('discounts.apply')) {
+                        <button class="ml-0.5 text-green-500 hover:text-green-700" (click)="removeDiscount(d.id, ci)">
+                          <span class="pi pi-times text-[10px]"></span>
+                        </button>
+                      }
+                    </span>
+                  }
+                </div>
+              }
               <p class="text-xs text-gray-400 mt-1">{{ timeAgo(ci.created_at) }}</p>
               @if (ci.notes) {
                 <p class="mt-1 text-xs text-gray-600 inline-flex items-center gap-1">
@@ -896,7 +942,14 @@
                     </td>
                     <td class="text-sm font-medium text-gray-700">{{ productName(ci) }}</td>
                     <td class="text-sm text-gray-600">{{ packageName(ci) || '—' }}</td>
-                    <td class="text-sm text-gray-600">{{ packagePrice(ci) }}</td>
+                <td class="text-sm text-gray-600">
+                  @if (getCartItemDiscountTotal(ci) > 0) {
+                    <span class="text-green-600 font-medium">{{ cartItemDiscountedTotal(ci) | number:'1.0-0' }}</span>
+                    <span class="ml-1 text-xs text-gray-400 line-through">{{ cartItemTotal(ci) | number:'1.0-0' }}</span>
+                  } @else {
+                    {{ packagePrice(ci) }}
+                  }
+                </td>
                     <td class="text-sm text-gray-600">{{ packageDuration(ci) }}</td>
                     <td class="text-sm text-gray-600">
                       @if (ci.notes) {
@@ -943,6 +996,21 @@
                         }
                         <p-button icon="pi pi-trash" severity="danger" (onClick)="removeCartItem(ci)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" [disabled]="ci.status === 'converted'" />
                       </div>
+                      @if (getCartItemDiscounts(ci).length > 0) {
+                        <div class="mt-1 flex flex-wrap gap-1">
+                          @for (d of getCartItemDiscounts(ci); track d.id) {
+                            <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                              <span class="pi pi-percentage text-[10px]"></span>
+                              {{ d.discount_code }} ({{ d.applied_amount | number:'1.0-0' }})
+                              @if (authService.hasPermission('discounts.apply')) {
+                                <button class="ml-0.5 text-green-500 hover:text-green-700" (click)="removeDiscount(d.id, ci)">
+                                  <span class="pi pi-times text-[10px]"></span>
+                                </button>
+                              }
+                            </span>
+                          }
+                        </div>
+                      }
                     </td>
                   </tr>
                 </ng-template>
@@ -969,8 +1037,29 @@
                 </div>
                 <p class="text-xs text-gray-500">{{ packageName(ci) || '—' }}</p>
                 <p class="text-xs text-gray-500">
-                {{ packagePrice(ci) }}{{ packagePrice(ci) !== '—' ? ' · ' : '' }}{{ packageDuration(ci) }} · <span class="text-green-600">Paid: {{ cartItemPaid(ci) | number:'1.0-0' }}</span> · <span [class.text-green-600]="cartItemBalance(ci) === 0" [class.text-amber-600]="cartItemBalance(ci) > 0">Bal: {{ cartItemBalance(ci) | number:'1.0-0' }}</span>
+                @if (getCartItemDiscountTotal(ci) > 0) {
+                  <span class="text-green-600 font-medium">{{ cartItemDiscountedTotal(ci) | number:'1.0-0' }} UGX</span>
+                  <span class="ml-1 text-gray-400 line-through">{{ cartItemTotal(ci) | number:'1.0-0' }}</span>
+                } @else {
+                  {{ packagePrice(ci) }}
+                }
+                {{ packagePrice(ci) !== '—' ? ' · ' : '' }}{{ packageDuration(ci) }} · <span class="text-green-600">Paid: {{ cartItemPaid(ci) | number:'1.0-0' }}</span> · <span [class.text-green-600]="cartItemBalance(ci) === 0" [class.text-amber-600]="cartItemBalance(ci) > 0">Bal: {{ cartItemBalance(ci) | number:'1.0-0' }}</span>
                 </p>
+                @if (getCartItemDiscounts(ci).length > 0) {
+                  <div class="mt-1 flex flex-wrap gap-1">
+                    @for (d of getCartItemDiscounts(ci); track d.id) {
+                      <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                        <span class="pi pi-percentage text-[10px]"></span>
+                        {{ d.discount_code }} ({{ d.applied_amount | number:'1.0-0' }})
+                        @if (authService.hasPermission('discounts.apply')) {
+                          <button class="ml-0.5 text-green-500 hover:text-green-700" (click)="removeDiscount(d.id, ci)">
+                            <span class="pi pi-times text-[10px]"></span>
+                          </button>
+                        }
+                      </span>
+                    }
+                  </div>
+                }
                 <p class="text-xs text-gray-400 mt-1">{{ timeAgo(ci.created_at) }}</p>
                 @if (ci.notes) {
                   <p class="mt-1 text-xs text-gray-600 inline-flex items-center gap-1">
@@ -1978,10 +2067,34 @@
                     <div class="col-span-5 text-sm">
                       <div class="font-medium">{{ sp.product.name }}</div>
                       @if (sp.packageName) { <div class="text-xs text-gray-400">{{ sp.packageName }}</div> }
+                      <div class="mt-1">
+                        @if (sp.selectedDiscount) {
+                          <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                            <span class="pi pi-percentage text-[10px]"></span>
+                            {{ sp.selectedDiscount.name }} ({{ sp.discountAmount | number:'1.0-0' }})
+                            <button class="ml-0.5 text-green-600 hover:text-green-800" (click)="removeAddProductDiscount(i)">
+                              <span class="pi pi-times text-[10px]"></span>
+                            </button>
+                          </span>
+                        } @else if (hasAddApplicableDiscounts(sp, i)) {
+                          <button class="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800" (click)="openAddProductDiscountDialog(i)">
+                            <span class="pi pi-percentage"></span> Apply discount
+                          </button>
+                        } @else {
+                          <span class="text-xs text-gray-400">No discounts</span>
+                        }
+                      </div>
                     </div>
-                    <div class="col-span-3 text-right text-sm font-medium">{{ sp.price | number:'1.0-0' }}</div>
+                    <div class="col-span-3 text-right text-sm">
+                      @if (sp.discountAmount && sp.discountAmount > 0) {
+                        <span class="font-medium text-green-600">{{ addDiscountedPrice(sp) | number:'1.0-0' }}</span>
+                        <span class="block text-xs text-gray-400 line-through">{{ sp.price | number:'1.0-0' }}</span>
+                      } @else {
+                        <span class="font-medium">{{ sp.price | number:'1.0-0' }}</span>
+                      }
+                    </div>
                     <div class="col-span-4 text-right">
-                      <p-inputNumber [ngModel]="getAllocation(i)" (onInput)="onAllocationInput(i, $event)" [min]="0" [max]="sp.price" placeholder="0" inputStyleClass="w-full px-2 py-1 text-sm text-right" />
+                      <p-inputNumber [ngModel]="getAllocation(i)" (onInput)="onAllocationInput(i, $event)" [min]="0" [max]="addDiscountedPrice(sp)" placeholder="0" inputStyleClass="w-full px-2 py-1.5 text-sm text-right" />
                     </div>
                   </div>
                 }
@@ -2138,6 +2251,30 @@
           }
         </div>
       </div>
+
+      <!-- Add to Cart Discount Selection Dialog -->
+      <p-dialog header="Apply Discount" [(visible)]="showAddProductDiscountDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '420px' }" [draggable]="false" [resizable]="false">
+        <div class="flex flex-col gap-3 pt-2">
+          @if (addProductDiscountOptions().length === 0) {
+            <p class="text-sm text-gray-500">No applicable discounts available.</p>
+          } @else {
+            <p class="text-sm text-gray-600">Select a discount to apply:</p>
+            <div class="flex flex-col gap-2">
+              @for (d of addProductDiscountOptions(); track d.id) {
+                <button class="flex items-center justify-between rounded-lg border px-3 py-2 text-left hover:bg-gray-50" (click)="selectAddProductDiscount(d)">
+                  <span class="text-sm font-medium">{{ d.name }}</span>
+                  <span class="text-xs text-gray-500">
+                    @if (d.discount_type === 'fixed') { {{ d.discount_value | number:'1.0-0' }} UGX off }
+                    @else { {{ d.discount_value }}% off }
+                    @if (d.status === 'pending') { · pending }
+                  </span>
+                </button>
+              }
+            </div>
+          }
+          <p-button label="Cancel" severity="secondary" (onClick)="showAddProductDiscountDialog.set(false)" styleClass="w-full justify-center" />
+        </div>
+      </p-dialog>
     </p-dialog>
 
     <!-- Edit Dialog -->
@@ -2353,8 +2490,46 @@
             <div class="rounded-lg bg-gray-50 p-3 text-sm">
               <div class="flex justify-between">
                 <span class="text-gray-600">Total Price</span>
-                <span class="font-semibold">{{ completeSaleTotal() | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
+                @if (getCartItemDiscountTotal(cs) > 0) {
+                  <span>
+                    <span class="text-gray-400 line-through">{{ cartItemTotal(cs) | number:'1.0-0' }}</span>
+                    <span class="ml-1 font-semibold text-green-600">{{ completeSaleTotal() | number:'1.0-0' }}</span>
+                    {{ currencyService.symbol() }}
+                  </span>
+                } @else {
+                  <span class="font-semibold">{{ completeSaleTotal() | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
+                }
               </div>
+              @if (getCartItemDiscountTotal(cs) > 0) {
+                <div class="mt-1 flex justify-between text-green-600">
+                  <span>Discount</span>
+                  <span class="font-semibold">-{{ getCartItemDiscountTotal(cs) | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
+                </div>
+              }
+            </div>
+
+            <div>
+              <div class="mb-1 flex items-center justify-between">
+                <label class="block text-sm font-medium text-gray-700">Discounts</label>
+                <p-button label="Apply Discount" icon="pi pi-percentage" size="small" severity="secondary" (onClick)="openApplyDiscount(cs)" styleClass="p-button-sm" />
+              </div>
+              @if (getCartItemDiscounts(cs).length > 0) {
+                <div class="flex flex-wrap gap-2">
+                  @for (d of getCartItemDiscounts(cs); track d.id) {
+                    <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs text-green-700">
+                      <span class="pi pi-percentage text-[10px]"></span>
+                      {{ d.discount_code }} ({{ d.applied_amount | number:'1.0-0' }})
+                      @if (authService.hasPermission('discounts.apply')) {
+                        <button class="ml-0.5 text-green-600 hover:text-green-800" (click)="removeDiscount(d.id, cs)">
+                          <span class="pi pi-times text-[10px]"></span>
+                        </button>
+                      }
+                    </span>
+                  }
+                </div>
+              } @else {
+                <p class="text-xs text-gray-400">No discounts applied</p>
+              }
             </div>
 
             <div>
@@ -2411,7 +2586,7 @@
 
             <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">Amount Paid</label>
-              <p-inputNumber [ngModel]="completeSalePaidAmount()" (onInput)="completeSalePaidAmount.set($event.value ?? 0); onCompleteSalePaidChange()" [min]="0" [max]="completeSaleTotal()" [placeholder]="'0'" class="w-full" inputStyleClass="w-full px-3 py-2 text-sm" />
+              <p-inputNumber [ngModel]="completeSalePaidAmount()" (onInput)="completeSalePaidAmount.set($event.value ?? 0); onCompleteSalePaidChange()" [min]="0" [max]="completeSaleDiscountedTotal()" [placeholder]="'0'" class="w-full" inputStyleClass="w-full px-3 py-2 text-sm" />
             </div>
 
             @if (completeSaleRemainingBalance(); as remaining) {
@@ -2474,8 +2649,21 @@
             <div class="rounded-lg bg-gray-50 p-3 text-sm">
               <div class="flex justify-between">
                 <span class="text-gray-600">Total Price</span>
-                <span class="font-semibold">{{ cartItemTotal(mp) | number:'1.0-0' }}</span>
+                @if (getCartItemDiscountTotal(mp) > 0) {
+                  <span>
+                    <span class="text-gray-400 line-through">{{ cartItemTotal(mp) | number:'1.0-0' }}</span>
+                    <span class="ml-1 font-semibold text-green-600">{{ cartItemDiscountedTotal(mp) | number:'1.0-0' }}</span>
+                  </span>
+                } @else {
+                  <span class="font-semibold">{{ cartItemTotal(mp) | number:'1.0-0' }}</span>
+                }
               </div>
+              @if (getCartItemDiscountTotal(mp) > 0) {
+                <div class="flex justify-between mt-1 text-green-600">
+                  <span>Discount</span>
+                  <span class="font-semibold">-{{ getCartItemDiscountTotal(mp) | number:'1.0-0' }}</span>
+                </div>
+              }
               <div class="flex justify-between mt-1">
                 <span class="text-gray-600">Already Paid</span>
                 <span class="font-semibold text-green-600">{{ cartItemPaid(mp) | number:'1.0-0' }}</span>
@@ -2622,6 +2810,9 @@
                   <div class="col-span-5 text-sm">
                     <div class="font-medium">{{ it.productName }}</div>
                     @if (it.packageName) { <div class="text-xs text-gray-400">{{ it.packageName }}</div> }
+                    @if (it.discountAmount > 0) {
+                      <div class="text-xs text-green-600">Discount: {{ it.discountAmount | number:'1.0-0' }}</div>
+                    }
                   </div>
                   <div class="col-span-3 text-right text-sm">{{ it.balance | number:'1.0-0' }}</div>
                   <div class="col-span-4 text-right">
@@ -3027,6 +3218,60 @@
     <p-toast />
 
     <!-- Guide Dialog -->
+    <p-dialog header="Apply Discount" [(visible)]="showApplyDiscountDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '500px' }" [draggable]="false" [resizable]="false">
+      <div class="flex flex-col gap-4 pt-2">
+        @if (discountTarget()) {
+          <div class="rounded-lg bg-gray-50 p-3">
+            <p class="text-sm font-medium text-gray-900">
+              {{ productName(discountTarget()!) }} — {{ packageName(discountTarget()!) }}
+            </p>
+            <p class="text-xs text-gray-500">
+              Price: {{ packagePrice(discountTarget()!) }} · Balance: {{ cartItemBalance(discountTarget()!) | number:'1.0-0' }} UGX
+            </p>
+          </div>
+        }
+
+        @if (loadingDiscounts()) {
+          <div class="flex items-center justify-center py-8">
+            <span class="pi pi-spin pi-spinner text-2xl text-gray-400"></span>
+          </div>
+        } @else if (applicableDiscounts().length === 0) {
+          <div class="py-8 text-center text-gray-400">
+            <span class="pi pi-percentage mb-2 block text-3xl"></span>
+            <p class="text-sm">No applicable discounts found</p>
+            <p class="mt-1 text-xs text-gray-400">Discounts must be approved, active, and within date/usage limits</p>
+          </div>
+        } @else {
+          <div class="flex flex-col gap-2">
+            @for (d of applicableDiscounts(); track d.id) {
+              <div class="flex items-center justify-between rounded-lg border p-3 hover:bg-gray-50">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-gray-900">{{ d.name }}</span>
+                    <span class="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-mono text-blue-700">{{ d.code }}</span>
+                  </div>
+                  <p class="text-xs text-gray-500">
+                    {{ discountDescription(d) }} off
+                    @if (d.applies_to === 'product') { on products }
+                    @else if (d.applies_to === 'package') { on packages }
+                    @else { sitewide }
+                    @if (d.end_date) { · expires {{ d.end_date | date:'mediumDate' }} }
+                  </p>
+                </div>
+                <p-button
+                  label="Apply"
+                  icon="pi pi-check"
+                  [loading]="loadingDiscounts()"
+                  (onClick)="applyDiscount(d)"
+                  styleClass="p-button-sm"
+                />
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </p-dialog>
+
     <p-dialog header="Guide" [(visible)]="showGuide" [modal]="true" [style]="{ width: '90vw', maxWidth: '520px' }" [draggable]="false" [resizable]="false">
       <div class="flex flex-col gap-3 pt-2">
         @for (line of guideContent().split('\n'); track $index) {

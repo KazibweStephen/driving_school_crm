@@ -1,0 +1,449 @@
+<div class="p-4 sm:p-6">
+  <!-- Header -->
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-gray-900">Discounts</h1>
+    @if (canCreate) {
+      <p-button
+        label="New Discount"
+        icon="pi pi-plus"
+        (onClick)="resetNewDiscount(); showCreateDialog.set(true)"
+      />
+    }
+  </div>
+
+  <!-- Filters -->
+  <div class="mb-4 flex flex-wrap items-center gap-2">
+    <span class="p-input-icon-left">
+      <i class="pi pi-search text-gray-400"></i>
+      <input
+        pInputText
+        [(ngModel)]="search"
+        (keyup.enter)="onSearch()"
+        placeholder="Search code or name..."
+        class="w-56"
+      />
+    </span>
+    <p-select
+      [(ngModel)]="statusFilter"
+      [options]="statusOptions"
+      optionLabel="label"
+      optionValue="value"
+      placeholder="All statuses"
+      styleClass="w-40"
+      appendTo="body"
+      (onChange)="onSearch()"
+    />
+    <p-select
+      [(ngModel)]="branchFilter"
+      [options]="branches()"
+      optionLabel="name"
+      optionValue="id"
+      placeholder="All branches"
+      styleClass="w-44"
+      appendTo="body"
+      (onChange)="onSearch()"
+    />
+    @if (search() || statusFilter() || branchFilter()) {
+      <p-button
+        label="Clear"
+        icon="pi pi-times"
+        severity="secondary"
+        (onClick)="clearFilters()"
+        styleClass="p-button-sm"
+      />
+    }
+  </div>
+
+  <!-- Desktop table -->
+  <div class="hidden sm:block">
+    <p-table
+      [value]="discounts()"
+      [paginator]="true"
+      [rows]="pageSize()"
+      [totalRecords]="total()"
+      [lazy]="true"
+      (onPage)="onPageChange($event)"
+      [loading]="loading()"
+      stripedRows
+      styleClass="p-datatable-sm"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Value</th>
+          <th>Validity</th>
+          <th>Branch</th>
+          <th>Status</th>
+          <th>Uses</th>
+          <th>Actions</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-d>
+        <tr>
+          <td class="font-mono text-sm">{{ d.code }}</td>
+          <td class="font-medium">{{ d.name }}</td>
+          <td class="text-sm">{{ typeLabel(d.discount_type) }}</td>
+          <td class="text-sm">{{ discountDescription(d) }}</td>
+          <td class="text-xs text-gray-500">
+            {{ d.start_date | date:'mediumDate' }}
+            @if (d.end_date) { - {{ d.end_date | date:'mediumDate' }} }
+            @else { (no expiry) }
+          </td>
+          <td class="text-xs text-gray-500">{{ branchName(d.branch_id) }}</td>
+          <td>
+            <p-tag [value]="d.status" [severity]="statusSeverity(d.status)" />
+            @if (!d.is_active && d.status !== 'expired') {
+              <p-tag value="inactive" severity="secondary" styleClass="ml-1" />
+            }
+          </td>
+          <td class="text-xs text-gray-500">
+            @if (d.max_uses) { {{ d.used_count }} / {{ d.max_uses }} }
+            @else { {{ d.used_count }} }
+          </td>
+          <td>
+            <div class="flex items-center gap-1">
+              @if (d.status === 'pending' && canApprove) {
+                <p-button
+                  icon="pi pi-check"
+                  severity="success"
+                  (onClick)="approveDiscount(d)"
+                  styleClass="p-button-sm p-button-rounded p-button-text"
+                  pTooltip="Approve"
+                  tooltipPosition="top"
+                />
+              }
+              @if (d.status === 'pending' && canReject) {
+                <p-button
+                  icon="pi pi-times"
+                  severity="danger"
+                  (onClick)="openReject(d)"
+                  styleClass="p-button-sm p-button-rounded p-button-text"
+                  pTooltip="Reject"
+                  tooltipPosition="top"
+                />
+              }
+              @if (canEdit && d.status !== 'expired') {
+                <p-button
+                  icon="pi pi-pencil"
+                  severity="secondary"
+                  (onClick)="openEdit(d)"
+                  styleClass="p-button-sm p-button-rounded p-button-text"
+                  pTooltip="Edit"
+                  tooltipPosition="top"
+                />
+                <p-button
+                  icon="pi pi-power-off"
+                  [severity]="d.is_active ? 'warn' : 'success'"
+                  (onClick)="toggleActive(d)"
+                  styleClass="p-button-sm p-button-rounded p-button-text"
+                  [pTooltip]="d.is_active ? 'Deactivate' : 'Activate'"
+                  tooltipPosition="top"
+                />
+              }
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- Mobile card list -->
+  <div class="sm:hidden">
+    @for (d of discounts(); track d.id) {
+      <div class="mb-3 rounded-xl border bg-white p-4 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div class="min-w-0 flex-1">
+            <p class="font-medium text-gray-900">{{ d.name }}</p>
+            <p class="font-mono text-xs text-gray-500">{{ d.code }}</p>
+          </div>
+          <div class="flex flex-col items-end gap-1">
+            <p-tag [value]="d.status" [severity]="statusSeverity(d.status)" />
+            @if (!d.is_active && d.status !== 'expired') {
+              <p-tag value="inactive" severity="secondary" />
+            }
+          </div>
+        </div>
+        <p class="mt-2 text-xs text-gray-500">
+          {{ discountDescription(d) }} · {{ typeLabel(d.discount_type) }}<br>
+          {{ branchName(d.branch_id) }}<br>
+          {{ d.start_date | date:'mediumDate' }}
+          @if (d.end_date) { - {{ d.end_date | date:'mediumDate' }} }
+        </p>
+        <div class="mt-3 flex items-center gap-2 border-t pt-3">
+          @if (d.status === 'pending' && canApprove) {
+            <p-button icon="pi pi-check" severity="success" (onClick)="approveDiscount(d)" styleClass="p-button-sm" />
+          }
+          @if (d.status === 'pending' && canReject) {
+            <p-button icon="pi pi-times" severity="danger" (onClick)="openReject(d)" styleClass="p-button-sm" />
+          }
+          @if (canEdit && d.status !== 'expired') {
+            <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openEdit(d)" styleClass="p-button-sm" />
+            <p-button icon="pi pi-power-off" [severity]="d.is_active ? 'warn' : 'success'" (onClick)="toggleActive(d)" styleClass="p-button-sm" />
+          }
+        </div>
+      </div>
+    }
+    @if (discounts().length === 0 && !loading()) {
+      <div class="py-12 text-center text-gray-400">
+        <span class="pi pi-percentage mb-2 block text-3xl"></span>
+        <p>No discounts found</p>
+      </div>
+    }
+  </div>
+
+  <!-- Create Discount Dialog -->
+  <p-dialog
+    header="New Discount"
+    [(visible)]="showCreateDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '520px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    <div class="flex flex-col gap-4 pt-2">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Code</label>
+          <input pInputText [(ngModel)]="newDiscount.code" placeholder="e.g. EARLY2026" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Name</label>
+          <input pInputText [(ngModel)]="newDiscount.name" placeholder="e.g. Early Bird" class="w-full" />
+        </div>
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Description</label>
+        <textarea pTextarea [(ngModel)]="newDiscount.description" rows="2" class="w-full" placeholder="Optional description"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Discount Type</label>
+          <p-select
+            [(ngModel)]="newDiscount.discount_type"
+            [options]="discountTypes"
+            optionLabel="label"
+            optionValue="value"
+            styleClass="w-full"
+            appendTo="body"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Value</label>
+          <p-inputnumber
+            [(ngModel)]="newDiscount.discount_value"
+            [min]="0"
+            [max]="newDiscount.discount_type === 'percentage' ? 100 : undefined"
+            mode="decimal"
+            [minFractionDigits]="0"
+            [maxFractionDigits]="2"
+            styleClass="w-full"
+          />
+        </div>
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Applies To</label>
+        <p-select
+          [(ngModel)]="newDiscount.applies_to"
+          [options]="appliesToOptions"
+          optionLabel="label"
+          optionValue="value"
+          styleClass="w-full"
+          appendTo="body"
+        />
+      </div>
+      @if (newDiscount.applies_to === 'product') {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Products</label>
+          <p-multiSelect
+            [(ngModel)]="newDiscount.product_ids"
+            [options]="productOptions()"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Select products"
+            styleClass="w-full"
+            appendTo="body"
+          />
+        </div>
+      }
+      @if (newDiscount.applies_to === 'package') {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Packages</label>
+          <p-multiSelect
+            [(ngModel)]="newDiscount.package_ids"
+            [options]="packageOptions()"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Select packages"
+            styleClass="w-full"
+            appendTo="body"
+          />
+        </div>
+      }
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Start Date</label>
+          <input type="date" [(ngModel)]="newDiscount.start_date" class="w-full rounded-md border border-gray-300 p-2 text-sm" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">End Date (optional)</label>
+          <input type="date" [(ngModel)]="newDiscount.end_date" class="w-full rounded-md border border-gray-300 p-2 text-sm" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Branch</label>
+          <p-select
+            [(ngModel)]="newDiscount.branch_id"
+            [options]="branches()"
+            optionLabel="name"
+            optionValue="id"
+            styleClass="w-full"
+            appendTo="body"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Max Uses (optional)</label>
+          <p-inputnumber [(ngModel)]="newDiscount.max_uses" [min]="1" mode="decimal" styleClass="w-full" />
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="newDiscount.is_active" [binary]="true" inputId="new_active" />
+        <label for="new_active" class="text-sm">Active</label>
+      </div>
+      <p-button
+        label="Submit for Approval"
+        [loading]="loading()"
+        (onClick)="createDiscount()"
+        styleClass="w-full justify-center"
+      />
+    </div>
+  </p-dialog>
+
+  <!-- Edit Discount Dialog -->
+  <p-dialog
+    header="Edit Discount"
+    [(visible)]="showEditDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '520px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    @if (editingDiscount()) {
+      <div class="flex flex-col gap-4 pt-2">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Name</label>
+          <input pInputText [(ngModel)]="editData.name" class="w-full" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Description</label>
+          <textarea pTextarea [(ngModel)]="editData.description" rows="2" class="w-full"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Value</label>
+            <p-inputnumber
+              [(ngModel)]="editData.discount_value"
+              [min]="0"
+              [max]="editData.discount_type === 'percentage' ? 100 : undefined"
+              mode="decimal"
+              [minFractionDigits]="0"
+              [maxFractionDigits]="2"
+              styleClass="w-full"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Applies To</label>
+            <p-select
+              [(ngModel)]="editData.applies_to"
+              [options]="appliesToOptions"
+              optionLabel="label"
+              optionValue="value"
+              styleClass="w-full"
+              appendTo="body"
+            />
+          </div>
+        </div>
+        @if (editData.applies_to === 'product') {
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Products</label>
+            <p-multiSelect
+              [(ngModel)]="editData.product_ids"
+              [options]="productOptions()"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Select products"
+              styleClass="w-full"
+              appendTo="body"
+            />
+          </div>
+        }
+        @if (editData.applies_to === 'package') {
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Packages</label>
+            <p-multiSelect
+              [(ngModel)]="editData.package_ids"
+              [options]="packageOptions()"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Select packages"
+              styleClass="w-full"
+              appendTo="body"
+            />
+          </div>
+        }
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Start Date</label>
+            <input type="date" [(ngModel)]="editData.start_date" class="w-full rounded-md border border-gray-300 p-2 text-sm" />
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">End Date (optional)</label>
+            <input type="date" [(ngModel)]="editData.end_date" class="w-full rounded-md border border-gray-300 p-2 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Max Uses (optional)</label>
+          <p-inputnumber [(ngModel)]="editData.max_uses" [min]="1" mode="decimal" styleClass="w-full" />
+        </div>
+        <div class="flex items-center gap-2">
+          <p-checkbox [(ngModel)]="editData.is_active" [binary]="true" inputId="edit_active" />
+          <label for="edit_active" class="text-sm">Active</label>
+        </div>
+        <p-button
+          label="Save Changes"
+          [loading]="loading()"
+          (onClick)="saveEdit()"
+          styleClass="w-full justify-center"
+        />
+      </div>
+    }
+  </p-dialog>
+
+  <!-- Reject Dialog -->
+  <p-dialog
+    header="Reject Discount"
+    [(visible)]="showRejectDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '420px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    <div class="flex flex-col gap-4 pt-2">
+      <p class="text-sm text-gray-600">Please provide a reason for rejecting <strong>{{ rejectingDiscount()?.name }}</strong>.</p>
+      <textarea pTextarea [(ngModel)]="rejectReason" rows="3" class="w-full" placeholder="Rejection reason"></textarea>
+      <p-button
+        label="Reject Discount"
+        severity="danger"
+        [loading]="loading()"
+        [disabled]="!rejectReason.trim()"
+        (onClick)="confirmReject()"
+        styleClass="w-full justify-center"
+      />
+    </div>
+  </p-dialog>
+
+  <p-confirmDialog />
+  <p-toast />
+</div>

@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DecimalPipe } from '@angular/common';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -19,6 +20,7 @@ import {
 } from '../../core/services/consultation.service';
 import { CatalogService, Product, Package, User } from '../../core/services/catalog.service';
 import { PaymentService, BranchInfo, PaymentRead } from '../../core/services/payment.service';
+import { DiscountService, Discount } from '../../core/services/discount.service';
 import { ClientSearch } from '../../shared/client-search/client-search';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { PageHeader } from '../../shared/page-header/page-header';
@@ -31,6 +33,8 @@ interface SaleItem {
   allocation: number;
   installments: { amount: number; due_date: string }[];
   cartItemId?: string;
+  selectedDiscount?: Discount | null;
+  discountAmount?: number;
 }
 
 type Step = 'home' | 'client' | 'products' | 'payment' | 'consulting' | 'done';
@@ -41,6 +45,7 @@ type SalesTab = 'active' | 'consultations';
   selector: 'app-sales',
   imports: [
     FormsModule,
+    DecimalPipe,
     ButtonModule,
     InputTextModule,
     DatePickerModule,
@@ -57,6 +62,7 @@ export class Sales {
   private consultationService = inject(ConsultationService);
   private catalogService = inject(CatalogService);
   private paymentService = inject(PaymentService);
+  private discountService = inject(DiscountService);
   private messageService = inject(MessageService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -345,9 +351,73 @@ export class Sales {
   // result
   resultConsultationId = signal<string | null>(null);
 
-  totalPrice = computed(() => this.selectedItems().reduce((s, i) => s + i.price, 0));
+  totalPrice = computed(() => this.selectedItems().reduce((s, i) => s + this.discountedPrice(i), 0));
   totalPaid = computed(() => this.selectedItems().reduce((s, i) => s + i.allocation, 0));
   totalRemaining = computed(() => this.totalPrice() - this.totalPaid());
+
+  applicableDiscounts = signal<Map<string, Discount[]>>(new Map());
+  loadingApplicableDiscounts = signal(false);
+
+  discountedPrice(item: SaleItem): number {
+    return Math.max(0, item.price - (item.discountAmount || 0));
+  }
+
+  discountDescription(item: SaleItem): string {
+    const d = item.selectedDiscount;
+    if (!d) return '';
+    if (d.discount_type === 'fixed') return `${d.discount_value.toLocaleString()} UGX`;
+    return `${d.discount_value}%`;
+  }
+
+  onDiscountChange(item: SaleItem, discount: Discount | null) {
+    item.selectedDiscount = discount || null;
+    if (!discount) {
+      item.discountAmount = 0;
+    } else if (discount.discount_type === 'fixed') {
+      item.discountAmount = discount.discount_value;
+    } else {
+      item.discountAmount = Math.round((item.price * discount.discount_value) / 100);
+    }
+    // Recompute allocation to cap at discounted price and regenerate schedule
+    const discounted = this.discountedPrice(item);
+    if (item.allocation > discounted) {
+      item.allocation = discounted;
+    }
+    this.recomputeSchedule(item);
+    this.selectedItems.set([...this.selectedItems()]);
+  }
+
+  loadApplicableDiscounts(item: SaleItem) {
+    const key = item.cartItemId || `${item.product.id}:${item.package?.id || ''}`;
+    if (item.cartItemId) {
+      this.discountService.getApplicableDiscounts(item.cartItemId).subscribe({
+        next: (discounts) => {
+          const map = new Map(this.applicableDiscounts());
+          map.set(key, discounts);
+          this.applicableDiscounts.set(map);
+        },
+        error: () => { /* ignore */ }
+      });
+    } else {
+      this.discountService.getApplicableDiscountsForProduct(item.product.id, item.package?.id || null).subscribe({
+        next: (discounts) => {
+          const map = new Map(this.applicableDiscounts());
+          map.set(key, discounts);
+          this.applicableDiscounts.set(map);
+        },
+        error: () => { /* ignore */ }
+      });
+    }
+  }
+
+  applicableDiscountsFor(item: SaleItem): Discount[] {
+    const key = item.cartItemId || `${item.product.id}:${item.package?.id || ''}`;
+    return this.applicableDiscounts().get(key) || [];
+  }
+
+  hasApplicableDiscounts(item: SaleItem): boolean {
+    return this.applicableDiscountsFor(item).length > 0;
+  }
 
   startFlow(newSale: boolean, previous: boolean) {
     this.isNewSale.set(newSale);
@@ -694,7 +764,8 @@ export class Sales {
 
   onAllocationChange(item: SaleItem) {
     const base = toISODate(new Date(this.documentDate() + 'T00:00:00'));
-    const remaining = Math.max(0, item.price - item.allocation);
+    const price = this.discountedPrice(item);
+    const remaining = Math.max(0, price - item.allocation);
     let installments: { amount: number; due_date: string }[] = [];
     if (remaining > 0) {
       if (this.hasPriorPayments(item)) {
@@ -824,6 +895,11 @@ export class Sales {
     this.ensureDefaultBranch();
     this.saleMode.set('sale');
     this.step.set('payment');
+
+    // Load applicable discounts for all items
+    for (const item of this.selectedItems()) {
+      this.loadApplicableDiscounts(item);
+    }
   }
 
   nextToConsulting() {
@@ -899,6 +975,7 @@ export class Sales {
       package_id: item.package?.id,
       allocation: consulting ? 0 : item.allocation,
       installments: consulting ? [] : item.installments,
+      discount_id: !consulting && item.selectedDiscount ? item.selectedDiscount.id : undefined,
     }));
     const payload = {
       phone: this.phone.trim(),
@@ -1005,7 +1082,8 @@ export class Sales {
         if (this.hasPriorPayments(item)) {
           // Subsequent payment on an existing schedule: collect against the
           // earliest pending installment and push the remainder forward to the
-          // chosen date (no duplicate schedule is created).
+          // chosen date (no duplicate schedule is created). Discounts do not
+          // apply to collection payments.
           const pendings = this.existingPaymentsForSaleItem(item)
             .flatMap((p) => p.installments ?? [])
             .filter((inst) => inst.status !== 'paid')
@@ -1054,12 +1132,21 @@ export class Sales {
           await lastValueFrom(this.consultationService.updateCartItem(cartItemId, { status }));
           continue;
         }
+
+        // First payment path: apply selected discount before creating payment
+        if (item.selectedDiscount) {
+          await lastValueFrom(
+            this.discountService.apply(item.selectedDiscount.id, cartItemId)
+          );
+        }
+
+        const discountedPrice = this.discountedPrice(item);
         const payment = await lastValueFrom(
           this.paymentService.createPayment(consultation.id, {
             product_id: item.product.id,
             package_id: item.package?.id,
-            total_amount: item.price,
-            notes: `Upsell payment of ${item.price}`,
+            total_amount: discountedPrice,
+            notes: `Upsell payment of ${item.allocation}${item.selectedDiscount ? `, Discount: ${item.selectedDiscount.code}` : ''}`,
             receipt_number: this.receiptNumber || undefined,
             installments: [{ due_date: docDate, amount: item.allocation }, ...item.installments],
             document_date: docDate,
@@ -1076,7 +1163,7 @@ export class Sales {
             }),
           );
         }
-        const status = item.allocation >= item.price ? 'converted_paid' : 'converted_paying';
+        const status = item.allocation >= discountedPrice ? 'converted_paid' : 'converted_paying';
         await lastValueFrom(this.consultationService.updateCartItem(cartItemId, { status }));
       }
       this.resultConsultationId.set(consultation.id);

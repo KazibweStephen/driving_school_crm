@@ -27,6 +27,7 @@ from app.schemas.consultation import (
 )
 from app.services import consultation as consultation_service
 from app.services import payment as payment_service
+from app.services import discount as discount_service
 from app.services.notification import on_consultation_created
 
 router = APIRouter(prefix="/consultations", tags=["consultations"])
@@ -149,7 +150,23 @@ async def create_full_consultation(
                 if pkg:
                     package_price = Decimal(str(pkg.price))
 
-            remaining = max(Decimal('0'), package_price - allocation)
+            # Apply selected discount before payment (first payment only)
+            discount_amount = Decimal('0')
+            if item_data.discount_id:
+                try:
+                    cart_item_discount = await discount_service.apply_discount_to_cart_item(
+                        db,
+                        item_data.discount_id,
+                        ci.id,
+                        current_user.phone,
+                        current_user.company_id,
+                    )
+                    discount_amount = Decimal(str(cart_item_discount.applied_amount))
+                except ValueError as e:
+                    raise HTTPException(status_code=400, detail=str(e))
+
+            discounted_price = max(Decimal('0'), package_price - discount_amount)
+            remaining = max(Decimal('0'), discounted_price - allocation)
             is_fully_paid = remaining == 0
             cart_status = 'converted_paid' if is_fully_paid else 'converted_paying'
 
@@ -160,9 +177,9 @@ async def create_full_consultation(
                 created_by_phone=current_user.phone,
                 product_id=item_data.product_id,
                 package_id=item_data.package_id,
-                total_amount=package_price,
+                total_amount=discounted_price,
                 document_date=transaction_date,
-                notes=f"Paid: {allocation}, Balance: {remaining}",
+                notes=f"Paid: {allocation}, Balance: {remaining}{', Discount: ' + str(item_data.discount_id) if item_data.discount_id else ''}",
                 receipt_number=receipt_number,
                 system_receipt_number=transaction_id,
                 transaction_id=await payment_service.generate_transaction_id(db),

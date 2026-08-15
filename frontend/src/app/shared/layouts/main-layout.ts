@@ -11,6 +11,11 @@ import {
   TransferNotification,
   TransferNotificationsResponse,
 } from '../../core/services/finance.service';
+import {
+  DiscountNotification,
+  DiscountService,
+} from '../../core/services/discount.service';
+import { NotificationRefreshService } from '../../core/services/notification-refresh.service';
 import { CompanyService, Company } from '../../core/services/company.service';
 
 interface NavItem {
@@ -39,10 +44,14 @@ export class MainLayout implements OnInit, OnDestroy {
   expandedGroups = signal<Set<string>>(new Set());
   notificationsOpen = signal(false);
   notifications = signal<TransferNotification[]>([]);
+  discountNotifications = signal<DiscountNotification[]>([]);
   toReceiveCount = signal(0);
   toReceiveAmount = signal('0.00');
+  pendingDiscountCount = signal(0);
   loadingNotifications = signal(false);
   receivingId = signal<string | null>(null);
+  approvingDiscountId = signal<string | null>(null);
+  rejectingDiscountId = signal<string | null>(null);
   companies = signal<Company[]>([]);
   companySwitcherOpen = signal(false);
   switchingCompany = signal(false);
@@ -111,6 +120,7 @@ export class MainLayout implements OnInit, OnDestroy {
       children: [
         { path: '/users', label: 'Users', icon: 'pi pi-users', permission: 'users.view' },
         { path: '/users/transfers', label: 'Transfer History', icon: 'pi pi-arrow-right-arrow-left', permission: 'users.view' },
+        { path: '/discounts', label: 'Discounts', icon: 'pi pi-percentage', permission: 'discounts.view' },
         { path: '/branches', label: 'Branches', icon: 'pi pi-sitemap', permission: 'branches.view' },
         { path: '/companies', label: 'Companies', icon: 'pi pi-building', permission: 'companies.view' },
         { path: '/products', label: 'Products', icon: 'pi pi-box', permission: 'products.view' },
@@ -125,6 +135,8 @@ export class MainLayout implements OnInit, OnDestroy {
   constructor(
     public auth: AuthService,
     private financeService: FinanceService,
+    private discountService: DiscountService,
+    private notificationRefresh: NotificationRefreshService,
     private companyService: CompanyService,
     private messageService: MessageService,
     private router: Router,
@@ -156,6 +168,7 @@ export class MainLayout implements OnInit, OnDestroy {
     if (typeof window !== 'undefined') {
       this._pollTimer = setInterval(() => this.refreshNotifications(), 60000);
     }
+    this.notificationRefresh.refresh$.subscribe(() => this.refreshNotifications());
     this.router.events.subscribe((event: RouterEvent) => {
       if (event instanceof NavigationStart) {
         this.routeLoading.set(true);
@@ -181,6 +194,18 @@ export class MainLayout implements OnInit, OnDestroy {
       }
     } catch {
       /* non-critical */
+    }
+
+    if (this.auth.hasPermission('discounts.view')) {
+      try {
+        const discountRes = await this.discountService.getPendingNotifications(20).toPromise();
+        if (discountRes) {
+          this.discountNotifications.set(discountRes.items);
+          this.pendingDiscountCount.set(discountRes.total);
+        }
+      } catch {
+        /* non-critical */
+      }
     }
   }
 
@@ -217,6 +242,44 @@ export class MainLayout implements OnInit, OnDestroy {
     } finally {
       this.receivingId.set(null);
     }
+  }
+
+  discountDescription(d: DiscountNotification): string {
+    if (d.discount_type === 'fixed') {
+      return `${d.discount_value.toLocaleString()} UGX off`;
+    }
+    return `${d.discount_value}% off`;
+  }
+
+  async approveDiscountNotification(d: DiscountNotification) {
+    this.approvingDiscountId.set(d.id);
+    try {
+      await this.discountService.approve(d.id).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Approved', detail: 'Discount approved' });
+      await this.refreshNotifications();
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to approve discount' });
+    } finally {
+      this.approvingDiscountId.set(null);
+    }
+  }
+
+  async rejectDiscountNotification(d: DiscountNotification) {
+    this.rejectingDiscountId.set(d.id);
+    try {
+      await this.discountService.reject(d.id, 'Rejected from notification').toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Rejected', detail: 'Discount rejected' });
+      await this.refreshNotifications();
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to reject discount' });
+    } finally {
+      this.rejectingDiscountId.set(null);
+    }
+  }
+
+  goToDiscounts() {
+    this.notificationsOpen.set(false);
+    this.router.navigate(['/discounts']);
   }
 
   async loadCompanies() {

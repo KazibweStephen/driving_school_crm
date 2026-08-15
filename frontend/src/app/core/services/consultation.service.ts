@@ -73,6 +73,7 @@ export interface FullConsultationItem {
   product_id: string;
   package_id?: string;
   allocation: number;
+  discount_id?: string;
 }
 
 export interface FullConsultationPayment {

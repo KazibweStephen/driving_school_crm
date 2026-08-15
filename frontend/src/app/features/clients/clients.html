@@ -280,10 +280,34 @@
                   <div class="col-span-5 text-sm">
                     <div class="font-medium">{{ sp.product.name }}</div>
                     @if (sp.packageName) { <div class="text-xs text-gray-400">{{ sp.packageName }}</div> }
+                    <div class="mt-1">
+                      @if (sp.selectedDiscount) {
+                        <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                          <span class="pi pi-percentage text-[10px]"></span>
+                          {{ sp.selectedDiscount.name }} ({{ sp.discountAmount | number:'1.0-0' }})
+                          <button class="ml-0.5 text-green-600 hover:text-green-800" (click)="removeDiscountDialog(i)">
+                            <span class="pi pi-times text-[10px]"></span>
+                          </button>
+                        </span>
+                      } @else if (hasApplicableDiscounts(sp, i)) {
+                        <button class="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800" (click)="openDiscountDialog(i)">
+                          <span class="pi pi-percentage"></span> Apply discount
+                        </button>
+                      } @else {
+                        <span class="text-xs text-gray-400">No discounts</span>
+                      }
+                    </div>
                   </div>
-                  <div class="col-span-3 text-right text-sm font-medium">{{ sp.price | number:'1.0-0' }}</div>
+                  <div class="col-span-3 text-right text-sm">
+                    @if (sp.discountAmount && sp.discountAmount > 0) {
+                      <span class="font-medium text-green-600">{{ discountedPrice(sp) | number:'1.0-0' }}</span>
+                      <span class="block text-xs text-gray-400 line-through">{{ sp.price | number:'1.0-0' }}</span>
+                    } @else {
+                      <span class="font-medium">{{ sp.price | number:'1.0-0' }}</span>
+                    }
+                  </div>
                   <div class="col-span-4 text-right">
-                    <p-inputNumber [ngModel]="getAllocation(i)" (onInput)="onAllocationInput(i, $event)" [min]="0" [max]="sp.price" placeholder="0" inputStyleClass="w-full px-2 py-1 text-sm text-right" />
+                    <p-inputNumber [ngModel]="getAllocation(i)" (onInput)="onAllocationInput(i, $event)" [min]="0" [max]="discountedPrice(sp)" placeholder="0" inputStyleClass="w-full px-2 py-1.5 text-sm text-right" />
                   </div>
                 </div>
               }
@@ -446,6 +470,30 @@
           <span class="pi pi-spin pi-spinner text-3xl text-blue-600"></span>
         </div>
       }
+    </div>
+  </p-dialog>
+
+  <!-- Discount Selection Dialog -->
+  <p-dialog header="Apply Discount" [(visible)]="showDiscountDialog" [modal]="true" [style]="{ width: '90vw', maxWidth: '420px' }" [draggable]="false" [resizable]="false">
+    <div class="flex flex-col gap-3 pt-2">
+      @if (discountDialogOptions().length === 0) {
+        <p class="text-sm text-gray-500">No applicable discounts available.</p>
+      } @else {
+        <p class="text-sm text-gray-600">Select a discount to apply:</p>
+        <div class="flex flex-col gap-2">
+          @for (d of discountDialogOptions(); track d.id) {
+            <button class="flex items-center justify-between rounded-lg border px-3 py-2 text-left hover:bg-gray-50" (click)="selectDiscountDialog(d)">
+              <span class="text-sm font-medium">{{ d.name }}</span>
+              <span class="text-xs text-gray-500">
+                @if (d.discount_type === 'fixed') { {{ d.discount_value | number:'1.0-0' }} UGX off }
+                @else { {{ d.discount_value }}% off }
+                @if (d.status === 'pending') { · pending }
+              </span>
+            </button>
+          }
+        </div>
+      }
+      <p-button label="Cancel" severity="secondary" (onClick)="showDiscountDialog.set(false)" styleClass="w-full justify-center" />
     </div>
   </p-dialog>
 

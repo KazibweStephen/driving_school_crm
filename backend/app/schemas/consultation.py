@@ -169,6 +169,7 @@ class FullConsultationItem(BaseModel):
     package_id: str | None = None
     allocation: float = 0
     installments: list[InstallmentCreate] = []
+    discount_id: uuid.UUID | None = None
 
 
 class FullConsultationPayment(BaseModel):

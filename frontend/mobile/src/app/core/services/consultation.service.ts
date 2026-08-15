@@ -54,6 +54,7 @@ export interface FullConsultationItem {
   package_id?: string;
   allocation: number;
   installments: { due_date: string; amount: number }[];
+  discount_id?: string;
 }
 
 export interface FollowUpCreate {

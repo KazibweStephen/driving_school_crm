@@ -69,6 +69,7 @@ from app.models.permission import RolePermission
 from app.models.permit import PermitProgress
 from app.models.product import Package, Product
 from app.models.commission import Commission, CommissionRate, CommissionStatus, CommissionContest, ContestStatus
+from app.models.discount import CartItemDiscount, Discount, DiscountAppliesTo, DiscountStatus, DiscountType
 from app.models.lead import Lead, LeadStatus
 from app.models.fuel import FuelRate, FuelRefueling, PackageFuelRate
 from app.models.schedule_break import ScheduleBreak
@@ -105,4 +106,5 @@ __all__ = [
     "FuelRate", "FuelRefueling", "PackageFuelRate",
     "CompanySmsSettings", "SmsTemplate", "SmsTemplateCategory", "SmsLog",
     "RolePermission",
+    "Discount", "CartItemDiscount", "DiscountStatus", "DiscountType", "DiscountAppliesTo",
 ]

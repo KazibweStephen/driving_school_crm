@@ -24,6 +24,8 @@ import {
 import { ProductService, Product } from '../../core/services/product.service';
 import { CartItemService } from '../../core/services/cart.service';
 import { PaymentService, PaymentRead } from '../../core/services/payment.service';
+import { DiscountService, Discount } from '../../core/services/discount.service';
+import { NotificationRefreshService } from '../../core/services/notification-refresh.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { UserService, User } from '../../core/services/user.service';
@@ -34,6 +36,8 @@ interface SelectedProduct {
   packageId: string | null;
   price: number;
   packageName: string;
+  selectedDiscount?: Discount | null;
+  discountAmount?: number;
 }
 
 interface PackageAllocation {
@@ -115,6 +119,13 @@ export class Clients implements OnInit, OnDestroy {
   paymentReceiptNumber = signal('');
   paymentTransactionDate = signal<Date>(new Date());
   paymentInstallments = signal<{ due_date: Date | null; amount: number }[]>([]);
+
+  // Discounts for new consultation payment flow
+  applicableDiscounts = signal<Map<string, Discount[]>>(new Map());
+  loadingApplicableDiscounts = signal(false);
+  showDiscountDialog = signal(false);
+  discountDialogIndex = signal<number>(-1);
+  discountDialogOptions = signal<Discount[]>([]);
 
   // Recommender attribution (same default logic as mobile sales)
   users = signal<User[]>([]);
@@ -243,6 +254,8 @@ export class Clients implements OnInit, OnDestroy {
     private productService: ProductService,
     private cartItemService: CartItemService,
     private paymentService: PaymentService,
+    private discountService: DiscountService,
+    private notificationRefresh: NotificationRefreshService,
     public authService: AuthService,
     private companyService: CompanyService,
     private messageService: MessageService,
@@ -447,7 +460,7 @@ export class Clients implements OnInit, OnDestroy {
   }
 
   get selectedProductTotal(): number {
-    return this.selectedProducts().reduce((sum, sp) => sum + sp.price, 0);
+    return this.selectedProducts().reduce((sum, sp) => sum + this.discountedPrice(sp), 0);
   }
 
   get totalAllocated(): number {
@@ -456,6 +469,82 @@ export class Clients implements OnInit, OnDestroy {
 
   get unallocatedAmount(): number {
     return Math.max(0, this.selectedProductTotal - this.totalAllocated);
+  }
+
+  discountedPrice(sp: SelectedProduct): number {
+    return Math.max(0, sp.price - (sp.discountAmount || 0));
+  }
+
+  discountDescription(sp: SelectedProduct): string {
+    const d = sp.selectedDiscount;
+    if (!d) return '';
+    if (d.discount_type === 'fixed') return `${d.discount_value.toLocaleString()} UGX`;
+    return `${d.discount_value}%`;
+  }
+
+  onDiscountChange(sp: SelectedProduct, discount: Discount | null) {
+    const index = this.selectedProducts().indexOf(sp);
+    if (index < 0) return;
+    this.selectedProducts.update(list => {
+      const updated = [...list];
+      const item = { ...updated[index] };
+      item.selectedDiscount = discount || null;
+      if (!discount) {
+        item.discountAmount = 0;
+      } else if (discount.discount_type === 'fixed') {
+        item.discountAmount = discount.discount_value;
+      } else {
+        item.discountAmount = Math.round((item.price * discount.discount_value) / 100);
+      }
+      updated[index] = item;
+      return updated;
+    });
+    // Cap allocation at new discounted price
+    const allocation = this.getAllocation(index);
+    const discounted = this.discountedPrice(this.selectedProducts()[index]);
+    if (allocation > discounted) {
+      this.updateAllocation(index, discounted);
+    }
+    this.initPaymentInstallments();
+  }
+
+  loadApplicableDiscountsForProduct(sp: SelectedProduct, index: number) {
+    const key = `${index}:${sp.product.id}:${sp.packageId || ''}`;
+    this.discountService.getApplicableDiscountsForProduct(sp.product.id, sp.packageId).subscribe({
+      next: (discounts) => {
+        const map = new Map(this.applicableDiscounts());
+        map.set(key, discounts);
+        this.applicableDiscounts.set(map);
+      },
+      error: () => { /* ignore */ }
+    });
+  }
+
+  applicableDiscountsFor(sp: SelectedProduct, index: number): Discount[] {
+    const key = `${index}:${sp.product.id}:${sp.packageId || ''}`;
+    return this.applicableDiscounts().get(key) || [];
+  }
+
+  hasApplicableDiscounts(sp: SelectedProduct, index: number): boolean {
+    return this.applicableDiscountsFor(sp, index).length > 0;
+  }
+
+  openDiscountDialog(index: number) {
+    const sp = this.selectedProducts()[index];
+    this.discountDialogIndex.set(index);
+    this.discountDialogOptions.set(this.applicableDiscountsFor(sp, index));
+    this.showDiscountDialog.set(true);
+  }
+
+  selectDiscountDialog(discount: Discount) {
+    const index = this.discountDialogIndex();
+    if (index < 0) return;
+    this.onDiscountChange(this.selectedProducts()[index], discount);
+    this.showDiscountDialog.set(false);
+  }
+
+  removeDiscountDialog(index: number) {
+    this.onDiscountChange(this.selectedProducts()[index], null);
   }
 
   get today(): Date {
@@ -503,7 +592,7 @@ export class Clients implements OnInit, OnDestroy {
   updateAllocation(index: number, amount: number) {
     const sp = this.selectedProducts()[index];
     if (!sp) return;
-    const maxForPackage = sp.price;
+    const maxForPackage = this.discountedPrice(sp);
     const otherAllocations = this.packageAllocations()
       .filter(a => a.productIndex !== index)
       .reduce((sum, a) => sum + a.allocated, 0);
@@ -594,7 +683,10 @@ export class Clients implements OnInit, OnDestroy {
         this.paymentInstallments.set([]);
         this.receiptChecking.set(false);
         this.receiptAvailable.set(null);
+        this.applicableDiscounts.set(new Map());
         this.createStep.set(3);
+        // Load applicable discounts for each selected product
+        this.selectedProducts().forEach((sp, i) => this.loadApplicableDiscountsForProduct(sp, i));
       } else {
         await this.finishCreate();
       }
@@ -655,7 +747,8 @@ export class Clients implements OnInit, OnDestroy {
       // Build items with allocations and installments
       const items = this.selectedProducts().map((sp, i) => {
         const paidNow = this.getAllocation(i);
-        const remaining = Math.max(0, sp.price - paidNow);
+        const discountedPrice = this.discountedPrice(sp);
+        const remaining = Math.max(0, discountedPrice - paidNow);
         // Distribute global installments proportionally across unpaid items
         const totalRemaining = this.unallocatedAmount;
         const insts = totalRemaining > 0 ? this.paymentInstallments().map(inst => ({
@@ -666,6 +759,7 @@ export class Clients implements OnInit, OnDestroy {
           product_id: sp.product.id,
           package_id: sp.packageId || undefined,
           allocation: paidNow,
+          discount_id: sp.selectedDiscount?.id,
           installments: insts.filter(i => i.amount > 0),
         };
       }).filter(item => item.allocation > 0);
@@ -703,12 +797,13 @@ export class Clients implements OnInit, OnDestroy {
       for (let i = 0; i < this.selectedProducts().length; i++) {
         const sp = this.selectedProducts()[i];
         const allocation = this.getAllocation(i);
-        const remaining = Math.max(0, sp.price - allocation);
+        const discountedPrice = this.discountedPrice(sp);
+        const remaining = Math.max(0, discountedPrice - allocation);
         totalPaid += allocation;
         receiptData.push({
           productName: sp.product.name,
           packageName: sp.packageName,
-          price: sp.price,
+          price: discountedPrice,
           paid: allocation,
           balance: remaining,
         });
@@ -743,6 +838,11 @@ export class Clients implements OnInit, OnDestroy {
       this.receiptUserName.set(this.authService.currentUserName() || 'System');
       this.createdConsultation.set(c);
       this.createStep.set(4);
+
+      // Refresh notification bell if any pending discount was applied
+      if (this.selectedProducts().some(sp => sp.selectedDiscount?.status === 'pending')) {
+        this.notificationRefresh.trigger();
+      }
     } catch (err: any) {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: err?.error?.detail || err?.message || 'Failed to process payment' });
     } finally {

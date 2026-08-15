@@ -35,6 +35,8 @@ import { UserService, User } from '../../core/services/user.service';
 import { SchedulingService, ClientAvailability, FindAndLockResult } from '../../core/services/scheduling.service';
 import { VehicleScheduleService } from '../../core/services/vehicle-schedule.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
+import { DiscountService, Discount, CartItemDiscount } from '../../core/services/discount.service';
+import { NotificationRefreshService } from '../../core/services/notification-refresh.service';
 import { LessonQuickGenDialog } from '../../shared/components/lesson-quick-gen-dialog';
 
 @Component({
@@ -66,6 +68,7 @@ import { LessonQuickGenDialog } from '../../shared/components/lesson-quick-gen-d
   templateUrl: './client-profile.html',
 })
 export class ClientProfile implements OnInit {
+  Math = Math;
   consultation = signal<Consultation | null>(null);
   loading = signal(false);
 
@@ -76,7 +79,7 @@ export class ClientProfile implements OnInit {
   addStep = signal(1);
   selectedProduct = signal<Product | null>(null);
   selectedPackageId = signal<string | null>(null);
-  addSelectedProducts = signal<{ product: Product; packageId: string | null; price: number; packageName: string; cartItemId?: string }[]>([]);
+  addSelectedProducts = signal<{ product: Product; packageId: string | null; price: number; packageName: string; cartItemId?: string; selectedDiscount?: Discount | null; discountAmount?: number }[]>([]);
   addConvertNow = signal(false);
   // Step 1 per-item fields (reset each time a product is added to the list)
   addNote = signal('');
@@ -142,6 +145,12 @@ export class ClientProfile implements OnInit {
   completeSaleReceiptNumber = signal('');
   completeSaleSystemReceiptNumber = signal('');
   completeSaleDocumentDate = signal<Date | null>(null);
+  completeSaleApplicableDiscounts = signal<Discount[]>([]);
+  completeSaleSelectedDiscount = signal<Discount | null>(null);
+  completeSaleDiscountAmount = signal<number>(0);
+  completeSaleLoadingDiscounts = signal(false);
+
+  completeSaleDiscountedTotal = computed(() => this.completeSaleTotal());
 
   showMakePaymentDialog = signal(false);
   makePaymentTarget = signal<CartItemRead | null>(null);
@@ -157,13 +166,26 @@ export class ClientProfile implements OnInit {
   });
 
   showPayAllDialog = signal(false);
-  payAllItems = signal<{ cartItem: CartItemRead; payNow: number; balance: number; productName: string; packageName: string }[]>([]);
+  payAllItems = signal<{ cartItem: CartItemRead; payNow: number; balance: number; productName: string; packageName: string; discountAmount: number }[]>([]);
   payAllReceiptNumber = signal('');
   payAllInstallments: { due_date: Date | null; amount: number }[] = [];
   payAllDocumentDate = signal<Date | null>(null);
 
   branches = signal<Branch[]>([]);
   collectionBranchId = signal<string | null>(null);
+
+  // Discount management
+  // Discounts for Add to Cart payment flow
+  addApplicableDiscounts = signal<Map<string, Discount[]>>(new Map());
+  showAddProductDiscountDialog = signal(false);
+  addProductDiscountIndex = signal<number>(-1);
+  addProductDiscountOptions = signal<Discount[]>([]);
+
+  showApplyDiscountDialog = signal(false);
+  discountTarget = signal<CartItemRead | null>(null);
+  applicableDiscounts = signal<Discount[]>([]);
+  cartItemDiscounts = signal<Map<string, CartItemDiscount[]>>(new Map());
+  loadingDiscounts = signal(false);
 
   showGuide = signal(false);
   guideContent = signal('');
@@ -288,6 +310,8 @@ export class ClientProfile implements OnInit {
     private vehicleScheduleService: VehicleScheduleService,
     private permitProgressService: PermitProgressService,
     private companyService: CompanyService,
+    private discountService: DiscountService,
+    private notificationRefresh: NotificationRefreshService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     private sanitizer: DomSanitizer,
@@ -355,6 +379,7 @@ export class ClientProfile implements OnInit {
         this.loadPermitProgress();
         this.loadLessonPlans();
         this.loadVehiclesAndInstructors();
+        this.loadCartItemDiscounts();
       }
     } catch {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load consultation' });
@@ -1834,6 +1859,94 @@ export class ClientProfile implements OnInit {
     }
   }
 
+  // Discount methods
+  openApplyDiscount(ci: CartItemRead) {
+    this.discountTarget.set(ci);
+    this.loadingDiscounts.set(true);
+    this.showApplyDiscountDialog.set(true);
+    this.discountService.getApplicableDiscounts(ci.id).subscribe({
+      next: (discounts) => {
+        this.applicableDiscounts.set(discounts);
+        this.loadingDiscounts.set(false);
+      },
+      error: () => {
+        this.applicableDiscounts.set([]);
+        this.loadingDiscounts.set(false);
+      }
+    });
+  }
+
+  async applyDiscount(discount: Discount) {
+    const ci = this.discountTarget();
+    if (!ci) return;
+    this.loadingDiscounts.set(true);
+    try {
+      await this.discountService.apply(discount.id, ci.id).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Applied', detail: `Discount "${discount.name}" applied` });
+      this.showApplyDiscountDialog.set(false);
+      await this.loadConsultation(ci.consultation_id);
+      this.loadCartItemDiscounts();
+      this.notificationRefresh.trigger();
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to apply discount' });
+    } finally {
+      this.loadingDiscounts.set(false);
+    }
+  }
+
+  async removeDiscount(cartItemDiscountId: string, ci: CartItemRead) {
+    this.loadingDiscounts.set(true);
+    try {
+      await this.discountService.remove(cartItemDiscountId).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Removed', detail: 'Discount removed' });
+      await this.loadConsultation(ci.consultation_id);
+      this.loadCartItemDiscounts();
+      this.notificationRefresh.trigger();
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to remove discount' });
+    } finally {
+      this.loadingDiscounts.set(false);
+    }
+  }
+
+  loadCartItemDiscounts() {
+    const items = this.consultation()?.cart_items || [];
+    for (const ci of items) {
+      this.discountService.getCartItemDiscounts(ci.id).subscribe({
+        next: (discounts) => {
+          const map = new Map(this.cartItemDiscounts());
+          map.set(ci.id, discounts);
+          this.cartItemDiscounts.set(map);
+        },
+        error: () => { /* ignore */ }
+      });
+    }
+  }
+
+  getCartItemDiscounts(ci: CartItemRead): CartItemDiscount[] {
+    return this.cartItemDiscounts().get(ci.id) || [];
+  }
+
+  getCartItemDiscountTotal(ci: CartItemRead): number {
+    const discounts = this.getCartItemDiscounts(ci);
+    return discounts.reduce((sum, d) => sum + (d.applied_amount || 0), 0);
+  }
+
+  cartItemDiscountedTotal(ci: CartItemRead): number {
+    return Math.max(0, this.cartItemTotal(ci) - this.getCartItemDiscountTotal(ci));
+  }
+
+  cartItemDiscountedBalance(ci: CartItemRead): number {
+    return Math.max(0, this.cartItemDiscountedTotal(ci) - this.cartItemPaid(ci));
+  }
+
+  discountDescription(d: Discount): string {
+    if (d.discount_type === 'fixed') {
+      return `${d.discount_value.toLocaleString()} UGX`;
+    }
+    return `${d.discount_value}%`;
+  }
+
   transitions(): { label: string; status: string; btnClass: string; icon: string }[] {
     const s = this.consultation()?.status;
     switch (s) {
@@ -2002,7 +2115,7 @@ export class ClientProfile implements OnInit {
   }
 
   get addSelectedProductTotal(): number {
-    return this.addSelectedProducts().reduce((sum, sp) => sum + sp.price, 0);
+    return this.addSelectedProducts().reduce((sum, sp) => sum + this.addDiscountedPrice(sp), 0);
   }
 
   get addTotalAllocated(): number {
@@ -2013,6 +2126,81 @@ export class ClientProfile implements OnInit {
     return Math.max(0, this.addSelectedProductTotal - this.addTotalAllocated);
   }
 
+  addDiscountedPrice(sp: { price: number; discountAmount?: number }): number {
+    return Math.max(0, sp.price - (sp.discountAmount || 0));
+  }
+
+  addDiscountDescription(sp: { selectedDiscount?: Discount | null }): string {
+    const d = sp.selectedDiscount;
+    if (!d) return '';
+    if (d.discount_type === 'fixed') return `${d.discount_value.toLocaleString()} UGX`;
+    return `${d.discount_value}%`;
+  }
+
+  onAddDiscountChange(sp: any, discount: Discount | null) {
+    const index = this.addSelectedProducts().indexOf(sp);
+    if (index < 0) return;
+    this.addSelectedProducts.update(list => {
+      const updated = [...list];
+      const item = { ...updated[index] };
+      item.selectedDiscount = discount || null;
+      if (!discount) {
+        item.discountAmount = 0;
+      } else if (discount.discount_type === 'fixed') {
+        item.discountAmount = discount.discount_value;
+      } else {
+        item.discountAmount = Math.round((item.price * discount.discount_value) / 100);
+      }
+      updated[index] = item;
+      return updated;
+    });
+    const allocation = this.getAllocation(index);
+    const discounted = this.addDiscountedPrice(this.addSelectedProducts()[index]);
+    if (allocation > discounted) {
+      this.updateAllocation(index, discounted);
+    }
+    this.initAddPaymentInstallments();
+  }
+
+  loadAddApplicableDiscounts(sp: any, index: number) {
+    const key = `${index}:${sp.product.id}:${sp.packageId || ''}`;
+    this.discountService.getApplicableDiscountsForProduct(sp.product.id, sp.packageId).subscribe({
+      next: (discounts) => {
+        const map = new Map(this.addApplicableDiscounts());
+        map.set(key, discounts);
+        this.addApplicableDiscounts.set(map);
+      },
+      error: () => { /* ignore */ }
+    });
+  }
+
+  addApplicableDiscountsFor(sp: any, index: number): Discount[] {
+    const key = `${index}:${sp.product.id}:${sp.packageId || ''}`;
+    return this.addApplicableDiscounts().get(key) || [];
+  }
+
+  hasAddApplicableDiscounts(sp: any, index: number): boolean {
+    return this.addApplicableDiscountsFor(sp, index).length > 0;
+  }
+
+  openAddProductDiscountDialog(index: number) {
+    const sp = this.addSelectedProducts()[index];
+    this.addProductDiscountIndex.set(index);
+    this.addProductDiscountOptions.set(this.addApplicableDiscountsFor(sp, index));
+    this.showAddProductDiscountDialog.set(true);
+  }
+
+  selectAddProductDiscount(discount: Discount) {
+    const index = this.addProductDiscountIndex();
+    if (index < 0) return;
+    this.onAddDiscountChange(this.addSelectedProducts()[index], discount);
+    this.showAddProductDiscountDialog.set(false);
+  }
+
+  removeAddProductDiscount(index: number) {
+    this.onAddDiscountChange(this.addSelectedProducts()[index], null);
+  }
+
   getAllocation(index: number): number {
     const alloc = this.addPackageAllocations().find(a => a.productIndex === index);
     return alloc?.allocated || 0;
@@ -2021,7 +2209,7 @@ export class ClientProfile implements OnInit {
   updateAllocation(index: number, amount: number) {
     const sp = this.addSelectedProducts()[index];
     if (!sp) return;
-    const maxForPackage = sp.price;
+    const maxForPackage = this.addDiscountedPrice(sp);
     const otherAllocations = this.addPackageAllocations()
       .filter(a => a.productIndex !== index)
       .reduce((sum, a) => sum + a.allocated, 0);
@@ -2118,13 +2306,15 @@ export class ClientProfile implements OnInit {
       if (this.addConvertNow()) {
         const allocs = products.map((sp, i) => ({
           productIndex: i,
-          allocated: sp.price,
+          allocated: this.addDiscountedPrice(sp),
         }));
         this.addPackageAllocations.set(allocs);
         this.addPaymentInstallments = [];
         this.receiptChecking.set(false);
         this.receiptAvailable.set(null);
+        this.addApplicableDiscounts.set(new Map());
         this.addStep.set(2);
+        products.forEach((sp, i) => this.loadAddApplicableDiscounts(sp, i));
       } else {
         await this.finishAddProducts();
       }
@@ -2229,7 +2419,15 @@ export class ClientProfile implements OnInit {
         const allocation = this.getAllocation(i);
         if (allocation <= 0) continue;
 
-        const remaining = Math.max(0, sp.price - allocation);
+        const ciId = itemIds[i];
+
+        // Apply selected discount to cart item before creating payment
+        if (ciId && sp.selectedDiscount) {
+          await this.discountService.apply(sp.selectedDiscount.id, ciId).toPromise();
+        }
+
+        const discountedPrice = this.addDiscountedPrice(sp);
+        const remaining = Math.max(0, discountedPrice - allocation);
         const isFullyPaid = remaining === 0;
 
         // Build installments: one immediate + proportionally distributed scheduled installments
@@ -2251,8 +2449,8 @@ export class ClientProfile implements OnInit {
           .createPayment(c.id, {
             product_id: sp.product.id,
             package_id: sp.packageId || undefined,
-            total_amount: sp.price,
-            notes: `Paid: ${allocation}, Balance: ${remaining}`,
+            total_amount: discountedPrice,
+            notes: `Paid: ${allocation}, Balance: ${remaining}${sp.selectedDiscount ? `, Discount: ${sp.selectedDiscount.code}` : ''}`,
             receipt_number: this.addPaymentReceiptNumber() || undefined,
             installments,
             branch_id: this.consultation()?.branch_id || undefined,
@@ -2278,7 +2476,6 @@ export class ClientProfile implements OnInit {
         }
 
         // Update cart item status
-        const ciId = itemIds[i];
         if (ciId) {
           await this.cartItemService.update(ciId, {
             status: isFullyPaid ? 'converted_paid' : 'converted_paying',
@@ -2319,12 +2516,13 @@ export class ClientProfile implements OnInit {
       // Build receipt data
       const receiptItems = this.addSelectedProducts().map((sp, i) => {
         const allocation = this.getAllocation(i);
+        const discountedPrice = this.addDiscountedPrice(sp);
         return {
           productName: sp.product.name,
           packageName: sp.packageName,
-          price: sp.price,
+          price: discountedPrice,
           paid: allocation,
-          balance: Math.max(0, sp.price - allocation),
+          balance: Math.max(0, discountedPrice - allocation),
         };
       });
 
@@ -2577,7 +2775,7 @@ export class ClientProfile implements OnInit {
   }
 
   openCompleteSaleDialog(ci: CartItemRead) {
-    const total = this.cartItemTotal(ci);
+    const total = this.cartItemDiscountedTotal(ci);
     this.completeSaleTarget.set(ci);
     this.completeSaleTotal.set(total);
     this.completeSalePaidAmount.set(total);
@@ -2590,11 +2788,15 @@ export class ClientProfile implements OnInit {
     this.collectionBranchId.set(this.consultation()?.branch_id ?? null);
     this.receiptChecking.set(false);
     this.receiptAvailable.set(null);
+    this.completeSaleSelectedDiscount.set(null);
+    this.completeSaleDiscountAmount.set(0);
+    this.completeSaleApplicableDiscounts.set([]);
+    this.completeSaleLoadingDiscounts.set(false);
     this.showCompleteSaleDialog.set(true);
   }
 
   onCompleteSalePaidChange() {
-    const total = this.completeSaleTotal();
+    const total = this.completeSaleDiscountedTotal();
     const paid = this.completeSalePaidAmount();
     const remaining = Math.max(0, total - (paid || 0));
     this.completeSaleBalance.set(total);
@@ -2611,6 +2813,20 @@ export class ClientProfile implements OnInit {
     } else {
       this.completeSaleInstallments = [];
     }
+  }
+
+  onCompleteSaleDiscountChange() {
+    const discount = this.completeSaleSelectedDiscount();
+    const total = this.completeSaleTotal();
+    if (!discount) {
+      this.completeSaleDiscountAmount.set(0);
+    } else if (discount.discount_type === 'fixed') {
+      this.completeSaleDiscountAmount.set(discount.discount_value);
+    } else {
+      this.completeSaleDiscountAmount.set(Math.round((total * discount.discount_value) / 100));
+    }
+    this.completeSalePaidAmount.set(this.completeSaleDiscountedTotal());
+    this.onCompleteSalePaidChange();
   }
 
   addCompleteSaleInstallment() {
@@ -2713,27 +2929,28 @@ export class ClientProfile implements OnInit {
       return;
     }
 
-    const total = this.completeSaleTotal();
     const paid = this.completeSalePaidAmount();
     if (paid === null || paid === undefined || paid < 0) return;
-
-    const remaining = Math.max(0, total - paid);
-    const status = remaining === 0 ? 'converted_paid' : 'converted_paying';
 
     this.loading.set(true);
     try {
       const docDate = this.completeSaleDocumentDate() ? this.formatDate(this.completeSaleDocumentDate()!) : this.formatDate(new Date());
+
+      const total = this.completeSaleTotal();
+      const paidCapped = Math.min(paid, total);
+      const remaining = Math.max(0, total - paidCapped);
+      const status = remaining === 0 ? 'converted_paid' : 'converted_paying';
 
       // Always include the paid-today amount as the first installment
       const futureInstallments = this.completeSaleInstallments
         .filter(inst => inst.amount > 0 && inst.due_date)
         .map(inst => ({
           due_date: this.formatDate(inst.due_date!),
-          amount: inst.amount,
+          amount: Math.min(inst.amount, remaining),
         }));
 
       const installments = [
-        { due_date: docDate, amount: paid },
+        { due_date: docDate, amount: paidCapped },
         ...futureInstallments,
       ];
 
@@ -2742,7 +2959,7 @@ export class ClientProfile implements OnInit {
           product_id: ci.product_id,
           package_id: ci.package_id || undefined,
           total_amount: total,
-          notes: `Paid: ${paid}, Balance: ${remaining}`,
+          notes: `Paid: ${paidCapped}, Balance: ${remaining}`,
           receipt_number: this.completeSaleReceiptNumber() || undefined,
           installments,
           document_date: this.completeSaleDocumentDate() ? docDate : undefined,
@@ -2787,7 +3004,7 @@ export class ClientProfile implements OnInit {
   }
 
   openMakePaymentDialog(ci: CartItemRead) {
-    const balance = this.cartItemBalance(ci);
+    const balance = this.cartItemDiscountedBalance(ci);
     if (balance <= 0) return;
     this.makePaymentTarget.set(ci);
     this.makePaymentAmount.set(balance);
@@ -2979,16 +3196,17 @@ export class ClientProfile implements OnInit {
   }
 
   pendingPayAllItems(): CartItemRead[] {
-    return this.paidCartItems().filter(ci => this.cartItemBalance(ci) > 0);
+    return this.paidCartItems().filter(ci => this.cartItemDiscountedBalance(ci) > 0);
   }
 
   openPayAllDialog() {
     const items = this.pendingPayAllItems().map(ci => ({
       cartItem: ci,
-      payNow: this.cartItemBalance(ci),
-      balance: this.cartItemBalance(ci),
+      payNow: this.cartItemDiscountedBalance(ci),
+      balance: this.cartItemDiscountedBalance(ci),
       productName: this.productName(ci),
       packageName: this.packageName(ci) || '',
+      discountAmount: this.getCartItemDiscountTotal(ci),
     }));
     if (!items.length) return;
     this.payAllItems.set(items);

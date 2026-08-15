@@ -416,7 +416,14 @@
               <div class="text-sm font-semibold text-slate-900">
                 {{ item.package?.name || item.product.name }}
               </div>
-              <div class="text-xs text-slate-500">Price: {{ money(item.price) }}</div>
+              <div class="text-xs text-slate-500">
+                @if (item.discountAmount && item.discountAmount > 0) {
+                  <span class="text-green-600">Price: {{ money(discountedPrice(item)) }}</span>
+                  <span class="ml-1 line-through text-slate-400">{{ money(item.price) }}</span>
+                } @else {
+                  Price: {{ money(item.price) }}
+                }
+              </div>
               @if (hasPriorPayments(item)) {
                 <span class="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
                   Collecting balance · push-forward
@@ -425,7 +432,7 @@
             </div>
             <div class="text-right">
               <div class="text-sm font-semibold text-slate-900">
-                Remaining: {{ money(Math.max(0, item.price - item.allocation)) }}
+                Remaining: {{ money(Math.max(0, discountedPrice(item) - item.allocation)) }}
               </div>
             </div>
           </div>
@@ -446,7 +453,45 @@
               data-testid="recompute-schedule"
             />
           </div>
-          @if (item.price > 0 && item.allocation < item.price) {
+
+          @if (!hasPriorPayments(item) && hasApplicableDiscounts(item)) {
+            <div class="mt-3">
+              <label class="mb-1 block text-sm font-medium text-slate-700">Discount (optional)</label>
+              <p-select
+                [options]="applicableDiscountsFor(item)"
+                optionLabel="name"
+                [ngModel]="item.selectedDiscount || null"
+                (ngModelChange)="onDiscountChange(item, $event)"
+                placeholder="Select a discount"
+                appendTo="body"
+                styleClass="w-full"
+                [showClear]="true"
+              >
+                <ng-template let-discount pTemplate="item">
+                  <div class="flex items-center justify-between">
+                    <span>{{ discount.name }}</span>
+                    <span class="text-xs text-slate-500">
+                      @if (discount.discount_type === 'fixed') { {{ discount.discount_value | number:'1.0-0' }} UGX off }
+                      @else { {{ discount.discount_value }}% off }
+                      @if (discount.status === 'pending') { · pending approval }
+                    </span>
+                  </div>
+                </ng-template>
+              </p-select>
+              @if (item.discountAmount && item.discountAmount > 0) {
+                <div class="mt-1 flex justify-between text-xs text-green-600">
+                  <span>Discount ({{ item.selectedDiscount?.code }})</span>
+                  <span>-{{ money(item.discountAmount) }}</span>
+                </div>
+                <div class="mt-0.5 flex justify-between text-xs font-medium text-slate-700">
+                  <span>Price after discount</span>
+                  <span>{{ money(discountedPrice(item)) }}</span>
+                </div>
+              }
+            </div>
+          }
+
+          @if (discountedPrice(item) > 0 && item.allocation < discountedPrice(item)) {
             <div class="mt-3 border-t border-slate-100 pt-3">
               <div class="mb-2 text-sm font-medium text-slate-700">
                 {{ hasPriorPayments(item) ? 'Push forward balance' : 'Future installments' }}

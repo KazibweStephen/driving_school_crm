@@ -155,6 +155,11 @@ PERMISSION_GROUPS: list[PermissionGroup] = [
         "Leads",
         ["leads.manage", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.update_status"],
     ),
+    PermissionGroup(
+        "discounts",
+        "Discounts",
+        ["discounts.manage", "discounts.view", "discounts.create", "discounts.edit", "discounts.approve", "discounts.reject", "discounts.apply"],
+    ),
     PermissionGroup("bulk_onboarding", "Bulk Onboarding", ["bulk_onboarding.manage"]),
     PermissionGroup("sms", "SMS", ["sms.manage", "sms.view", "sms.send"]),
     PermissionGroup("permissions", "Roles & Permissions", ["permissions.manage"]),
@@ -220,6 +225,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
         "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.update_status",
         "bulk_onboarding.manage",
         "sms.view", "sms.send",
+        "discounts.view", "discounts.create", "discounts.edit", "discounts.apply",
     ],
     UserRole.BRANCH_SUPERVISOR: [
         "dashboard.view",
@@ -249,6 +255,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
         "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.update_status",
         "bulk_onboarding.manage",
         "sms.view", "sms.send",
+        "discounts.view", "discounts.create", "discounts.edit", "discounts.apply",
     ],
     UserRole.MANAGER: [
         "dashboard.view",
@@ -278,6 +285,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
         "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.update_status",
         "bulk_onboarding.manage",
         "sms.view",
+        "discounts.view", "discounts.create", "discounts.edit", "discounts.apply", "discounts.approve", "discounts.reject",
     ],
     UserRole.SUPERVISOR: [
         "dashboard.view",
@@ -307,6 +315,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
         "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.update_status",
         "bulk_onboarding.manage",
         "sms.view",
+        "discounts.view", "discounts.create", "discounts.edit", "discounts.apply", "discounts.approve", "discounts.reject",
     ],
     UserRole.RECEPTION: [
         "dashboard.view",
@@ -314,6 +323,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
         "payments.view",
         "transfers.view",
         "products.view",
+        "discounts.view",
     ],
     UserRole.INSTRUCTOR: [
         "dashboard.view",
@@ -328,6 +338,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
         "video_library.view",
         "competency.view",
         "lesson_execution.view", "lesson_execution.start",
+        "discounts.view",
     ],
 }
 

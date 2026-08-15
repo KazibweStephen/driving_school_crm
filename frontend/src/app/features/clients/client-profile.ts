@@ -721,6 +721,7 @@ export class ClientProfile implements OnInit {
 
   clientLessonPlans = signal<Map<string, ClientLessonPlan[]>>(new Map());
   templates = signal<LessonPlanTemplate[]>([]);
+  collapsedPlans = signal<Set<string>>(new Set());
   showCreateLessonPlanDialog = signal(false);
   showLessonDetailDialog = signal(false);
   createPlanCartItemId = signal<string | null>(null);
@@ -792,6 +793,22 @@ export class ClientProfile implements OnInit {
 
   lessonPlansForCartItem(cartItemId: string): ClientLessonPlan[] {
     return this.clientLessonPlans().get(cartItemId) || [];
+  }
+
+  isPlanCollapsed(planId: string): boolean {
+    return this.collapsedPlans().has(planId);
+  }
+
+  togglePlanCollapse(planId: string) {
+    this.collapsedPlans.update(set => {
+      const next = new Set(set);
+      if (next.has(planId)) next.delete(planId); else next.add(planId);
+      return next;
+    });
+  }
+
+  planHasProgress(plan: ClientLessonPlan): boolean {
+    return plan.lessons.some(l => l.is_active && (l.status === 'completed' || l.status === 'started' || l.status === 'in_progress'));
   }
 
   selectedPlanForTemplateLessons = signal<ClientLessonPlan | null>(null);

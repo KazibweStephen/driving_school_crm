@@ -88,3 +88,6 @@ class CartItem(Base):
     permit_progress: Mapped["PermitProgress | None"] = relationship(
         "PermitProgress", back_populates="cart_item", uselist=False, cascade="all, delete-orphan"
     )
+    discount_links: Mapped[list["CartItemDiscount"]] = relationship(
+        "CartItemDiscount", back_populates="cart_item", cascade="all, delete-orphan"
+    )

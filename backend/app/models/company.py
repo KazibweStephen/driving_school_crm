@@ -67,6 +67,9 @@ class Company(Base):
     sms_templates: Mapped[list["SmsTemplate"]] = relationship(
         "SmsTemplate", back_populates="company", cascade="all, delete-orphan"
     )
+    discounts: Mapped[list["Discount"]] = relationship(
+        "Discount", back_populates="company", cascade="all, delete-orphan"
+    )
 
 
 class Branch(Base):
@@ -113,6 +116,9 @@ class Branch(Base):
     )
     monthly_targets: Mapped[list["BranchMonthlyTarget"]] = relationship(
         "BranchMonthlyTarget", back_populates="branch", cascade="all, delete-orphan"
+    )
+    discounts: Mapped[list["Discount"]] = relationship(
+        "Discount", back_populates="branch"
     )
 
 

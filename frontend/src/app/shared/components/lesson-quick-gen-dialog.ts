@@ -6,6 +6,7 @@ import { SelectModule } from 'primeng/select';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { DatePickerModule } from 'primeng/datepicker';
 import { TooltipModule } from 'primeng/tooltip';
+import { DatePipe } from '@angular/common';
 import { LessonPlanService, LessonPlanTemplate, ClientLesson, ClientLessonPlan } from '../../core/services/lesson-plan.service';
 import { ProductService } from '../../core/services/product.service';
 import { User } from '../../core/services/user.service';
@@ -31,198 +32,276 @@ interface QuickGenLesson {
   lesson_objectives: string[];
   practical_objectives: string[];
   status: 'completed' | 'pending' | 'locked';
+  duration_minutes: number;
 }
 
 @Component({
   selector: 'app-lesson-quick-gen-dialog',
   standalone: true,
-  imports: [FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, DatePickerModule, TooltipModule],
+  imports: [FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, DatePickerModule, TooltipModule, DatePipe],
   template: `
     <p-dialog [(visible)]="visible" header="Quick Generate Lessons" [modal]="true"
-      [style]="{ width: '92vw', maxWidth: '520px' }" [draggable]="false" [resizable]="false"
+      [style]="{ width: '92vw', maxWidth: '560px' }" [draggable]="false" [resizable]="false"
       [closable]="!saving()">
-      <div class="space-y-4">
-        @if (trainingDays > 0 || trainingHours > 0) {
-          <div class="bg-indigo-50/60 border border-indigo-100 rounded-lg px-3 py-2.5 text-xs grid grid-cols-2 gap-x-4 gap-y-2">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-gray-500">Driving Training (Days)</span>
-              <strong class="text-indigo-700">{{ trainingDays }}</strong>
-            </div>
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-gray-500">Theory Training (Hours)</span>
-              <strong class="text-indigo-700">{{ trainingHours }} hrs</strong>
-            </div>
-          </div>
-          <p class="text-xs text-gray-400 -mt-2.5">From the package — read-only. If days trained are below these totals, the remaining lessons are scheduled.</p>
-        }
 
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Practical)</label>
-            <p-inputNumber [(ngModel)]="form().practicalDays" [min]="0" [max]="maxPracticalDays()"
-              placeholder="e.g. 4" [style]="{ width: '100%' }"
-              (ngModelChange)="onCountsChange()" />
-            <p class="text-[11px] text-gray-400 mt-0.5">Max {{ maxPracticalDays() }} — cannot exceed package practical days.</p>
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Theory)</label>
-            <p-inputNumber [(ngModel)]="form().theoryLessons" [min]="0" [max]="999"
-              placeholder="e.g. 2" [style]="{ width: '100%' }"
-              (ngModelChange)="onCountsChange()" />
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs text-gray-500 mb-0.5">Start Date</label>
-            <p-datepicker [(ngModel)]="form().startDate" dateFormat="yy-mm-dd"
-              placeholder="Start date" appendTo="body" class="w-full"
-              [style]="{ 'border-color': dateError() ? '#ef4444' : '' }"
-              (ngModelChange)="onDateRangeChange()" />
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-0.5">Last Date of Training</label>
-            <p-datepicker [(ngModel)]="form().lastDate" dateFormat="yy-mm-dd"
-              placeholder="Last date" appendTo="body" class="w-full"
-              [style]="{ 'border-color': dateError() ? '#ef4444' : '' }"
-              (ngModelChange)="onDateRangeChange()" />
-          </div>
-        </div>
-        @if (dateError()) {
-          <div class="text-xs text-red-500 flex items-center gap-1">
-            <i class="pi pi-exclamation-triangle"></i>
-            {{ dateError() }}
-          </div>
-        }
-        <div>
-          <label class="block text-xs text-gray-500 mb-0.5">Transmission Trained</label>
-          <p-select [options]="[{ label: 'Manual', value: 'manual' }, { label: 'Automatic', value: 'automatic' }, { label: 'Both', value: 'both' }]"
-            [(ngModel)]="form().transmission" appendTo="body" class="w-full"
-            (ngModelChange)="onTransmissionChange($event)" />
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs text-gray-500 mb-0.5">Instructor (all lessons)</label>
-            <p-select [options]="instructorOpts" [(ngModel)]="form().instructor_id"
-              placeholder="Optional" appendTo="body" class="w-full" [showClear]="true" [filter]="true" filterBy="label" />
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-0.5">Vehicle (all lessons)</label>
-            <p-select [options]="vehicleOpts" [(ngModel)]="form().vehicle_id"
-              placeholder="Optional" appendTo="body" class="w-full" [showClear]="true" [filter]="true" filterBy="label" />
-          </div>
-        </div>
-        <p class="text-xs text-gray-400 -mt-2">Chosen once here, then applied to every generated lesson. Vehicles are filtered by the selected transmission.</p>
-
-        <div>
-          <label class="block text-xs text-gray-500 mb-0.5">Lesson Plan (optional)</label>
-          <p-select [options]="templateOpts" [(ngModel)]="form().lesson_plan_template_id"
-            placeholder="Pick lessons from a lesson plan" appendTo="body" class="w-full" [filter]="true" filterBy="label"
-            (ngModelChange)="onTemplateChange($event)" />
-          <p class="text-xs text-gray-400 mt-1">Filtered by transmission. Selecting a plan pre-ticks lessons from your Practical/Theory days — adjust the ticks as needed.</p>
-          <p class="text-xs text-red-400 mt-0.5 flex items-center gap-1">
-            <i class="pi pi-exclamation-circle"></i>
-            Changing the lesson plan removes the previous lessons for this plan.
-          </p>
-        </div>
-
-        @if (selectedTemplate()) {
-          <div class="border border-gray-200 rounded-lg overflow-hidden">
-            <div class="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b">
-              Lessons in {{ selectedTemplate()!.name }} — pick the ones covered
+      <!-- ═══ CONFIG STEP ═══ -->
+      @if (step() === 'config') {
+        <div class="space-y-4">
+          @if (trainingDays > 0 || trainingHours > 0) {
+            <div class="bg-indigo-50/60 border border-indigo-100 rounded-lg px-3 py-2.5 text-xs grid grid-cols-2 gap-x-4 gap-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-gray-500">Driving Training (Days)</span>
+                <strong class="text-indigo-700">{{ trainingDays }}</strong>
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-gray-500">Theory Training (Hours)</span>
+                <strong class="text-indigo-700">{{ trainingHours }} hrs</strong>
+              </div>
             </div>
-            <div class="divide-y divide-gray-100 max-h-64 overflow-y-auto">
-              @for (item of templateItems(); track item.id) {
-                <div class="flex items-center gap-2.5 px-3 py-2">
-                  <label class="flex items-start gap-2.5 flex-1 min-w-0 cursor-pointer hover:bg-gray-50">
-                    <input type="checkbox" class="mt-0.5" [checked]="isItemSelected(item.id)"
-                      (change)="toggleItem(item.id)" />
-                    <span class="text-sm">
-                      <span class="font-medium text-gray-700">{{ item.title }}</span>
-                      <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded
-                        {{ item.is_theory ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600' }}">
-                        {{ item.is_theory ? 'Theory' : 'Practical' }}
-                      </span>
-                      @if (item.difficulty) {
-                        <span class="ml-1 text-xs text-gray-400">{{ item.difficulty }}</span>
-                      }
-                    </span>
-                  </label>
-                  @if (isItemSelected(item.id)) {
-                    @if (itemStatus()[item.id] === 'locked') {
-                      <span class="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-medium whitespace-nowrap"><i class="pi pi-lock mr-0.5" style="font-size: 0.6rem"></i>Locked</span>
-                    } @else if (itemStatus()[item.id] === 'pending') {
-                      <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">Scheduled</span>
-                    }
-                    @if (itemStatus()[item.id] !== 'locked') {
-                      <p-datepicker [ngModel]="itemDates()[item.id]"
-                        (ngModelChange)="onItemDateChange(item.id, $event)"
-                        dateFormat="yy-mm-dd" appendTo="body" styleClass="w-56"
-                        [showIcon]="true" icon="pi pi-calendar" />
-                    }
-                  }
-                </div>
-              }
+            <p class="text-xs text-gray-400 -mt-2.5">From the package — read-only. If days trained are below these totals, the remaining lessons are scheduled.</p>
+          }
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Practical)</label>
+              <p-inputNumber [(ngModel)]="form().practicalDays" [min]="0" [max]="maxPracticalDays()"
+                placeholder="e.g. 4" [style]="{ width: '100%' }"
+                (ngModelChange)="onCountsChange()" />
+              <p class="text-[11px] text-gray-400 mt-0.5">Max {{ maxPracticalDays() }} — cannot exceed package practical days.</p>
             </div>
-            <div class="bg-gray-50 px-3 py-1.5 text-xs text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span class="font-medium text-gray-700">{{ selectedItemIds().length }} selected</span>
-              <span class="flex items-center gap-1 text-green-600"><i class="pi pi-check-circle" style="font-size: 0.7rem"></i> {{ completedCount() }} covered</span>
-              <span class="flex items-center gap-1 text-orange-600"><i class="pi pi-calendar-plus" style="font-size: 0.7rem"></i> {{ scheduledCount() }} scheduled</span>
-              @if (lockedCount() > 0) {
-                <span class="flex items-center gap-1 text-red-600"><i class="pi pi-lock" style="font-size: 0.7rem"></i> {{ lockedCount() }} locked</span>
-              }
-              <span class="w-full sm:w-auto text-gray-400">pre-ticked from your Practical/Theory days. If days trained are below the package total, the remaining lessons are <span class="text-orange-600 font-medium">Scheduled</span>. Lessons beyond the package are <span class="text-red-600 font-medium">Locked</span> until an extension is purchased.</span>
+            <div>
+              <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Theory)</label>
+              <p-inputNumber [(ngModel)]="form().theoryLessons" [min]="0" [max]="999"
+                placeholder="e.g. 2" [style]="{ width: '100%' }"
+                (ngModelChange)="onCountsChange()" />
             </div>
           </div>
-        }
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-0.5">Start Date</label>
+              <p-datepicker [(ngModel)]="form().startDate" dateFormat="yy-mm-dd"
+                placeholder="Start date" appendTo="body" class="w-full"
+                [style]="{ 'border-color': dateError() ? '#ef4444' : '' }"
+                (ngModelChange)="onDateRangeChange()" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-0.5">Last Date of Training</label>
+              <p-datepicker [(ngModel)]="form().lastDate" dateFormat="yy-mm-dd"
+                placeholder="Last date" appendTo="body" class="w-full"
+                [style]="{ 'border-color': dateError() ? '#ef4444' : '' }"
+                (ngModelChange)="onDateRangeChange()" />
+            </div>
+          </div>
+          @if (dateError()) {
+            <div class="text-xs text-red-500 flex items-center gap-1">
+              <i class="pi pi-exclamation-triangle"></i>
+              {{ dateError() }}
+            </div>
+          }
+          <div>
+            <label class="block text-xs text-gray-500 mb-0.5">Transmission Trained</label>
+            <p-select [options]="[{ label: 'Manual', value: 'manual' }, { label: 'Automatic', value: 'automatic' }, { label: 'Both', value: 'both' }]"
+              [(ngModel)]="form().transmission" appendTo="body" class="w-full"
+              (ngModelChange)="onTransmissionChange($event)" />
+          </div>
 
-        @if (!selectedTemplate()) {
-          <p-button label="Compute Lessons" icon="pi pi-calculator" (click)="computeLessons()"
-            [loading]="busy()" [disabled]="busy()" styleClass="w-full" />
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-0.5">Instructor (all lessons)</label>
+              <p-select [options]="instructorOpts" [(ngModel)]="form().instructor_id"
+                placeholder="Optional" appendTo="body" class="w-full" [showClear]="true" [filter]="true" filterBy="label" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-0.5">Vehicle (all lessons)</label>
+              <p-select [options]="vehicleOpts" [(ngModel)]="form().vehicle_id"
+                placeholder="Optional" appendTo="body" class="w-full" [showClear]="true" [filter]="true" filterBy="label" />
+            </div>
+          </div>
+          <p class="text-xs text-gray-400 -mt-2">Chosen once here, then applied to every generated lesson. Vehicles are filtered by the selected transmission.</p>
 
-          @if (preview().length > 0) {
+          <div>
+            <label class="block text-xs text-gray-500 mb-0.5">Lesson Plan (optional)</label>
+            <p-select [options]="templateOpts" [(ngModel)]="form().lesson_plan_template_id"
+              placeholder="Pick lessons from a lesson plan" appendTo="body" class="w-full" [filter]="true" filterBy="label"
+              (ngModelChange)="onTemplateChange($event)" />
+            <p class="text-xs text-gray-400 mt-1">Filtered by transmission. Selecting a plan pre-ticks lessons from your Practical/Theory days — adjust the ticks as needed.</p>
+            <p class="text-xs text-red-400 mt-0.5 flex items-center gap-1">
+              <i class="pi pi-exclamation-circle"></i>
+              Changing the lesson plan removes the previous lessons for this plan.
+            </p>
+          </div>
+
+          @if (selectedTemplate()) {
             <div class="border border-gray-200 rounded-lg overflow-hidden">
               <div class="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b">
-                Preview — {{ preview().length }} lesson(s). Theory always on Saturday.
+                Lessons in {{ selectedTemplate()!.name }} — pick the ones covered
               </div>
-              <div class="divide-y divide-gray-100 max-h-56 overflow-y-auto">
-                @for (lesson of preview(); track $index; let li = $index) {
-                  <div class="flex items-center gap-2 px-3 py-2">
-                    <span class="w-8 text-center text-xs font-medium text-gray-500">{{ lesson.dayLabel }}</span>
-                    @if (lesson.title) {
-                      <span class="text-xs text-gray-600 flex-1 min-w-0 truncate" [title]="lesson.title">
-                        {{ lesson.title }}
+              <div class="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                @for (item of templateItems(); track item.id) {
+                  <div class="flex items-center gap-2.5 px-3 py-2">
+                    <label class="flex items-start gap-2.5 flex-1 min-w-0 cursor-pointer hover:bg-gray-50">
+                      <input type="checkbox" class="mt-0.5" [checked]="isItemSelected(item.id)"
+                        (change)="toggleItem(item.id)" />
+                      <span class="text-sm">
+                        <span class="font-medium text-gray-700">{{ item.title }}</span>
+                        <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded
+                          {{ item.is_theory ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600' }}">
+                          {{ item.is_theory ? 'Theory' : 'Practical' }}
+                        </span>
+                        @if (item.difficulty) {
+                          <span class="ml-1 text-xs text-gray-400">{{ item.difficulty }}</span>
+                        }
                       </span>
+                    </label>
+                    @if (isItemSelected(item.id)) {
+                      @if (itemStatus()[item.id] === 'locked') {
+                        <span class="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-medium whitespace-nowrap"><i class="pi pi-lock mr-0.5" style="font-size: 0.6rem"></i>Locked</span>
+                      } @else if (itemStatus()[item.id] === 'pending') {
+                        <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">Scheduled</span>
+                      }
+                      @if (itemStatus()[item.id] !== 'locked') {
+                        <p-datepicker [ngModel]="itemDates()[item.id]"
+                          (ngModelChange)="onItemDateChange(item.id, $event)"
+                          dateFormat="yy-mm-dd" appendTo="body" styleClass="w-56"
+                          [showIcon]="true" icon="pi pi-calendar" />
+                      }
                     }
-                    @if (lesson.status === 'pending') {
-                      <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">Scheduled</span>
-                    }
-                    <p-datepicker [ngModel]="lesson.date" (ngModelChange)="onPreviewDateChange(lesson, $event)"
-                      dateFormat="yy-mm-dd" appendTo="body" styleClass="w-56" />
-                    <p-select [ngModel]="lesson.lesson_type"
-                      (ngModelChange)="onPreviewTypeChange(lesson, $event)"
-                      [options]="[{ label: 'Practical', value: 'practical' }, { label: 'Theory', value: 'theory' }]"
-                      appendTo="body" styleClass="w-32" />
-                    <p-button icon="pi pi-trash" severity="danger" size="small"
-                      (click)="removePreviewLesson(li)" />
                   </div>
                 }
               </div>
-              <div class="bg-blue-50 px-3 py-2 text-xs text-blue-600 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span class="flex items-center gap-1 text-green-600"><i class="pi pi-check-circle" style="font-size: 0.7rem"></i> {{ previewCompletedCount() }} covered</span>
-                <span class="flex items-center gap-1 text-orange-600"><i class="pi pi-calendar-plus" style="font-size: 0.7rem"></i> {{ previewScheduledCount() }} scheduled</span>
-                <span class="text-blue-400">Confirm replaces the existing lessons for this plan.</span>
+              <div class="bg-gray-50 px-3 py-1.5 text-xs text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span class="font-medium text-gray-700">{{ selectedItemIds().length }} selected</span>
+                <span class="flex items-center gap-1 text-green-600"><i class="pi pi-check-circle" style="font-size: 0.7rem"></i> {{ completedCount() }} covered</span>
+                <span class="flex items-center gap-1 text-orange-600"><i class="pi pi-calendar-plus" style="font-size: 0.7rem"></i> {{ scheduledCount() }} scheduled</span>
+                @if (lockedCount() > 0) {
+                  <span class="flex items-center gap-1 text-red-600"><i class="pi pi-lock" style="font-size: 0.7rem"></i> {{ lockedCount() }} locked</span>
+                }
+                <span class="w-full sm:w-auto text-gray-400">pre-ticked from your Practical/Theory days. If days trained are below the package total, the remaining lessons are <span class="text-orange-600 font-medium">Scheduled</span>. Lessons beyond the package are <span class="text-red-600 font-medium">Locked</span> until an extension is purchased.</span>
               </div>
             </div>
           }
-        }
-      </div>
+
+          @if (!selectedTemplate()) {
+            <p-button label="Compute Lessons" icon="pi pi-calculator" (click)="computeLessons()"
+              [loading]="busy()" [disabled]="busy()" styleClass="w-full" />
+
+            @if (preview().length > 0) {
+              <div class="border border-gray-200 rounded-lg overflow-hidden">
+                <div class="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b">
+                  Preview — {{ preview().length }} lesson(s). Theory always on Saturday.
+                </div>
+                <div class="divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                  @for (lesson of preview(); track $index; let li = $index) {
+                    <div class="flex items-center gap-2 px-3 py-2">
+                      <span class="w-8 text-center text-xs font-medium text-gray-500">{{ lesson.dayLabel }}</span>
+                      @if (lesson.title) {
+                        <span class="text-xs text-gray-600 flex-1 min-w-0 truncate" [title]="lesson.title">
+                          {{ lesson.title }}
+                        </span>
+                      }
+                      @if (lesson.status === 'pending') {
+                        <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">Scheduled</span>
+                      }
+                      <p-datepicker [ngModel]="lesson.date" (ngModelChange)="onPreviewDateChange(lesson, $event)"
+                        dateFormat="yy-mm-dd" appendTo="body" styleClass="w-56" />
+                      <p-select [ngModel]="lesson.lesson_type"
+                        (ngModelChange)="onPreviewTypeChange(lesson, $event)"
+                        [options]="[{ label: 'Practical', value: 'practical' }, { label: 'Theory', value: 'theory' }]"
+                        appendTo="body" styleClass="w-32" />
+                      <p-button icon="pi pi-trash" severity="danger" size="small"
+                        (click)="removePreviewLesson(li)" />
+                    </div>
+                  }
+                </div>
+                <div class="bg-blue-50 px-3 py-2 text-xs text-blue-600 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span class="flex items-center gap-1 text-green-600"><i class="pi pi-check-circle" style="font-size: 0.7rem"></i> {{ previewCompletedCount() }} covered</span>
+                  <span class="flex items-center gap-1 text-orange-600"><i class="pi pi-calendar-plus" style="font-size: 0.7rem"></i> {{ previewScheduledCount() }} scheduled</span>
+                </div>
+              </div>
+            }
+          }
+        </div>
+      }
+
+      <!-- ═══ PREVIEW STEP ═══ -->
+      @if (step() === 'preview') {
+        <div class="space-y-3">
+          <p class="text-sm text-gray-600">Review lessons before saving. This replaces all existing lessons for this plan.</p>
+
+          <div class="grid grid-cols-3 gap-2 text-xs">
+            <div class="bg-green-50 rounded-lg px-3 py-2 text-center">
+              <div class="font-bold text-green-700 text-lg">{{ previewLessons().filter(l => l.status === 'completed').length }}</div>
+              <div class="text-green-600">Completed</div>
+            </div>
+            <div class="bg-orange-50 rounded-lg px-3 py-2 text-center">
+              <div class="font-bold text-orange-700 text-lg">{{ previewLessons().filter(l => l.status === 'pending').length }}</div>
+              <div class="text-orange-600">Scheduled</div>
+            </div>
+            <div class="bg-red-50 rounded-lg px-3 py-2 text-center">
+              <div class="font-bold text-red-700 text-lg">{{ previewLessons().filter(l => l.status === 'locked').length }}</div>
+              <div class="text-red-600">Locked</div>
+            </div>
+          </div>
+
+          <div class="border border-gray-200 rounded-lg overflow-hidden">
+            <div class="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b flex items-center justify-between">
+              <span>{{ previewLessons().length }} lesson(s)</span>
+              <span class="text-gray-400 font-normal">{{ form().transmission }}</span>
+            </div>
+            <div class="divide-y divide-gray-100 max-h-[22rem] overflow-y-auto">
+              @for (lesson of previewLessons(); track $index) {
+                <div class="flex items-center gap-2.5 px-3 py-1.5 text-xs"
+                     [class.bg-red-50]="lesson.status === 'locked'"
+                     [class.bg-green-50/50]="lesson.status === 'completed'">
+                  <span class="w-5 text-center font-medium text-gray-400">{{ $index + 1 }}</span>
+                  <span class="w-9 text-center font-medium"
+                        [class.text-amber-600]="lesson.lesson_type === 'theory'"
+                        [class.text-blue-600]="lesson.lesson_type === 'practical'">
+                    {{ lesson.lesson_type === 'theory' ? 'TH' : 'PR' }}
+                  </span>
+                  <span class="w-10 text-center text-gray-500">{{ lesson.dayLabel }}</span>
+                  <span class="text-gray-700 flex-1 min-w-0 truncate">
+                    {{ lesson.date | date:'EEE, MMM d' }}
+                    @if (lesson.title) { <span class="text-gray-400 ml-1">{{ lesson.title }}</span> }
+                  </span>
+                  <span class="text-gray-400">{{ lesson.duration_minutes }}m</span>
+                  <span class="px-1.5 py-0.5 rounded font-medium whitespace-nowrap"
+                        [class.bg-green-100]="lesson.status === 'completed'"
+                        [class.text-green-700]="lesson.status === 'completed'"
+                        [class.bg-orange-100]="lesson.status === 'pending'"
+                        [class.text-orange-700]="lesson.status === 'pending'"
+                        [class.bg-red-100]="lesson.status === 'locked'"
+                        [class.text-red-700]="lesson.status === 'locked'">
+                    {{ lesson.status === 'completed' ? 'Done' : lesson.status === 'locked' ? 'Locked' : 'Scheduled' }}
+                  </span>
+                </div>
+              }
+            </div>
+          </div>
+
+          @if (form().instructor_id || form().vehicle_id) {
+            <div class="text-xs text-gray-500 flex gap-3">
+              @if (form().instructor_id) { <span>Instructor: <strong>{{ form().instructor_id }}</strong></span> }
+              @if (form().vehicle_id) { <span>Vehicle: <strong>{{ form().vehicle_id }}</strong></span> }
+            </div>
+          }
+        </div>
+      }
+
       <ng-template pTemplate="footer">
         <div class="flex gap-2 justify-end">
+          @if (step() === 'preview') {
+            <p-button label="Back" severity="secondary" (click)="step.set('config')" [disabled]="saving()" />
+          }
           <p-button label="Cancel" severity="secondary" (click)="cancel()" [disabled]="saving()" />
-          <p-button label="Confirm" [disabled]="saving() || dateError() || (selectedTemplate() ? selectedItemIds().length === 0 : preview().length === 0)"
-            [loading]="saving()"
-            (click)="confirm()" />
+          @if (step() === 'config') {
+            <p-button label="Review" icon="pi pi-eye" [disabled]="saving() || dateError() || (selectedTemplate() ? selectedItemIds().length === 0 : preview().length === 0)"
+              (click)="goToPreview()" />
+          } @else {
+            <p-button label="Save Lessons" icon="pi pi-check" [loading]="saving()"
+              [disabled]="saving()"
+              (click)="confirm()" />
+          }
         </div>
       </ng-template>
     </p-dialog>
@@ -232,6 +311,7 @@ export class LessonQuickGenDialog {
   visible = signal(false);
   saving = signal(false);
   busy = signal(false);
+  step = signal<'config' | 'preview'>('config');
 
   form = signal<QuickGenForm>({
     practicalDays: null,
@@ -300,6 +380,15 @@ export class LessonQuickGenDialog {
     return () => this.preview().filter(l => l.status === 'pending').length;
   }
 
+  get previewLessons(): () => QuickGenLesson[] {
+    return () => {
+      if (this.selectedTemplate()) {
+        return this.buildLessonsFromTemplate();
+      }
+      return this.preview();
+    };
+  }
+
   async open(
     plan: ClientLessonPlan,
     instructors: User[],
@@ -308,6 +397,7 @@ export class LessonQuickGenDialog {
     productId: string | null,
     packageId: string | null,
   ) {
+    this.step.set('config');
     this.planId = plan.id;
     this.cartItemId = plan.cart_item_id;
     this.existingLessons = plan.lessons.filter(l => l.is_active).map(l => ({ ...l }));
@@ -315,7 +405,6 @@ export class LessonQuickGenDialog {
     this.allVehicles = vehicles;
     this.instructorOpts = instructors.map(u => ({ label: u.name, value: u.phone }));
 
-    // Fetch training limits from the Package (source of truth)
     if (productId && packageId) {
       try {
         const product: any = await this.productService.getProduct(productId).toPromise();
@@ -341,7 +430,6 @@ export class LessonQuickGenDialog {
       .filter(t => trans === 'both' || !t.transmission_type || t.transmission_type === 'both' || t.transmission_type === trans)
       .map(t => ({ label: t.name, value: t.id }));
 
-    // Load start/end dates: first try plan.start_date, then scan existing lessons
     let startDate: Date | null = null;
     let lastDate: Date | null = null;
     if (plan.start_date) {
@@ -392,11 +480,20 @@ export class LessonQuickGenDialog {
 
   onCountsChange() {
     this.syncTemplateSelection();
+    this.autoRecompute();
   }
 
   onDateRangeChange() {
     if (this.dateError()) return;
     this.assignDates(true);
+    this.autoRecompute();
+  }
+
+  private autoRecompute() {
+    if (this.selectedTemplate()) return;
+    if (this.preview().length > 0) {
+      this.computeLessons();
+    }
   }
 
   onTransmissionChange(transmission: string) {
@@ -437,7 +534,6 @@ export class LessonQuickGenDialog {
     const template = this.selectedTemplate();
     const item = template?.lesson_items?.find((i: any) => i.id === itemId);
     if (item && !this.isItemSelected(itemId)) {
-      // Check practical limit
       if (!item.is_theory) {
         const max = this.trainingDays || 999;
         if (max !== 999) {
@@ -449,7 +545,6 @@ export class LessonQuickGenDialog {
           if (selectedPractical >= max) return;
         }
       }
-      // Check theory limit
       if (item.is_theory) {
         const maxTheory = this.trainingHours ? Math.ceil(this.trainingHours / 2) : 999;
         if (maxTheory !== 999) {
@@ -486,6 +581,7 @@ export class LessonQuickGenDialog {
 
   onPreviewTypeChange(lesson: QuickGenLesson, value: string) {
     lesson.lesson_type = value === 'theory' ? 'theory' : 'practical';
+    lesson.duration_minutes = lesson.lesson_type === 'theory' ? 120 : 30;
     this.preview.update(list => [...list]);
   }
 
@@ -539,6 +635,7 @@ export class LessonQuickGenDialog {
         lesson_objectives: [],
         practical_objectives: [],
         status: i < (f.practicalDays ?? 0) ? 'completed' : 'pending',
+        duration_minutes: 30,
       }));
 
       const theories: QuickGenLesson[] = theoryDates.slice(0, theoryCount).map((d, i) => ({
@@ -550,6 +647,7 @@ export class LessonQuickGenDialog {
         lesson_objectives: [],
         practical_objectives: [],
         status: i < (f.theoryLessons ?? 0) ? 'completed' : 'pending',
+        duration_minutes: 120,
       }));
 
       const generated = [...practicals, ...theories].sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -557,6 +655,33 @@ export class LessonQuickGenDialog {
     } finally {
       setTimeout(() => this.busy.set(false), 400);
     }
+  }
+
+  goToPreview() {
+    if (this.selectedTemplate()) {
+      this.buildLessonsFromTemplate();
+    }
+    this.step.set('preview');
+  }
+
+  private buildLessonsFromTemplate(): QuickGenLesson[] {
+    const template = this.selectedTemplate();
+    if (!template) return [];
+    const ids = this.selectedItemIds();
+    const items = (template.lesson_items || []).filter((i: any) => ids.includes(i.id));
+    const dates = this.itemDates();
+    const statuses = this.itemStatus();
+    return items.map((item: any) => ({
+      date: dates[item.id] || new Date(),
+      lesson_type: item.is_theory ? 'theory' as const : 'practical' as const,
+      dayLabel: '',
+      template_item_id: item.id,
+      title: item.title,
+      lesson_objectives: item.lesson_objectives || [],
+      practical_objectives: item.practical_objectives || [],
+      status: statuses[item.id] || 'completed',
+      duration_minutes: item.is_theory ? 120 : 30,
+    }));
   }
 
   async confirm() {
@@ -594,7 +719,7 @@ export class LessonQuickGenDialog {
         if (pv.length === 0) { this.saving.set(false); return; }
         lessonsToSave = pv.map((l, idx) => ({
           scheduled_date: l.date,
-          duration_minutes: l.lesson_type === 'theory' ? 120 : 30,
+          duration_minutes: l.duration_minutes,
           is_theory: l.lesson_type === 'theory',
           instructor_id: instructorId,
           vehicle_id: vehicleId,
@@ -646,13 +771,12 @@ export class LessonQuickGenDialog {
 
   cancel() {
     this.visible.set(false);
+    this.step.set('config');
     this.preview.set([]);
     this.selectedItemIds.set([]);
     this.itemDates.set({});
     this.itemStatus.set({});
   }
-
-  // ── Internal helpers ──
 
   private startOfDay(d: Date): Date {
     const copy = new Date(d);
@@ -696,12 +820,10 @@ export class LessonQuickGenDialog {
     }
     const practicalItems = template.lesson_items.filter((i: any) => !i.is_theory);
     const theoryItems = template.lesson_items.filter((i: any) => i.is_theory);
-    // Cap at package training limits
     const maxPractical = this.trainingDays || 999;
     const maxTheory = this.trainingHours ? Math.ceil(this.trainingHours / 2) : 999;
     const trainedPractical = f.practicalDays ?? 0;
     const trainedTheory = f.theoryLessons ?? 0;
-    // Select up to package limit; user-entered trained count determines completed vs pending
     const practicalToSelect = Math.min(practicalItems.length, maxPractical);
     const theoryToSelect = Math.min(theoryItems.length, maxTheory);
     const selected: string[] = [];
@@ -711,7 +833,6 @@ export class LessonQuickGenDialog {
         selected.push(i.id);
         status[i.id] = idx < trainedPractical ? 'completed' : 'pending';
       } else {
-        // Beyond package limit → locked
         selected.push(i.id);
         status[i.id] = 'locked';
       }
@@ -721,7 +842,6 @@ export class LessonQuickGenDialog {
         selected.push(i.id);
         status[i.id] = idx < trainedTheory ? 'completed' : 'pending';
       } else {
-        // Beyond package limit → locked
         selected.push(i.id);
         status[i.id] = 'locked';
       }

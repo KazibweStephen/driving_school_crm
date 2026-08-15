@@ -181,7 +181,7 @@ export interface ClientLessonPlanCreate {
   manual_days?: number;
   purchased_days?: number;
   purchased_theory_sessions?: number;
-  lessons?: { day_number: number; week_number: number; title: string; lesson_objectives?: string[]; practical_objectives?: string[]; order?: number; is_active?: boolean; is_theory?: boolean; preferred_location?: string; enforce_prerequisites?: boolean; scheduled_date?: string; duration_minutes?: number; instructor_id?: string; vehicle_id?: string; template_item_id?: string; is_locked?: boolean }[];
+  lessons?: { day_number: number; week_number: number; title: string; lesson_objectives?: string[]; practical_objectives?: string[]; order?: number; is_active?: boolean; is_theory?: boolean; preferred_location?: string; enforce_prerequisites?: boolean; scheduled_date?: string; duration_minutes?: number; instructor_id?: string; vehicle_id?: string; template_item_id?: string; is_locked?: boolean; status?: string }[];
 }
 
 export interface ClientLessonPlanUpdate {
@@ -194,6 +194,9 @@ export interface ClientLessonPlanUpdate {
   extension_days_added?: number;
   notes?: string;
   manual_days?: number;
+  template_id?: string;
+  transmission_type?: string;
+  lessons?: { day_number: number; week_number: number; title: string; lesson_objectives?: string[]; practical_objectives?: string[]; order?: number; is_active?: boolean; is_theory?: boolean; preferred_location?: string; enforce_prerequisites?: boolean; scheduled_date?: string; duration_minutes?: number; instructor_id?: string; vehicle_id?: string; template_item_id?: string; is_locked?: boolean; status?: string }[];
 }
 
 export interface ClientLessonUpdate {

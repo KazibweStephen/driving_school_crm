@@ -232,6 +232,9 @@ class ClientLessonPlan(Base):
     template_type: Mapped[str] = mapped_column(String(20), default="practical", nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     manual_days: Mapped[int | None] = mapped_column(Integer, default=5, nullable=True)
+    lessons_completed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    practical_lessons_completed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    theory_lessons_completed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

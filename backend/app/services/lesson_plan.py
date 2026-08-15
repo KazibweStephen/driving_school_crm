@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -561,6 +561,130 @@ async def create_client_plan(
     return result.scalar_one()
 
 
+async def replace_plan_lessons(
+    db: AsyncSession,
+    plan: ClientLessonPlan,
+    lessons_data: list[dict],
+    start_date: datetime | None = None,
+    template_id: uuid.UUID | None = None,
+    transmission_type: str | None = None,
+    manual_days: int | None = None,
+) -> ClientLessonPlan:
+    """Replace all lessons in a plan atomically and recompute completion counters."""
+    if start_date is not None:
+        plan.start_date = start_date
+    if template_id is not None:
+        plan.template_id = template_id
+    if transmission_type is not None:
+        plan.transmission_type = TransmissionType(transmission_type)
+    if manual_days is not None:
+        plan.manual_days = manual_days
+
+    # Delete existing lessons (use ORM deletion to keep session/identity map consistent)
+    for old_lesson in list(plan.lessons):
+        await db.delete(old_lesson)
+    await db.flush()
+
+    # Fetch training limits from Package
+    ci_result = await db.execute(
+        select(CartItem).where(CartItem.id == plan.cart_item_id)
+    )
+    cart_item = ci_result.scalar_one_or_none()
+    max_practical = None
+    max_theory = None
+    if cart_item and cart_item.package_id:
+        from app.models.product import Package
+        pkg_result = await db.execute(select(Package).where(Package.id == cart_item.package_id))
+        pkg = pkg_result.scalar_one_or_none()
+        if pkg:
+            max_practical = pkg.driving_training_duration_days
+            max_theory = (pkg.theory_training_hours // 2) if pkg.theory_training_hours else None
+
+    practical_count = 0
+    theory_count = 0
+    lessons_completed = 0
+    practical_lessons_completed = 0
+    theory_lessons_completed = 0
+
+    for lesson in lessons_data:
+        lo = lesson.get("lesson_objectives", [])
+        po = lesson.get("practical_objectives", [])
+        is_theory = lesson.get("is_theory", False)
+
+        is_locked = lesson.get("is_locked", False)
+        if not is_locked and max_practical is not None and not is_theory:
+            if practical_count >= max_practical:
+                is_locked = True
+            practical_count += 1
+        if not is_locked and max_theory is not None and is_theory:
+            if theory_count >= max_theory:
+                is_locked = True
+            theory_count += 1
+
+        scheduled_date_val = lesson.get("scheduled_date")
+        if isinstance(scheduled_date_val, str) and scheduled_date_val:
+            scheduled_date_val = date.fromisoformat(scheduled_date_val)
+        elif isinstance(scheduled_date_val, datetime):
+            scheduled_date_val = scheduled_date_val.date()
+
+        template_item_id_val = lesson.get("template_item_id")
+        if isinstance(template_item_id_val, str) and template_item_id_val:
+            try:
+                template_item_id_val = uuid.UUID(template_item_id_val)
+            except ValueError:
+                template_item_id_val = None
+        elif not isinstance(template_item_id_val, uuid.UUID | None):
+            template_item_id_val = None
+
+        lesson_status = lesson.get("status")
+        if is_locked:
+            lesson_status = "locked"
+        elif not lesson_status:
+            lesson_status = "pending"
+
+        if lesson_status == "completed":
+            lessons_completed += 1
+            if is_theory:
+                theory_lessons_completed += 1
+            else:
+                practical_lessons_completed += 1
+
+        client_lesson = ClientLesson(
+            lesson_plan_id=plan.id,
+            day_number=lesson["day_number"],
+            week_number=lesson["week_number"],
+            title=lesson["title"],
+            lesson_objectives=lo if isinstance(lo, list) else [lo] if lo else [],
+            practical_objectives=po if isinstance(po, list) else [po] if po else [],
+            order=lesson.get("order", 0),
+            is_active=lesson.get("is_active", True),
+            is_theory=is_theory,
+            preferred_location=lesson.get("preferred_location"),
+            enforce_prerequisites=lesson.get("enforce_prerequisites", True),
+            scheduled_date=scheduled_date_val,
+            duration_minutes=lesson.get("duration_minutes", 120 if is_theory else 30),
+            instructor_id=lesson.get("instructor_id"),
+            vehicle_id=lesson.get("vehicle_id"),
+            template_item_id=template_item_id_val,
+            is_locked=is_locked,
+            status=lesson_status,
+        )
+        db.add(client_lesson)
+
+    plan.lessons_completed = lessons_completed
+    plan.practical_lessons_completed = practical_lessons_completed
+    plan.theory_lessons_completed = theory_lessons_completed
+
+    await db.flush()
+
+    result = await db.execute(
+        select(ClientLessonPlan)
+        .where(ClientLessonPlan.id == plan.id)
+        .options(selectinload(ClientLessonPlan.lessons))
+    )
+    return result.scalar_one()
+
+
 async def create_client_plan_from_template(
     db: AsyncSession,
     cart_item_id: uuid.UUID,
@@ -769,8 +893,11 @@ async def _verify_cart_item_company(
         return True
     result = await db.execute(
         select(CartItem).join(Consultation, CartItem.consultation_id == Consultation.id)
-        .join(Branch, Consultation.branch_id == Branch.id)
-        .where(CartItem.id == cart_item_id, Branch.company_id == company_id)
+        .outerjoin(Branch, Consultation.branch_id == Branch.id)
+        .where(
+            CartItem.id == cart_item_id,
+            or_(Consultation.branch_id.is_(None), Branch.company_id == company_id),
+        )
     )
     return result.scalar_one_or_none() is not None
 
@@ -804,8 +931,11 @@ async def get_client_plan_by_id(
         query = (
             query.join(CartItem, ClientLessonPlan.cart_item_id == CartItem.id)
             .join(Consultation, CartItem.consultation_id == Consultation.id)
-            .join(Branch, Consultation.branch_id == Branch.id)
-            .where(Branch.company_id == company_id)
+            .outerjoin(Branch, Consultation.branch_id == Branch.id)
+            .where(
+                ClientLessonPlan.id == plan_id,
+                or_(Consultation.branch_id.is_(None), Branch.company_id == company_id),
+            )
         )
     result = await db.execute(query)
     return result.scalar_one_or_none()
@@ -853,6 +983,26 @@ async def update_client_plan(
         .options(selectinload(ClientLessonPlan.lessons))
     )
     return result.scalar_one()
+
+
+async def _recompute_plan_counters(db: AsyncSession, plan_id: uuid.UUID) -> None:
+    """Recompute completion counters on a plan from its current lessons."""
+    result = await db.execute(
+        select(ClientLesson).where(ClientLesson.lesson_plan_id == plan_id)
+    )
+    lessons = result.scalars().all()
+    plan_result = await db.execute(
+        select(ClientLessonPlan).where(ClientLessonPlan.id == plan_id)
+    )
+    plan = plan_result.scalar_one_or_none()
+    if not plan:
+        return
+
+    completed = [l for l in lessons if l.status == LessonState.COMPLETED]
+    plan.lessons_completed = len(completed)
+    plan.practical_lessons_completed = sum(1 for l in completed if not l.is_theory)
+    plan.theory_lessons_completed = sum(1 for l in completed if l.is_theory)
+    await db.flush()
 
 
 async def delete_client_plan(
@@ -1104,6 +1254,8 @@ async def update_client_lesson(
         lesson.fuel_cost = Decimal(fuel_cost)
     await db.flush()
     await db.refresh(lesson)
+    # Recompute plan completion counters whenever a lesson status may have changed
+    await _recompute_plan_counters(db, lesson.lesson_plan_id)
     return lesson
 
 

@@ -454,13 +454,26 @@ async def update_client_plan(
     plan = await lesson_service.get_client_plan_by_id(db, pid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not plan:
         raise HTTPException(status_code=404, detail="Lesson plan not found")
-    updated = await lesson_service.update_client_plan(
-        db, plan,
-        start_date=data.start_date,
-        status=data.status,
-        purchased_days=data.purchased_days,
-        notes=data.notes,
-    )
+
+    if data.lessons is not None:
+        template_id = uuid.UUID(data.template_id) if data.template_id else None
+        lessons_data = [l.model_dump() for l in data.lessons]
+        updated = await lesson_service.replace_plan_lessons(
+            db, plan,
+            lessons_data=lessons_data,
+            start_date=data.start_date,
+            template_id=template_id,
+            transmission_type=data.transmission_type,
+            manual_days=data.manual_days,
+        )
+    else:
+        updated = await lesson_service.update_client_plan(
+            db, plan,
+            start_date=data.start_date,
+            status=data.status,
+            purchased_days=data.purchased_days,
+            notes=data.notes,
+        )
     return ClientLessonPlanRead.model_validate(updated)
 
 

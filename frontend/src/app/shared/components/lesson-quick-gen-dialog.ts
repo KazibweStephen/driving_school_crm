@@ -735,14 +735,11 @@ export class LessonQuickGenDialog {
 
       const newTemplateId = f.lesson_plan_template_id || null;
 
-      // Delete the old plan entirely (not just soft-delete lessons)
-      if (this.planId) {
-        await this.lessonPlanService.deleteClientPlan(this.planId, 'all').toPromise();
-      }
-
-      await this.lessonPlanService.createClientPlan(this.cartItemId, {
+      // Update existing plan in-place via PATCH (backend deletes + replaces lessons atomically)
+      await this.lessonPlanService.updateClientPlan(this.planId, {
         template_id: newTemplateId || undefined,
         transmission_type: f.transmission || 'manual',
+        start_date: f.startDate ? f.startDate.toISOString().split('T')[0] : undefined,
         lessons: lessonsToSave.map(ls => ({
           day_number: ls.order,
           week_number: Math.ceil(ls.order / 5),
@@ -752,6 +749,7 @@ export class LessonQuickGenDialog {
           order: ls.order,
           is_active: true,
           is_locked: ls.is_locked || false,
+          status: ls.status,
           scheduled_date: ls.scheduled_date ? ls.scheduled_date.toISOString().split('T')[0] : undefined,
           duration_minutes: ls.duration_minutes,
           is_theory: ls.is_theory,

@@ -253,6 +253,7 @@ class ClientLessonCreate(BaseModel):
     vehicle_id: str | None = None
     template_item_id: str | None = None
     is_locked: bool = False
+    status: str | None = None
 
 
 class ClientLessonUpdate(BaseModel):
@@ -356,6 +357,9 @@ class ClientLessonPlanUpdate(BaseModel):
     extension_days_added: int | None = None
     notes: str | None = None
     manual_days: int | None = None
+    template_id: str | None = None
+    transmission_type: str | None = None
+    lessons: list[ClientLessonCreate] | None = None
 
 
 class ClientLessonPlanRead(BaseModel):
@@ -374,6 +378,9 @@ class ClientLessonPlanRead(BaseModel):
     template_type: str = "practical"
     notes: str | None
     manual_days: int | None
+    lessons_completed: int = 0
+    practical_lessons_completed: int = 0
+    theory_lessons_completed: int = 0
     lessons: list[ClientLessonRead] = []
     created_at: datetime
     updated_at: datetime

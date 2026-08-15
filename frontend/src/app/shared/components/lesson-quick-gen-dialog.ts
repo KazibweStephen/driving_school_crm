@@ -63,21 +63,6 @@ interface QuickGenLesson {
 
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Practical)</label>
-              <p-inputNumber [(ngModel)]="form().practicalDays" [min]="0" [max]="maxPracticalDays()"
-                placeholder="e.g. 4" [style]="{ width: '100%' }"
-                (ngModelChange)="onCountsChange()" />
-              <p class="text-[11px] text-gray-400 mt-0.5">Max {{ maxPracticalDays() }} — cannot exceed package practical days.</p>
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Theory)</label>
-              <p-inputNumber [(ngModel)]="form().theoryLessons" [min]="0" [max]="999"
-                placeholder="e.g. 2" [style]="{ width: '100%' }"
-                (ngModelChange)="onCountsChange()" />
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
               <label class="block text-xs text-gray-500 mb-0.5">Start Date</label>
               <p-datepicker [(ngModel)]="form().startDate" dateFormat="yy-mm-dd"
                 placeholder="Start date" appendTo="body" class="w-full"
@@ -98,6 +83,21 @@ interface QuickGenLesson {
               {{ dateError() }}
             </div>
           }
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Practical)</label>
+              <p-inputNumber [(ngModel)]="form().practicalDays" [min]="0" [max]="maxPracticalDays()"
+                placeholder="e.g. 4" [style]="{ width: '100%' }"
+                (ngModelChange)="onCountsChange()" />
+              <p class="text-[11px] text-gray-400 mt-0.5">Max {{ maxPracticalDays() }} — cannot exceed package practical days.</p>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-0.5">Days Trained (Theory)</label>
+              <p-inputNumber [(ngModel)]="form().theoryLessons" [min]="0" [max]="999"
+                placeholder="e.g. 2" [style]="{ width: '100%' }"
+                (ngModelChange)="onCountsChange()" />
+            </div>
+          </div>
           <div>
             <label class="block text-xs text-gray-500 mb-0.5">Transmission Trained</label>
             <p-select [options]="[{ label: 'Manual', value: 'manual' }, { label: 'Automatic', value: 'automatic' }, { label: 'Both', value: 'both' }]"
@@ -735,11 +735,10 @@ export class LessonQuickGenDialog {
 
       const newTemplateId = f.lesson_plan_template_id || null;
 
-      const existingActive = this.existingLessons.filter(l => l.id);
-      const deletePromises = existingActive.map(l =>
-        this.lessonPlanService.updateClientLesson(l.id, { is_active: false }).toPromise()
-      );
-      await Promise.all(deletePromises);
+      // Delete the old plan entirely (not just soft-delete lessons)
+      if (this.planId) {
+        await this.lessonPlanService.deleteClientPlan(this.planId, 'all').toPromise();
+      }
 
       await this.lessonPlanService.createClientPlan(this.cartItemId, {
         template_id: newTemplateId || undefined,

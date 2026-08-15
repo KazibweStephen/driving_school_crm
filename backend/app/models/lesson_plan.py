@@ -35,6 +35,7 @@ class LessonState(str, enum.Enum):
     CANCELLED = "cancelled"
     SKIPPED = "skipped"
     EXPIRED = "expired"
+    LOCKED = "locked"
 
 
 class ChecklistType(str, enum.Enum):

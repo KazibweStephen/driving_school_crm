@@ -456,12 +456,19 @@ async def create_client_plan(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Cart item not found")
 
-    # Look up cart item training limits for locking excess lessons
+    # Fetch training limits from the Package (source of truth), not the CartItem snapshot
     from app.models.cart import CartItem
+    from app.models.product import Package
     ci_result = await db.execute(select(CartItem).where(CartItem.id == cart_item_id))
     cart_item = ci_result.scalar_one_or_none()
-    max_practical = cart_item.driving_training_duration_days if cart_item else None
-    max_theory = (cart_item.theory_training_hours // 2) if cart_item and cart_item.theory_training_hours else None
+    max_practical = None
+    max_theory = None
+    if cart_item and cart_item.package_id:
+        pkg_result = await db.execute(select(Package).where(Package.id == cart_item.package_id))
+        pkg = pkg_result.scalar_one_or_none()
+        if pkg:
+            max_practical = pkg.driving_training_duration_days
+            max_theory = (pkg.theory_training_hours // 2) if pkg.theory_training_hours else None
 
     plan = ClientLessonPlan(
         cart_item_id=cart_item_id,
@@ -516,10 +523,10 @@ async def create_client_plan(
             elif not isinstance(template_item_id_val, uuid.UUID | None):
                 template_item_id_val = None
 
-            # Determine status: use provided status, or default based on lock state
+            # Determine status: locked lessons get "locked", others default to "pending"
             lesson_status = lesson.get("status")
-            if is_locked and not lesson_status:
-                lesson_status = "pending"
+            if is_locked:
+                lesson_status = "locked"
             elif not lesson_status:
                 lesson_status = "pending"
 
@@ -608,6 +615,7 @@ async def create_client_plan_from_template(
             is_theory=item.is_theory,
             preferred_location=item.preferred_location,
             enforce_prerequisites=item.enforce_prerequisites,
+            status=LessonState.LOCKED if is_locked else LessonState.PENDING,
         )
         db.add(client_lesson)
     await db.flush()
@@ -740,6 +748,7 @@ async def create_merged_client_plan(
             is_theory=item["is_theory"],
             preferred_location=item["preferred_location"],
             enforce_prerequisites=item["enforce_prerequisites"],
+            status=LessonState.LOCKED if is_locked else LessonState.PENDING,
         )
         db.add(client_lesson)
     await db.flush()
@@ -906,10 +915,10 @@ async def upgrade_plan(
         if lesson.is_locked and not lesson.is_theory:
             if plan.purchased_days is not None and lesson.day_number <= plan.purchased_days:
                 lesson.is_locked = False
+                lesson.status = LessonState.PENDING
         # Unlock theory lessons that are now within purchased theory sessions
         if lesson.is_locked and lesson.is_theory:
             if plan.purchased_theory_sessions is not None:
-                # Count theory lessons by order; unlock up to purchased_theory_sessions
                 theory_lessons = sorted(
                     [l for l in plan.lessons if l.is_theory and l.is_active],
                     key=lambda l: l.order
@@ -917,6 +926,7 @@ async def upgrade_plan(
                 for idx, tl in enumerate(theory_lessons):
                     if tl.id == lesson.id and idx < plan.purchased_theory_sessions:
                         lesson.is_locked = False
+                        lesson.status = LessonState.PENDING
                         break
     await db.flush()
 
@@ -981,6 +991,11 @@ async def update_client_lesson(
         lesson.is_active = is_active
     if is_locked is not None:
         lesson.is_locked = is_locked
+        # Sync status with lock state
+        if is_locked and status is None:
+            lesson.status = LessonState.LOCKED
+        elif not is_locked and lesson.status == LessonState.LOCKED and status is None:
+            lesson.status = LessonState.PENDING
     if status is not None:
         from_state = lesson.status.value if lesson.status else None
         lesson.status = LessonState(status)

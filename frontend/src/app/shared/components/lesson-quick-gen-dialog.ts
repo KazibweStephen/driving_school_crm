@@ -7,6 +7,7 @@ import { InputNumberModule } from 'primeng/inputnumber';
 import { DatePickerModule } from 'primeng/datepicker';
 import { TooltipModule } from 'primeng/tooltip';
 import { LessonPlanService, LessonPlanTemplate, ClientLesson, ClientLessonPlan } from '../../core/services/lesson-plan.service';
+import { ProductService } from '../../core/services/product.service';
 import { User } from '../../core/services/user.service';
 import { Vehicle } from '../../core/services/vehicle.service';
 
@@ -29,7 +30,7 @@ interface QuickGenLesson {
   title: string | null;
   lesson_objectives: string[];
   practical_objectives: string[];
-  status: 'completed' | 'pending';
+  status: 'completed' | 'pending' | 'locked';
 }
 
 @Component({
@@ -148,13 +149,17 @@ interface QuickGenLesson {
                     </span>
                   </label>
                   @if (isItemSelected(item.id)) {
-                    @if (itemStatus()[item.id] === 'pending') {
+                    @if (itemStatus()[item.id] === 'locked') {
+                      <span class="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-medium whitespace-nowrap"><i class="pi pi-lock mr-0.5" style="font-size: 0.6rem"></i>Locked</span>
+                    } @else if (itemStatus()[item.id] === 'pending') {
                       <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">Scheduled</span>
                     }
-                    <p-datepicker [ngModel]="itemDates()[item.id]"
-                      (ngModelChange)="onItemDateChange(item.id, $event)"
-                      dateFormat="yy-mm-dd" appendTo="body" styleClass="w-56"
-                      [showIcon]="true" icon="pi pi-calendar" />
+                    @if (itemStatus()[item.id] !== 'locked') {
+                      <p-datepicker [ngModel]="itemDates()[item.id]"
+                        (ngModelChange)="onItemDateChange(item.id, $event)"
+                        dateFormat="yy-mm-dd" appendTo="body" styleClass="w-56"
+                        [showIcon]="true" icon="pi pi-calendar" />
+                    }
                   }
                 </div>
               }
@@ -163,7 +168,10 @@ interface QuickGenLesson {
               <span class="font-medium text-gray-700">{{ selectedItemIds().length }} selected</span>
               <span class="flex items-center gap-1 text-green-600"><i class="pi pi-check-circle" style="font-size: 0.7rem"></i> {{ completedCount() }} covered</span>
               <span class="flex items-center gap-1 text-orange-600"><i class="pi pi-calendar-plus" style="font-size: 0.7rem"></i> {{ scheduledCount() }} scheduled</span>
-              <span class="w-full sm:w-auto text-gray-400">pre-ticked from your Practical/Theory days. If days trained are below the package total, the remaining lessons are <span class="text-orange-600 font-medium">Scheduled</span>. Untick to skip, edit the date per lesson.</span>
+              @if (lockedCount() > 0) {
+                <span class="flex items-center gap-1 text-red-600"><i class="pi pi-lock" style="font-size: 0.7rem"></i> {{ lockedCount() }} locked</span>
+              }
+              <span class="w-full sm:w-auto text-gray-400">pre-ticked from your Practical/Theory days. If days trained are below the package total, the remaining lessons are <span class="text-orange-600 font-medium">Scheduled</span>. Lessons beyond the package are <span class="text-red-600 font-medium">Locked</span> until an extension is purchased.</span>
             </div>
           </div>
         }
@@ -238,7 +246,7 @@ export class LessonQuickGenDialog {
   preview = signal<QuickGenLesson[]>([]);
   selectedItemIds = signal<string[]>([]);
   itemDates = signal<Record<string, Date | null>>({});
-  itemStatus = signal<Record<string, 'completed' | 'pending'>>({});
+  itemStatus = signal<Record<string, 'completed' | 'pending' | 'locked'>>({});
 
   trainingDays = 0;
   trainingHours = 0;
@@ -254,7 +262,7 @@ export class LessonQuickGenDialog {
 
   @Output() saved = new EventEmitter<void>();
 
-  constructor(private lessonPlanService: LessonPlanService) {}
+  constructor(private lessonPlanService: LessonPlanService, private productService: ProductService) {}
 
   get maxPracticalDays(): () => number {
     return () => this.trainingDays || 999;
@@ -280,6 +288,10 @@ export class LessonQuickGenDialog {
     return () => Object.values(this.itemStatus()).filter(s => s === 'pending').length;
   }
 
+  get lockedCount(): () => number {
+    return () => Object.values(this.itemStatus()).filter(s => s === 'locked').length;
+  }
+
   get previewCompletedCount(): () => number {
     return () => this.preview().filter(l => l.status !== 'pending').length;
   }
@@ -293,17 +305,36 @@ export class LessonQuickGenDialog {
     instructors: User[],
     vehicles: Vehicle[],
     templates: LessonPlanTemplate[],
-    trainingDays: number,
-    trainingHours: number,
+    productId: string | null,
+    packageId: string | null,
   ) {
     this.planId = plan.id;
     this.cartItemId = plan.cart_item_id;
-    this.trainingDays = trainingDays;
-    this.trainingHours = trainingHours;
     this.existingLessons = plan.lessons.filter(l => l.is_active).map(l => ({ ...l }));
     this.templates = templates;
     this.allVehicles = vehicles;
     this.instructorOpts = instructors.map(u => ({ label: u.name, value: u.phone }));
+
+    // Fetch training limits from the Package (source of truth)
+    if (productId && packageId) {
+      try {
+        const product: any = await this.productService.getProduct(productId).toPromise();
+        const pkg = product?.packages?.find((p: any) => p.id === packageId);
+        if (pkg) {
+          this.trainingDays = pkg.driving_training_duration_days ?? 0;
+          this.trainingHours = pkg.theory_training_hours ?? 0;
+        } else {
+          this.trainingDays = 0;
+          this.trainingHours = 0;
+        }
+      } catch {
+        this.trainingDays = 0;
+        this.trainingHours = 0;
+      }
+    } else {
+      this.trainingDays = 0;
+      this.trainingHours = 0;
+    }
 
     const trans = plan.transmission_type || 'manual';
     this.templateOpts = templates
@@ -536,7 +567,7 @@ export class LessonQuickGenDialog {
       const instructorId = f.instructor_id || '';
       const vehicleId = f.vehicle_id || '';
 
-      let lessonsToSave: { scheduled_date: Date | null; duration_minutes: number; is_theory: boolean; instructor_id: string; vehicle_id: string; order: number; title: string | null; lesson_objectives: string[]; practical_objectives: string[]; template_item_id: string | null; status: string }[];
+      let lessonsToSave: { scheduled_date: Date | null; duration_minutes: number; is_theory: boolean; instructor_id: string; vehicle_id: string; order: number; title: string | null; lesson_objectives: string[]; practical_objectives: string[]; template_item_id: string | null; status: string; is_locked: boolean }[];
 
       if (template) {
         const ids = this.selectedItemIds();
@@ -556,6 +587,7 @@ export class LessonQuickGenDialog {
           practical_objectives: item.practical_objectives || [],
           template_item_id: item.id,
           status: statuses[item.id] || 'completed',
+          is_locked: statuses[item.id] === 'locked',
         }));
       } else {
         const pv = this.preview();
@@ -572,6 +604,7 @@ export class LessonQuickGenDialog {
           practical_objectives: l.practical_objectives,
           template_item_id: l.template_item_id,
           status: l.status,
+          is_locked: l.status === 'locked',
         }));
       }
 
@@ -594,7 +627,7 @@ export class LessonQuickGenDialog {
           practical_objectives: ls.practical_objectives.length ? ls.practical_objectives : undefined,
           order: ls.order,
           is_active: true,
-          is_locked: false,
+          is_locked: ls.is_locked || false,
           scheduled_date: ls.scheduled_date ? ls.scheduled_date.toISOString().split('T')[0] : undefined,
           duration_minutes: ls.duration_minutes,
           is_theory: ls.is_theory,
@@ -668,18 +701,30 @@ export class LessonQuickGenDialog {
     const maxTheory = this.trainingHours ? Math.ceil(this.trainingHours / 2) : 999;
     const trainedPractical = f.practicalDays ?? 0;
     const trainedTheory = f.theoryLessons ?? 0;
-    // Select up to package limit; user-entered trained count determines completed vs scheduled
+    // Select up to package limit; user-entered trained count determines completed vs pending
     const practicalToSelect = Math.min(practicalItems.length, maxPractical);
     const theoryToSelect = Math.min(theoryItems.length, maxTheory);
     const selected: string[] = [];
-    const status: Record<string, 'completed' | 'pending'> = {};
-    practicalItems.slice(0, practicalToSelect).forEach((i: any, idx: number) => {
-      selected.push(i.id);
-      status[i.id] = idx < trainedPractical ? 'completed' : 'pending';
+    const status: Record<string, 'completed' | 'pending' | 'locked'> = {};
+    practicalItems.forEach((i: any, idx: number) => {
+      if (idx < practicalToSelect) {
+        selected.push(i.id);
+        status[i.id] = idx < trainedPractical ? 'completed' : 'pending';
+      } else {
+        // Beyond package limit → locked
+        selected.push(i.id);
+        status[i.id] = 'locked';
+      }
     });
-    theoryItems.slice(0, theoryToSelect).forEach((i: any, idx: number) => {
-      selected.push(i.id);
-      status[i.id] = idx < trainedTheory ? 'completed' : 'pending';
+    theoryItems.forEach((i: any, idx: number) => {
+      if (idx < theoryToSelect) {
+        selected.push(i.id);
+        status[i.id] = idx < trainedTheory ? 'completed' : 'pending';
+      } else {
+        // Beyond package limit → locked
+        selected.push(i.id);
+        status[i.id] = 'locked';
+      }
     });
     this.selectedItemIds.set(selected);
     this.itemStatus.set(status);

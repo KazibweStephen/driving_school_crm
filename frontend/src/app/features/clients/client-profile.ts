@@ -935,8 +935,8 @@ export class ClientProfile implements OnInit {
     const cartItem = this.trainableCartItems().find(ci =>
       this.lessonPlansForCartItem(ci.id).some(p => p.id === plan.id)
     );
-    const days = cartItem?.driving_training_duration_days ?? 0;
-    const hours = cartItem?.theory_training_hours ?? 0;
+    const productId = cartItem?.product_id || null;
+    const packageId = cartItem?.package_id || null;
     this.loadVehiclesAndInstructors();
     this.lessonPlanService.listTemplates().subscribe(templates => {
       dialog.open(
@@ -944,8 +944,8 @@ export class ClientProfile implements OnInit {
         this.availableInstructors(),
         this.availableVehicles(),
         templates || [],
-        days,
-        hours,
+        productId,
+        packageId,
       );
     });
   }

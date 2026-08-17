@@ -23,6 +23,11 @@
   - Replaced inline discount dropdowns with an **Apply Discount** dialog + removable discount tags on Complete Sale, Add to Cart, and new-consultation payment flows; Pay Now inputs now have more horizontal space.
 - **Verified**: `ng build` web + mobile OK; frontend redeployed; login (11), consultations (15), onboarding-receipt (1), expenses (2), permissions (2) Playwright tests pass.
 
+## Session Summary — Discount Multi-Branch Assignment + Branch Scoping Fixes (Complete)
+- **Discount multi-branch**: Replaced single `branch_id` FK on `discounts` with `discount_branch_assignments` M2M table (migration `q2r3s4t5u6v7w`). `DiscountCreate` now accepts `branch_ids: list[UUID]` (min 1). `DiscountUpdate` accepts `branch_ids` to reassign. `DiscountRead` returns `branch_ids` and `branch_names`. List filter accepts `branch_ids` param. Existing discounts migrated to M2M. Frontend create/edit dialogs use `p-multiSelect` for branch selection. Table and mobile card show comma-separated branch names.
+- **Client list branch scoping**: `GET /api/v1/clients/` now accepts `branch_ids` param and calls `resolve_branch_ids()`. Service layer `list_clients()` filters by user's assigned branches. Branch-less consultations properly handled via outerjoin. Fixed missing `uuid` import in `reports.py` that would crash dashboard with branch_ids param.
+- **Verified**: py_compile OK, ng build web+mobile OK, login (11), consultations (15), mobile (16), expenses (2), permissions (2), onboarding-receipt (1), company-switch (1), lesson-plans (4) Playwright tests pass. Branch scoping verified: instructor (Main Branch) sees 263 clients, admin sees 277 (both). Discount multi-branch CRUD verified via API.
+
 ## Session Summary — Quick Gen Plan Save Refactor: PATCH + Status + Counters + Branch-less Scoping (Complete)
 - **Problem**: Quick Generate Lessons dialog was deleting the old plan and POSTing a new one, causing duplicate POSTs and losing lesson IDs. All saved lessons ended up `pending` because `ClientLessonCreate` schema dropped `status`. `start_date` was never sent. No completion counters existed on `ClientLessonPlan`.
 - **Backend schema**: `ClientLessonCreate` now accepts `status`; `ClientLessonPlanUpdate` accepts `lessons`, `template_id`, `transmission_type`; `ClientLessonPlanRead` returns `lessons_completed`, `practical_lessons_completed`, `theory_lessons_completed`.
@@ -274,7 +279,8 @@ Postgres `:5433` (external), backend `:8000`, frontend `:80`
 If migration files are missing from container: `docker cp backend/alembic/versions/<file> crm-backend:/app/alembic/versions/`
 
 ## Migration Heads
-- `p1q2r3s4t5u6v` (head — adds `lessons_completed`, `practical_lessons_completed`, `theory_lessons_completed` to `client_lesson_plans`, chains from `d13cd90a16c4`)
+- `q2r3s4t5u6v7w` (head — adds `discount_branch_assignments` M2M table, migrates existing `branch_id` data, makes `discounts.branch_id` nullable; chains from `p1q2r3s4t5u6v`)
+- `p1q2r3s4t5u6v` — adds `lessons_completed`, `practical_lessons_completed`, `theory_lessons_completed` to `client_lesson_plans`, chains from `d13cd90a16c4`
 - `d13cd90a16c4` — adds discounts module (`discounts`, `cart_item_discounts`)
 - `o4p5q6r7s8t9u` — aligns DB `commissionstatus` enum with `CommissionStatus` model values, chains from `n3o4p5q6r7s8t`
 - `n3o4p5q6r7s8t` — grants `expenses.create`/`expenses.delete` to `office_admin`/`branch_supervisor` role_permissions

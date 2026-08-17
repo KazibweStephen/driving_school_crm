@@ -494,6 +494,7 @@ async def list_clients(
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
     outstanding_only: bool = False,
+    branch_ids: list[uuid.UUID] | None = None,
 ) -> tuple[list[Consultation], int]:
     # Clients are consultations with at least one converted_paid or converted_paying cart item
     active_statuses = [CartItemStatus.CONVERTED_PAID, CartItemStatus.CONVERTED_PAYING]
@@ -520,12 +521,22 @@ async def list_clients(
             )
         )
 
-    if company_id is not None:
-        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
+    has_search = bool(search and search.strip())
 
-    if search:
+    if branch_ids is not None and not has_search:
+        if branch_ids:
+            query = query.where(Consultation.branch_id.in_(branch_ids))
+        else:
+            # Non-privileged user with no branch assignments: show nothing
+            query = query.where(False)
+
+    if company_id is not None:
+        query = query.outerjoin(Branch, Consultation.branch_id == Branch.id).where(
+            or_(Consultation.branch_id.is_(None), Branch.company_id == company_id)
+        )
+
+    if has_search:
         search_term = f"%{search}%"
-        from sqlalchemy import or_
         query = query.where(
             or_(
                 Consultation.phone.ilike(search_term),

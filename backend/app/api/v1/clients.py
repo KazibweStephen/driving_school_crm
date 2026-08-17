@@ -14,6 +14,7 @@ from app.models.commission import Commission
 from app.models.consultation import Consultation
 from app.models.product import Package, Product
 from app.models.user import User
+from app.utils.tenant import resolve_branch_ids
 from app.schemas.payment import (
     ClientActiveProduct,
     ClientListResponse,
@@ -37,13 +38,21 @@ async def list_clients(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     outstanding_only: bool = Query(default=False),
+    branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs; auto-resolved if omitted"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("consultations.view")),
 ):
+    requested = (
+        [uuid.UUID(b) for b in branch_ids.split(",") if b]
+        if branch_ids
+        else None
+    )
+    resolved_branch_ids = await resolve_branch_ids(db, current_user, requested)
+
     consultations, total = await payment_service.list_clients(
         db, search=search, page=page, page_size=page_size,
         company_id=current_user.company_id, current_user_role=current_user.role,
-        outstanding_only=outstanding_only,
+        outstanding_only=outstanding_only, branch_ids=resolved_branch_ids,
     )
 
     active_statuses = [CartItemStatus.CONVERTED_PAID, CartItemStatus.CONVERTED_PAYING]

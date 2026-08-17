@@ -29,6 +29,7 @@ from app.services import consultation as consultation_service
 from app.services import payment as payment_service
 from app.services import discount as discount_service
 from app.services.notification import on_consultation_created
+from app.utils.tenant import resolve_branch_ids
 
 router = APIRouter(prefix="/consultations", tags=["consultations"])
 
@@ -279,12 +280,23 @@ async def list_consultations(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     branch_id: uuid.UUID | None = Query(None),
+    branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("consultations.view")),
 ):
+    resolved_branch_ids = None
+    if not search:
+        requested = (
+            [uuid.UUID(b) for b in branch_ids.split(",") if b]
+            if branch_ids
+            else None
+        )
+        resolved_branch_ids = await resolve_branch_ids(db, current_user, requested)
+
     consultations, total = await consultation_service.search_consultations(
         db, search=search, status=status, page=page, page_size=page_size, stage=stage,
-        branch_id=branch_id, company_id=current_user.company_id, current_user_role=current_user.role,
+        branch_id=branch_id, branch_ids=resolved_branch_ids,
+        company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return ConsultationListResponse(
         consultations=[ConsultationRead.from_orm_with_cart(c) for c in consultations],

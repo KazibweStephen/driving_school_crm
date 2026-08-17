@@ -3,10 +3,11 @@
 import uuid
 from typing import TypeVar
 
+from fastapi import HTTPException, status
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.company import Branch, Company
+from app.models.company import Branch, Company, UserBranchAssignment
 from app.models.user import User, UserRole
 
 M = TypeVar("M")
@@ -113,3 +114,69 @@ async def resolve_company_id(db: AsyncSession, user: User) -> uuid.UUID | None:
         if company is not None:
             return company
     return None
+
+
+async def resolve_branch_ids(
+    db: AsyncSession,
+    current_user: User,
+    requested_branch_ids: list[uuid.UUID] | None = None,
+) -> list[uuid.UUID]:
+    """Resolve the branch IDs a user may access for list views.
+
+    - Privileged users (super_user, office_admin, manager, branch_supervisor):
+      requested IDs are validated against the company; if none requested,
+      all company branches are returned.
+    - Non-privileged users: requested IDs must be a subset of their assigned
+      branches; if none requested, their assigned branches are returned.
+    """
+    is_privileged = current_user.role in (
+        UserRole.SUPER_USER,
+        UserRole.OFFICE_ADMIN,
+        UserRole.MANAGER,
+        UserRole.BRANCH_SUPERVISOR,
+    )
+
+    base_query = select(Branch)
+    if current_user.company_id is not None:
+        base_query = base_query.where(Branch.company_id == current_user.company_id)
+
+    if is_privileged:
+        if not requested_branch_ids:
+            result = await db.execute(base_query)
+            return [b.id for b in result.scalars().all()]
+        result = await db.execute(
+            base_query.where(Branch.id.in_(requested_branch_ids))
+        )
+        resolved = [b.id for b in result.scalars().all()]
+        if not resolved:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="No branch access"
+            )
+        return resolved
+
+    assignment_query = (
+        select(UserBranchAssignment.branch_id)
+        .join(Branch, UserBranchAssignment.branch_id == Branch.id)
+        .where(UserBranchAssignment.user_id == current_user.phone)
+    )
+    if current_user.company_id is not None:
+        assignment_query = assignment_query.where(
+            Branch.company_id == current_user.company_id
+        )
+
+    result = await db.execute(assignment_query)
+    assigned = [row[0] for row in result.all()]
+    if not assigned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="No branch access"
+        )
+
+    if requested_branch_ids:
+        valid = set(requested_branch_ids) & set(assigned)
+        if not valid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="No branch access"
+            )
+        return list(valid)
+
+    return assigned

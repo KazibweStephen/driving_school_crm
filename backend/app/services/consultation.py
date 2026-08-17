@@ -133,6 +133,7 @@ async def search_consultations(
     exclude_converted: bool = False,
     stage: str | None = None,
     branch_id: uuid.UUID | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> tuple[list[Consultation], int]:
@@ -141,10 +142,20 @@ async def search_consultations(
         selectinload(Consultation.cart_items),
     )
 
+    effective_branch_ids: list[uuid.UUID] | None = None
     if branch_id:
-        query = query.where(Consultation.branch_id == branch_id)
+        effective_branch_ids = [branch_id]
+    elif branch_ids:
+        effective_branch_ids = branch_ids
+
+    # When the user is searching, allow cross-branch results within the company.
+    # Otherwise restrict to the resolved branch list.
+    if effective_branch_ids and search is None:
+        query = query.where(Consultation.branch_id.in_(effective_branch_ids))
     if company_id is not None:
-        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
+        query = query.outerjoin(Branch, Consultation.branch_id == Branch.id).where(
+            or_(Consultation.branch_id.is_(None), Branch.company_id == company_id)
+        )
 
     if search:
         search_term = f"%{search}%"

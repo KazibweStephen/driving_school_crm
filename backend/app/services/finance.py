@@ -30,6 +30,7 @@ from app.services.notification import on_installment_overdue, on_expense_approve
 async def list_expenses(
     db: AsyncSession,
     branch_id: uuid.UUID | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
     status: ExpenseStatus | None = None,
     page: int = 1,
     page_size: int = 20,
@@ -45,9 +46,10 @@ async def list_expenses(
     )
     count_query = select(func.count(Expense.id))
 
-    if branch_id:
-        query = query.where(Expense.branch_id == branch_id)
-        count_query = count_query.where(Expense.branch_id == branch_id)
+    effective_branch_ids = branch_ids if branch_ids else ([branch_id] if branch_id else None)
+    if effective_branch_ids:
+        query = query.where(Expense.branch_id.in_(effective_branch_ids))
+        count_query = count_query.where(Expense.branch_id.in_(effective_branch_ids))
     if company_id is not None:
         query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
         count_query = count_query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
@@ -183,6 +185,7 @@ async def update_expense(
 async def list_borrowed(
     db: AsyncSession,
     branch_id: uuid.UUID | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
     status: BorrowStatus | None = None,
     page: int = 1,
     page_size: int = 20,
@@ -192,9 +195,10 @@ async def list_borrowed(
     query = select(BorrowedMoney)
     count_query = select(func.count(BorrowedMoney.id))
 
-    if branch_id:
-        query = query.where(BorrowedMoney.branch_id == branch_id)
-        count_query = count_query.where(BorrowedMoney.branch_id == branch_id)
+    effective_branch_ids = branch_ids if branch_ids else ([branch_id] if branch_id else None)
+    if effective_branch_ids:
+        query = query.where(BorrowedMoney.branch_id.in_(effective_branch_ids))
+        count_query = count_query.where(BorrowedMoney.branch_id.in_(effective_branch_ids))
     if company_id is not None:
         query = query.join(Branch, BorrowedMoney.branch_id == Branch.id).where(Branch.company_id == company_id)
         count_query = count_query.join(Branch, BorrowedMoney.branch_id == Branch.id).where(Branch.company_id == company_id)
@@ -297,6 +301,7 @@ async def update_borrowed(
 async def list_collections(
     db: AsyncSession,
     branch_id: uuid.UUID | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
     status: CollectionStatus | None = None,
     page: int = 1,
     page_size: int = 20,
@@ -309,14 +314,15 @@ async def list_collections(
     )
     count_query = select(func.count(Collection.id))
 
-    if branch_id:
+    effective_branch_ids = branch_ids if branch_ids else ([branch_id] if branch_id else None)
+    if effective_branch_ids:
         query = (
             query.join(Consultation, Collection.consultation_id == Consultation.id)
-            .where(Consultation.branch_id == branch_id)
+            .where(Consultation.branch_id.in_(effective_branch_ids))
         )
         count_query = (
             count_query.join(Consultation, Collection.consultation_id == Consultation.id)
-            .where(Consultation.branch_id == branch_id)
+            .where(Consultation.branch_id.in_(effective_branch_ids))
         )
     if company_id is not None:
         query = query.join(Consultation, Collection.consultation_id == Consultation.id)
@@ -685,6 +691,7 @@ async def cancel_branch_transfer(
 async def list_branch_transfers(
     db: AsyncSession,
     branch_id: uuid.UUID | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
     direction: str = "all",
     status: TransferStatus | None = None,
     page: int = 1,
@@ -695,13 +702,17 @@ async def list_branch_transfers(
     query = select(BranchTransfer)
     count_query = select(func.count(BranchTransfer.id))
 
-    if branch_id:
+    effective_branch_ids = branch_ids if branch_ids else ([branch_id] if branch_id else None)
+    if effective_branch_ids:
         if direction == "incoming":
-            cond = BranchTransfer.to_branch_id == branch_id
+            cond = BranchTransfer.to_branch_id.in_(effective_branch_ids)
         elif direction == "outgoing":
-            cond = BranchTransfer.from_branch_id == branch_id
+            cond = BranchTransfer.from_branch_id.in_(effective_branch_ids)
         else:
-            cond = or_(BranchTransfer.to_branch_id == branch_id, BranchTransfer.from_branch_id == branch_id)
+            cond = or_(
+                BranchTransfer.to_branch_id.in_(effective_branch_ids),
+                BranchTransfer.from_branch_id.in_(effective_branch_ids),
+            )
         query = query.where(cond)
         count_query = count_query.where(cond)
     if company_id is not None:

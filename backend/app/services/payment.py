@@ -582,5 +582,75 @@ async def cancel_payment(
     for inst in payment.installments:
         inst.status = InstallmentStatus.CANCELLED
     await db.flush()
+    await _recompute_payment_totals(payment)
+    await db.refresh(payment)
+
+    # Cascade to linked cart item(s) and consultation status.
+    if payment.consultation_id and payment.product_id:
+        cart_items_result = await db.execute(
+            select(CartItem).where(
+                CartItem.consultation_id == payment.consultation_id,
+                CartItem.product_id == payment.product_id,
+                (
+                    CartItem.package_id == payment.package_id
+                    if payment.package_id is not None
+                    else CartItem.package_id.is_(None)
+                ),
+            )
+        )
+        affected_cart_items = list(cart_items_result.scalars().all())
+
+        for cart_item in affected_cart_items:
+            all_payments_result = await db.execute(
+                select(Payment).where(
+                    Payment.consultation_id == payment.consultation_id,
+                    Payment.product_id == cart_item.product_id,
+                    (
+                        Payment.package_id == cart_item.package_id
+                        if cart_item.package_id is not None
+                        else Payment.package_id.is_(None)
+                    ),
+                )
+            )
+            all_payments = list(all_payments_result.scalars().all())
+            remaining_payments = [p for p in all_payments if p.cancelled_at is None]
+
+            for p in all_payments:
+                await _recompute_payment_totals(p)
+
+            # The original amount due is the largest total_amount recorded on any
+            # payment for this cart item (usually the first payment captures the
+            # full discounted price).
+            total_due = max(
+                (p.total_amount for p in all_payments),
+                default=Decimal("0"),
+            )
+            total_paid = sum((p.total_paid for p in remaining_payments), Decimal("0"))
+
+            if not remaining_payments or total_paid <= 0:
+                new_status = CartItemStatus.CONSULTING
+            elif total_paid >= total_due and total_due > 0:
+                new_status = CartItemStatus.CONVERTED_PAID
+            else:
+                new_status = CartItemStatus.CONVERTED_PAYING
+
+            cart_item.status = new_status
+
+        from app.services.cart import _update_consultation_status
+        await _update_consultation_status(
+            db, payment.consultation_id, allow_downgrade=True
+        )
+
+    # Cancel any pending branch transfer tied to this payment.
+    transfer_result = await db.execute(
+        select(BranchTransfer).where(
+            BranchTransfer.payment_id == payment_id,
+            BranchTransfer.status == TransferStatus.INITIATED,
+        )
+    )
+    for transfer in transfer_result.scalars().all():
+        transfer.status = TransferStatus.CANCELLED
+
+    await db.flush()
     await db.refresh(payment)
     return payment

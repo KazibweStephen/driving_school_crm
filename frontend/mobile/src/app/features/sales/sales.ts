@@ -699,7 +699,7 @@ export class Sales {
       const price = Number(pkg.price) || balance;
       this.selectedItems.update((items) => [
         ...items,
-        { product, package: pkg, price, allocation: balance, installments: [], cartItemId: balanceItem.id },
+        { product, package: pkg, price, allocation: 0, installments: [], cartItemId: balanceItem.id },
       ]);
       return;
     }
@@ -710,7 +710,7 @@ export class Sales {
     const price = Number(pkg.price);
     this.selectedItems.update((items) => [
       ...items,
-      { product, package: pkg, price, allocation: price, installments: [] },
+      { product, package: pkg, price, allocation: 0, installments: [] },
     ]);
   }
 
@@ -725,7 +725,7 @@ export class Sales {
       const price = this.existingTotalForItem(balanceItem) || balance;
       this.selectedItems.update((items) => [
         ...items,
-        { product, package: null, price, allocation: balance, installments: [], cartItemId: balanceItem.id },
+        { product, package: null, price, allocation: 0, installments: [], cartItemId: balanceItem.id },
       ]);
       return;
     }
@@ -760,6 +760,14 @@ export class Sales {
       (s, p) => s + parseFloat(p.balance || '0'),
       0,
     );
+  }
+
+  amountHint(item: SaleItem): string {
+    const balance = this.existingBalanceForSaleItem(item);
+    if (balance > 0) {
+      return `Balance: ${this.money(balance)}`;
+    }
+    return `Price: ${this.money(this.discountedPrice(item))}`;
   }
 
   onAllocationChange(item: SaleItem) {
@@ -920,6 +928,15 @@ export class Sales {
   submitSale() {
     if (this.saleMode() === 'consulting') {
       this.submitConsulting();
+      return;
+    }
+    const zeroItem = this.selectedItems().find((item) => item.allocation <= 0);
+    if (zeroItem) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Invalid amount',
+        detail: `Enter an amount greater than zero for ${zeroItem.product.name}`,
+      });
       return;
     }
     if (this.totalPaid() <= 0) {

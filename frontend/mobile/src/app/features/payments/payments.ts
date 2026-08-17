@@ -556,6 +556,14 @@ export class Payments {
       .map((r) => ({ due_date: r.due_date!, amount: r.amount }));
     const futureTotal = futureRows.reduce((s, r) => s + r.amount, 0);
     const total = Math.round((amount + futureTotal) * 100) / 100;
+    if (total <= 0) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Invalid amount',
+        detail: 'Enter an amount greater than zero',
+      });
+      return;
+    }
     this.submitting.set(true);
     this.paymentService
       .createPayment(consultationId, {

@@ -445,6 +445,7 @@
               [(ngModel)]="item.allocation"
               data-testid="allocation"
             />
+            <p class="mt-1 text-xs text-slate-500">{{ amountHint(item) }}</p>
             <p-button
               label="Calculate schedule"
               size="small"

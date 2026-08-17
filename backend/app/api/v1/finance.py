@@ -29,6 +29,7 @@ from app.schemas.company import (
 )
 from app.services import finance as finance_service
 from app.services.permission import has_permission
+from app.utils.tenant import resolve_branch_ids
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ async def upload_expense_receipt(
 @router.get("/expenses", response_model=dict)
 async def list_expenses(
     branch_id: uuid.UUID | None = Query(None),
+    branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     status: ExpenseStatus | None = Query(None),
     category: str | None = Query(None),
     category_not: str | None = Query(None),
@@ -79,8 +81,17 @@ async def list_expenses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("expenses.view")),
 ):
+    requested = (
+        [uuid.UUID(b) for b in branch_ids.split(",") if b]
+        if branch_ids
+        else None
+    )
+    resolved_branch_ids = (
+        [branch_id] if branch_id else await resolve_branch_ids(db, current_user, requested)
+    )
     expenses, total = await finance_service.list_expenses(
-        db, branch_id=branch_id, status=status, page=page, page_size=page_size,
+        db, branch_ids=resolved_branch_ids, status=status,
+        page=page, page_size=page_size,
         company_id=current_user.company_id, current_user_role=current_user.role,
         category=category, category_not=category_not,
     )
@@ -306,14 +317,23 @@ async def delete_expense(
 @router.get("/borrowed", response_model=dict)
 async def list_borrowed(
     branch_id: uuid.UUID | None = Query(None),
+    branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     status: BorrowStatus | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("collections.view")),
 ):
+    requested = (
+        [uuid.UUID(b) for b in branch_ids.split(",") if b]
+        if branch_ids
+        else None
+    )
+    resolved_branch_ids = (
+        [branch_id] if branch_id else await resolve_branch_ids(db, current_user, requested)
+    )
     items, total = await finance_service.list_borrowed(
-        db, branch_id=branch_id, status=status, page=page, page_size=page_size,
+        db, branch_ids=resolved_branch_ids, status=status, page=page, page_size=page_size,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return {
@@ -380,14 +400,23 @@ async def update_borrowed(
 @router.get("/collections", response_model=dict)
 async def list_collections(
     branch_id: uuid.UUID | None = Query(None),
+    branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     status: CollectionStatus | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("collections.view")),
 ):
+    requested = (
+        [uuid.UUID(b) for b in branch_ids.split(",") if b]
+        if branch_ids
+        else None
+    )
+    resolved_branch_ids = (
+        [branch_id] if branch_id else await resolve_branch_ids(db, current_user, requested)
+    )
     collections, total = await finance_service.list_collections(
-        db, branch_id=branch_id, status=status, page=page, page_size=page_size,
+        db, branch_ids=resolved_branch_ids, status=status, page=page, page_size=page_size,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return {
@@ -479,6 +508,7 @@ async def send_dunning(
 @router.get("/transfers", response_model=dict)
 async def list_branch_transfers(
     branch_id: uuid.UUID | None = Query(None),
+    branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     direction: str = Query("all", pattern="^(all|incoming|outgoing)$"),
     status: TransferStatus | None = Query(None),
     page: int = Query(1, ge=1),
@@ -486,8 +516,16 @@ async def list_branch_transfers(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("transfers.view")),
 ):
+    requested = (
+        [uuid.UUID(b) for b in branch_ids.split(",") if b]
+        if branch_ids
+        else None
+    )
+    resolved_branch_ids = (
+        [branch_id] if branch_id else await resolve_branch_ids(db, current_user, requested)
+    )
     transfers, total = await finance_service.list_branch_transfers(
-        db, branch_id=branch_id, direction=direction, status=status,
+        db, branch_ids=resolved_branch_ids, direction=direction, status=status,
         page=page, page_size=page_size,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )

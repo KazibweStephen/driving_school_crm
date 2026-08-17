@@ -1562,6 +1562,15 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     const expanded: { date: Date | null; duration: number; chunk: number; total: number }[] = [];
     for (const lesson of lessons) {
       if (!lesson.duration_minutes || lesson.duration_minutes <= 0) continue;
+      if (lesson.lesson_type === 'theory') {
+        expanded.push({
+          date: lesson.date,
+          duration: lesson.duration_minutes,
+          chunk: 1,
+          total: 1,
+        });
+        continue;
+      }
       const chunks = Math.ceil(lesson.duration_minutes / 30);
       for (let i = 0; i < chunks; i++) {
         const remaining = lesson.duration_minutes - i * 30;
@@ -1580,6 +1589,10 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     let count = 0;
     for (const lesson of lessons) {
       if (!lesson.duration_minutes || lesson.duration_minutes <= 0) continue;
+      if (lesson.lesson_type === 'theory') {
+        count += 1;
+        continue;
+      }
       count += Math.ceil(lesson.duration_minutes / 30);
     }
     return count;

@@ -247,15 +247,18 @@ async def get_cart_items(
     return list(result.scalars().all())
 
 
-async def _update_consultation_status(db: AsyncSession, consultation_id: uuid.UUID) -> None:
+async def _update_consultation_status(
+    db: AsyncSession, consultation_id: uuid.UUID, allow_downgrade: bool = False
+) -> None:
     from app.models.consultation import ConsultationStatus
 
     consultation = await db.get(Consultation, consultation_id)
     if not consultation:
         return
 
-    # Never downgrade from a converted/client status
-    if consultation.status in (
+    # Never downgrade from a converted/client status unless explicitly allowed
+    # (e.g. when a payment is cancelled and cart items revert).
+    if not allow_downgrade and consultation.status in (
         ConsultationStatus.CONVERTED_NEW,
         ConsultationStatus.CONVERTED_UPSOLD,
         ConsultationStatus.CONVERTED_COMPLETED,

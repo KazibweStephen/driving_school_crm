@@ -221,6 +221,24 @@ async def bulk_onboard_clients(
 def _expand_lessons(lessons) -> list[dict]:
     expanded = []
     for lesson in lessons:
+        if lesson.lesson_type == "theory":
+            expanded.append({
+                "duration": lesson.duration_minutes,
+                "original": {
+                    "date": lesson.date,
+                    "duration_minutes": lesson.duration_minutes,
+                    "lesson_type": lesson.lesson_type,
+                    "instructor_id": lesson.instructor_id,
+                    "vehicle_id": lesson.vehicle_id,
+                    "notes": lesson.notes,
+                    "template_item_id": lesson.template_item_id,
+                    "title": lesson.title,
+                    "lesson_objectives": lesson.lesson_objectives,
+                    "practical_objectives": lesson.practical_objectives,
+                    "status": lesson.status,
+                },
+            })
+            continue
         chunks = math.ceil(lesson.duration_minutes / 30)
         for chunk_idx in range(chunks):
             remaining = lesson.duration_minutes - chunk_idx * 30

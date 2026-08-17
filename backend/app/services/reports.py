@@ -117,7 +117,7 @@ async def get_dashboard_summary(
             Consultation.branch_id.in_(select(branch_subq.c.id))
         )
 
-    if branch_ids:
+    if branch_ids is not None and len(branch_ids) > 0:
         today_payments = today_payments.where(
             Payment.consultation_id.in_(
                 select(Consultation.id).where(Consultation.branch_id.in_(branch_ids))

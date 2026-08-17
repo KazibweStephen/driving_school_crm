@@ -145,19 +145,24 @@ async def search_consultations(
     effective_branch_ids: list[uuid.UUID] | None = None
     if branch_id:
         effective_branch_ids = [branch_id]
-    elif branch_ids:
+    elif branch_ids is not None:
         effective_branch_ids = branch_ids
 
-    # When the user is searching, allow cross-branch results within the company.
-    # Otherwise restrict to the resolved branch list.
-    if effective_branch_ids and search is None:
-        query = query.where(Consultation.branch_id.in_(effective_branch_ids))
+    # When the user is searching with an actual query, allow cross-branch
+    # results within the company. Otherwise restrict to the resolved branch list.
+    has_search = bool(search and search.strip())
+    if effective_branch_ids is not None and not has_search:
+        if effective_branch_ids:
+            query = query.where(Consultation.branch_id.in_(effective_branch_ids))
+        else:
+            # Non-privileged user with no branch assignments: show nothing.
+            query = query.where(False)
     if company_id is not None:
         query = query.outerjoin(Branch, Consultation.branch_id == Branch.id).where(
             or_(Consultation.branch_id.is_(None), Branch.company_id == company_id)
         )
 
-    if search:
+    if has_search:
         search_term = f"%{search}%"
         query = query.where(
             or_(

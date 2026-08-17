@@ -76,7 +76,7 @@ export class DiscountsCmp implements OnInit {
     start_date: this.formatDate(new Date()),
     end_date: '',
     is_active: true,
-    branch_id: '',
+    branch_ids: [],
     max_uses: undefined,
   };
 
@@ -145,7 +145,7 @@ export class DiscountsCmp implements OnInit {
       const res = await this.discountService.list({
         search: this.search() || undefined,
         status: this.statusFilter() || undefined,
-        branch_id: this.branchFilter() || undefined,
+        branch_ids: this.branchFilter() || undefined,
         page: this.page(),
         page_size: this.pageSize(),
       }).toPromise();
@@ -183,6 +183,14 @@ export class DiscountsCmp implements OnInit {
     return this.branches().find(b => b.id === id)?.name || id.substring(0, 8);
   }
 
+  branchNames(d: Discount): string {
+    if (d.branch_names && d.branch_names.length > 0) {
+      return d.branch_names.join(', ');
+    }
+    if (d.branch_id) return this.branchName(d.branch_id);
+    return '—';
+  }
+
   productOptions() {
     return this.products().map(p => ({ label: p.name, value: p.id }));
   }
@@ -210,7 +218,7 @@ export class DiscountsCmp implements OnInit {
       start_date: this.formatDate(new Date()),
       end_date: '',
       is_active: true,
-      branch_id: this.branches()[0]?.id || '',
+      branch_ids: [],
       max_uses: undefined,
     };
   }
@@ -251,6 +259,7 @@ export class DiscountsCmp implements OnInit {
       start_date: discount.start_date,
       end_date: discount.end_date,
       is_active: discount.is_active,
+      branch_ids: discount.branch_ids || [],
       max_uses: discount.max_uses,
     };
     this.showEditDialog.set(true);

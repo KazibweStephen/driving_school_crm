@@ -29,6 +29,10 @@ def _to_read(discount, branch_name: str | None = None, requested_by_name: str | 
     data = DiscountRead.model_validate(discount)
     data.branch_name = branch_name or (discount.branch.name if discount.branch else None)
     data.requested_by_name = requested_by_name or (discount.requested_by_user.name if discount.requested_by_user else None)
+    # Populate branch_ids and branch_names from assignments
+    if hasattr(discount, 'branch_assignments') and discount.branch_assignments:
+        data.branch_ids = [a.branch_id for a in discount.branch_assignments]
+        data.branch_names = [a.branch.name for a in discount.branch_assignments if a.branch]
     return data
 
 
@@ -51,7 +55,7 @@ async def create_discount(
 async def list_discounts(
     search: str | None = Query(None, max_length=50),
     status: DiscountStatus | None = None,
-    branch_id: UUID | None = None,
+    branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -59,17 +63,19 @@ async def list_discounts(
 ):
     company_id = current_user.company_id
     if current_user.role == UserRole.SUPER_USER and company_id is None:
-        # Super users without an active company cannot list discounts
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Switch to a company to view discounts",
         )
+    parsed_branch_ids = None
+    if branch_ids:
+        parsed_branch_ids = [UUID(b) for b in branch_ids.split(",") if b.strip()]
     discounts, total = await discount_service.list_discounts(
         db,
         company_id=company_id,
         search=search,
         status=status,
-        branch_id=branch_id,
+        branch_ids=parsed_branch_ids,
         page=page,
         page_size=page_size,
     )
@@ -100,8 +106,8 @@ async def pending_discount_notifications(
             "name": d.name,
             "discount_type": d.discount_type.value,
             "discount_value": d.discount_value,
-            "branch_id": d.branch_id,
-            "branch_name": d.branch.name if d.branch else "",
+            "branch_ids": [a.branch_id for a in d.branch_assignments] if d.branch_assignments else [],
+            "branch_names": [a.branch.name for a in d.branch_assignments if a.branch] if d.branch_assignments else [],
             "requested_by": d.requested_by,
             "requested_by_name": d.requested_by_user.name if d.requested_by_user else "",
             "created_at": d.created_at,

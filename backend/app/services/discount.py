@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.company import Branch, UserBranchAssignment
-from app.models.discount import CartItemDiscount, Discount, DiscountAppliesTo, DiscountStatus, DiscountType
+from app.models.discount import CartItemDiscount, Discount, DiscountAppliesTo, DiscountBranchAssignment, DiscountStatus, DiscountType
 from app.models.product import Package, Product
 from app.models.user import User, UserRole
 
@@ -102,10 +102,15 @@ async def create_discount(
     company_id: uuid.UUID,
     requested_by: str,
 ) -> Discount:
-    branch_id = data["branch_id"]
-    branch = await db.get(Branch, branch_id)
-    if branch is None or branch.company_id != company_id:
-        raise ValueError("Branch not found or does not belong to the company")
+    branch_ids = data.get("branch_ids", [])
+    if not branch_ids:
+        raise ValueError("At least one branch must be selected")
+
+    # Validate all branches belong to the company
+    valid_branches = await _get_company_branches(db, company_id)
+    invalid = set(uuid.UUID(str(b)) for b in branch_ids) - valid_branches
+    if invalid:
+        raise ValueError("One or more branches do not belong to the company")
 
     applies_to = DiscountAppliesTo(data["applies_to"])
     await _validate_applies_to_ids(
@@ -145,17 +150,23 @@ async def create_discount(
         is_active=data.get("is_active", True),
         status=DiscountStatus.PENDING,
         requested_by=requested_by,
-        branch_id=branch_id,
         company_id=company_id,
         max_uses=data.get("max_uses"),
     )
     db.add(discount)
     await db.flush()
-    await db.refresh(
-        discount,
-        attribute_names=["branch", "requested_by_user", "approved_by_user"],
-    )
-    return discount
+
+    # Create branch assignments
+    for bid in branch_ids:
+        assignment = DiscountBranchAssignment(
+            discount_id=discount.id,
+            branch_id=uuid.UUID(str(bid)),
+        )
+        db.add(assignment)
+    await db.flush()
+
+    # Re-fetch with all relationships loaded (including nested branch on assignments)
+    return await get_discount(db, discount.id, company_id)
 
 
 async def get_discount(db: AsyncSession, discount_id: uuid.UUID, company_id: uuid.UUID | None = None) -> Discount | None:
@@ -165,6 +176,7 @@ async def get_discount(db: AsyncSession, discount_id: uuid.UUID, company_id: uui
             selectinload(Discount.branch),
             selectinload(Discount.requested_by_user),
             selectinload(Discount.approved_by_user),
+            selectinload(Discount.branch_assignments).selectinload(DiscountBranchAssignment.branch),
         )
         .where(Discount.id == discount_id)
     )
@@ -189,7 +201,7 @@ async def list_discounts(
     company_id: uuid.UUID,
     search: str | None = None,
     status: DiscountStatus | None = None,
-    branch_id: uuid.UUID | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[Discount], int]:
@@ -199,6 +211,7 @@ async def list_discounts(
             selectinload(Discount.branch),
             selectinload(Discount.requested_by_user),
             selectinload(Discount.approved_by_user),
+            selectinload(Discount.branch_assignments).selectinload(DiscountBranchAssignment.branch),
         )
         .where(Discount.company_id == company_id)
     )
@@ -212,8 +225,14 @@ async def list_discounts(
         )
     if status:
         query = query.where(Discount.status == status)
-    if branch_id:
-        query = query.where(Discount.branch_id == branch_id)
+    if branch_ids:
+        # Filter: discount must have at least one assignment in the requested branches
+        discount_ids_q = (
+            select(DiscountBranchAssignment.discount_id)
+            .where(DiscountBranchAssignment.branch_id.in_(branch_ids))
+            .distinct()
+        )
+        query = query.where(Discount.id.in_(discount_ids_q))
 
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar() or 0
@@ -275,16 +294,41 @@ async def update_discount(
     if "max_uses" in data:
         discount.max_uses = data["max_uses"]
 
+    # Update branch assignments if provided
+    if "branch_ids" in data and data["branch_ids"] is not None:
+        new_branch_ids = data["branch_ids"]
+        if not new_branch_ids:
+            raise ValueError("At least one branch must be selected")
+        # Validate all branches belong to the company
+        valid_branches = await _get_company_branches(db, discount.company_id)
+        invalid = set(uuid.UUID(str(b)) for b in new_branch_ids) - valid_branches
+        if invalid:
+            raise ValueError("One or more branches do not belong to the company")
+        # Delete existing assignments
+        existing_assignments = await db.execute(
+            select(DiscountBranchAssignment).where(
+                DiscountBranchAssignment.discount_id == discount.id
+            )
+        )
+        for assignment in existing_assignments.scalars().all():
+            await db.delete(assignment)
+        await db.flush()
+        # Create new assignments
+        for bid in new_branch_ids:
+            assignment = DiscountBranchAssignment(
+                discount_id=discount.id,
+                branch_id=uuid.UUID(str(bid)),
+            )
+            db.add(assignment)
+
     # Re-validate dates
     if discount.end_date is not None and discount.start_date > discount.end_date:
         raise ValueError("start_date must be before or equal to end_date")
 
     await db.flush()
-    await db.refresh(
-        discount,
-        attribute_names=["branch", "requested_by_user", "approved_by_user"],
-    )
-    return discount
+
+    # Re-fetch with all relationships loaded
+    return await get_discount(db, discount.id, discount.company_id)
 
 
 async def approve_discount(
@@ -313,11 +357,9 @@ async def approve_discount(
     discount.rejection_reason = None
 
     await db.flush()
-    await db.refresh(
-        discount,
-        attribute_names=["branch", "requested_by_user", "approved_by_user", "updated_at"],
-    )
-    return discount
+
+    # Re-fetch with all relationships loaded
+    return await get_discount(db, discount.id, discount.company_id)
 
 
 async def reject_discount(
@@ -337,11 +379,9 @@ async def reject_discount(
     discount.rejection_reason = reason
 
     await db.flush()
-    await db.refresh(
-        discount,
-        attribute_names=["branch", "requested_by_user", "approved_by_user", "updated_at"],
-    )
-    return discount
+
+    # Re-fetch with all relationships loaded
+    return await get_discount(db, discount.id, discount.company_id)
 
 
 async def toggle_discount_active(
@@ -352,11 +392,9 @@ async def toggle_discount_active(
         raise ValueError("Expired discounts cannot be reactivated")
     discount.is_active = not discount.is_active
     await db.flush()
-    await db.refresh(
-        discount,
-        attribute_names=["branch", "requested_by_user", "approved_by_user"],
-    )
-    return discount
+
+    # Re-fetch with all relationships loaded
+    return await get_discount(db, discount.id, discount.company_id)
 
 
 def compute_discount_amount(discount: Discount, package_price: float) -> float:
@@ -426,7 +464,7 @@ async def get_applicable_discounts_for_product(
     today = date.today()
     query = (
         select(Discount)
-        .options(selectinload(Discount.branch), selectinload(Discount.requested_by_user))
+        .options(selectinload(Discount.branch), selectinload(Discount.requested_by_user), selectinload(Discount.branch_assignments).selectinload(DiscountBranchAssignment.branch))
         .where(
             Discount.company_id == company_id,
             Discount.status.in_([DiscountStatus.APPROVED, DiscountStatus.PENDING]),
@@ -572,12 +610,21 @@ async def get_pending_discount_notifications(
 ) -> list[Discount]:
     if not accessible_branch_ids:
         return []
+    # Find discounts that have at least one assignment in the accessible branches
+    discount_ids_q = (
+        select(DiscountBranchAssignment.discount_id)
+        .where(DiscountBranchAssignment.branch_id.in_(accessible_branch_ids))
+        .distinct()
+    )
     query = (
         select(Discount)
-        .options(selectinload(Discount.branch), selectinload(Discount.requested_by_user))
+        .options(
+            selectinload(Discount.requested_by_user),
+            selectinload(Discount.branch_assignments).selectinload(DiscountBranchAssignment.branch),
+        )
         .where(
             Discount.status == DiscountStatus.PENDING,
-            Discount.branch_id.in_(accessible_branch_ids),
+            Discount.id.in_(discount_ids_q),
         )
     )
     if company_id:
@@ -600,7 +647,7 @@ async def get_applicable_discounts(
     today = date.today()
     query = (
         select(Discount)
-        .options(selectinload(Discount.branch), selectinload(Discount.requested_by_user))
+        .options(selectinload(Discount.branch), selectinload(Discount.requested_by_user), selectinload(Discount.branch_assignments).selectinload(DiscountBranchAssignment.branch))
         .where(
             Discount.company_id == company_id,
             Discount.status.in_([DiscountStatus.APPROVED, DiscountStatus.PENDING]),

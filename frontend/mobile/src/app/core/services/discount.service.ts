@@ -25,8 +25,10 @@ export interface Discount {
   approved_by?: string;
   approved_at?: string;
   rejection_reason?: string;
-  branch_id: string;
+  branch_id?: string;
   branch_name?: string;
+  branch_ids: string[];
+  branch_names: string[];
   company_id: string;
   max_uses?: number;
   used_count: number;

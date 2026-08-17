@@ -19,7 +19,7 @@ class DiscountCreate(BaseModel):
     start_date: date
     end_date: date | None = None
     is_active: bool = True
-    branch_id: uuid.UUID
+    branch_ids: list[uuid.UUID] = Field(..., min_length=1)
     max_uses: int | None = Field(None, ge=1)
 
     @model_validator(mode="after")
@@ -56,6 +56,7 @@ class DiscountUpdate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     is_active: bool | None = None
+    branch_ids: list[uuid.UUID] | None = None
     max_uses: int | None = Field(None, ge=1)
 
     @model_validator(mode="after")
@@ -100,8 +101,10 @@ class DiscountRead(BaseModel):
     approved_by: str | None
     approved_at: datetime | None
     rejection_reason: str | None
-    branch_id: uuid.UUID
+    branch_id: uuid.UUID | None = None
     branch_name: str | None = None
+    branch_ids: list[uuid.UUID] = []
+    branch_names: list[str] = []
     company_id: uuid.UUID
     max_uses: int | None
     used_count: int
@@ -147,8 +150,8 @@ class DiscountNotification(BaseModel):
     name: str
     discount_type: str
     discount_value: float
-    branch_id: uuid.UUID
-    branch_name: str
+    branch_ids: list[uuid.UUID] = []
+    branch_names: list[str] = []
     requested_by: str
     requested_by_name: str
     created_at: datetime

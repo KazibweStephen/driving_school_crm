@@ -25,8 +25,10 @@ export interface Discount {
   approved_by?: string;
   approved_at?: string;
   rejection_reason?: string;
-  branch_id: string;
+  branch_id?: string;
   branch_name?: string;
+  branch_ids: string[];
+  branch_names: string[];
   company_id: string;
   max_uses?: number;
   used_count: number;
@@ -46,7 +48,7 @@ export interface DiscountCreate {
   start_date: string;
   end_date?: string;
   is_active?: boolean;
-  branch_id: string;
+  branch_ids: string[];
   max_uses?: number;
 }
 
@@ -61,6 +63,7 @@ export interface DiscountUpdate {
   start_date?: string;
   end_date?: string;
   is_active?: boolean;
+  branch_ids?: string[];
   max_uses?: number;
 }
 
@@ -89,8 +92,8 @@ export interface DiscountNotification {
   name: string;
   discount_type: DiscountType;
   discount_value: number;
-  branch_id: string;
-  branch_name: string;
+  branch_ids: string[];
+  branch_names: string[];
   requested_by: string;
   requested_by_name: string;
   created_at: string;
@@ -110,14 +113,14 @@ export class DiscountService {
   list(params?: {
     search?: string;
     status?: string;
-    branch_id?: string;
+    branch_ids?: string;
     page?: number;
     page_size?: number;
   }): Observable<DiscountListResponse> {
     let httpParams = new HttpParams();
     if (params?.search) httpParams = httpParams.set('search', params.search);
     if (params?.status) httpParams = httpParams.set('status', params.status);
-    if (params?.branch_id) httpParams = httpParams.set('branch_id', params.branch_id);
+    if (params?.branch_ids) httpParams = httpParams.set('branch_ids', params.branch_ids);
     if (params?.page) httpParams = httpParams.set('page', params.page);
     if (params?.page_size) httpParams = httpParams.set('page_size', params.page_size);
     return this.http.get<DiscountListResponse>(`${this.base}/`, { params: httpParams });

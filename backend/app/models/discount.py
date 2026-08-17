@@ -76,8 +76,8 @@ class Discount(Base):
     )
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    branch_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("branches.id", ondelete="CASCADE"), nullable=True, index=True
     )
     company_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
@@ -99,8 +99,11 @@ class Discount(Base):
     approved_by_user: Mapped["User | None"] = relationship(
         "User", foreign_keys=[approved_by]
     )
-    branch: Mapped["Branch"] = relationship("Branch", back_populates="discounts")
+    branch: Mapped["Branch | None"] = relationship("Branch", back_populates="discounts")
     company: Mapped["Company"] = relationship("Company", back_populates="discounts")
+    branch_assignments: Mapped[list["DiscountBranchAssignment"]] = relationship(
+        "DiscountBranchAssignment", back_populates="discount", cascade="all, delete-orphan"
+    )
     cart_item_links: Mapped[list["CartItemDiscount"]] = relationship(
         "CartItemDiscount", back_populates="discount", cascade="all, delete-orphan"
     )
@@ -126,3 +129,24 @@ class CartItemDiscount(Base):
 
     cart_item: Mapped["CartItem"] = relationship("CartItem", back_populates="discount_links")
     discount: Mapped["Discount"] = relationship("Discount", back_populates="cart_item_links")
+
+
+class DiscountBranchAssignment(Base):
+    __tablename__ = "discount_branch_assignments"
+    __table_args__ = (
+        UniqueConstraint("discount_id", "branch_id", name="uq_discount_branch"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    discount_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("discounts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    branch_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    discount: Mapped["Discount"] = relationship("Discount", back_populates="branch_assignments")
+    branch: Mapped["Branch"] = relationship("Branch")

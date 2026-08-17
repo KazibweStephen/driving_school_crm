@@ -91,7 +91,7 @@
             @if (d.end_date) { - {{ d.end_date | date:'mediumDate' }} }
             @else { (no expiry) }
           </td>
-          <td class="text-xs text-gray-500">{{ branchName(d.branch_id) }}</td>
+          <td class="text-xs text-gray-500">{{ branchNames(d) }}</td>
           <td>
             <p-tag [value]="d.status" [severity]="statusSeverity(d.status)" />
             @if (!d.is_active && d.status !== 'expired') {
@@ -167,7 +167,7 @@
         </div>
         <p class="mt-2 text-xs text-gray-500">
           {{ discountDescription(d) }} · {{ typeLabel(d.discount_type) }}<br>
-          {{ branchName(d.branch_id) }}<br>
+          {{ branchNames(d) }}<br>
           {{ d.start_date | date:'mediumDate' }}
           @if (d.end_date) { - {{ d.end_date | date:'mediumDate' }} }
         </p>
@@ -293,12 +293,13 @@
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700">Branch</label>
-          <p-select
-            [(ngModel)]="newDiscount.branch_id"
+          <label class="mb-1 block text-sm font-medium text-gray-700">Branches</label>
+          <p-multiSelect
+            [(ngModel)]="newDiscount.branch_ids"
             [options]="branches()"
             optionLabel="name"
             optionValue="id"
+            placeholder="Select branches"
             styleClass="w-full"
             appendTo="body"
           />
@@ -403,9 +404,23 @@
             <input type="date" [(ngModel)]="editData.end_date" class="w-full rounded-md border border-gray-300 p-2 text-sm" />
           </div>
         </div>
-        <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700">Max Uses (optional)</label>
-          <p-inputnumber [(ngModel)]="editData.max_uses" [min]="1" mode="decimal" styleClass="w-full" />
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Max Uses (optional)</label>
+            <p-inputnumber [(ngModel)]="editData.max_uses" [min]="1" mode="decimal" styleClass="w-full" />
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Branches</label>
+            <p-multiSelect
+              [(ngModel)]="editData.branch_ids"
+              [options]="branches()"
+              optionLabel="name"
+              optionValue="id"
+              placeholder="Select branches"
+              styleClass="w-full"
+              appendTo="body"
+            />
+          </div>
         </div>
         <div class="flex items-center gap-2">
           <p-checkbox [(ngModel)]="editData.is_active" [binary]="true" inputId="edit_active" />

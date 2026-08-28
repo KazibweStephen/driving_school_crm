@@ -1,0 +1,69 @@
+<p-toast></p-toast>
+
+<div class="p-4 sm:p-6">
+  <div class="mb-4">
+    <h1 class="text-2xl font-bold text-gray-900">Profit &amp; Loss Report</h1>
+  </div>
+
+  <div class="mb-4 flex flex-wrap items-center gap-2">
+    <p-datepicker [(ngModel)]="startDate" dateFormat="yy-mm-dd" placeholder="Start date" appendTo="body"
+      styleClass="" />
+    <p-datepicker [(ngModel)]="endDate" dateFormat="yy-mm-dd" placeholder="End date" appendTo="body" />
+    @if (branches.length > 1) {
+      <p-multiSelect [(ngModel)]="selectedBranchIds" [options]="branches" optionLabel="name" optionValue="id"
+        placeholder="All Branches" styleClass="w-64" appendTo="body" [showHeader]="false"
+        [maxSelectedLabels]="2" [selectedItemsLabel]="'{0} branches'" />
+    }
+    <p-button label="Apply" icon="pi pi-filter" (onClick)="load()" [loading]="loading()" />
+    <p-button label="Clear" severity="secondary" icon="pi pi-filter-slash" (onClick)="clearFilters()" />
+  </div>
+
+  @if (loaded && items().length) {
+    <div class="mb-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <p-card>
+        <div class="text-sm text-gray-500">Revenue</div>
+        <div class="text-xl font-bold text-green-600">{{ currencyService.symbol() }} {{ formatAmount(totals.revenue) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Expenses</div>
+        <div class="text-xl font-bold text-red-500">-{{ currencyService.symbol() }} {{ formatAmount(totals.expenses) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Commissions Due</div>
+        <div class="text-xl font-bold text-amber-600">-{{ currencyService.symbol() }} {{ formatAmount(totals.commissions) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Net Profit</div>
+        <div class="text-xl font-bold {{ netColor(totals.net) }}">{{ currencyService.symbol() }} {{ formatAmount(totals.net) }}</div>
+      </p-card>
+    </div>
+  }
+
+  <p-table [value]="items()" [loading]="loading()">
+    <ng-template pTemplate="header">
+      <tr>
+        <th>Branch</th>
+        <th>Revenue</th>
+        <th>Expenses</th>
+        <th>Commissions</th>
+        <th>Net</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-i>
+      <tr>
+        <td class="font-medium">{{ i.branch_name }}</td>
+        <td class="text-green-600 whitespace-nowrap">{{ currencyService.symbol() }} {{ formatAmount(i.revenue) }}</td>
+        <td class="text-red-500 whitespace-nowrap">-{{ currencyService.symbol() }} {{ formatAmount(i.expenses) }}</td>
+        <td class="text-amber-600 whitespace-nowrap">-{{ currencyService.symbol() }} {{ formatAmount(i.commissions) }}</td>
+        <td class="font-bold whitespace-nowrap {{ netColor(i.net) }}">{{ currencyService.symbol() }} {{ formatAmount(i.net) }}</td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="5" class="text-center text-gray-500 py-6">
+          {{ loaded ? 'No data for the selected filters' : 'Loading...' }}
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>

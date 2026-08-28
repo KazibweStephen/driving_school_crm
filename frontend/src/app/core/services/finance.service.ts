@@ -10,6 +10,8 @@ export interface Expense {
   category?: string;
   mileage?: number;
   vehicle_id?: string;
+  consultation_id?: string;
+  client_name?: string;
   status: string;
   approved_by?: string;
   approved_at?: string;
@@ -29,8 +31,29 @@ export interface ExpenseCreate {
   category?: string;
   mileage?: number;
   vehicle_id?: string;
+  consultation_id?: string;
   expense_date?: string | Date;
   status?: string;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  requires_client: boolean;
+  is_active: boolean;
+}
+
+export interface ExpenseCategoryCreate {
+  name: string;
+  requires_client?: boolean;
+  is_active?: boolean;
+}
+
+export interface TransferPaymentLink {
+  payment_id: string;
+  amount: number;
+  client_name?: string;
+  client_phone?: string;
 }
 
 export interface ExpenseUpdate {
@@ -52,10 +75,14 @@ export interface BranchTransfer {
   id: string;
   from_branch_id: string;
   to_branch_id: string;
-  amount: string;
+  amount: string | number;
   reason?: string;
   consultation_id?: string;
   payment_id?: string;
+  payment_ids?: string[];
+  pool?: string;
+  method?: string;
+  reference?: string;
   status: 'initiated' | 'received' | 'cancelled';
   initiated_by?: string;
   initiated_at: string;
@@ -63,6 +90,10 @@ export interface BranchTransfer {
   received_at?: string;
   cancelled_by?: string;
   cancelled_at?: string;
+  from_branch_name?: string;
+  to_branch_name?: string;
+  initiated_by_name?: string;
+  payment_links?: TransferPaymentLink[];
   created_at: string;
   updated_at: string;
 }
@@ -74,6 +105,10 @@ export interface BranchTransferCreate {
   reason?: string;
   consultation_id?: string;
   payment_id?: string;
+  payment_ids?: string[];
+  pool?: string;
+  method?: string;
+  reference?: string;
 }
 
 export interface BranchTransferListResponse {
@@ -114,6 +149,44 @@ export interface TransferNotificationsResponse {
   total: number;
   to_receive_count: number;
   to_receive_amount: string;
+}
+
+export interface PoolPosition {
+  pool: string;
+  collected: number;
+  remitted: number;
+  pending_remitted: number;
+  expenses: number;
+  net_in_hand: number;
+}
+
+export interface BranchCashPosition {
+  branch_id: string;
+  branch_name: string;
+  pools: PoolPosition[];
+}
+
+export interface ProfitLossItem {
+  branch_id: string;
+  branch_name: string;
+  revenue: number;
+  expenses: number;
+  commissions: number;
+  net: number;
+  payment_count: number;
+}
+
+export interface ProfitLossResponse {
+  items: ProfitLossItem[];
+  total_revenue: number;
+  total_expenses: number;
+  total_commissions: number;
+  total_net: number;
+}
+
+export interface ExpenseCategoryListResponse {
+  items: ExpenseCategory[];
+  total: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -218,5 +291,35 @@ export class FinanceService {
     return this.http.get<TransferNotificationsResponse>(`${this.base}/transfers/notifications`, {
       params: new HttpParams().set('limit', limit),
     });
+  }
+
+  listExpenseCategories(params?: { active?: boolean }): Observable<ExpenseCategoryListResponse> {
+    let p = new HttpParams();
+    if (params?.active !== undefined) p = p.set('active', params.active ? 'true' : 'false');
+    return this.http.get<ExpenseCategoryListResponse>(`${this.base}/expense-categories`, { params: p });
+  }
+
+  createExpenseCategory(data: ExpenseCategoryCreate): Observable<ExpenseCategory> {
+    return this.http.post<ExpenseCategory>(`${this.base}/expense-categories`, data);
+  }
+
+  updateExpenseCategory(id: string, data: Partial<ExpenseCategoryCreate>): Observable<ExpenseCategory> {
+    return this.http.patch<ExpenseCategory>(`${this.base}/expense-categories/${id}`, data);
+  }
+
+  deleteExpenseCategory(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/expense-categories/${id}`);
+  }
+
+  getCashPosition(): Observable<BranchCashPosition[]> {
+    return this.http.get<BranchCashPosition[]>(`${this.base}/cash-position`);
+  }
+
+  getProfitLoss(params?: { from_date?: string; to_date?: string; branch_ids?: string[] }): Observable<ProfitLossResponse> {
+    let p = new HttpParams();
+    if (params?.from_date) p = p.set('from_date', params.from_date);
+    if (params?.to_date) p = p.set('to_date', params.to_date);
+    if (params?.branch_ids?.length) p = p.set('branch_ids', params.branch_ids.join(','));
+    return this.http.get<ProfitLossResponse>(`${this.base}/profit-loss`, { params: p });
   }
 }

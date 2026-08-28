@@ -100,6 +100,18 @@ export const routes: Routes = [
           import('./features/transfers/transfers').then((c) => c.TransfersCmp),
       },
       {
+        path: 'cash-position',
+        data: { permission: 'finance.view' },
+        loadComponent: () =>
+          import('./features/cash-position/cash-position').then((c) => c.CashPositionCmp),
+      },
+      {
+        path: 'profit-loss',
+        data: { permission: 'reports.view' },
+        loadComponent: () =>
+          import('./features/profit-loss/profit-loss').then((c) => c.ProfitLossCmp),
+      },
+      {
         path: 'companies',
         data: { permission: 'companies.view' },
         loadComponent: () =>

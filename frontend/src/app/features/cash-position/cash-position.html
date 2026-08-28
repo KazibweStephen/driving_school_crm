@@ -1,0 +1,158 @@
+<p-toast></p-toast>
+
+<div class="p-4 sm:p-6">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-gray-900">Cash Position</h1>
+    <p-button label="Send Money to Head Office" icon="pi pi-send" (onClick)="openSendDialog()" />
+  </div>
+
+  @if (loading()) {
+    <div class="text-center text-gray-500 py-8">Loading cash position...</div>
+  } @else if (!positions().length) {
+    <div class="text-center text-gray-500 py-8">No cash position available</div>
+  } @else {
+    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      @for (branch of positions(); track branch.branch_id) {
+        @let petty = poolById(branch, 'petty_cash');
+        @let clientsPool = poolById(branch, 'client_accounts');
+        <p-card>
+          <div class="mb-3 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i class="pi pi-building text-blue-500"></i>
+              <span class="text-lg font-semibold text-gray-900">{{ branch.branch_name }}</span>
+            </div>
+            @if (branchIsHeadOffice(branch.branch_id)) {
+              <p-tag value="HEAD OFFICE" severity="info" />
+            }
+          </div>
+
+          <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Petty Cash</div>
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <div class="text-xs text-gray-500">Collected</div>
+              <div class="font-semibold text-green-600">{{ currencyService.symbol() }} {{ formatAmount(petty.collected) }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-500">Remitted</div>
+              <div class="font-semibold text-amber-600">-{{ currencyService.symbol() }} {{ formatAmount(petty.remitted + petty.pending_remitted) }} <span class="text-xs font-normal text-gray-400">(+{{ formatAmount(petty.pending_remitted) }} pend)</span></div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-500">Expenses</div>
+              <div class="font-semibold text-red-500">-{{ currencyService.symbol() }} {{ formatAmount(petty.expenses) }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-500">Net In Hand</div>
+              <div class="font-bold text-gray-900">{{ currencyService.symbol() }} {{ formatAmount(petty.net_in_hand) }}</div>
+            </div>
+          </div>
+
+          <div class="my-2 border-t border-gray-100"></div>
+
+          <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Client Accounts</div>
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <div class="text-xs text-gray-500">Remitted</div>
+              <div class="font-semibold text-amber-600">-{{ currencyService.symbol() }} {{ formatAmount(clientsPool.remitted + clientsPool.pending_remitted) }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-500">Net</div>
+              <div class="font-bold text-gray-900">{{ currencyService.symbol() }} {{ formatAmount(clientsPool.net_in_hand) }}</div>
+            </div>
+          </div>
+        </p-card>
+      }
+    </div>
+  }
+</div>
+
+<p-dialog header="Send Money to Head Office" [modal]="true" [(visible)]="showSendDialog"
+  [style]="{ width: '520px' }" appendTo="body" [closable]="false">
+  <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">From Branch *</label>
+      <p-select [(ngModel)]="sendForm.from_branch_id" [options]="branches" optionLabel="name" optionValue="id"
+        placeholder="Select branch" styleClass="w-full" appendTo="body" />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">To Branch (Head Office) *</label>
+      <p-select [(ngModel)]="sendForm.to_branch_id" [options]="branches" optionLabel="name" optionValue="id"
+        placeholder="Select destination" styleClass="w-full" appendTo="body" />
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1">
+        <label class="text-sm font-medium text-gray-700">Money Pool</label>
+        <p-select [(ngModel)]="sendForm.pool" [options]="poolOptions" optionLabel="name" optionValue="id"
+          styleClass="w-full" appendTo="body" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-sm font-medium text-gray-700">Method</label>
+        <p-select [(ngModel)]="sendForm.method" [options]="methodOptions" optionLabel="label" optionValue="value"
+          styleClass="w-full" appendTo="body" />
+      </div>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">Reference</label>
+      <input pInputText [(ngModel)]="sendForm.reference" placeholder="e.g. MOMO-1234 / bank ref" class="w-full" />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">Amount *</label>
+      <p-inputNumber [(ngModel)]="sendForm.amount" mode="decimal" [min]="1" [maxFractionDigits]="2"
+        styleClass="w-full" inputStyleClass="w-full" />
+    </div>
+
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">
+        Collected from client (optional)
+      </label>
+      <div class="relative">
+        <input pInputText [(ngModel)]="clientQuery" (input)="searchClient($any($event.target).value)"
+          placeholder="Search client by name/phone..." class="w-full" />
+        @if (clientQuery()) {
+          <button pButton icon="pi pi-times" class="p-button-sm p-button-text absolute right-1 top-1/2 -translate-y-1/2"
+            (click)="clearClient()"></button>
+        }
+        @if (clientSearching()) {
+          <div class="absolute z-10 w-full bg-white border rounded shadow-lg mt-1 p-2 text-sm text-gray-500">Searching...</div>
+        } @else if (clientResults().length) {
+          <ul class="absolute z-10 w-full bg-white border rounded shadow-lg mt-1 max-h-48 overflow-auto p-0 m-0 list-none">
+            @for (c of clientResults(); track c.phone) {
+              <li class="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 border-b last:border-b-0"
+                (click)="selectClient(c)">
+                <span class="font-medium">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
+                <span class="text-gray-500"> · {{ c.phone }}</span>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </div>
+
+    @if (linkableLoading()) {
+      <div class="text-sm text-gray-500">Loading payments...</div>
+    } @else if (linkablePayments().length) {
+      <div class="flex flex-col gap-2 border rounded p-3 max-h-48 overflow-auto">
+        @for (p of linkablePayments(); track p.payment_id) {
+          <label class="flex items-start gap-2 cursor-pointer text-sm">
+            <input type="checkbox" [checked]="isPaymentSelected(p.payment_id)"
+              (change)="togglePayment(p)" class="mt-1" />
+            <span>
+              <span class="font-medium">{{ p.client_name }}</span>
+              <span class="text-gray-500"> · {{ currencyService.symbol() }} {{ formatAmount(p.amount) }}</span>
+            </span>
+          </label>
+        }
+      </div>
+    }
+
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">Reason / Note</label>
+      <input pInputText [(ngModel)]="sendForm.reason" placeholder="Optional note" class="w-full" />
+    </div>
+
+    <div class="flex justify-end gap-2 pt-2">
+      <p-button label="Cancel" severity="secondary" (onClick)="showSendDialog.set(false)" />
+      <p-button label="Send" icon="pi pi-send" [loading]="saving()" [disabled]="!sendFormValid()"
+        (onClick)="sendMoney()" />
+    </div>
+  </div>
+</p-dialog>

@@ -26,6 +26,7 @@ class CompanyUpdate(BaseModel):
     email: str | None = None
     currency: str | None = None
     is_active: bool | None = None
+    head_office_branch_id: uuid.UUID | None = None
 
 
 class CompanyRead(BaseModel):
@@ -37,6 +38,8 @@ class CompanyRead(BaseModel):
     email: str | None = None
     currency: str
     is_active: bool
+    head_office_branch_id: uuid.UUID | None = None
+    head_office_branch_name: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -137,6 +140,7 @@ class ExpenseCreate(BaseModel):
     amount: float
     description: str | None = None
     category: str | None = None
+    consultation_id: uuid.UUID | None = None
     mileage: int | None = None
     vehicle_id: uuid.UUID | None = None
     expense_date: datetime | None = None
@@ -152,6 +156,7 @@ class ExpenseUpdate(BaseModel):
     rejection_reason: str | None = None
     receipt_url: str | None = None
     vehicle_id: uuid.UUID | None = None
+    consultation_id: uuid.UUID | None = None
 
 
 class ExpenseRead(BaseModel):
@@ -160,6 +165,8 @@ class ExpenseRead(BaseModel):
     amount: float
     description: str | None = None
     category: str | None = None
+    consultation_id: uuid.UUID | None = None
+    client_name: str | None = None
     mileage: int | None = None
     vehicle_id: uuid.UUID | None = None
     status: str | None = None
@@ -287,26 +294,105 @@ class BranchTransferCreate(BaseModel):
     to_branch_id: uuid.UUID
     amount: Decimal = Field(..., decimal_places=2, gt=0)
     reason: str | None = None
+    pool: str | None = None
+    method: str | None = None
+    reference: str | None = None
     consultation_id: uuid.UUID | None = None
     payment_id: uuid.UUID | None = None
+    payment_ids: list[uuid.UUID] | None = None
+
+
+class TransferPaymentLinkRead(BaseModel):
+    payment_id: uuid.UUID
+    amount: Decimal
+    client_name: str | None = None
+    client_phone: str | None = None
+
+    model_config = {"from_attributes": True}
 
 
 class BranchTransferRead(BaseModel):
     id: uuid.UUID
     from_branch_id: uuid.UUID
     to_branch_id: uuid.UUID
+    from_branch_name: str | None = None
+    to_branch_name: str | None = None
     amount: Decimal
     reason: str | None = None
+    pool: str | None = None
+    method: str | None = None
+    reference: str | None = None
     consultation_id: uuid.UUID | None = None
     payment_id: uuid.UUID | None = None
     status: TransferStatus
     initiated_by: str | None = None
+    initiated_by_name: str | None = None
     initiated_at: datetime
     received_by: str | None = None
     received_at: datetime | None = None
     cancelled_by: str | None = None
     cancelled_at: datetime | None = None
+    payment_links: list[TransferPaymentLinkRead] = []
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── Expense Category ──
+
+class ExpenseCategoryCreate(BaseModel):
+    name: str
+    code: str
+    requires_client: bool = False
+    is_operating: bool = True
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class ExpenseCategoryUpdate(BaseModel):
+    name: str | None = None
+    code: str | None = None
+    requires_client: bool | None = None
+    is_operating: bool | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class ExpenseCategoryRead(BaseModel):
+    id: uuid.UUID
+    name: str
+    code: str
+    requires_client: bool
+    is_operating: bool
+    sort_order: int
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Cash Position / Profit & Loss ──
+
+class PoolPosition(BaseModel):
+    pool: str
+    collected: float
+    remitted: float
+    expenses: float
+    net_in_hand: float
+
+
+class BranchCashPosition(BaseModel):
+    branch_id: uuid.UUID
+    branch_name: str
+    pools: list[PoolPosition]
+
+
+class ProfitLossItem(BaseModel):
+    branch_id: uuid.UUID
+    branch_name: str
+    revenue: float
+    expenses: float
+    commissions: float
+    net: float
+    payment_count: int

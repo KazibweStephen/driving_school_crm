@@ -14,9 +14,10 @@ import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { DatePickerModule } from 'primeng/datepicker';
 import { ConfirmationService, MessageService } from 'primeng/api';
-import { FinanceService, Expense, ExpenseCreate } from '../../core/services/finance.service';
+import { FinanceService, Expense, ExpenseCreate, ExpenseCategory } from '../../core/services/finance.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
+import { ConsultationService, ClientInfo } from '../../core/services/consultation.service';
 import { CurrencyService } from '../../core/services/currency.service';
 import { UserDisplayCmp } from '../../shared/components/user-display';
 import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
@@ -53,17 +54,22 @@ export class ExpensesCmp implements OnInit {
   rejectingExpense = signal<Expense | null>(null);
   rejectReason = signal('');
 
-  categoryOptions = [
-    { label: 'Fuel', value: 'Fuel' },
-    { label: 'Repair', value: 'Repair' },
-    { label: 'Data', value: 'Data' },
-    { label: 'Airtime', value: 'Airtime' },
-    { label: 'Allowance', value: 'Allowance' },
-    { label: 'Salary', value: 'Salary' },
-    { label: 'Bonus', value: 'Bonus' },
-    { label: 'Car Service', value: 'Car Service' },
-    { label: 'Other', value: '__other__' },
-  ];
+  categories = signal<ExpenseCategory[]>([]);
+  categoryOptions = computed(() => {
+    const opts = this.categories().map(c => ({
+      label: c.name,
+      value: c.name,
+      requires_client: c.requires_client,
+    }));
+    return [...opts, { label: 'Other', value: '__other__', requires_client: false }];
+  });
+  selectedCategory = computed(() =>
+    this.categoryOptions().find(c => c.value === this.form.category) ?? null
+  );
+
+  clientResults = signal<ClientInfo[]>([]);
+  clientSearching = signal(false);
+  clientQuery = signal('');
 
   form = {
     branch_id: '',
@@ -73,6 +79,7 @@ export class ExpensesCmp implements OnInit {
     otherDetail: '',
     vehicle_id: '',
     mileage: null as number | null,
+    consultation_id: '',
     expense_date: new Date(),
   };
 
@@ -87,6 +94,7 @@ export class ExpensesCmp implements OnInit {
     private financeService: FinanceService,
     private companyService: CompanyService,
     private vehicleService: VehicleService,
+    private consultationService: ConsultationService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public currencyService: CurrencyService,
@@ -95,6 +103,14 @@ export class ExpensesCmp implements OnInit {
   ngOnInit() {
     this.loadBranches();
     this.loadExpenses();
+    this.loadCategories();
+  }
+
+  private loadCategories() {
+    this.financeService.listExpenseCategories().subscribe({
+      next: (res) => this.categories.set(res.items),
+      error: () => {},
+    });
   }
 
   private loadBranches() {
@@ -145,8 +161,11 @@ export class ExpensesCmp implements OnInit {
       otherDetail: '',
       vehicle_id: '',
       mileage: null,
+      consultation_id: '',
       expense_date: new Date(),
     };
+    this.clientResults.set([]);
+    this.clientQuery.set('');
     this.receiptFile.set(null);
     this.vehicles.set([]);
     this.showDialog.set(true);
@@ -182,6 +201,7 @@ export class ExpensesCmp implements OnInit {
         category,
         mileage: this.form.mileage ?? undefined,
         vehicle_id: this.form.vehicle_id || undefined,
+        consultation_id: this.form.consultation_id || undefined,
         expense_date: this.form.expense_date instanceof Date
           ? this.form.expense_date.toISOString().slice(0, 10)
           : this.form.expense_date,
@@ -277,7 +297,41 @@ export class ExpensesCmp implements OnInit {
   formIsValid(): boolean {
     if (!this.form.branch_id || (this.form.amount ?? 0) <= 0) return false;
     if (this.form.category === '__other__' && !this.form.otherDetail.trim()) return false;
+    if (this.selectedCategory()?.requires_client && !this.form.consultation_id) return false;
     return true;
+  }
+
+  async searchClient(q: string) {
+    this.clientQuery.set(q);
+    const search = (q || '').trim();
+    if (search.length < 2) {
+      this.clientResults.set([]);
+      return;
+    }
+    this.clientSearching.set(true);
+    try {
+      const res = await this.consultationService.clientSearch(search).toPromise();
+      this.clientResults.set(res || []);
+    } catch {
+      this.clientResults.set([]);
+    } finally {
+      this.clientSearching.set(false);
+    }
+  }
+
+  selectClient(c: ClientInfo) {
+    this.form.consultation_id = c.latest_consultation_id || '';
+    this.clientQuery.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
+    if (!c.latest_consultation_id) {
+      this.messageService.add({ severity: 'warn', summary: 'No consultation', detail: 'This client has no consultation to attach' });
+    }
+    this.clientResults.set([]);
+  }
+
+  clearClient() {
+    this.form.consultation_id = '';
+    this.clientQuery.set('');
+    this.clientResults.set([]);
   }
 
   loadVehiclesForBranch() {

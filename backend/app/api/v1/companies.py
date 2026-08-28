@@ -39,6 +39,15 @@ from app.schemas.company import (
 router = APIRouter(prefix="/api/v1/companies", tags=["Companies"])
 
 
+async def _company_read(db: AsyncSession, company: Company) -> CompanyRead:
+    read = CompanyRead.model_validate(company)
+    head_name = None
+    if company.head_office_branch_id:
+        b = (await db.execute(select(Branch).where(Branch.id == company.head_office_branch_id))).scalar_one_or_none()
+        head_name = b.name if b else None
+    return read.model_copy(update={"head_office_branch_name": head_name})
+
+
 @router.get("/my-branches", response_model=list[BranchRead])
 async def my_branches(
     db: AsyncSession = Depends(get_db),
@@ -95,6 +104,9 @@ async def create_company(
     from app.services.permission import seed_default_permissions
     await seed_default_permissions(db, company.id)
 
+    from app.services.finance import seed_default_expense_categories
+    await seed_default_expense_categories(db, company.id)
+
     from app.scripts.seed_competency_catalogue import seed_company_catalogue
     await seed_company_catalogue(db, company.id)
 
@@ -106,7 +118,7 @@ async def create_company(
 
     await db.commit()
     await db.refresh(company)
-    return CompanyRead.model_validate(company)
+    return await _company_read(db, company)
 
 
 @router.get("/", response_model=list[CompanyRead])
@@ -121,7 +133,10 @@ async def list_companies(
         return []
     result = await db.execute(query.order_by(Company.created_at.desc()))
     companies = result.scalars().all()
-    return [CompanyRead.model_validate(c) for c in companies]
+    items = []
+    for c in companies:
+        items.append(await _company_read(db, c))
+    return items
 
 
 @router.get("/{company_id}", response_model=CompanyRead)
@@ -150,7 +165,7 @@ async def get_company(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Company not found",
         )
-    return CompanyRead.model_validate(company)
+    return await _company_read(db, company)
 
 
 @router.patch("/{company_id}", response_model=CompanyRead)
@@ -179,7 +194,7 @@ async def update_company(
         setattr(company, field, value)
     await db.commit()
     await db.refresh(company)
-    return CompanyRead.model_validate(company)
+    return await _company_read(db, company)
 
 
 @router.delete("/{company_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -65,6 +65,11 @@ PERMISSION_GROUPS: list[PermissionGroup] = [
         ["collections.manage", "collections.view", "collections.create", "collections.edit", "collections.delete", "collections.send_dunning"],
     ),
     PermissionGroup(
+        "finance",
+        "Finance & P&L",
+        ["finance.manage", "finance.view"],
+    ),
+    PermissionGroup(
         "sales",
         "Sales",
         ["sales.manage", "sales.view", "sales.create", "sales.edit", "sales.delete"],
@@ -200,6 +205,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.OFFICE_ADMIN: [
         "dashboard.view",
         "reports.view",
+        "finance.view",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
@@ -230,6 +236,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.BRANCH_SUPERVISOR: [
         "dashboard.view",
         "reports.view",
+        "finance.view",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
@@ -260,6 +267,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.MANAGER: [
         "dashboard.view",
         "reports.view",
+        "finance.view",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
@@ -290,6 +298,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.SUPERVISOR: [
         "dashboard.view",
         "reports.view",
+        "finance.view",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",

@@ -28,6 +28,8 @@ const CATEGORIES = [
   'Meals',
   'Marketing',
   'Utilities',
+  'Permit Payment',
+  'Learner Permit Payment',
   'Other',
 ];
 

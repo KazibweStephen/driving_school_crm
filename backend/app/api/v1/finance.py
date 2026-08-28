@@ -23,6 +23,9 @@ from app.schemas.company import (
     CollectionCreate,
     CollectionRead,
     CollectionUpdate,
+    ExpenseCategoryCreate,
+    ExpenseCategoryRead,
+    ExpenseCategoryUpdate,
     ExpenseCreate,
     ExpenseRead,
     ExpenseUpdate,
@@ -34,6 +37,62 @@ from app.utils.tenant import resolve_branch_ids
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/finance", tags=["finance"])
+
+
+def _expense_read(e) -> ExpenseRead:
+    read = ExpenseRead.model_validate(e)
+    client_name = None
+    if e.consultation:
+        c = e.consultation
+        client_name = f"{c.first_name} {c.last_name or ''}".strip()
+    return read.model_copy(update={
+        "created_by_name": e.created_by_user.name if e.created_by_user else None,
+        "approved_by_name": e.approved_by_user.name if e.approved_by_user else None,
+        "paid_by_name": e.paid_by_user.name if e.paid_by_user else None,
+        "client_name": client_name,
+    })
+
+
+async def _transfer_read(db: AsyncSession, t) -> BranchTransferRead:
+    from sqlalchemy import select
+    from app.models.payment import Payment
+    from app.models.consultation import Consultation
+    read = BranchTransferRead.model_validate(t)
+    from_name = t.from_branch.name if t.from_branch else None
+    to_name = t.to_branch.name if t.to_branch else None
+    init_name = None
+    if t.initiated_by:
+        u = (await db.execute(select(User).where(User.phone == t.initiated_by))).scalar_one_or_none()
+        init_name = u.name if u else None
+    links = []
+    if t.payment_links:
+        pmt_ids = [link.payment_id for link in t.payment_links]
+        amt_map = {link.payment_id: float(link.amount) for link in t.payment_links}
+        pmt_rows = None
+        if pmt_ids:
+            pmt_rows = (await db.execute(
+                select(Payment, Consultation)
+                .join(Consultation, Payment.consultation_id == Consultation.id)
+                .where(Payment.id.in_(pmt_ids))
+            )).all()
+        pmt_by_id = {}
+        if pmt_rows:
+            for p, c in pmt_rows:
+                pmt_by_id[p.id] = c
+        for link in t.payment_links:
+            c = pmt_by_id.get(link.payment_id)
+            links.append({
+                "payment_id": link.payment_id,
+                "amount": amt_map.get(link.payment_id, 0.0),
+                "client_name": f"{c.first_name} {c.last_name or ''}".strip() if c else None,
+                "client_phone": c.phone if c else None,
+            })
+    return read.model_copy(update={
+        "from_branch_name": from_name,
+        "to_branch_name": to_name,
+        "initiated_by_name": init_name,
+        "payment_links": links,
+    })
 
 
 @router.post("/expenses/upload-receipt")
@@ -98,16 +157,7 @@ async def list_expenses(
 
     items = []
     for e in expenses:
-        read = ExpenseRead.model_validate(e)
-        items.append(
-            read.model_copy(
-                update={
-                    "created_by_name": e.created_by_user.name if e.created_by_user else None,
-                    "approved_by_name": e.approved_by_user.name if e.approved_by_user else None,
-                    "paid_by_name": e.paid_by_user.name if e.paid_by_user else None,
-                }
-            )
-        )
+        items.append(_expense_read(e))
 
     return {
         "items": items,
@@ -129,6 +179,7 @@ async def create_expense(
         amount=data.amount,
         description=data.description,
         category=data.category,
+        consultation_id=data.consultation_id,
         mileage=data.mileage,
         vehicle_id=data.vehicle_id,
         expense_date=data.expense_date,
@@ -136,7 +187,10 @@ async def create_expense(
         created_by_phone=current_user.phone,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
-    return ExpenseRead.model_validate(expense)
+    expense = await finance_service.get_expense(
+        db, expense.id, company_id=current_user.company_id, current_user_role=current_user.role
+    )
+    return _expense_read(expense)
 
 
 @router.patch("/expenses/{expense_id}", response_model=ExpenseRead)
@@ -163,6 +217,7 @@ async def update_expense(
         paid_at=data.paid_at,
         rejection_reason=data.rejection_reason,
         receipt_url=data.receipt_url,
+        consultation_id=data.consultation_id,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
     if not expense:
@@ -188,7 +243,7 @@ async def update_expense(
         except Exception as e:
             logger.warning("[SMS] Failed to send expense_approved notification: %s", e)
 
-    return ExpenseRead.model_validate(expense)
+    return _expense_read(expense)
 
 
 class ExpenseReject(BaseModel):
@@ -237,7 +292,7 @@ async def approve_expense(
         except Exception as e:
             logger.warning("[SMS] Failed to send expense_approved notification: %s", e)
 
-    return ExpenseRead.model_validate(expense)
+    return _expense_read(expense)
 
 
 @router.post("/expenses/{expense_id}/reject", response_model=ExpenseRead)
@@ -263,7 +318,7 @@ async def reject_expense(
     expense.approved_at = datetime.now()
     await db.flush()
     await db.refresh(expense)
-    return ExpenseRead.model_validate(expense)
+    return _expense_read(expense)
 
 
 @router.post("/expenses/{expense_id}/mark-paid", response_model=ExpenseRead)
@@ -285,7 +340,7 @@ async def mark_expense_paid(
     expense.paid_at = datetime.now()
     await db.flush()
     await db.refresh(expense)
-    return ExpenseRead.model_validate(expense)
+    return _expense_read(expense)
 
 
 @router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -529,8 +584,11 @@ async def list_branch_transfers(
         page=page, page_size=page_size,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
+    items = []
+    for t in transfers:
+        items.append(await _transfer_read(db, t))
     return {
-        "items": [BranchTransferRead.model_validate(t) for t in transfers],
+        "items": items,
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -564,12 +622,20 @@ async def create_branch_transfer(
         to_branch_id=data.to_branch_id,
         amount=data.amount,
         reason=data.reason,
+        pool=data.pool,
+        method=data.method,
+        reference=data.reference,
         consultation_id=data.consultation_id,
         payment_id=data.payment_id,
+        payment_ids=data.payment_ids,
         initiated_by=current_user.phone,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
-    return BranchTransferRead.model_validate(transfer)
+    transfer = await finance_service.get_branch_transfer(
+        db, transfer.id,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+    return await _transfer_read(db, transfer)
 
 
 @router.post("/transfers/{transfer_id}/receive", response_model=BranchTransferRead)
@@ -587,7 +653,7 @@ async def receive_branch_transfer(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Transfer not found",
         )
-    return BranchTransferRead.model_validate(transfer)
+    return await _transfer_read(db, transfer)
 
 
 @router.post("/transfers/{transfer_id}/cancel", response_model=BranchTransferRead)
@@ -605,7 +671,7 @@ async def cancel_branch_transfer(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Transfer not found",
         )
-    return BranchTransferRead.model_validate(transfer)
+    return await _transfer_read(db, transfer)
 
 
 @router.get("/transfers/summary", response_model=dict)
@@ -646,3 +712,112 @@ async def get_finance_summary(
     current_user: User = Depends(require_permission("collections.view")),
 ):
     return await finance_service.get_finance_summary(db, branch_id=branch_id, company_id=current_user.company_id, current_user_role=current_user.role)
+
+
+# ── Expense Categories ──
+
+
+@router.get("/expense-categories", response_model=dict)
+async def list_expense_categories(
+    include_inactive: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.view")),
+):
+    cats = await finance_service.list_expense_categories(
+        db, company_id=current_user.company_id, include_inactive=include_inactive
+    )
+    return {"items": [ExpenseCategoryRead.model_validate(c) for c in cats]}
+
+
+@router.post("/expense-categories", response_model=ExpenseCategoryRead, status_code=status.HTTP_201_CREATED)
+async def create_expense_category(
+    data: ExpenseCategoryCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.manage")),
+):
+    return ExpenseCategoryRead.model_validate(await finance_service.create_expense_category(
+        db, name=data.name, code=data.code, requires_client=data.requires_client,
+        is_operating=data.is_operating, sort_order=data.sort_order,
+        is_active=data.is_active, company_id=current_user.company_id,
+    ))
+
+
+@router.patch("/expense-categories/{category_id}", response_model=ExpenseCategoryRead)
+async def update_expense_category(
+    category_id: uuid.UUID,
+    data: ExpenseCategoryUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.manage")),
+):
+    cat = await finance_service.update_expense_category(
+        db, category_id, company_id=current_user.company_id,
+        name=data.name, code=data.code, requires_client=data.requires_client,
+        is_operating=data.is_operating, sort_order=data.sort_order, is_active=data.is_active,
+    )
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return ExpenseCategoryRead.model_validate(cat)
+
+
+@router.delete("/expense-categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_expense_category(
+    category_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.manage")),
+):
+    deleted = await finance_service.delete_expense_category(
+        db, category_id, company_id=current_user.company_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return None
+
+
+# ── Cash Position ──
+
+
+@router.get("/cash-position", response_model=list[dict])
+async def get_cash_position(
+    branch_id: uuid.UUID | None = Query(None),
+    branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("finance.view")),
+):
+    requested = (
+        [uuid.UUID(b) for b in branch_ids.split(",") if b]
+        if branch_ids
+        else None
+    )
+    resolved_branch_ids = (
+        [branch_id] if branch_id else await resolve_branch_ids(db, current_user, requested)
+    )
+    return await finance_service.get_cash_position(
+        db, branch_ids=resolved_branch_ids,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+
+
+# ── Profit & Loss ──
+
+
+@router.get("/profit-loss", response_model=dict)
+async def get_profit_loss(
+    branch_id: uuid.UUID | None = Query(None),
+    branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
+    from_date: date | None = Query(None),
+    to_date: date | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("reports.view")),
+):
+    requested = (
+        [uuid.UUID(b) for b in branch_ids.split(",") if b]
+        if branch_ids
+        else None
+    )
+    resolved_branch_ids = (
+        [branch_id] if branch_id else await resolve_branch_ids(db, current_user, requested)
+    )
+    return await finance_service.get_profit_loss(
+        db, branch_ids=resolved_branch_ids, from_date=from_date, to_date=to_date,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )

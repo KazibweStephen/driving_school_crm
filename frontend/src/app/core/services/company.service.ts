@@ -11,6 +11,8 @@ export interface Company {
   email?: string;
   currency: string;
   is_active: boolean;
+  head_office_branch_id?: string;
+  head_office_branch_name?: string;
   created_at: string;
   updated_at: string;
 }

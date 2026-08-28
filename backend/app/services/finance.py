@@ -14,12 +14,16 @@ from app.models.company import (
     Collection,
     CollectionStatus,
     Expense,
+    ExpenseCategory,
     ExpenseStatus,
+    TransferMethod,
+    TransferPaymentLink,
+    TransferPool,
     TransferStatus,
     UserBranchAssignment,
 )
 from app.models.consultation import Consultation
-from app.models.payment import Installment, InstallmentStatus
+from app.models.payment import Installment, InstallmentStatus, Payment
 from app.models.user import UserRole
 from app.services.notification import on_installment_overdue, on_expense_approved
 
@@ -43,6 +47,7 @@ async def list_expenses(
         selectinload(Expense.created_by_user),
         selectinload(Expense.approved_by_user),
         selectinload(Expense.paid_by_user),
+        selectinload(Expense.consultation),
     )
     count_query = select(func.count(Expense.id))
 
@@ -86,12 +91,30 @@ async def _verify_branch_company(
     return result.scalar_one_or_none() is not None
 
 
+async def _verify_consultation_company(
+    db: AsyncSession, consultation_id: uuid.UUID,
+    company_id: uuid.UUID | None, user_role: UserRole | None,
+) -> bool:
+    if company_id is None:
+        return True
+    result = await db.execute(
+        select(Consultation)
+        .outerjoin(Branch, Consultation.branch_id == Branch.id)
+        .where(
+            Consultation.id == consultation_id,
+            or_(Consultation.branch_id.is_(None), Branch.company_id == company_id),
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def create_expense(
     db: AsyncSession,
     branch_id: uuid.UUID,
     amount: float,
     description: str | None = None,
     category: str | None = None,
+    consultation_id: uuid.UUID | None = None,
     mileage: int | None = None,
     vehicle_id: uuid.UUID | None = None,
     expense_date: datetime | None = None,
@@ -103,11 +126,16 @@ async def create_expense(
     if not await _verify_branch_company(db, branch_id, company_id, current_user_role):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Branch not found")
+    if consultation_id is not None:
+        if not await _verify_consultation_company(db, consultation_id, company_id, current_user_role):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Client not found")
     expense = Expense(
         branch_id=branch_id,
         amount=amount,
         description=description,
         category=category,
+        consultation_id=consultation_id,
         mileage=mileage,
         vehicle_id=vehicle_id,
         expense_date=expense_date or datetime.now(timezone.utc),
@@ -126,7 +154,12 @@ async def get_expense(
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> Expense | None:
-    query = select(Expense).where(Expense.id == expense_id)
+    query = select(Expense).options(
+        selectinload(Expense.consultation),
+        selectinload(Expense.created_by_user),
+        selectinload(Expense.approved_by_user),
+        selectinload(Expense.paid_by_user),
+    ).where(Expense.id == expense_id)
     if company_id is not None:
         query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
     result = await db.execute(query)
@@ -143,6 +176,7 @@ async def update_expense(
     paid_at: datetime | None = None,
     rejection_reason: str | None = None,
     receipt_url: str | None = None,
+    consultation_id: uuid.UUID | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> Expense | None:
@@ -173,6 +207,8 @@ async def update_expense(
         expense.rejection_reason = rejection_reason
     if receipt_url is not None:
         expense.receipt_url = receipt_url
+    if consultation_id is not None:
+        expense.consultation_id = consultation_id
 
     await db.flush()
     await db.refresh(expense)
@@ -596,8 +632,12 @@ async def create_branch_transfer(
     to_branch_id: uuid.UUID,
     amount: Decimal,
     reason: str | None = None,
+    pool: str | None = None,
+    method: str | None = None,
+    reference: str | None = None,
     consultation_id: uuid.UUID | None = None,
     payment_id: uuid.UUID | None = None,
+    payment_ids: list[uuid.UUID] | None = None,
     initiated_by: str | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
@@ -615,11 +655,41 @@ async def create_branch_transfer(
         to_branch_id=to_branch_id,
         amount=float(amount),
         reason=reason,
+        pool=TransferPool(pool) if pool else None,
+        method=TransferMethod(method) if method else None,
+        reference=reference,
         consultation_id=consultation_id,
         payment_id=payment_id,
         initiated_by=initiated_by,
     )
     db.add(transfer)
+    await db.flush()
+
+    # Link the individual client payments this remittance is composed of
+    linked_ids = set()
+    if payment_id is not None:
+        linked_ids.add(payment_id)
+    if payment_ids:
+        linked_ids.update(payment_ids)
+    if linked_ids and company_id is not None:
+        # Validate linked payments belong to the company's branches
+        pmt_result = await db.execute(
+            select(Payment)
+            .join(Consultation, Payment.consultation_id == Consultation.id)
+            .outerjoin(Branch, Consultation.branch_id == Branch.id)
+            .where(
+                Payment.id.in_(linked_ids),
+                or_(Consultation.branch_id.is_(None), Branch.company_id == company_id),
+            )
+        )
+        valid_payments = list(pmt_result.scalars().all())
+        for p in valid_payments:
+            db.add(TransferPaymentLink(
+                transfer_id=transfer.id,
+                payment_id=p.id,
+                amount=float(p.total_paid or p.total_amount or 0),
+            ))
+
     await db.flush()
     await db.refresh(transfer)
     return transfer
@@ -631,7 +701,11 @@ async def _get_transfer_scoped(
     company_id: uuid.UUID | None,
     current_user_role: UserRole | None,
 ) -> BranchTransfer | None:
-    query = select(BranchTransfer).where(BranchTransfer.id == transfer_id)
+    query = select(BranchTransfer).options(
+        selectinload(BranchTransfer.from_branch),
+        selectinload(BranchTransfer.to_branch),
+        selectinload(BranchTransfer.payment_links),
+    ).where(BranchTransfer.id == transfer_id)
     if company_id is not None:
         from_branch = select(Branch.id).where(
             Branch.id == BranchTransfer.from_branch_id,
@@ -644,6 +718,15 @@ async def _get_transfer_scoped(
         query = query.where(or_(from_branch.exists(), to_branch.exists()))
     result = await db.execute(query)
     return result.scalar_one_or_none()
+
+
+async def get_branch_transfer(
+    db: AsyncSession,
+    transfer_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> BranchTransfer | None:
+    return await _get_transfer_scoped(db, transfer_id, company_id, current_user_role)
 
 
 async def receive_branch_transfer(
@@ -699,7 +782,11 @@ async def list_branch_transfers(
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> tuple[list[BranchTransfer], int]:
-    query = select(BranchTransfer)
+    query = select(BranchTransfer).options(
+        selectinload(BranchTransfer.from_branch),
+        selectinload(BranchTransfer.to_branch),
+        selectinload(BranchTransfer.payment_links),
+    )
     count_query = select(func.count(BranchTransfer.id))
 
     effective_branch_ids = branch_ids if branch_ids else ([branch_id] if branch_id else None)
@@ -1065,3 +1152,332 @@ async def get_finance_summary(
     summary["total_overdue"] = total_overdue
 
     return summary
+
+
+# ── Expense Categories ──
+
+
+DEFAULT_EXPENSE_CATEGORIES = [
+    {"name": "Fuel", "code": "fuel", "requires_client": False, "is_operating": True, "sort_order": 1},
+    {"name": "Permit Payment", "code": "permit_payment", "requires_client": True, "is_operating": False, "sort_order": 10},
+    {"name": "Learner Permit Payment", "code": "learner_permit_payment", "requires_client": True, "is_operating": False, "sort_order": 11},
+    {"name": "Vehicle Maintenance", "code": "vehicle_maintenance", "requires_client": False, "is_operating": True, "sort_order": 20},
+    {"name": "Salaries", "code": "salaries", "requires_client": False, "is_operating": True, "sort_order": 30},
+    {"name": "Rent", "code": "rent", "requires_client": False, "is_operating": True, "sort_order": 40},
+    {"name": "Utilities", "code": "utilities", "requires_client": False, "is_operating": True, "sort_order": 50},
+]
+
+
+async def seed_default_expense_categories(
+    db: AsyncSession, company_id: uuid.UUID | None
+) -> None:
+    if company_id is None:
+        return
+    result = await db.execute(
+        select(func.count(ExpenseCategory.id)).where(
+            ExpenseCategory.company_id == company_id
+        )
+    )
+    if (result.scalar() or 0) > 0:
+        return
+    for c in DEFAULT_EXPENSE_CATEGORIES:
+        db.add(ExpenseCategory(company_id=company_id, **c))
+    await db.flush()
+
+
+async def list_expense_categories(
+    db: AsyncSession,
+    company_id: uuid.UUID | None = None,
+    include_inactive: bool = False,
+) -> list[ExpenseCategory]:
+    if company_id is not None:
+        await seed_default_expense_categories(db, company_id)
+    query = select(ExpenseCategory)
+    if company_id is not None:
+        query = query.where(ExpenseCategory.company_id == company_id)
+    if not include_inactive:
+        query = query.where(ExpenseCategory.is_active.is_(True))
+    query = query.order_by(ExpenseCategory.sort_order.asc(), ExpenseCategory.name.asc())
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+async def create_expense_category(
+    db: AsyncSession,
+    name: str,
+    code: str,
+    requires_client: bool = False,
+    is_operating: bool = True,
+    sort_order: int = 0,
+    is_active: bool = True,
+    company_id: uuid.UUID | None = None,
+) -> ExpenseCategory:
+    if company_id is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Company required")
+    existing = await db.execute(
+        select(ExpenseCategory).where(
+            ExpenseCategory.company_id == company_id,
+            ExpenseCategory.code == code,
+        )
+    )
+    if existing.scalar_one_or_none():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=409, detail="Category code already exists")
+    cat = ExpenseCategory(
+        company_id=company_id, name=name, code=code,
+        requires_client=requires_client, is_operating=is_operating,
+        sort_order=sort_order, is_active=is_active,
+    )
+    db.add(cat)
+    await db.flush()
+    await db.refresh(cat)
+    return cat
+
+
+async def update_expense_category(
+    db: AsyncSession,
+    category_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    **fields,
+) -> ExpenseCategory | None:
+    query = select(ExpenseCategory).where(ExpenseCategory.id == category_id)
+    if company_id is not None:
+        query = query.where(ExpenseCategory.company_id == company_id)
+    result = await db.execute(query)
+    cat = result.scalar_one_or_none()
+    if not cat:
+        return None
+    for key, value in fields.items():
+        if value is not None and hasattr(cat, key):
+            setattr(cat, key, value)
+    await db.flush()
+    await db.refresh(cat)
+    return cat
+
+
+async def delete_expense_category(
+    db: AsyncSession,
+    category_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+) -> bool:
+    query = select(ExpenseCategory).where(ExpenseCategory.id == category_id)
+    if company_id is not None:
+        query = query.where(ExpenseCategory.company_id == company_id)
+    result = await db.execute(query)
+    cat = result.scalar_one_or_none()
+    if not cat:
+        return False
+    await db.delete(cat)
+    await db.flush()
+    return True
+
+
+# ── Cash Position ──
+
+
+async def _resolve_companies_branches(db, branch_ids, company_id, current_user_role):
+    if branch_ids:
+        return list(branch_ids)
+    query = select(Branch)
+    if company_id is not None:
+        query = query.where(Branch.company_id == company_id)
+    result = await db.execute(query)
+    return [b.id for b in result.scalars().all()]
+
+
+async def get_cash_position(
+    db: AsyncSession,
+    branch_id: uuid.UUID | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> list[dict]:
+    branches = await _resolve_companies_branches(db, branch_ids, company_id, current_user_role)
+    if not branches:
+        return []
+    if branch_id:
+        branches = [b for b in branches if b == branch_id]
+
+    result = []
+    for bid in branches:
+        branch_row = await db.get(Branch, bid)
+        name = branch_row.name if branch_row else "Unknown"
+
+        # Collected payments at this collecting branch
+        collected = await db.execute(
+            select(func.coalesce(func.sum(Payment.total_paid), 0))
+            .where(Payment.branch_id == bid, Payment.cancelled_at.is_(None))
+        )
+        collected_petty = float(collected.scalar() or 0)
+
+        # Remitted (received) transfers sent from this branch, by pool
+        remit_rows = await db.execute(
+            select(
+                BranchTransfer.pool,
+                func.coalesce(func.sum(BranchTransfer.amount), 0),
+            )
+            .where(
+                BranchTransfer.from_branch_id == bid,
+                BranchTransfer.status == TransferStatus.RECEIVED,
+            )
+            .group_by(BranchTransfer.pool)
+        )
+        remitted = {
+            "petty_cash": 0.0,
+            "client_accounts": 0.0,
+        }
+        for p, amt in remit_rows:
+            remitted[p.value if p else "petty_cash"] = float(amt)
+
+        pending_remit_rows = await db.execute(
+            select(
+                BranchTransfer.pool,
+                func.coalesce(func.sum(BranchTransfer.amount), 0),
+            )
+            .where(
+                BranchTransfer.from_branch_id == bid,
+                BranchTransfer.status == TransferStatus.INITIATED,
+            )
+            .group_by(BranchTransfer.pool)
+        )
+        pending_remitted = {
+            "petty_cash": 0.0,
+            "client_accounts": 0.0,
+        }
+        for p, amt in pending_remit_rows:
+            pending_remitted[p.value if p else "petty_cash"] = float(amt)
+
+        # Paid expenses at this branch by pool
+        exp_rows = await db.execute(
+            select(
+                Expense.category,
+                func.coalesce(func.sum(Expense.amount), 0),
+            )
+            .where(Expense.branch_id == bid, Expense.status == ExpenseStatus.PAID)
+            .group_by(Expense.category)
+        )
+        expenses_petty = 0.0
+        expenses_client = 0.0
+        cat_map = {}
+        if company_id is not None:
+            cats = await list_expense_categories(db, company_id=company_id, include_inactive=True)
+            cat_map = {c.name: c.is_operating for c in cats}
+        for category, amt in exp_rows:
+            is_operating = cat_map.get(category, True)
+            if is_operating:
+                expenses_petty += float(amt)
+            else:
+                expenses_client += float(amt)
+
+        pools = [
+            {
+                "pool": "petty_cash",
+                "collected": collected_petty,
+                "remitted": remitted["petty_cash"],
+                "pending_remitted": pending_remitted["petty_cash"],
+                "expenses": expenses_petty,
+                "net_in_hand": collected_petty - remitted["petty_cash"] - pending_remitted["petty_cash"] - expenses_petty,
+            },
+            {
+                "pool": "client_accounts",
+                "collected": 0.0,
+                "remitted": remitted["client_accounts"],
+                "pending_remitted": pending_remitted["client_accounts"],
+                "expenses": expenses_client,
+                "net_in_hand": -remitted["client_accounts"] - pending_remitted["client_accounts"] - expenses_client,
+            },
+        ]
+        result.append({
+            "branch_id": str(bid),
+            "branch_name": name,
+            "pools": pools,
+        })
+    return result
+
+
+# ── Profit & Loss ──
+
+
+async def get_profit_loss(
+    db: AsyncSession,
+    branch_id: uuid.UUID | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> dict:
+    branches = await _resolve_companies_branches(db, branch_ids, company_id, current_user_role)
+    if branch_id:
+        branches = [b for b in branches if b == branch_id]
+
+    start_dt = datetime.combine(from_date, datetime.min.time()) if from_date else None
+    end_dt = datetime.combine(to_date, datetime.max.time()) if to_date else None
+
+    revenue_q = select(
+        Payment.branch_id,
+        func.coalesce(func.sum(Payment.total_paid), 0),
+        func.count(Payment.id),
+    ).where(Payment.cancelled_at.is_(None))
+    if start_dt:
+        revenue_q = revenue_q.where(Payment.created_at >= start_dt)
+    if end_dt:
+        revenue_q = revenue_q.where(Payment.created_at <= end_dt)
+    revenue_rows = (await db.execute(revenue_q.group_by(Payment.branch_id))).all()
+
+    expenses_q = select(
+        Expense.branch_id,
+        func.coalesce(func.sum(Expense.amount), 0),
+    ).where(Expense.status == ExpenseStatus.PAID)
+    if start_dt:
+        expenses_q = expenses_q.where(Expense.expense_date >= start_dt)
+    if end_dt:
+        expenses_q = expenses_q.where(Expense.expense_date <= end_dt)
+    expense_rows = (await db.execute(expenses_q.group_by(Expense.branch_id))).all()
+
+    from app.models.commission import Commission, CommissionStatus
+    from app.models.cart import CartItem
+    commissions_q = (
+        select(
+            Consultation.branch_id,
+            func.coalesce(func.sum(Commission.total_amount), 0),
+        )
+        .join(CartItem, Commission.cart_item_id == CartItem.id)
+        .join(Consultation, CartItem.consultation_id == Consultation.id)
+        .where(Commission.status.in_([CommissionStatus.PENDING, CommissionStatus.PARTIALLY_MATURED, CommissionStatus.FULLY_MATURED]))
+    )
+    if start_dt:
+        commissions_q = commissions_q.where(Commission.created_at >= start_dt)
+    if end_dt:
+        commissions_q = commissions_q.where(Commission.created_at <= end_dt)
+    commission_rows = (await db.execute(commissions_q.group_by(Consultation.branch_id))).all()
+
+    revenue_map = {r[0]: (float(r[1]), r[2]) for r in revenue_rows}
+    expense_map = {r[0]: float(r[1]) for r in expense_rows}
+    commission_map = {r[0]: float(r[1]) for r in commission_rows}
+
+    items = []
+    for bid in branches:
+        branch_row = await db.get(Branch, bid)
+        rev, count = revenue_map.get(bid, (0.0, 0))
+        exp = expense_map.get(bid, 0.0)
+        comm = commission_map.get(bid, 0.0)
+        items.append({
+            "branch_id": str(bid),
+            "branch_name": branch_row.name if branch_row else "Unknown",
+            "revenue": rev,
+            "expenses": exp,
+            "commissions": comm,
+            "net": rev - exp - comm,
+            "payment_count": count,
+        })
+
+    items.sort(key=lambda i: i["branch_id"])
+    return {
+        "items": items,
+        "total_revenue": sum(i["revenue"] for i in items),
+        "total_expenses": sum(i["expenses"] for i in items),
+        "total_commissions": sum(i["commissions"] for i in items),
+        "total_net": sum(i["net"] for i in items),
+    }

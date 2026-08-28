@@ -43,6 +43,9 @@
         <td class="font-medium whitespace-nowrap">{{ currencyService.symbol() }} {{ e.amount.toFixed(2) }}</td>
         <td>
           <span class="text-sm">{{ e.category || '-' }}</span>
+          @if (e.client_name) {
+            <br><span class="text-xs text-blue-600"><i class="pi pi-user mr-1"></i>{{ e.client_name }}</span>
+          }
           @if (e.description) {
             <br><span class="text-xs text-gray-400">{{ e.description }}</span>
           }
@@ -119,7 +122,7 @@
     </div>
     <div>
       <label class="mb-1 block text-sm font-medium text-gray-700">Category</label>
-      <p-select [(ngModel)]="form.category" [options]="categoryOptions" optionLabel="label" optionValue="value"
+      <p-select [(ngModel)]="form.category" [options]="categoryOptions()" optionLabel="label" optionValue="value"
         placeholder="Select category" styleClass="w-full" appendTo="body" [filter]="true" filterPlaceholder="Search..." />
     </div>
     @if (form.category === '__other__') {
@@ -137,6 +140,32 @@
       <div>
         <label class="mb-1 block text-sm font-medium text-gray-700">Mileage (km)</label>
         <p-inputNumber [(ngModel)]="form.mileage" [min]="0" [max]="999999" [useGrouping]="false" styleClass="w-full" inputStyleClass="w-full" />
+      </div>
+    }
+    @if (selectedCategory()?.requires_client) {
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Client *</label>
+        <div class="relative">
+          <input pInputText [(ngModel)]="clientQuery" (input)="searchClient($any($event.target).value)"
+            placeholder="Search client by name or phone..." class="w-full" />
+          @if (form.consultation_id) {
+            <button pButton icon="pi pi-times" class="p-button-sm p-button-text absolute right-1 top-1/2 -translate-y-1/2"
+              (click)="clearClient()"></button>
+          }
+          @if (clientSearching()) {
+            <div class="absolute z-10 w-full bg-white border rounded shadow-lg mt-1 p-2 text-sm text-gray-500">Searching...</div>
+          } @else if (clientResults().length) {
+            <ul class="absolute z-10 w-full bg-white border rounded shadow-lg mt-1 max-h-56 overflow-auto p-0 m-0 list-none">
+              @for (c of clientResults(); track c.phone) {
+                <li class="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 border-b last:border-b-0"
+                  (click)="selectClient(c)">
+                  <span class="font-medium">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
+                  <span class="text-gray-500"> · {{ c.phone }}</span>
+                </li>
+              }
+            </ul>
+          }
+        </div>
       </div>
     }
     <div>

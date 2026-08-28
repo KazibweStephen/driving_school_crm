@@ -37,6 +37,20 @@ class TransferStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class TransferPool(str, enum.Enum):
+    """The source fund pool a branch transfer/remittance draws from."""
+    PETTY_CASH = "petty_cash"
+    CLIENT_ACCOUNTS = "client_accounts"
+
+
+class TransferMethod(str, enum.Enum):
+    """How money was physically moved between branches."""
+    CASH = "cash"
+    MOBILE_MONEY = "mobile_money"
+    BANK = "bank"
+    OTHER = "other"
+
+
 class Company(Base):
     __tablename__ = "companies"
 
@@ -50,6 +64,9 @@ class Company(Base):
     monthly_sales_target: Mapped[float] = mapped_column(
         Numeric(14, 2), default=10_000_000.00, nullable=False
     )
+    head_office_branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -59,7 +76,10 @@ class Company(Base):
     )
 
     branches: Mapped[list["Branch"]] = relationship(
-        "Branch", back_populates="company", cascade="all, delete-orphan"
+        "Branch",
+        back_populates="company",
+        cascade="all, delete-orphan",
+        foreign_keys="Branch.company_id",
     )
     sms_settings: Mapped["CompanySmsSettings | None"] = relationship(
         "CompanySmsSettings", back_populates="company", uselist=False, cascade="all, delete-orphan"
@@ -69,6 +89,9 @@ class Company(Base):
     )
     discounts: Mapped[list["Discount"]] = relationship(
         "Discount", back_populates="company", cascade="all, delete-orphan"
+    )
+    head_office_branch: Mapped["Branch | None"] = relationship(
+        "Branch", foreign_keys=[head_office_branch_id], uselist=False
     )
 
 
@@ -95,7 +118,9 @@ class Branch(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    company: Mapped["Company"] = relationship("Company", back_populates="branches")
+    company: Mapped["Company"] = relationship(
+        "Company", back_populates="branches", foreign_keys=[company_id]
+    )
     user_assignments: Mapped[list["UserBranchAssignment"]] = relationship(
         "UserBranchAssignment", back_populates="branch", cascade="all, delete-orphan"
     )
@@ -192,6 +217,9 @@ class Expense(Base):
     amount: Mapped[float] = mapped_column(nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    consultation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("consultations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     mileage: Mapped[int | None] = mapped_column(nullable=True)
     vehicle_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True, index=True
@@ -225,6 +253,7 @@ class Expense(Base):
     )
 
     branch: Mapped["Branch"] = relationship("Branch", back_populates="expenses")
+    consultation: Mapped["Consultation | None"] = relationship("Consultation")
     created_by_user: Mapped["User | None"] = relationship(
         "User", foreign_keys=[created_by_phone], uselist=False
     )
@@ -348,6 +377,15 @@ class BranchTransfer(Base):
     )
     amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pool: Mapped[TransferPool | None] = mapped_column(
+        Enum(TransferPool, values_callable=lambda x: [e.value for e in x]),
+        default=TransferPool.PETTY_CASH, nullable=True,
+    )
+    method: Mapped[TransferMethod | None] = mapped_column(
+        Enum(TransferMethod, values_callable=lambda x: [e.value for e in x]),
+        default=TransferMethod.CASH, nullable=True,
+    )
+    reference: Mapped[str | None] = mapped_column(String(200), nullable=True)
     consultation_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("consultations.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -387,6 +425,60 @@ class BranchTransfer(Base):
     to_branch: Mapped["Branch"] = relationship("Branch", foreign_keys=[to_branch_id])
     consultation: Mapped["Consultation | None"] = relationship("Consultation")
     payment: Mapped["Payment | None"] = relationship("Payment")
+    payment_links: Mapped[list["TransferPaymentLink"]] = relationship(
+        "TransferPaymentLink", back_populates="transfer",
+        cascade="all, delete-orphan",
+    )
+
+
+class TransferPaymentLink(Base):
+    """Links a transfer/remittance to the individual client payments it is
+    composed of, so we can clearly show who the money was collected from."""
+    __tablename__ = "transfer_payment_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    transfer_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("branch_transfers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    payment_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("payments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0.00)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    transfer: Mapped["BranchTransfer"] = relationship("BranchTransfer", back_populates="payment_links")
+    payment: Mapped["Payment"] = relationship("Payment")
+
+
+class ExpenseCategory(Base):
+    """An editable catalogue of expense categories. Categories that are
+    client-related (e.g. Permit Payment, Learner Permit Payment) carry a
+    `requires_client` flag, prompting an attached client on the expense."""
+    __tablename__ = "expense_categories"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    code: Mapped[str] = mapped_column(String(100), nullable=False)
+    requires_client: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_operating: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    sort_order: Mapped[int] = mapped_column(default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    company: Mapped["Company"] = relationship("Company")
+    __table_args__ = (
+        UniqueConstraint("company_id", "code", name="uq_expense_category_company_code"),
+    )
 
 
 class CompanySmsSettings(Base):

@@ -49,6 +49,11 @@
           @if (e.description) {
             <br><span class="text-xs text-gray-400">{{ e.description }}</span>
           }
+          @if (e.receipt_url) {
+            <br><a [href]="receiptLink(e)" target="_blank" class="text-xs text-blue-600 underline">
+              <i class="pi pi-paperclip mr-1"></i>View receipt
+            </a>
+          }
         </td>
         <td><p-tag [value]="e.status.toUpperCase()" [severity]="severityMap[e.status]"></p-tag>
           @if (e.status === 'rejected' && e.rejection_reason) {

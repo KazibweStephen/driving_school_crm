@@ -34,18 +34,26 @@ export interface ExpenseCreate {
   consultation_id?: string;
   expense_date?: string | Date;
   status?: string;
+  receipt_url?: string;
 }
 
 export interface ExpenseCategory {
   id: string;
   name: string;
+  code: string;
   requires_client: boolean;
+  is_operating: boolean;
+  sort_order: number;
   is_active: boolean;
+  created_at: string;
 }
 
 export interface ExpenseCategoryCreate {
   name: string;
+  code?: string;
   requires_client?: boolean;
+  is_operating?: boolean;
+  sort_order?: number;
   is_active?: boolean;
 }
 
@@ -309,6 +317,10 @@ export class FinanceService {
 
   deleteExpenseCategory(id: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/expense-categories/${id}`);
+  }
+
+  syncUsedExpenseCategories(): Observable<{ created: number }> {
+    return this.http.post<{ created: number }>(`${this.base}/expense-categories/sync-used`, {});
   }
 
   getCashPosition(): Observable<BranchCashPosition[]> {

@@ -111,7 +111,7 @@ async def upload_expense_receipt(
     if size > max_size:
         raise HTTPException(status_code=400, detail="File too large (max 10MB)")
 
-    upload_dir = os.path.join(settings.UPLOAD_DIR, "receipts")
+    upload_dir = os.path.join("uploads", "receipts")
     os.makedirs(upload_dir, exist_ok=True)
 
     ext = os.path.splitext(file.filename or "receipt.jpg")[1] or ".jpg"
@@ -123,6 +123,31 @@ async def upload_expense_receipt(
         f.write(content)
 
     return {"url": f"/uploads/receipts/{filename}"}
+
+
+@router.get("/expenses/receipts/{filename}")
+async def get_expense_receipt(
+    filename: str,
+    current_user: User = Depends(require_permission("expenses.view")),
+):
+    from fastapi.responses import FileResponse
+
+    base_dir = os.path.realpath(os.path.join("uploads", "receipts"))
+    safe_name = os.path.basename(filename)
+    file_path = os.path.realpath(os.path.join(base_dir, safe_name))
+    if not file_path.startswith(base_dir) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Receipt not found")
+
+    ext = os.path.splitext(safe_name)[1].lower()
+    media_type = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".pdf": "application/pdf",
+    }.get(ext, "application/octet-stream")
+
+    return FileResponse(path=file_path, media_type=media_type, filename=safe_name)
 
 
 # ── Expenses ──
@@ -184,6 +209,7 @@ async def create_expense(
         vehicle_id=data.vehicle_id,
         expense_date=data.expense_date,
         status=data.status or "pending",
+        receipt_url=data.receipt_url,
         created_by_phone=current_user.phone,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
@@ -771,6 +797,16 @@ async def delete_expense_category(
     if not deleted:
         raise HTTPException(status_code=404, detail="Category not found")
     return None
+
+
+@router.post("/expense-categories/sync-used", response_model=dict)
+async def sync_used_expense_categories(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.manage")),
+):
+    return await finance_service.sync_used_expense_categories(
+        db, company_id=current_user.company_id
+    )
 
 
 # ── Cash Position ──

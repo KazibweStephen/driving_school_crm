@@ -90,6 +90,7 @@ export class MainLayout implements OnInit, OnDestroy {
         { path: '/consultations', label: 'Consultations', icon: 'pi pi-phone', permission: 'consultations.view' },
         { path: '/bulk-onboarding', label: 'Bulk Onboarding', icon: 'pi pi-upload', permission: 'bulk_onboarding.manage' },
         { path: '/expenses', label: 'Expenses', icon: 'pi pi-minus-circle', permission: 'expenses.view' },
+        { path: '/expense-categories', label: 'Expense Categories', icon: 'pi pi-tags', permission: 'expenses.manage' },
         { path: '/payments', label: 'Payments', icon: 'pi pi-credit-card', permission: 'payments.view' },
         { path: '/collections-sheet', label: 'Collections Sheet', icon: 'pi pi-file-invoice', permission: 'collections.view' },
         { path: '/transfers', label: 'Branch Transfers', icon: 'pi pi-arrow-right-arrow-left', permission: 'transfers.view' },

@@ -63,9 +63,9 @@ export class ExpensesCmp implements OnInit {
     }));
     return [...opts, { label: 'Other', value: '__other__', requires_client: false }];
   });
-  selectedCategory = computed(() =>
-    this.categoryOptions().find(c => c.value === this.form.category) ?? null
-  );
+  selectedCategory(): { label: string; value: string; requires_client: boolean } | null {
+    return this.categoryOptions().find(c => c.value === this.form.category) ?? null;
+  }
 
   clientResults = signal<ClientInfo[]>([]);
   clientSearching = signal(false);
@@ -193,18 +193,20 @@ export class ExpensesCmp implements OnInit {
         this.uploading.set(false);
       }
 
-      const category = this.form.category === '__other__' ? this.form.otherDetail.trim() : this.form.category;
+      const f = this.form;
+      const category = f.category === '__other__' ? f.otherDetail.trim() : f.category;
       const payload: ExpenseCreate = {
-        branch_id: this.form.branch_id,
-        amount: this.form.amount,
-        description: this.form.description,
+        branch_id: f.branch_id,
+        amount: f.amount,
+        description: f.description,
         category,
-        mileage: this.form.mileage ?? undefined,
-        vehicle_id: this.form.vehicle_id || undefined,
-        consultation_id: this.form.consultation_id || undefined,
-        expense_date: this.form.expense_date instanceof Date
-          ? this.form.expense_date.toISOString().slice(0, 10)
-          : this.form.expense_date,
+        mileage: f.mileage ?? undefined,
+        vehicle_id: f.vehicle_id || undefined,
+        consultation_id: f.consultation_id || undefined,
+        expense_date: f.expense_date instanceof Date
+          ? f.expense_date.toISOString().slice(0, 10)
+          : f.expense_date,
+        receipt_url,
       };
       await this.financeService.createExpense(payload).toPromise();
       this.messageService.add({ severity: 'success', summary: 'Created', detail: 'Expense created' });
@@ -351,5 +353,11 @@ export class ExpensesCmp implements OnInit {
     if (!d) return '';
     const dt = new Date(d);
     return dt.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  receiptLink(e: Expense): string {
+    if (!e.receipt_url) return '';
+    const filename = e.receipt_url.split('/').pop() || '';
+    return `/api/v1/finance/expenses/receipts/${encodeURIComponent(filename)}`;
   }
 }

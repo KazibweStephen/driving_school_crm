@@ -145,6 +145,7 @@ class ExpenseCreate(BaseModel):
     vehicle_id: uuid.UUID | None = None
     expense_date: datetime | None = None
     status: str | None = "pending"
+    receipt_url: str | None = None
 
 
 class ExpenseUpdate(BaseModel):

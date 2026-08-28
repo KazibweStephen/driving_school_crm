@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -119,6 +120,7 @@ async def create_expense(
     vehicle_id: uuid.UUID | None = None,
     expense_date: datetime | None = None,
     status: str = "pending",
+    receipt_url: str | None = None,
     created_by_phone: str | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
@@ -140,6 +142,7 @@ async def create_expense(
         vehicle_id=vehicle_id,
         expense_date=expense_date or datetime.now(timezone.utc),
         status=ExpenseStatus(status),
+        receipt_url=receipt_url,
         created_by_phone=created_by_phone,
     )
     db.add(expense)
@@ -1271,6 +1274,89 @@ async def delete_expense_category(
     await db.delete(cat)
     await db.flush()
     return True
+
+
+def _category_code_from_name(name: str) -> str:
+    code = re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_") or "other"
+    return code[:100]
+
+
+async def sync_used_expense_categories(
+    db: AsyncSession,
+    company_id: uuid.UUID,
+) -> dict:
+    """Create ExpenseCategory entries for every distinct expense category that
+    has already been used by an expense in this company but is not yet present
+    in the catalogue. Legacy/arbitrary categories entered as free text are
+    picked up here."""
+    if company_id is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Company required")
+
+    distinct_cats = (
+        await db.execute(
+            select(Expense.category)
+            .join(Branch, Branch.id == Expense.branch_id)
+            .where(
+                Branch.company_id == company_id,
+                Expense.category.is_not(None),
+                Expense.category != "",
+            )
+            .distinct()
+        )
+    ).scalars().all()
+
+    existing_names_lower = {
+        n.lower()
+        for n in (
+            await db.execute(
+                select(ExpenseCategory.name).where(ExpenseCategory.company_id == company_id)
+            )
+        ).scalars().all()
+    }
+    existing_codes = set(
+        (
+            await db.execute(
+                select(ExpenseCategory.code).where(ExpenseCategory.company_id == company_id)
+            )
+        ).scalars().all()
+    )
+    existing_codes_lower = {c.lower() for c in existing_codes}
+
+    created = 0
+    current_name = ""
+    max_order_result = await db.execute(
+        select(func.max(ExpenseCategory.sort_order)).where(ExpenseCategory.company_id == company_id)
+    )
+    next_order = (max_order_result.scalar() or 0) + 1
+
+    for current_name in distinct_cats:
+        name = current_name.strip()
+        if not name:
+            continue
+        name_lower = name.lower()
+        if name_lower in ("other", "__other__"):
+            continue
+        if name_lower in existing_names_lower or name_lower in existing_codes_lower:
+            continue
+        code = _category_code_from_name(name)
+        unique_code = code
+        i = 2
+        while unique_code in existing_codes:
+            unique_code = f"{code}_{i}"
+            i += 1
+        db.add(ExpenseCategory(
+            company_id=company_id, name=name, code=unique_code,
+            requires_client=False, is_operating=True,
+            sort_order=next_order, is_active=True,
+        ))
+        existing_names_lower.add(name.lower())
+        existing_codes.add(unique_code)
+        created += 1
+        next_order += 1
+
+    await db.flush()
+    return {"created": created}
 
 
 # ── Cash Position ──

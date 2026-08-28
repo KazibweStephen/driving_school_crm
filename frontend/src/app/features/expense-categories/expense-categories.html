@@ -1,0 +1,117 @@
+<p-toast></p-toast>
+
+<div class="p-4 sm:p-6">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Expense Categories</h1>
+      <p class="text-sm text-gray-500 mt-1">Manage the category catalogue used when creating expenses.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <p-button *appHasPermission="'expenses.manage'" label="Sync used categories" icon="pi pi-refresh"
+        severity="secondary" [loading]="syncing()" (onClick)="syncUsed()"
+        pTooltip="Add any categories already used on expenses but missing from this catalogue" tooltipPosition="bottom" />
+      <p-button *appHasPermission="'expenses.manage'" label="Add Category" icon="pi pi-plus" (onClick)="openCreate()" />
+    </div>
+  </div>
+
+  <p-table [value]="categories()" [loading]="loading()" [paginator]="true" [rows]="15"
+    [rowsPerPageOptions]="[10, 15, 30]" sortField="sort_order" [sortOrder]="1">
+    <ng-template pTemplate="header">
+      <tr>
+        <th>Name</th>
+        <th>Code</th>
+        <th>Client Required</th>
+        <th>Operating</th>
+        <th>Status</th>
+        <th style="width: 10rem">Actions</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-c>
+      <tr>
+        <td class="text-sm font-medium">{{ c.name }}</td>
+        <td class="text-sm text-gray-500">{{ c.code || '-' }}</td>
+        <td>
+          @if (c.requires_client) {
+            <p-tag value="Yes" severity="info" />
+          } @else {
+            <span class="text-sm text-gray-400">No</span>
+          }
+        </td>
+        <td>
+          @if (c.is_operating) {
+            <p-tag value="Operating" severity="success" />
+          } @else {
+            <p-tag value="Client" severity="warn" />
+          }
+        </td>
+        <td>
+          @if (c.is_active) {
+            <p-tag value="Active" severity="success" />
+          } @else {
+            <p-tag value="Inactive" severity="secondary" />
+          }
+        </td>
+        <td>
+          <div class="flex gap-1">
+            <p-button *appHasPermission="'expenses.manage'" icon="pi pi-pencil" severity="secondary" rounded="true"
+              pTooltip="Edit" (onClick)="openEdit(c)" />
+            <p-button *appHasPermission="'expenses.manage'" icon="pi pi-trash" severity="danger" rounded="true"
+              pTooltip="Delete" (onClick)="confirmDelete(c)" />
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="6" class="text-center text-gray-500 py-4">No categories found</td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<p-dialog
+  [(visible)]="showDialog"
+  [header]="editing() ? 'Edit Category' : 'New Category'"
+  [modal]="true"
+  [style]="{ width: '460px' }"
+  [draggable]="false"
+  [resizable]="false"
+  appendTo="body"
+>
+  <div class="flex flex-col gap-4 pt-2">
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700">Name *</label>
+      <input pInputText [(ngModel)]="form().name" class="w-full" placeholder="e.g. Training Material" />
+    </div>
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700">Code (optional)</label>
+      <input pInputText [(ngModel)]="form().code" class="w-full" placeholder="auto-generated from name if left blank" />
+    </div>
+    <div class="flex gap-6">
+      <span class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="form().requires_client" binary="true" inputId="reqClient" />
+        <label for="reqClient" class="text-sm text-gray-700">Requires client</label>
+      </span>
+      <span class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="form().is_operating" binary="true" inputId="isOp" />
+        <label for="isOp" class="text-sm text-gray-700">Operating expense</label>
+      </span>
+    </div>
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700">Sort order</label>
+      <p-inputNumber [(ngModel)]="form().sort_order" [min]="0" [useGrouping]="false" styleClass="w-full" inputStyleClass="w-full" />
+    </div>
+    @if (editing()) {
+      <div class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="form().is_active" binary="true" inputId="isActive" />
+        <label for="isActive" class="text-sm text-gray-700">Active</label>
+      </div>
+    }
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button label="Cancel" severity="secondary" (onClick)="showDialog.set(false)" />
+    <p-button label="Save" [disabled]="!formValid() || saving()" [loading]="saving()" (onClick)="save()" />
+  </ng-template>
+</p-dialog>
+
+<p-confirmDialog></p-confirmDialog>

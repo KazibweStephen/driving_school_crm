@@ -112,6 +112,12 @@ export const routes: Routes = [
           import('./features/profit-loss/profit-loss').then((c) => c.ProfitLossCmp),
       },
       {
+        path: 'expense-categories',
+        data: { permission: 'expenses.view' },
+        loadComponent: () =>
+          import('./features/expense-categories/expense-categories').then((c) => c.ExpenseCategoriesCmp),
+      },
+      {
         path: 'companies',
         data: { permission: 'companies.view' },
         loadComponent: () =>

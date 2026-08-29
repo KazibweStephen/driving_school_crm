@@ -62,6 +62,23 @@ export interface InstallmentUpdate {
   future_installments?: InstallmentFutureAdjust[];
 }
 
+export interface ScheduleAdjustment {
+  installment_id: string;
+  due_date: string;
+}
+
+export interface CollectionPayment {
+  product_id: string;
+  package_id?: string;
+  amount: number;
+  branch_id?: string;
+  document_date?: string;
+  receipt_number?: string;
+  notes?: string;
+  schedule_adjustments?: ScheduleAdjustment[];
+  future_schedule?: InstallmentCreate[];
+}
+
 export interface BranchInfo {
   id: string;
   name: string;
@@ -78,6 +95,13 @@ export class PaymentService {
 
   createPayment(consultationId: string, data: PaymentCreate) {
     return this.http.post<PaymentRead>(`/api/v1/consultations/${consultationId}/payments`, data);
+  }
+
+  collectPayment(consultationId: string, data: CollectionPayment) {
+    return this.http.post<PaymentRead>(
+      `/api/v1/consultations/${consultationId}/payments/collect`,
+      data,
+    );
   }
 
   updateInstallment(paymentId: string, installmentId: string, data: InstallmentUpdate) {

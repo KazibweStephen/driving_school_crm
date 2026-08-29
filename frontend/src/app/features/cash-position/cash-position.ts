@@ -181,6 +181,23 @@ export class CashPositionCmp implements OnInit {
     }
   }
 
+  onPoolChange() {
+    this.selectedPayments.set([]);
+    this.sendForm.amount = 0;
+    this.paymentSearch.set('');
+    if (this.sendForm.pool === 'client_accounts') {
+      if (this.sendForm.from_branch_id) {
+        this.loadUnremitted(this.sendForm.from_branch_id);
+      } else {
+        this.unremitted.set([]);
+        this.filteredPayments.set([]);
+      }
+    } else {
+      this.unremitted.set([]);
+      this.filteredPayments.set([]);
+    }
+  }
+
   applyPaymentFilter() {
     const q = (this.paymentSearch() || '').trim().toLowerCase();
     const all = this.unremitted();
@@ -209,6 +226,9 @@ export class CashPositionCmp implements OnInit {
   sendFormValid(): boolean {
     if (!this.sendForm.from_branch_id || !this.sendForm.to_branch_id) return false;
     if (this.sendForm.from_branch_id === this.sendForm.to_branch_id) return false;
+    if (this.sendForm.pool === 'client_accounts') {
+      return this.selectedPayments().length > 0 && this.sendForm.amount > 0;
+    }
     if (!this.sendForm.amount || this.sendForm.amount <= 0) return false;
     return true;
   }

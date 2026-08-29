@@ -129,6 +129,254 @@ async def create_payment(
     return payment
 
 
+async def create_collection_payment(
+    db: AsyncSession,
+    consultation_id: uuid.UUID,
+    product_id: str,
+    package_id: str | None,
+    branch_id: uuid.UUID | None,
+    created_by_phone: str | None,
+    amount: Decimal,
+    document_date: date | None,
+    receipt_number: str | None,
+    notes: str | None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+    schedule_adjustments: list[dict] | None = None,
+    future_schedule: list[dict] | None = None,
+) -> Payment:
+    """Record a collection as an independent Payment row.
+
+    The new row carries the collected amount as a single PAID installment. The
+    original schedule rows (other payments for the same consultation+product+
+    package) keep the instalment plan: the collection pays off their pending
+    installments in due-date order but their `total_paid` is NOT inflated
+    (paid-off installments are zeroed so _recompute_payment_totals adds 0).
+    """
+    from fastapi import HTTPException
+
+    amount = Decimal(str(amount))
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Payment amount must be greater than zero")
+
+    consultation_result = await db.execute(
+        select(Consultation)
+        .outerjoin(Branch, Consultation.branch_id == Branch.id)
+        .where(
+            Consultation.id == consultation_id,
+            or_(
+                Consultation.branch_id.is_(None),
+                Branch.company_id == company_id,
+            ),
+        )
+    )
+    consultation = consultation_result.scalar_one_or_none()
+    if consultation is None:
+        raise HTTPException(status_code=404, detail="Consultation not found")
+
+    if branch_id is not None:
+        b_result = await db.execute(
+            select(Branch).where(Branch.id == branch_id)
+        )
+        branch = b_result.scalar_one_or_none()
+        if branch is None:
+            raise HTTPException(status_code=404, detail="Branch not found")
+        if company_id is not None and branch.company_id != company_id:
+            raise HTTPException(status_code=403, detail="Branch not in your company")
+
+    effective_date = document_date or date.today()
+    if (
+        consultation.document_date is not None
+        and effective_date < consultation.document_date
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Transaction Date cannot be before Document Date",
+        )
+
+    future_rows: list[tuple[date, Decimal]] = []
+    future_amt_total = Decimal("0")
+    if future_schedule:
+        for fs in future_schedule:
+            f_due = fs.get("due_date")
+            f_amt = fs.get("amount")
+            if f_due is None or f_amt is None:
+                continue
+            f_amt = Decimal(str(f_amt))
+            if f_amt > 0:
+                future_rows.append((f_due, f_amt))
+                future_amt_total += f_amt
+
+    # Other payments for the same product/package (the schedule owner rows).
+    schedule_result = await db.execute(
+        select(Payment)
+        .where(
+            Payment.consultation_id == consultation_id,
+            Payment.product_id == product_id,
+            (
+                Payment.package_id == package_id
+                if package_id is not None
+                else Payment.package_id.is_(None)
+            ),
+            Payment.cancelled_at.is_(None),
+        )
+        .options(selectinload(Payment.installments), selectinload(Payment.consultation))
+        .order_by(Payment.created_at.asc())
+    )
+    schedule_payments = list(schedule_result.scalars().all())
+
+    if not schedule_payments:
+        # First payment for this product: this row doubles as the plan row so the
+        # frontend balance math (first payment total_amount - sum of total_paid)
+        # stays correct. Future installments ride on this row as pending.
+        total_amount = amount + future_amt_total
+    else:
+        total_amount = amount
+
+    payment = Payment(
+        id=uuid.uuid4(),
+        consultation_id=consultation_id,
+        branch_id=branch_id,
+        created_by_phone=created_by_phone,
+        product_id=product_id,
+        package_id=package_id,
+        total_amount=total_amount,
+        document_date=effective_date,
+        notes=notes or ("Collection payment" if schedule_payments else None),
+        receipt_number=receipt_number or None,
+        system_receipt_number=_generate_system_receipt_number(),
+        transaction_id=await generate_transaction_id(db),
+    )
+    payment_id = payment.id
+    db.add(payment)
+    await db.flush()
+
+    paid_inst = Installment(
+        payment_id=payment_id,
+        due_date=effective_date,
+        amount=amount,
+        paid_amount=amount,
+        status=InstallmentStatus.PAID,
+        paid_date=effective_date,
+        notes=notes or "Collection payment",
+    )
+    db.add(paid_inst)
+
+    if not schedule_payments:
+        for f_due, f_amt in future_rows:
+            db.add(
+                Installment(
+                    payment_id=payment_id,
+                    due_date=f_due,
+                    amount=f_amt,
+                    status=InstallmentStatus.PENDING,
+                )
+            )
+    await db.flush()
+
+    # Own totals for the new row (collected amount; pending future installments
+    # add nothing to total_paid).
+    new_payment_result = await db.execute(
+        select(Payment)
+        .where(Payment.id == payment_id)
+        .options(selectinload(Payment.installments))
+        .execution_options(populate_existing=True)
+    )
+    new_payment = new_payment_result.scalar_one()
+    await _recompute_payment_totals(new_payment)
+
+    if schedule_payments:
+        # Write off pending installments across the schedule rows in due-date
+        # order. Fully covered installments are zeroed and marked PAID so the
+        # schedule rows' total_paid is NOT inflated by this collection. Partial
+        # coverage reduces the remaining installment's amount in place.
+        pending = sorted(
+            (
+                inst
+                for sp in schedule_payments
+                for inst in sp.installments
+                if inst.status == InstallmentStatus.PENDING
+            ),
+            key=lambda i: (i.due_date, i.created_at),
+        )
+        remaining = Decimal(amount)
+        for target in pending:
+            if remaining <= 0:
+                break
+            if remaining >= target.amount:
+                remaining -= target.amount
+                target.amount = Decimal("0")
+                target.paid_amount = Decimal("0")
+                target.status = InstallmentStatus.PAID
+                target.paid_date = effective_date
+                if notes is not None:
+                    target.notes = notes
+            else:
+                target.amount = max(Decimal("0"), target.amount - remaining)
+                remaining = Decimal("0")
+                if notes is not None:
+                    target.notes = notes
+                break
+        await db.flush()
+
+        # Apply due-date overrides for the still-pending installments.
+        if schedule_adjustments:
+            for adj in schedule_adjustments:
+                adj_id = adj.get("installment_id")
+                adj_date = adj.get("due_date")
+                if not adj_id or not adj_date:
+                    continue
+                for sp in schedule_payments:
+                    for inst in sp.installments:
+                        if (
+                            str(inst.id) == str(adj_id)
+                            and inst.status != InstallmentStatus.PAID
+                        ):
+                            inst.due_date = adj_date
+        await db.flush()
+
+        for sp in schedule_payments:
+            await _recompute_payment_totals(sp)
+
+        # If the whole schedule was just paid off and the user still wants future
+        # installments, append them to the earliest schedule (plan) row.
+        if future_rows:
+            remaining_pending = [
+                inst
+                for sp in schedule_payments
+                for inst in sp.installments
+                if inst.status == InstallmentStatus.PENDING
+            ]
+            if not remaining_pending:
+                origin = schedule_payments[0]
+                for f_due, f_amt in future_rows:
+                    db.add(
+                        Installment(
+                            payment_id=origin.id,
+                            due_date=f_due,
+                            amount=f_amt,
+                            status=InstallmentStatus.PENDING,
+                        )
+                    )
+                await db.flush()
+                await _recompute_payment_totals(origin)
+
+    # Reload the new payment with installments for the response.
+    new_payment_result = await db.execute(
+        select(Payment)
+        .where(Payment.id == payment_id)
+        .options(selectinload(Payment.installments), selectinload(Payment.consultation))
+        .execution_options(populate_existing=True)
+    )
+    new_payment = new_payment_result.scalar_one()
+    await db.flush()
+
+    # Sync branch transfer for the new collection row (cross-branch reconciliation).
+    await _sync_branch_transfer_for_payment(db, new_payment)
+    await db.flush()
+    return new_payment
+
+
 async def get_payment_by_id(db: AsyncSession, payment_id: uuid.UUID) -> Payment | None:
     result = await db.execute(
         select(Payment)
@@ -512,13 +760,23 @@ async def list_clients(
     )
 
     if outstanding_only:
-        query = query.where(
-            exists(
-                select(Payment.id).where(
-                    Payment.consultation_id == Consultation.id,
-                    Payment.balance > 0,
-                )
+        # A consultation is outstanding when, for at least one product/package,
+        # the largest recorded total_amount exceeds the sum of all payments'
+        # total_paid (i.e. it still owes money). Grouping by product/package
+        # keeps independent collection rows from double-counting or hiding debt.
+        outstanding_groups = (
+            select(Payment.consultation_id.label("consultation_id"))
+            .where(Payment.cancelled_at.is_(None))
+            .group_by(
+                Payment.consultation_id,
+                Payment.product_id,
+                Payment.package_id,
             )
+            .having(func.max(Payment.total_amount) > func.sum(Payment.total_paid))
+            .subquery()
+        )
+        query = query.where(
+            Consultation.id.in_(select(outstanding_groups.c.consultation_id))
         )
 
     has_search = bool(search and search.strip())

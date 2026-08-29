@@ -3039,12 +3039,10 @@ export class ClientProfile implements OnInit {
 
       const schedule = this.pendingScheduleFor(ci);
       if (schedule.length) {
-        // Pay against the existing schedule so the earliest pending installment's
-        // amount is reduced (or cleared), instead of creating a new payment that
-        // would compound the outstanding installments.
-        const earliest = schedule[0];
+        // Record an INDEPENDENT collection Payment row (own receipt/transaction
+        // id) instead of accumulating onto the original schedule Payment.
         const userFuture = this.makePaymentInstallments.filter(inst => inst.amount > 0 && inst.due_date);
-        const future = schedule
+        const scheduleAdjustments = schedule
           .slice(1)
           .map((row, i) => {
             const uf = userFuture[i];
@@ -3052,16 +3050,18 @@ export class ClientProfile implements OnInit {
           })
           .filter((x): x is { installment_id: string; due_date: string } => !!x);
 
-        await this.paymentService
-          .updateInstallment(earliest.payment_id, earliest.id, {
-            paid_date: docDate,
-            paid_amount: amount,
-            push_forward_date: earliest.due_date,
-            future_installments: future.length ? future : undefined,
-            notes: 'Paid',
+        const paymentResult = await this.paymentService
+          .collectPayment(c.id, {
+            product_id: ci.product_id,
+            package_id: ci.package_id || undefined,
+            branch_id: this.collectionBranchId() || undefined,
+            amount,
+            document_date: this.makePaymentDocumentDate() ? this.formatDate(this.makePaymentDocumentDate()!) : undefined,
+            receipt_number: this.makePaymentReceiptNumber() || undefined,
+            schedule_adjustments: scheduleAdjustments.length ? scheduleAdjustments : undefined,
           })
           .toPromise();
-        receiptId = earliest.payment_id;
+        receiptId = paymentResult?.id ?? null;
       } else {
         // No existing schedule: record a new payment with its own installments.
         const installments = [
@@ -3315,18 +3315,20 @@ export class ClientProfile implements OnInit {
 
         const schedule = this.pendingScheduleFor(ci);
         if (schedule.length) {
-          // Pay against the existing schedule so pending installments are reduced
-          // instead of compounding via a new payment record.
-          const earliest = schedule[0];
-          await this.paymentService
-            .updateInstallment(earliest.payment_id, earliest.id, {
-              paid_date: docDate,
-              paid_amount: amount,
-              notes: 'Paid',
+          // Record an INDEPENDENT collection Payment row (own receipt/transaction
+          // id) instead of accumulating onto the original schedule Payment.
+          const paymentResult = await this.paymentService
+            .collectPayment(c.id, {
+              product_id: ci.product_id,
+              package_id: ci.package_id || undefined,
+              branch_id: this.collectionBranchId() || undefined,
+              amount,
+              document_date: docDate,
+              receipt_number: receipt || undefined,
             })
             .toPromise();
-          if (!receipt) {
-            receiptPayments.push({ id: earliest.payment_id, amount });
+          if (!receipt && paymentResult?.id) {
+            receiptPayments.push({ id: paymentResult.id, amount });
           }
           continue;
         }

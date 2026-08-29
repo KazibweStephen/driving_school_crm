@@ -19,6 +19,7 @@ from app.schemas.payment import (
     ClientActiveProduct,
     ClientListResponse,
     ClientSummary,
+    CollectionPaymentCreate,
     InstallmentCreate,
     InstallmentRead,
     InstallmentUpdate,
@@ -249,6 +250,75 @@ async def create_payment(
                 await on_payment_received(
                     db, current_user.company_id, consultation.phone, client_name,
                     str(data.total_amount), receipt,
+                )
+        except Exception as e:
+            logger.warning("[SMS] Failed to send payment_received notification: %s", e)
+
+    return payment_response
+
+
+@router.post(
+    "/api/v1/consultations/{consultation_id}/payments/collect",
+    response_model=PaymentRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def collect_payment(
+    consultation_id: str,
+    data: CollectionPaymentCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("payments.record")),
+):
+    """Record a collection as an independent Payment row (own receipt numbers,
+    transaction id, and payments-list entry) instead of accumulating onto the
+    original product schedule row."""
+    try:
+        cid = uuid.UUID(consultation_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID")
+
+    payment = await payment_service.create_collection_payment(
+        db,
+        consultation_id=cid,
+        product_id=data.product_id,
+        package_id=data.package_id,
+        branch_id=data.branch_id,
+        created_by_phone=current_user.phone,
+        amount=data.amount,
+        document_date=data.document_date,
+        receipt_number=data.receipt_number,
+        notes=data.notes,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+        schedule_adjustments=(
+            [a.model_dump() for a in data.schedule_adjustments]
+            if data.schedule_adjustments else None
+        ),
+        future_schedule=(
+            [a.model_dump() for a in data.future_schedule]
+            if data.future_schedule else None
+        ),
+    )
+
+    # Serialize immediately to avoid lazy-load issues after subsequent db queries
+    payment_response = PaymentRead.model_validate(payment)
+
+    # Send payment received SMS
+    if current_user.company_id:
+        try:
+            from app.services.notification.service import on_payment_received
+            from sqlalchemy import select as sa_select
+            consult_result = await db.execute(
+                sa_select(Consultation).where(Consultation.id == cid)
+            )
+            consultation = consult_result.scalar_one_or_none()
+            if consultation and consultation.phone:
+                client_name = " ".join(
+                    filter(None, [consultation.first_name, consultation.middle_name, consultation.last_name])
+                ) or "Client"
+                receipt = data.receipt_number or ""
+                await on_payment_received(
+                    db, current_user.company_id, consultation.phone, client_name,
+                    str(data.amount), receipt,
                 )
         except Exception as e:
             logger.warning("[SMS] Failed to send payment_received notification: %s", e)

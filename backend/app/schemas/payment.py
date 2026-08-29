@@ -73,6 +73,23 @@ class InstallmentUpdate(BaseModel):
     future_installments: list[FutureInstallmentAdjust] | None = None
 
 
+class CollectionPaymentCreate(BaseModel):
+    """An independent collection payment against a product on a consultation.
+
+    Each collection is its own Payment row (own receipt numbers/transaction id)
+    instead of accumulating onto the original schedule Payment row.
+    """
+    product_id: str = Field(..., min_length=1)
+    package_id: str | None = None
+    amount: Decimal = Field(..., gt=0, decimal_places=2)
+    branch_id: uuid.UUID | None = None
+    document_date: date | None = None
+    receipt_number: str | None = Field(None, max_length=100)
+    notes: str | None = None
+    schedule_adjustments: list[FutureInstallmentAdjust] | None = None
+    future_schedule: list[InstallmentCreate] | None = None
+
+
 class ClientActiveProduct(BaseModel):
     cart_item_id: uuid.UUID
     product_id: str

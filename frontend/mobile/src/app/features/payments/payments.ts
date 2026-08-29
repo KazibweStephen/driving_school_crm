@@ -492,28 +492,11 @@ export class Payments {
   }
 
   private doSubmit(consultationId: string, ci: CartItem, amount: number) {
+    // Every collection is recorded as its OWN independent Payment row (own
+    // receipt/transaction id) instead of accumulating onto the original
+    // schedule Payment record.
     const rows = this.collectSchedule();
-    if (
-      rows.length > 0 &&
-      rows[0].installment_id &&
-      rows[0].payment_id
-    ) {
-      this.recordAgainstSchedule(consultationId, ci, amount);
-    } else {
-      this.doCollect(consultationId, ci, amount);
-    }
-  }
-
-  private recordAgainstSchedule(consultationId: string, ci: CartItem, amount: number) {
-    const rows = this.collectSchedule();
-    const earliest = rows[0];
-    if (!earliest?.installment_id || !earliest.payment_id) {
-      this.doCollect(consultationId, ci, amount);
-      return;
-    }
-    const docDate = this.documentDate();
-    const future = rows
-      .slice(1)
+    const scheduleAdjustments = rows
       .filter(
         (r) =>
           r.installment_id &&
@@ -524,95 +507,38 @@ export class Payments {
         installment_id: r.installment_id!,
         due_date: r.due_date!,
       }));
-    this.submitting.set(true);
-    this.paymentService
-      .updateInstallment(earliest.payment_id, earliest.installment_id, {
-        paid_date: docDate,
-        paid_amount: amount,
-        push_forward_date: earliest.due_date ?? undefined,
-        future_installments: future.length ? future : undefined,
-        notes: 'Payment collected on mobile',
-      })
-      .subscribe({
-        next: () => {
-          this.submitting.set(false);
-          this.finishCollect(consultationId, ci, earliest.payment_id!);
-        },
-        error: (err) => {
-          this.submitting.set(false);
-          this.resultSuccess.set(false);
-          this.resultPaymentId.set(earliest.payment_id);
-          this.resultAmount.set(amount);
-          this.resultMessage.set(err.error?.detail || 'Could not record the payment.');
-          this.step.set('result');
-        },
-      });
-  }
-
-  private doCollect(consultationId: string, ci: CartItem, amount: number) {
-    const docDate = this.documentDate();
-    const futureRows = this.collectSchedule()
+    const futureSchedule = rows
       .filter((r) => !r.installment_id && r.due_date && r.amount > 0)
       .map((r) => ({ due_date: r.due_date!, amount: r.amount }));
-    const futureTotal = futureRows.reduce((s, r) => s + r.amount, 0);
-    const total = Math.round((amount + futureTotal) * 100) / 100;
-    if (total <= 0) {
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Invalid amount',
-        detail: 'Enter an amount greater than zero',
-      });
-      return;
-    }
+    const docDate = this.documentDate();
     this.submitting.set(true);
     this.paymentService
-      .createPayment(consultationId, {
+      .collectPayment(consultationId, {
         product_id: ci.product_id,
         package_id: ci.package_id || undefined,
-        total_amount: total,
-        notes: `Collected on mobile: ${amount}`,
-        receipt_number: this.receiptNumber || undefined,
-        installments: [{ due_date: docDate, amount }, ...futureRows],
-        document_date: docDate,
         branch_id: this.branchId() || undefined,
+        amount,
+        document_date: docDate,
+        receipt_number: this.receiptNumber || undefined,
+        notes: 'Payment collected on mobile',
+        schedule_adjustments: scheduleAdjustments.length
+          ? scheduleAdjustments
+          : undefined,
+        future_schedule: futureSchedule.length ? futureSchedule : undefined,
       })
       .subscribe({
         next: (payment) => {
-          const inst = payment.installments?.[0];
-          if (!inst) {
-            this.submitting.set(false);
-            this.finishCollect(consultationId, ci, payment.id);
-            return;
-          }
-          this.paymentService
-            .updateInstallment(payment.id, inst.id, {
-              paid_date: docDate,
-              paid_amount: amount,
-              notes: 'Collected on mobile',
-            })
-            .subscribe({
-              next: () => {
-                this.submitting.set(false);
-                this.finishCollect(consultationId, ci, payment.id);
-              },
-              error: (err) => {
-                this.submitting.set(false);
-                this.resultSuccess.set(false);
-                this.resultPaymentId.set(payment.id);
-                this.resultAmount.set(amount);
-                this.resultMessage.set(
-                  err.error?.detail || 'Payment recorded but installment update failed.',
-                );
-                this.step.set('result');
-              },
-            });
+          this.submitting.set(false);
+          this.finishCollect(consultationId, ci, payment.id);
         },
         error: (err) => {
           this.submitting.set(false);
           this.resultSuccess.set(false);
           this.resultPaymentId.set(null);
           this.resultAmount.set(amount);
-          this.resultMessage.set(err.error?.detail || 'Could not record the payment.');
+          this.resultMessage.set(
+            err.error?.detail || 'Could not record the payment.',
+          );
           this.step.set('result');
         },
       });

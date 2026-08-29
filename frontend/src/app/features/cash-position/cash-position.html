@@ -82,7 +82,7 @@
       <div class="flex flex-col gap-1">
         <label class="text-sm font-medium text-gray-700">Money Pool</label>
         <p-select [(ngModel)]="sendForm.pool" [options]="poolOptions" optionLabel="name" optionValue="id"
-          styleClass="w-full" appendTo="body" />
+          styleClass="w-full" appendTo="body" (onChange)="onPoolChange()" />
       </div>
       <div class="flex flex-col gap-1">
         <label class="text-sm font-medium text-gray-700">Method</label>
@@ -95,47 +95,52 @@
       <input pInputText [(ngModel)]="sendForm.reference" placeholder="e.g. MOMO-1234 / bank ref" class="w-full" />
     </div>
     <div class="flex flex-col gap-1">
-      <label class="text-sm font-medium text-gray-700">Amount *</label>
+      <label class="text-sm font-medium text-gray-700">{{ sendForm.pool === 'client_accounts' ? 'Remitting (auto-calculated) *' : 'Amount *' }}</label>
       <p-inputNumber [(ngModel)]="sendForm.amount" mode="decimal" [min]="1" [maxFractionDigits]="2"
-        styleClass="w-full" inputStyleClass="w-full" />
+        styleClass="w-full" inputStyleClass="w-full" [disabled]="sendForm.pool === 'client_accounts'" />
+      <small class="text-xs text-gray-500" *ngIf="sendForm.pool === 'client_accounts'">
+        Total of the selected client payments below.
+      </small>
     </div>
 
-    <div class="flex flex-col gap-1">
-      <label class="text-sm font-medium text-gray-700">
-        Unremitted client payments (collected, not yet sent to head office)
-      </label>
-      @if (unremittedLoading()) {
-        <div class="text-sm text-gray-500">Loading payments...</div>
-      } @else {
-        <div class="relative">
-          <input pInputText [(ngModel)]="paymentSearch" (ngModelChange)="applyPaymentFilter()"
-            placeholder="Search by client name or phone..." class="w-full pr-8" />
-          @if (paymentSearch()) {
-            <button pButton icon="pi pi-times" class="p-button-sm p-button-text absolute right-1 top-1/2 -translate-y-1/2"
-              (click)="paymentSearch.set(''); applyPaymentFilter()"></button>
-          }
-        </div>
-        @if (filteredPayments().length) {
-          <div class="flex flex-col gap-2 border rounded p-3 max-h-56 overflow-auto">
-            @for (p of filteredPayments(); track p.payment_id) {
-              <label class="flex items-start gap-2 cursor-pointer text-sm">
-                <input type="checkbox" [checked]="isPaymentSelected(p.payment_id)"
-                  (change)="togglePayment(p)" class="mt-1" />
-                <span class="flex w-full items-center justify-between gap-2">
-                  <span class="min-w-0">
-                    <span class="block font-medium truncate">{{ p.client_name }}</span>
-                    <span class="block text-gray-500">{{ p.client_phone }}</span>
-                  </span>
-                  <span class="font-semibold whitespace-nowrap">{{ currencyService.symbol() }} {{ formatAmount(p.amount) }}</span>
-                </span>
-              </label>
+    @if (sendForm.pool === 'client_accounts') {
+      <div class="flex flex-col gap-1">
+        <label class="text-sm font-medium text-gray-700">
+          Select clients whose collected cash has not been sent to head office
+        </label>
+        @if (unremittedLoading()) {
+          <div class="text-sm text-gray-500">Loading payments...</div>
+        } @else {
+          <div class="relative">
+            <input pInputText [(ngModel)]="paymentSearch" (ngModelChange)="applyPaymentFilter()"
+              placeholder="Search by client name or phone..." class="w-full pr-8" />
+            @if (paymentSearch()) {
+              <button pButton icon="pi pi-times" class="p-button-sm p-button-text absolute right-1 top-1/2 -translate-y-1/2"
+                (click)="paymentSearch.set(''); applyPaymentFilter()"></button>
             }
           </div>
-        } @else {
-          <div class="text-sm text-gray-500">No unremitted client payments for this branch.</div>
+          @if (filteredPayments().length) {
+            <div class="flex flex-col gap-2 border rounded p-3 max-h-56 overflow-auto">
+              @for (p of filteredPayments(); track p.payment_id) {
+                <label class="flex items-start gap-2 cursor-pointer text-sm">
+                  <input type="checkbox" [checked]="isPaymentSelected(p.payment_id)"
+                    (change)="togglePayment(p)" class="mt-1" />
+                  <span class="flex w-full items-center justify-between gap-2">
+                    <span class="min-w-0">
+                      <span class="block font-medium truncate">{{ p.client_name }}</span>
+                      <span class="block text-gray-500">{{ p.client_phone }}</span>
+                    </span>
+                    <span class="font-semibold whitespace-nowrap">{{ currencyService.symbol() }} {{ formatAmount(p.amount) }}</span>
+                  </span>
+                </label>
+              }
+            </div>
+          } @else {
+            <div class="text-sm text-gray-500">No unremitted client payments for this branch.</div>
+          }
         }
-      }
-    </div>
+      </div>
+    }
 
     <div class="flex flex-col gap-1">
       <label class="text-sm font-medium text-gray-700">Reason / Note</label>

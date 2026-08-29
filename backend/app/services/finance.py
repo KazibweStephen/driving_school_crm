@@ -662,6 +662,72 @@ async def _user_assigned_branch_ids(
     return set(row[0] for row in result.all())
 
 
+async def pool_available(
+    db: AsyncSession,
+    branch_id: uuid.UUID,
+    pool: str,
+) -> float:
+    """Available (net) cash in a pool at a branch.
+
+    Client Accounts available = collected client payments
+        - paid client-account expenses - client-account remittances (initiated+received).
+    Petty Cash available = petty transfers received into the branch
+        - paid petty expenses - petty remittances (initiated+received).
+    A negative result means the pool is already overspent; transfers and
+    expense-payments must not make it worse."""
+    async def _one(q):
+        return float((await db.execute(q)).scalar() or 0)
+
+    if pool == TransferPool.CLIENT_ACCOUNTS.value:
+        collected = await _one(
+            select(func.coalesce(func.sum(Payment.total_paid), 0))
+            .where(Payment.branch_id == branch_id, Payment.cancelled_at.is_(None))
+        )
+        received = await _one(
+            select(func.coalesce(func.sum(BranchTransfer.amount), 0))
+            .where(
+                BranchTransfer.to_branch_id == branch_id,
+                BranchTransfer.pool == TransferPool.CLIENT_ACCOUNTS,
+                BranchTransfer.status == TransferStatus.RECEIVED,
+                BranchTransfer.cancelled_at.is_(None),
+            )
+        )
+    else:
+        # Petty cash has no organic on-site collection source: its money comes
+        # from transfers received into the branch, which is its "collected".
+        collected = await _one(
+            select(func.coalesce(func.sum(BranchTransfer.amount), 0))
+            .where(
+                BranchTransfer.to_branch_id == branch_id,
+                BranchTransfer.pool == TransferPool.PETTY_CASH,
+                BranchTransfer.status == TransferStatus.RECEIVED,
+                BranchTransfer.cancelled_at.is_(None),
+            )
+        )
+        received = 0.0
+
+    expenses = await _one(
+        select(func.coalesce(func.sum(Expense.amount), 0))
+        .where(
+            Expense.branch_id == branch_id,
+            Expense.status == ExpenseStatus.PAID,
+            Expense.account == pool,
+        )
+    )
+
+    remitted = await _one(
+        select(func.coalesce(func.sum(BranchTransfer.amount), 0))
+        .where(
+            BranchTransfer.from_branch_id == branch_id,
+            BranchTransfer.pool == TransferPool(pool),
+            BranchTransfer.status.in_([TransferStatus.INITIATED, TransferStatus.RECEIVED]),
+            BranchTransfer.cancelled_at.is_(None),
+        )
+    )
+
+    return round(collected + received - expenses - remitted, 2)
+
+
 async def create_branch_transfer(
     db: AsyncSession,
     from_branch_id: uuid.UUID,
@@ -694,6 +760,14 @@ async def create_branch_transfer(
             raise HTTPException(
                 status_code=403,
                 detail="You can only transfer money between branches you are assigned to",
+            )
+    if pool:
+        available = await pool_available(db, from_branch_id, pool)
+        if float(amount) > available:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=400,
+                detail=f"Amount exceeds available {TransferPool(pool).value.replace('_', ' ')} cash in this branch. Available: {available}.",
             )
     transfer = BranchTransfer(
         from_branch_id=from_branch_id,
@@ -1497,14 +1571,25 @@ async def get_cash_position(
         branch_row = await db.get(Branch, bid)
         name = branch_row.name if branch_row else "Unknown"
 
-        # Collected payments at this collecting branch
+        # Collected client payments at this collecting branch -> Client Accounts
         collected = await db.execute(
             select(func.coalesce(func.sum(Payment.total_paid), 0))
             .where(Payment.branch_id == bid, Payment.cancelled_at.is_(None))
         )
-        collected_petty = float(collected.scalar() or 0)
+        client_collected = float(collected.scalar() or 0)
 
-        # Remitted (received) transfers sent from this branch, by pool
+        # Petty cash collected = transfers RECEIVED into this branch with pool=petty_cash
+        petty_inflow = await db.execute(
+            select(func.coalesce(func.sum(BranchTransfer.amount), 0))
+            .where(
+                BranchTransfer.to_branch_id == bid,
+                BranchTransfer.pool == TransferPool.PETTY_CASH,
+                BranchTransfer.status == TransferStatus.RECEIVED,
+            )
+        )
+        petty_collected = float(petty_inflow.scalar() or 0)
+
+        # Remitted (received) transfers sent FROM this branch, by pool
         remit_rows = await db.execute(
             select(
                 BranchTransfer.pool,
@@ -1541,44 +1626,90 @@ async def get_cash_position(
         for p, amt in pending_remit_rows:
             pending_remitted[p.value if p else "petty_cash"] = float(amt)
 
-        # Paid expenses at this branch by pool
+        # Transfers RECEIVED into this branch, by pool -> "Received"
+        received_rows = await db.execute(
+            select(
+                BranchTransfer.pool,
+                func.coalesce(func.sum(BranchTransfer.amount), 0),
+            )
+            .where(
+                BranchTransfer.to_branch_id == bid,
+                BranchTransfer.status == TransferStatus.RECEIVED,
+                BranchTransfer.cancelled_at.is_(None),
+            )
+            .group_by(BranchTransfer.pool)
+        )
+        received_by_pool = {"petty_cash": 0.0, "client_accounts": 0.0}
+        for p, amt in received_rows:
+            key = (p.value if p else "petty_cash")
+            if key == "petty_cash":
+                # Petty inflows are already counted as Petty Cash "collected".
+                received_by_pool["petty_cash"] = 0.0
+            else:
+                received_by_pool["client_accounts"] = float(amt)
+
+        # Paid expenses at this branch, attributed to their pool via expense.account
         exp_rows = await db.execute(
             select(
-                Expense.category,
+                Expense.account,
                 func.coalesce(func.sum(Expense.amount), 0),
             )
             .where(Expense.branch_id == bid, Expense.status == ExpenseStatus.PAID)
-            .group_by(Expense.category)
+            .group_by(Expense.account)
         )
         expenses_petty = 0.0
         expenses_client = 0.0
-        cat_map = {}
-        if company_id is not None:
-            cats = await list_expense_categories(db, company_id=company_id, include_inactive=True)
-            cat_map = {c.name: c.is_operating for c in cats}
-        for category, amt in exp_rows:
-            is_operating = cat_map.get(category, True)
-            if is_operating:
-                expenses_petty += float(amt)
-            else:
+        for account, amt in exp_rows:
+            if account == "client_accounts":
                 expenses_client += float(amt)
+            else:
+                expenses_petty += float(amt)
+
+        group_sub = (
+            select(
+                func.greatest(
+                    func.max(Payment.total_amount) - func.sum(Payment.total_paid), 0
+                ).label("balance")
+            )
+            .join(Consultation, Payment.consultation_id == Consultation.id)
+            .where(
+                Consultation.branch_id == bid,
+                Payment.cancelled_at.is_(None),
+            )
+            .group_by(Payment.consultation_id, Payment.product_id, Payment.package_id)
+            .subquery()
+        )
+        outstanding_total = float(
+            (
+                await db.execute(
+                    select(func.coalesce(func.sum(group_sub.c.balance), 0))
+                )
+            ).scalar()
+            or 0
+        )
+
+        def _net(collect, receive, rem, pend, exp):
+            return round(collect + receive - rem - pend - exp, 2)
 
         pools = [
             {
                 "pool": "petty_cash",
-                "collected": collected_petty,
+                "collected": petty_collected,
+                "received": received_by_pool["petty_cash"],
                 "remitted": remitted["petty_cash"],
                 "pending_remitted": pending_remitted["petty_cash"],
                 "expenses": expenses_petty,
-                "net_in_hand": collected_petty - remitted["petty_cash"] - pending_remitted["petty_cash"] - expenses_petty,
+                "net_in_hand": _net(petty_collected, received_by_pool["petty_cash"], remitted["petty_cash"], pending_remitted["petty_cash"], expenses_petty),
             },
             {
                 "pool": "client_accounts",
-                "collected": 0.0,
+                "collected": client_collected,
+                "received": received_by_pool["client_accounts"],
                 "remitted": remitted["client_accounts"],
                 "pending_remitted": pending_remitted["client_accounts"],
                 "expenses": expenses_client,
-                "net_in_hand": -remitted["client_accounts"] - pending_remitted["client_accounts"] - expenses_client,
+                "net_in_hand": _net(client_collected, received_by_pool["client_accounts"], remitted["client_accounts"], pending_remitted["client_accounts"], expenses_client),
+                "outstanding": outstanding_total,
             },
         ]
         result.append({

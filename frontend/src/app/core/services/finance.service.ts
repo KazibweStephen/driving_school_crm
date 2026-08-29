@@ -166,10 +166,12 @@ export interface TransferNotificationsResponse {
 export interface PoolPosition {
   pool: string;
   collected: number;
+  received: number;
   remitted: number;
   pending_remitted: number;
   expenses: number;
   net_in_hand: number;
+  outstanding: number;
 }
 
 export interface BranchCashPosition {

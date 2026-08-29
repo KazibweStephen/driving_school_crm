@@ -1,6 +1,7 @@
 import { Component, OnInit, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
 import { DialogModule } from 'primeng/dialog';
@@ -8,6 +9,7 @@ import { FileUploadModule } from 'primeng/fileupload';
 import { InputTextModule } from 'primeng/inputtext';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { SelectModule } from 'primeng/select';
+import { SelectButtonModule } from 'primeng/selectbutton';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
@@ -32,7 +34,8 @@ interface Method {
   selector: 'app-cash-position',
   imports: [
     CommonModule, FormsModule, ButtonModule, CardModule, DialogModule, FileUploadModule,
-    InputTextModule, InputNumberModule, SelectModule, TagModule, ToastModule,
+    InputTextModule, InputNumberModule, SelectModule, SelectButtonModule, TagModule, ToastModule,
+    RouterModule,
   ],
   providers: [MessageService],
   templateUrl: './cash-position.html',
@@ -72,6 +75,14 @@ export class CashPositionCmp implements OnInit {
   unremittedLoading = signal(false);
   paymentSearch = signal('');
   selectedPayments = signal<UnremittedClientPayment[]>([]);
+
+  readonly Math = Math;
+
+  viewMode = signal<'card' | 'list'>('card');
+  viewOptions = [
+    { label: 'Cards', value: 'card', icon: 'pi pi-th-large' },
+    { label: 'List', value: 'list', icon: 'pi pi-list' },
+  ];
 
   constructor(
     private financeService: FinanceService,
@@ -117,8 +128,13 @@ export class CashPositionCmp implements OnInit {
 
   poolById(branch: BranchCashPosition, poolId: string): PoolPosition {
     return branch.pools.find(p => p.pool === poolId) ?? {
-      pool: poolId, collected: 0, remitted: 0, pending_remitted: 0, expenses: 0, net_in_hand: 0,
+      pool: poolId, collected: 0, received: 0, remitted: 0, pending_remitted: 0, expenses: 0, net_in_hand: 0, outstanding: 0,
     };
+  }
+
+  availableForFromBranch(pool: string): number {
+    const branch = this.positions().find(b => b.branch_id === this.sendForm.from_branch_id);
+    return branch ? this.poolById(branch, pool).net_in_hand : 0;
   }
 
   branchName(id: string): string {
@@ -226,11 +242,12 @@ export class CashPositionCmp implements OnInit {
   sendFormValid(): boolean {
     if (!this.sendForm.from_branch_id || !this.sendForm.to_branch_id) return false;
     if (this.sendForm.from_branch_id === this.sendForm.to_branch_id) return false;
+    const available = Math.max(0, this.availableForFromBranch(this.sendForm.pool));
+    const withinAvailable = this.sendForm.amount > 0 && this.sendForm.amount <= available + 0.001;
     if (this.sendForm.pool === 'client_accounts') {
-      return this.selectedPayments().length > 0 && this.sendForm.amount > 0;
+      return this.selectedPayments().length > 0 && withinAvailable;
     }
-    if (!this.sendForm.amount || this.sendForm.amount <= 0) return false;
-    return true;
+    return withinAvailable;
   }
 
   async sendMoney() {

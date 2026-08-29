@@ -376,6 +376,14 @@ async def mark_expense_paid(
     if expense.status != ExpenseStatus.APPROVED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only approved expenses can be marked as paid")
 
+    expense_pool = expense.account or "petty_cash"
+    available = await finance_service.pool_available(db, expense.branch_id, expense_pool)
+    if float(expense.amount) > available:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Expense exceeds available {expense_pool.replace('_', ' ')} cash in this branch. Available: {available}.",
+        )
+
     expense.status = ExpenseStatus.PAID
     expense.paid_by = current_user.phone
     expense.paid_at = datetime.now()

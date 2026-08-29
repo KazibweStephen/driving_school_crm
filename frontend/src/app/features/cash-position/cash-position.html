@@ -3,14 +3,21 @@
 <div class="p-4 sm:p-6">
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
     <h1 class="text-2xl font-bold text-gray-900">Cash Position</h1>
-    <p-button label="Send Money to Head Office" icon="pi pi-send" (onClick)="openSendDialog()" />
+    <div class="flex flex-wrap items-center gap-2">
+      <a routerLink="/transfers" class="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
+        <i class="pi pi-list"></i> Transfer Log
+      </a>
+      <p-selectButton [options]="viewOptions" [(ngModel)]="viewMode" optionLabel="label" optionValue="value"
+        styleClass="p-sm" />
+      <p-button label="Send Money to Head Office" icon="pi pi-send" (onClick)="openSendDialog()" />
+    </div>
   </div>
 
   @if (loading()) {
     <div class="text-center text-gray-500 py-8">Loading cash position...</div>
   } @else if (!positions().length) {
     <div class="text-center text-gray-500 py-8">No cash position available</div>
-  } @else {
+  } @else if (viewMode() === 'card') {
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       @for (branch of positions(); track branch.branch_id) {
         @let petty = poolById(branch, 'petty_cash');
@@ -33,6 +40,10 @@
               <div class="font-semibold text-green-600">{{ currencyService.symbol() }} {{ formatAmount(petty.collected) }}</div>
             </div>
             <div>
+              <div class="text-xs text-gray-500">Received</div>
+              <div class="font-semibold text-green-600">{{ currencyService.symbol() }} {{ formatAmount(petty.received) }}</div>
+            </div>
+            <div>
               <div class="text-xs text-gray-500">Remitted</div>
               <div class="font-semibold text-amber-600">-{{ currencyService.symbol() }} {{ formatAmount(petty.remitted + petty.pending_remitted) }} <span class="text-xs font-normal text-gray-400">(+{{ formatAmount(petty.pending_remitted) }} pend)</span></div>
             </div>
@@ -51,16 +62,67 @@
           <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Client Accounts</div>
           <div class="grid grid-cols-2 gap-2 text-sm">
             <div>
-              <div class="text-xs text-gray-500">Remitted</div>
-              <div class="font-semibold text-amber-600">-{{ currencyService.symbol() }} {{ formatAmount(clientsPool.remitted + clientsPool.pending_remitted) }}</div>
+              <div class="text-xs text-gray-500">Collected</div>
+              <div class="font-semibold text-green-600">{{ currencyService.symbol() }} {{ formatAmount(clientsPool.collected) }}</div>
             </div>
             <div>
-              <div class="text-xs text-gray-500">Net</div>
+              <div class="text-xs text-gray-500">Received</div>
+              <div class="font-semibold text-green-600">{{ currencyService.symbol() }} {{ formatAmount(clientsPool.received) }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-500">Remitted</div>
+              <div class="font-semibold text-amber-600">-{{ currencyService.symbol() }} {{ formatAmount(clientsPool.remitted + clientsPool.pending_remitted) }} <span class="text-xs font-normal text-gray-400">(+{{ formatAmount(clientsPool.pending_remitted) }} pend)</span></div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-500">Expenses</div>
+              <div class="font-semibold text-red-500">-{{ currencyService.symbol() }} {{ formatAmount(clientsPool.expenses) }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-500">Net In Hand</div>
               <div class="font-bold text-gray-900">{{ currencyService.symbol() }} {{ formatAmount(clientsPool.net_in_hand) }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-500">Outstanding (unpaid)</div>
+              <div class="font-bold text-purple-600">{{ currencyService.symbol() }} {{ formatAmount(clientsPool.outstanding) }}</div>
             </div>
           </div>
         </p-card>
       }
+    </div>
+  } @else {
+    <div class="overflow-x-auto rounded-lg border border-gray-200">
+      <table class="min-w-full divide-y divide-gray-200 text-sm">
+        <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <tr>
+            <th class="px-4 py-3">Branch</th>
+            <th class="px-4 py-3">Pool</th>
+            <th class="px-4 py-3 text-right">Collected</th>
+            <th class="px-4 py-3 text-right">Received</th>
+            <th class="px-4 py-3 text-right">Remitted</th>
+            <th class="px-4 py-3 text-right">Pending</th>
+            <th class="px-4 py-3 text-right">Expenses</th>
+            <th class="px-4 py-3 text-right">Outstanding</th>
+            <th class="px-4 py-3 text-right">Net In Hand</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          @for (branch of positions(); track branch.branch_id) {
+            @for (pool of branch.pools; track pool.pool) {
+              <tr class="odd:bg-white even:bg-gray-50/50">
+                <td class="px-4 py-3 font-medium text-gray-900">{{ branch.branch_name }}</td>
+                <td class="px-4 py-3 text-gray-600">{{ pool.pool === 'client_accounts' ? 'Client Accounts' : 'Petty Cash' }}</td>
+                <td class="px-4 py-3 text-right text-green-600">{{ currencyService.symbol() }} {{ formatAmount(pool.collected) }}</td>
+                <td class="px-4 py-3 text-right text-green-600">{{ currencyService.symbol() }} {{ formatAmount(pool.received) }}</td>
+                <td class="px-4 py-3 text-right text-amber-600">{{ currencyService.symbol() }} {{ formatAmount(pool.remitted) }}</td>
+                <td class="px-4 py-3 text-right text-gray-500">{{ currencyService.symbol() }} {{ formatAmount(pool.pending_remitted) }}</td>
+                <td class="px-4 py-3 text-right text-red-500">{{ currencyService.symbol() }} {{ formatAmount(pool.expenses) }}</td>
+                <td class="px-4 py-3 text-right text-purple-600">{{ currencyService.symbol() }} {{ formatAmount(pool.outstanding) }}</td>
+                <td class="px-4 py-3 text-right font-bold text-gray-900">{{ currencyService.symbol() }} {{ formatAmount(pool.net_in_hand) }}</td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
     </div>
   }
 </div>
@@ -101,6 +163,10 @@
       <small class="text-xs text-gray-500" *ngIf="sendForm.pool === 'client_accounts'">
         Total of the selected client payments below.
       </small>
+      <small class="text-xs text-gray-500 block mt-1"
+        >Available {{ sendForm.pool === 'petty_cash' ? 'petty cash' : 'client account' }} in this branch:
+        {{ currencyService.symbol() }} {{ formatAmount(Math.max(0, availableForFromBranch(sendForm.pool))) }}</small
+      >
     </div>
 
     @if (sendForm.pool === 'client_accounts') {

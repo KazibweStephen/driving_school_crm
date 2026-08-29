@@ -121,6 +121,7 @@ async def create_expense(
     expense_date: datetime | None = None,
     status: str = "pending",
     receipt_url: str | None = None,
+    account: str | None = None,
     created_by_phone: str | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
@@ -132,11 +133,23 @@ async def create_expense(
         if not await _verify_consultation_company(db, consultation_id, company_id, current_user_role):
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Client not found")
+    if not account and category and company_id is not None:
+        match = (
+            await db.execute(
+                select(ExpenseCategory).where(
+                    ExpenseCategory.company_id == company_id,
+                    ExpenseCategory.name == category,
+                )
+            )
+        ).scalar_one_or_none()
+        if match is not None:
+            account = match.account or "petty_cash"
     expense = Expense(
         branch_id=branch_id,
         amount=amount,
         description=description,
         category=category,
+        account=account or "petty_cash",
         consultation_id=consultation_id,
         mileage=mileage,
         vehicle_id=vehicle_id,
@@ -1161,13 +1174,13 @@ async def get_finance_summary(
 
 
 DEFAULT_EXPENSE_CATEGORIES = [
-    {"name": "Fuel", "code": "fuel", "requires_client": False, "is_operating": True, "sort_order": 1},
-    {"name": "Permit Payment", "code": "permit_payment", "requires_client": True, "is_operating": False, "sort_order": 10},
-    {"name": "Learner Permit Payment", "code": "learner_permit_payment", "requires_client": True, "is_operating": False, "sort_order": 11},
-    {"name": "Vehicle Maintenance", "code": "vehicle_maintenance", "requires_client": False, "is_operating": True, "sort_order": 20},
-    {"name": "Salaries", "code": "salaries", "requires_client": False, "is_operating": True, "sort_order": 30},
-    {"name": "Rent", "code": "rent", "requires_client": False, "is_operating": True, "sort_order": 40},
-    {"name": "Utilities", "code": "utilities", "requires_client": False, "is_operating": True, "sort_order": 50},
+    {"name": "Fuel", "code": "fuel", "requires_client": False, "is_operating": True, "account": "petty_cash", "sort_order": 1},
+    {"name": "Permit Payment", "code": "permit_payment", "requires_client": True, "is_operating": False, "account": "client_accounts", "sort_order": 10},
+    {"name": "Learner Permit Payment", "code": "learner_permit_payment", "requires_client": True, "is_operating": False, "account": "client_accounts", "sort_order": 11},
+    {"name": "Vehicle Maintenance", "code": "vehicle_maintenance", "requires_client": False, "is_operating": True, "account": "petty_cash", "sort_order": 20},
+    {"name": "Salaries", "code": "salaries", "requires_client": False, "is_operating": True, "account": "petty_cash", "sort_order": 30},
+    {"name": "Rent", "code": "rent", "requires_client": False, "is_operating": True, "account": "petty_cash", "sort_order": 40},
+    {"name": "Utilities", "code": "utilities", "requires_client": False, "is_operating": True, "account": "petty_cash", "sort_order": 50},
 ]
 
 
@@ -1211,6 +1224,7 @@ async def create_expense_category(
     code: str,
     requires_client: bool = False,
     is_operating: bool = True,
+    account: str = "petty_cash",
     sort_order: int = 0,
     is_active: bool = True,
     company_id: uuid.UUID | None = None,
@@ -1230,7 +1244,7 @@ async def create_expense_category(
     cat = ExpenseCategory(
         company_id=company_id, name=name, code=code,
         requires_client=requires_client, is_operating=is_operating,
-        sort_order=sort_order, is_active=is_active,
+        account=account, sort_order=sort_order, is_active=is_active,
     )
     db.add(cat)
     await db.flush()
@@ -1348,7 +1362,7 @@ async def sync_used_expense_categories(
         db.add(ExpenseCategory(
             company_id=company_id, name=name, code=unique_code,
             requires_client=False, is_operating=True,
-            sort_order=next_order, is_active=True,
+            account="petty_cash", sort_order=next_order, is_active=True,
         ))
         existing_names_lower.add(name.lower())
         existing_codes.add(unique_code)

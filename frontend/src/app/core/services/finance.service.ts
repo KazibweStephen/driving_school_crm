@@ -43,6 +43,7 @@ export interface ExpenseCategory {
   code: string;
   requires_client: boolean;
   is_operating: boolean;
+  account: string;
   sort_order: number;
   is_active: boolean;
   created_at: string;
@@ -53,6 +54,7 @@ export interface ExpenseCategoryCreate {
   code?: string;
   requires_client?: boolean;
   is_operating?: boolean;
+  account?: string;
   sort_order?: number;
   is_active?: boolean;
 }

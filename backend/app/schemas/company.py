@@ -146,6 +146,7 @@ class ExpenseCreate(BaseModel):
     expense_date: datetime | None = None
     status: str | None = "pending"
     receipt_url: str | None = None
+    account: str | None = None
 
 
 class ExpenseUpdate(BaseModel):
@@ -166,6 +167,7 @@ class ExpenseRead(BaseModel):
     amount: float
     description: str | None = None
     category: str | None = None
+    account: str | None = None
     consultation_id: uuid.UUID | None = None
     client_name: str | None = None
     mileage: int | None = None
@@ -347,6 +349,7 @@ class ExpenseCategoryCreate(BaseModel):
     code: str
     requires_client: bool = False
     is_operating: bool = True
+    account: str = "petty_cash"
     sort_order: int = 0
     is_active: bool = True
 
@@ -356,6 +359,7 @@ class ExpenseCategoryUpdate(BaseModel):
     code: str | None = None
     requires_client: bool | None = None
     is_operating: bool | None = None
+    account: str | None = None
     sort_order: int | None = None
     is_active: bool | None = None
 
@@ -366,6 +370,7 @@ class ExpenseCategoryRead(BaseModel):
     code: str
     requires_client: bool
     is_operating: bool
+    account: str | None = None
     sort_order: int
     is_active: bool
     created_at: datetime

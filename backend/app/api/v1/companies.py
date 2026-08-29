@@ -116,6 +116,9 @@ async def create_company(
     from app.scripts.seed_lesson_plans import seed_company_lesson_plans
     await seed_company_lesson_plans(db, company.id)
 
+    from app.services.branch import ensure_head_office_branch
+    await ensure_head_office_branch(db, company.id)
+
     await db.commit()
     await db.refresh(company)
     return await _company_read(db, company)

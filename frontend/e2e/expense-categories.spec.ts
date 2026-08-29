@@ -63,14 +63,16 @@ test.describe('Expense Categories', () => {
 
     // Create
     const created = await call('POST', `${API}/expense-categories`,
-      { name, code: `e2e_cat_${stamp}`, requires_client: true, is_operating: false });
+      { name, code: `e2e_cat_${stamp}`, requires_client: true, is_operating: false, account: 'client_accounts' });
     expect(created.status).toBe(201);
+    expect(created.body.account).toBe('client_accounts');
     const id = created.body.id;
 
-    // Update
-    const updated = await call('PATCH', `${API}/expense-categories/${id}`, { is_active: false });
+    // Update (change account)
+    const updated = await call('PATCH', `${API}/expense-categories/${id}`, { is_active: false, account: 'petty_cash' });
     expect(updated.status).toBe(200);
     expect(updated.body.is_active).toBe(false);
+    expect(updated.body.account).toBe('petty_cash');
 
     // List (include inactive) should contain it
     const listed = await call('GET', `${API}/expense-categories?include_inactive=true`);
@@ -87,6 +89,15 @@ test.describe('Expense Categories', () => {
     // Delete
     const deleted = await call('DELETE', `${API}/expense-categories/${id}`);
     expect(deleted.status).toBe(204);
+  });
+
+  test('expense categories page is visible in nav and shows the account column', async ({ page }) => {
+    await page.goto('/expense-categories');
+    await expect(page.locator('h1')).toContainText('Expense Categories', { timeout: 10000 });
+    const header = page.locator('p-table thead');
+    await expect(header).toContainText('Account', { timeout: 5000 });
+    // Seed categories include client_accounts ones
+    await expect(page.locator('p-table tbody')).toContainText('Client Accounts', { timeout: 5000 });
   });
 
   test('expense with attached receipt uploads and links a viewable receipt', async ({ page }) => {

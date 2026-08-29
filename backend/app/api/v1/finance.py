@@ -98,7 +98,7 @@ async def _transfer_read(db: AsyncSession, t) -> BranchTransferRead:
 @router.post("/expenses/upload-receipt")
 async def upload_expense_receipt(
     file: UploadFile = File(...),
-    current_user: User = Depends(require_permission("expenses.edit")),
+    current_user: User = Depends(require_permission("expenses.create")),
 ):
     allowed_types = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
     if file.content_type and file.content_type not in allowed_types:
@@ -210,6 +210,7 @@ async def create_expense(
         expense_date=data.expense_date,
         status=data.status or "pending",
         receipt_url=data.receipt_url,
+        account=data.account,
         created_by_phone=current_user.phone,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
@@ -763,7 +764,7 @@ async def create_expense_category(
 ):
     return ExpenseCategoryRead.model_validate(await finance_service.create_expense_category(
         db, name=data.name, code=data.code, requires_client=data.requires_client,
-        is_operating=data.is_operating, sort_order=data.sort_order,
+        is_operating=data.is_operating, account=data.account, sort_order=data.sort_order,
         is_active=data.is_active, company_id=current_user.company_id,
     ))
 
@@ -778,7 +779,8 @@ async def update_expense_category(
     cat = await finance_service.update_expense_category(
         db, category_id, company_id=current_user.company_id,
         name=data.name, code=data.code, requires_client=data.requires_client,
-        is_operating=data.is_operating, sort_order=data.sort_order, is_active=data.is_active,
+        is_operating=data.is_operating, account=data.account,
+        sort_order=data.sort_order, is_active=data.is_active,
     )
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")

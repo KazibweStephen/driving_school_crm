@@ -217,6 +217,7 @@ class Expense(Base):
     amount: Mapped[float] = mapped_column(nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    account: Mapped[str | None] = mapped_column(String(20), nullable=True)
     consultation_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("consultations.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -466,6 +467,9 @@ class ExpenseCategory(Base):
     code: Mapped[str] = mapped_column(String(100), nullable=False)
     requires_client: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_operating: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    account: Mapped[str] = mapped_column(
+        String(20), default=TransferPool.PETTY_CASH.value, nullable=False
+    )
     sort_order: Mapped[int] = mapped_column(default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

@@ -22,6 +22,7 @@
         <th>Code</th>
         <th>Client Required</th>
         <th>Operating</th>
+        <th>Account</th>
         <th>Status</th>
         <th style="width: 10rem">Actions</th>
       </tr>
@@ -45,6 +46,13 @@
           }
         </td>
         <td>
+          @if (c.account === 'client_accounts') {
+            <p-tag value="Client Accounts" severity="warn" icon="pi pi-users" />
+          } @else {
+            <p-tag value="Petty Cash" severity="secondary" icon="pi pi-wallet" />
+          }
+        </td>
+        <td>
           @if (c.is_active) {
             <p-tag value="Active" severity="success" />
           } @else {
@@ -63,7 +71,7 @@
     </ng-template>
     <ng-template pTemplate="emptymessage">
       <tr>
-        <td colspan="6" class="text-center text-gray-500 py-4">No categories found</td>
+        <td colspan="7" class="text-center text-gray-500 py-4">No categories found</td>
       </tr>
     </ng-template>
   </p-table>
@@ -100,6 +108,11 @@
     <div>
       <label class="mb-1 block text-sm font-medium text-gray-700">Sort order</label>
       <p-inputNumber [(ngModel)]="form().sort_order" [min]="0" [useGrouping]="false" styleClass="w-full" inputStyleClass="w-full" />
+    </div>
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700">Account</label>
+      <p-select [(ngModel)]="form().account" [options]="accountOptions" optionLabel="label" optionValue="value"
+        placeholder="Select account" styleClass="w-full" appendTo="body" />
     </div>
     @if (editing()) {
       <div class="flex items-center gap-2">

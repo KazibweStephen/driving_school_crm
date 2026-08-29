@@ -44,9 +44,15 @@ export class ExpenseCategoriesCmp implements OnInit {
     code: '',
     requires_client: false,
     is_operating: true,
+    account: 'petty_cash',
     sort_order: 0,
     is_active: true,
   });
+
+  accountOptions = [
+    { label: 'Petty Cash', value: 'petty_cash' },
+    { label: 'Client Accounts', value: 'client_accounts' },
+  ];
 
   constructor(
     private financeService: FinanceService,
@@ -89,7 +95,7 @@ export class ExpenseCategoriesCmp implements OnInit {
 
   openCreate() {
     this.editing.set(null);
-    this.form.set({ name: '', code: '', requires_client: false, is_operating: true, sort_order: 0, is_active: true });
+    this.form.set({ name: '', code: '', requires_client: false, is_operating: true, account: 'petty_cash', sort_order: 0, is_active: true });
     this.showDialog.set(true);
   }
 
@@ -100,6 +106,7 @@ export class ExpenseCategoriesCmp implements OnInit {
       code: c.code,
       requires_client: c.requires_client,
       is_operating: c.is_operating,
+      account: c.account || 'petty_cash',
       sort_order: c.sort_order,
       is_active: c.is_active,
     });
@@ -123,6 +130,7 @@ export class ExpenseCategoriesCmp implements OnInit {
           code: f.code.trim() || slugify(f.name),
           requires_client: f.requires_client,
           is_operating: f.is_operating,
+          account: f.account,
           sort_order: f.sort_order,
           is_active: f.is_active,
         }).toPromise();
@@ -133,6 +141,7 @@ export class ExpenseCategoriesCmp implements OnInit {
           code: f.code.trim() || slugify(f.name),
           requires_client: f.requires_client,
           is_operating: f.is_operating,
+          account: f.account,
           sort_order: f.sort_order,
           is_active: f.is_active,
         };

@@ -387,6 +387,7 @@ class BranchTransfer(Base):
         default=TransferMethod.CASH, nullable=True,
     )
     reference: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    receipt_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     consultation_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("consultations.id", ondelete="SET NULL"), nullable=True, index=True
     )

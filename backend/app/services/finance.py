@@ -642,6 +642,26 @@ async def _verify_branches_in_company(
     return len(list(result.scalars().all())) == len(set(branch_ids))
 
 
+async def _user_assigned_branch_ids(
+    db: AsyncSession,
+    phone: str | None,
+    company_id: uuid.UUID | None = None,
+) -> set[uuid.UUID]:
+    """Return the set of branch IDs a user is assigned to (empty set if the
+    user is None — a missing user is not branch-restricted)."""
+    if not phone:
+        return set()
+    query = (
+        select(UserBranchAssignment.branch_id)
+        .join(Branch, UserBranchAssignment.branch_id == Branch.id)
+        .where(UserBranchAssignment.user_id == phone)
+    )
+    if company_id is not None:
+        query = query.where(Branch.company_id == company_id)
+    result = await db.execute(query)
+    return set(row[0] for row in result.all())
+
+
 async def create_branch_transfer(
     db: AsyncSession,
     from_branch_id: uuid.UUID,
@@ -651,6 +671,7 @@ async def create_branch_transfer(
     pool: str | None = None,
     method: str | None = None,
     reference: str | None = None,
+    receipt_url: str | None = None,
     consultation_id: uuid.UUID | None = None,
     payment_id: uuid.UUID | None = None,
     payment_ids: list[uuid.UUID] | None = None,
@@ -666,6 +687,14 @@ async def create_branch_transfer(
     ):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Branch not found")
+    if current_user_role != UserRole.SUPER_USER:
+        assigned = await _user_assigned_branch_ids(db, initiated_by, company_id)
+        if not assigned or {from_branch_id, to_branch_id} - assigned:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=403,
+                detail="You can only transfer money between branches you are assigned to",
+            )
     transfer = BranchTransfer(
         from_branch_id=from_branch_id,
         to_branch_id=to_branch_id,
@@ -674,6 +703,7 @@ async def create_branch_transfer(
         pool=TransferPool(pool) if pool else None,
         method=TransferMethod(method) if method else None,
         reference=reference,
+        receipt_url=receipt_url,
         consultation_id=consultation_id,
         payment_id=payment_id,
         initiated_by=initiated_by,
@@ -749,6 +779,7 @@ async def receive_branch_transfer(
     db: AsyncSession,
     transfer_id: uuid.UUID,
     received_by: str | None = None,
+    receipt_url: str | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> BranchTransfer | None:
@@ -758,9 +789,19 @@ async def receive_branch_transfer(
     if transfer.status != TransferStatus.INITIATED:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Only initiated transfers can be received")
+    if current_user_role != UserRole.SUPER_USER:
+        assigned = await _user_assigned_branch_ids(db, received_by, company_id)
+        if transfer.to_branch_id not in assigned:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=403,
+                detail="You can only receive money at branches you are assigned to",
+            )
     transfer.status = TransferStatus.RECEIVED
     transfer.received_by = received_by
     transfer.received_at = datetime.now(timezone.utc)
+    if receipt_url:
+        transfer.receipt_url = receipt_url
     await db.flush()
     await db.refresh(transfer)
     return transfer
@@ -856,13 +897,8 @@ async def list_transfer_notifications(
     Returns initiated transfers received by (incoming) or sent from (outgoing)
     the user's branches, newest first.
     """
-    is_privileged = current_user_role in (
-        UserRole.SUPER_USER,
-        UserRole.OFFICE_ADMIN,
-        UserRole.MANAGER,
-        UserRole.BRANCH_SUPERVISOR,
-    )
-    if is_privileged:
+    is_super = current_user_role == UserRole.SUPER_USER
+    if is_super:
         bq = select(Branch.id)
         if company_id is not None:
             bq = bq.where(Branch.company_id == company_id)
@@ -916,6 +952,8 @@ async def list_transfer_notifications(
             "to_branch_name": t.to_branch.name if t.to_branch else None,
             "amount": str(t.amount),
             "reason": t.reason,
+            "reference": t.reference,
+            "receipt_url": t.receipt_url,
             "consultation_id": t.consultation_id,
             "payment_id": t.payment_id,
             "status": t.status.value,

@@ -5,6 +5,7 @@ import { CardModule } from 'primeng/card';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { DialogModule } from 'primeng/dialog';
+import { FileUploadModule } from 'primeng/fileupload';
 import { InputTextModule } from 'primeng/inputtext';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { MultiSelectModule } from 'primeng/multiselect';
@@ -25,7 +26,7 @@ interface DirectionOption {
 @Component({
   selector: 'app-transfers',
   imports: [
-    FormsModule, ButtonModule, CardModule, ConfirmDialogModule, DialogModule,
+    FormsModule, ButtonModule, CardModule, ConfirmDialogModule, DialogModule, FileUploadModule,
     InputTextModule, InputNumberModule, MultiSelectModule, SelectModule, TableModule, TagModule,
     ToastModule, TooltipModule,
   ],
@@ -61,6 +62,8 @@ export class TransfersCmp implements OnInit {
     amount: null,
     reason: '',
   };
+  receiptFile: File | null = null;
+  uploadingReceipt = signal(false);
 
   directionOptions: DirectionOption[] = [
     { label: 'All', value: 'all' },
@@ -159,7 +162,16 @@ export class TransfersCmp implements OnInit {
       amount: null,
       reason: '',
     };
+    this.receiptFile = null;
     this.showCreateDialog.set(true);
+  }
+
+  onReceiptSelected(event: any) {
+    this.receiptFile = event?.files?.[0] || event?.currentFiles?.[0] || null;
+  }
+
+  clearReceipt() {
+    this.receiptFile = null;
   }
 
   async createTransfer() {
@@ -177,19 +189,28 @@ export class TransfersCmp implements OnInit {
     }
     this.saving.set(true);
     try {
+      let receipt_url: string | undefined;
+      if (this.receiptFile) {
+        this.uploadingReceipt.set(true);
+        const up = await this.financeService.uploadTransferReceipt(this.receiptFile).toPromise();
+        receipt_url = up?.url;
+      }
       await this.financeService.createTransfer({
         from_branch_id: this.newTransfer.from_branch_id,
         to_branch_id: this.newTransfer.to_branch_id,
         amount: this.newTransfer.amount,
         reason: this.newTransfer.reason || undefined,
+        receipt_url,
       }).toPromise();
       this.showCreateDialog.set(false);
+      this.receiptFile = null;
       await this.loadTransfers();
       await this.loadSummary();
       this.messageService.add({ severity: 'success', summary: 'Initiated', detail: 'Transfer created' });
     } catch (e: any) {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to create transfer' });
     } finally {
+      this.uploadingReceipt.set(false);
       this.saving.set(false);
     }
   }

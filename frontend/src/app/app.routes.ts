@@ -107,7 +107,7 @@ export const routes: Routes = [
       },
       {
         path: 'profit-loss',
-        data: { permission: 'reports.view' },
+        data: { permission: 'finance.manage' },
         loadComponent: () =>
           import('./features/profit-loss/profit-loss').then((c) => c.ProfitLossCmp),
       },

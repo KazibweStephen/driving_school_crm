@@ -117,6 +117,18 @@
       <label class="text-sm font-medium text-gray-700">Reason</label>
       <input pInputText [(ngModel)]="newTransfer.reason" placeholder="Optional note" class="w-full" />
     </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">Receipt (optional)</label>
+      <div class="flex items-center gap-2">
+        <p-fileUpload mode="basic" chooseLabel="{{ receiptFile?.name || 'Choose file' }}"
+          [chooseIcon]="receiptFile ? 'pi pi-check' : 'pi pi-upload'"
+          accept="image/*,.pdf" [auto]="false" (onSelect)="onReceiptSelected($event)" />
+        @if (receiptFile) {
+          <button pButton icon="pi pi-times" class="p-button-sm p-button-text"
+            (click)="clearReceipt()"></button>
+        }
+      </div>
+    </div>
     <div class="flex justify-end gap-2 pt-2">
       <p-button label="Cancel" severity="secondary" (onClick)="showCreateDialog.set(false)" />
       <p-button label="Initiate" icon="pi pi-check" [loading]="saving()" (onClick)="createTransfer()" />

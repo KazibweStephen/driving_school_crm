@@ -20,6 +20,7 @@ from app.schemas.company import (
     BorrowedMoneyUpdate,
     BranchTransferCreate,
     BranchTransferRead,
+    TransferReceiveRequest,
     CollectionCreate,
     CollectionRead,
     CollectionUpdate,
@@ -32,7 +33,7 @@ from app.schemas.company import (
 )
 from app.services import finance as finance_service
 from app.services.permission import has_permission
-from app.utils.tenant import resolve_branch_ids
+from app.utils.tenant import resolve_assigned_branch_ids, resolve_branch_ids
 
 logger = logging.getLogger(__name__)
 
@@ -604,7 +605,7 @@ async def list_branch_transfers(
         else None
     )
     resolved_branch_ids = (
-        [branch_id] if branch_id else await resolve_branch_ids(db, current_user, requested)
+        [branch_id] if branch_id else await resolve_assigned_branch_ids(db, current_user, requested)
     )
     transfers, total = await finance_service.list_branch_transfers(
         db, branch_ids=resolved_branch_ids, direction=direction, status=status,
@@ -652,6 +653,7 @@ async def create_branch_transfer(
         pool=data.pool,
         method=data.method,
         reference=data.reference,
+        receipt_url=data.receipt_url,
         consultation_id=data.consultation_id,
         payment_id=data.payment_id,
         payment_ids=data.payment_ids,
@@ -665,14 +667,71 @@ async def create_branch_transfer(
     return await _transfer_read(db, transfer)
 
 
+@router.post("/transfers/upload-receipt")
+async def upload_transfer_receipt(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_permission("transfers.create")),
+):
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
+    if file.content_type and file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
+
+    max_size = 10 * 1024 * 1024  # 10MB
+    file.file.seek(0, os.SEEK_END)
+    size = file.file.tell()
+    file.file.seek(0)
+    if size > max_size:
+        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+
+    upload_dir = os.path.join("uploads", "transfer_receipts")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    ext = os.path.splitext(file.filename or "transfer.jpg")[1] or ".jpg"
+    filename = f"{uuid.uuid4()}{ext}"
+    filepath = os.path.join(upload_dir, filename)
+
+    content = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    return {"url": f"/uploads/transfer_receipts/{filename}"}
+
+
+@router.get("/transfers/receipts/{filename}")
+async def get_transfer_receipt(
+    filename: str,
+    current_user: User = Depends(require_permission("transfers.view")),
+):
+    from fastapi.responses import FileResponse
+
+    base_dir = os.path.realpath(os.path.join("uploads", "transfer_receipts"))
+    safe_name = os.path.basename(filename)
+    file_path = os.path.realpath(os.path.join(base_dir, safe_name))
+    if not file_path.startswith(base_dir) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Receipt not found")
+
+    ext = os.path.splitext(safe_name)[1].lower()
+    media_type = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".pdf": "application/pdf",
+    }.get(ext, "application/octet-stream")
+
+    return FileResponse(path=file_path, media_type=media_type, filename=safe_name)
+
+
 @router.post("/transfers/{transfer_id}/receive", response_model=BranchTransferRead)
 async def receive_branch_transfer(
     transfer_id: uuid.UUID,
+    data: TransferReceiveRequest | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("transfers.receive")),
 ):
     transfer = await finance_service.receive_branch_transfer(
         db, transfer_id, received_by=current_user.phone,
+        receipt_url=data.receipt_url if data else None,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
     if not transfer:
@@ -827,7 +886,7 @@ async def get_cash_position(
         else None
     )
     resolved_branch_ids = (
-        [branch_id] if branch_id else await resolve_branch_ids(db, current_user, requested)
+        [branch_id] if branch_id else await resolve_assigned_branch_ids(db, current_user, requested)
     )
     return await finance_service.get_cash_position(
         db, branch_ids=resolved_branch_ids,
@@ -845,7 +904,7 @@ async def get_profit_loss(
     from_date: date | None = Query(None),
     to_date: date | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("reports.view")),
+    current_user: User = Depends(require_permission("finance.manage")),
 ):
     requested = (
         [uuid.UUID(b) for b in branch_ids.split(",") if b]
@@ -853,7 +912,7 @@ async def get_profit_loss(
         else None
     )
     resolved_branch_ids = (
-        [branch_id] if branch_id else await resolve_branch_ids(db, current_user, requested)
+        [branch_id] if branch_id else await resolve_assigned_branch_ids(db, current_user, requested)
     )
     return await finance_service.get_profit_loss(
         db, branch_ids=resolved_branch_ids, from_date=from_date, to_date=to_date,

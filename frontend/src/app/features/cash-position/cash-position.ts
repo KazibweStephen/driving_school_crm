@@ -4,6 +4,7 @@ import { CommonModule } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
 import { DialogModule } from 'primeng/dialog';
+import { FileUploadModule } from 'primeng/fileupload';
 import { InputTextModule } from 'primeng/inputtext';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { SelectModule } from 'primeng/select';
@@ -40,7 +41,7 @@ interface LinkablePayment {
 @Component({
   selector: 'app-cash-position',
   imports: [
-    CommonModule, FormsModule, ButtonModule, CardModule, DialogModule,
+    CommonModule, FormsModule, ButtonModule, CardModule, DialogModule, FileUploadModule,
     InputTextModule, InputNumberModule, SelectModule, TagModule, ToastModule,
   ],
   providers: [MessageService],
@@ -74,6 +75,7 @@ export class CashPositionCmp implements OnInit {
     amount: 0,
     reason: '',
   };
+  receiptFile: File | null = null;
 
   clientResults = signal<ClientInfo[]>([]);
   clientSearching = signal(false);
@@ -229,6 +231,11 @@ export class CashPositionCmp implements OnInit {
     this.saving.set(true);
     try {
       const payment_ids = this.selectedPayments().map(p => p.payment_id);
+      let receipt_url: string | undefined;
+      if (this.receiptFile) {
+        const up = await this.financeService.uploadTransferReceipt(this.receiptFile).toPromise();
+        receipt_url = up?.url;
+      }
       await this.financeService.createTransfer({
         from_branch_id: this.sendForm.from_branch_id,
         to_branch_id: this.sendForm.to_branch_id,
@@ -238,8 +245,10 @@ export class CashPositionCmp implements OnInit {
         method: this.sendForm.method,
         reference: this.sendForm.reference || undefined,
         payment_ids: payment_ids.length ? payment_ids : undefined,
+        receipt_url,
       }).toPromise();
       this.showSendDialog.set(false);
+      this.receiptFile = null;
       await this.loadPositions();
       this.messageService.add({ severity: 'success', summary: 'Sent', detail: 'Money remitted to head office' });
     } catch (e: any) {
@@ -247,6 +256,14 @@ export class CashPositionCmp implements OnInit {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  onReceiptSelected(event: any) {
+    this.receiptFile = event?.files?.[0] || event?.currentFiles?.[0] || null;
+  }
+
+  clearReceipt() {
+    this.receiptFile = null;
   }
 
   formatAmount(n: number): string {

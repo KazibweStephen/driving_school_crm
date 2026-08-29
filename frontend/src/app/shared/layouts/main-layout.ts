@@ -93,9 +93,14 @@ export class MainLayout implements OnInit, OnDestroy {
         { path: '/expense-categories', label: 'Expense Categories', icon: 'pi pi-tags', permission: 'expenses.manage' },
         { path: '/payments', label: 'Payments', icon: 'pi pi-credit-card', permission: 'payments.view' },
         { path: '/collections-sheet', label: 'Collections Sheet', icon: 'pi pi-file-invoice', permission: 'collections.view' },
-        { path: '/transfers', label: 'Branch Transfers', icon: 'pi pi-arrow-right-arrow-left', permission: 'transfers.view' },
+      ],
+    },
+    {
+      label: 'Finance', icon: 'pi pi-dollar', expanded: false,
+      children: [
         { path: '/cash-position', label: 'Cash Position', icon: 'pi pi-wallet', permission: 'finance.view' },
-        { path: '/profit-loss', label: 'Profit & Loss', icon: 'pi pi-chart-line', permission: 'reports.view' },
+        { path: '/transfers', label: 'Branch Transfers', icon: 'pi pi-arrow-right-arrow-left', permission: 'transfers.view' },
+        { path: '/profit-loss', label: 'Profit & Loss', icon: 'pi pi-chart-line', permission: 'finance.manage' },
       ],
     },
     {

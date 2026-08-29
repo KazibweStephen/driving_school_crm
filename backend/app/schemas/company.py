@@ -300,9 +300,14 @@ class BranchTransferCreate(BaseModel):
     pool: str | None = None
     method: str | None = None
     reference: str | None = None
+    receipt_url: str | None = None
     consultation_id: uuid.UUID | None = None
     payment_id: uuid.UUID | None = None
     payment_ids: list[uuid.UUID] | None = None
+
+
+class TransferReceiveRequest(BaseModel):
+    receipt_url: str | None = None
 
 
 class TransferPaymentLinkRead(BaseModel):
@@ -325,6 +330,7 @@ class BranchTransferRead(BaseModel):
     pool: str | None = None
     method: str | None = None
     reference: str | None = None
+    receipt_url: str | None = None
     consultation_id: uuid.UUID | None = None
     payment_id: uuid.UUID | None = None
     status: TransferStatus

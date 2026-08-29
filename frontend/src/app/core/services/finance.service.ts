@@ -93,6 +93,7 @@ export interface BranchTransfer {
   pool?: string;
   method?: string;
   reference?: string;
+  receipt_url?: string;
   status: 'initiated' | 'received' | 'cancelled';
   initiated_by?: string;
   initiated_at: string;
@@ -119,6 +120,7 @@ export interface BranchTransferCreate {
   pool?: string;
   method?: string;
   reference?: string;
+  receipt_url?: string;
 }
 
 export interface BranchTransferListResponse {
@@ -283,8 +285,14 @@ export class FinanceService {
     return this.http.post<BranchTransfer>(`${this.base}/transfers`, data);
   }
 
-  receiveTransfer(id: string): Observable<BranchTransfer> {
-    return this.http.post<BranchTransfer>(`${this.base}/transfers/${id}/receive`, {});
+  receiveTransfer(id: string, receiptUrl?: string): Observable<BranchTransfer> {
+    return this.http.post<BranchTransfer>(`${this.base}/transfers/${id}/receive`, { receipt_url: receiptUrl });
+  }
+
+  uploadTransferReceipt(file: File): Observable<{ url: string }> {
+    const fd = new FormData();
+    fd.append('file', file);
+    return this.http.post<{ url: string }>(`${this.base}/transfers/upload-receipt`, fd);
   }
 
   cancelTransfer(id: string): Observable<BranchTransfer> {

@@ -180,3 +180,49 @@ async def resolve_branch_ids(
         return list(valid)
 
     return assigned
+
+
+async def resolve_assigned_branch_ids(
+    db: AsyncSession,
+    current_user: User,
+    requested_branch_ids: list[uuid.UUID] | None = None,
+) -> list[uuid.UUID]:
+    """Resolve branch IDs a user may operate on, strictly by branch assignment.
+
+    Unlike ``resolve_branch_ids`` this never gives privileged non-super roles
+    blanket access to the whole company: every non-super user is limited to the
+    branches they are assigned to (via ``UserBranchAssignment``). Only
+    ``super_user`` can bypass and see the whole company.
+
+    Used by cash position and branch transfer flows (create/receive/list).
+    """
+    if current_user.role == UserRole.SUPER_USER:
+        base_query = select(Branch)
+        if requested_branch_ids:
+            base_query = base_query.where(Branch.id.in_(requested_branch_ids))
+        result = await db.execute(base_query)
+        return [b.id for b in result.scalars().all()]
+
+    assignment_query = (
+        select(UserBranchAssignment.branch_id)
+        .join(Branch, UserBranchAssignment.branch_id == Branch.id)
+        .where(UserBranchAssignment.user_id == current_user.phone)
+    )
+    if current_user.company_id is not None:
+        assignment_query = assignment_query.where(
+            Branch.company_id == current_user.company_id
+        )
+    result = await db.execute(assignment_query)
+    assigned = [row[0] for row in result.all()]
+    if not assigned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="No branch access"
+        )
+    if requested_branch_ids:
+        valid = set(requested_branch_ids) & set(assigned)
+        if not valid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="No branch access"
+            )
+        return list(valid)
+    return assigned

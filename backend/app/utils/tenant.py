@@ -198,6 +198,8 @@ async def resolve_assigned_branch_ids(
     """
     if current_user.role == UserRole.SUPER_USER:
         base_query = select(Branch)
+        if current_user.company_id is not None:
+            base_query = base_query.where(Branch.company_id == current_user.company_id)
         if requested_branch_ids:
             base_query = base_query.where(Branch.id.in_(requested_branch_ids))
         result = await db.execute(base_query)

@@ -1424,6 +1424,61 @@ async def _resolve_companies_branches(db, branch_ids, company_id, current_user_r
     return [b.id for b in result.scalars().all()]
 
 
+async def list_unremitted_client_payments(
+    db: AsyncSession,
+    branch_id: uuid.UUID | None,
+    company_id: uuid.UUID | None,
+    current_user_role: UserRole | None,
+    search: str | None = None,
+) -> list[dict]:
+    """Return client payments collected at `branch_id` that have not yet been
+    remitted (linked to any branch transfer). Each entry carries the client's
+    name and phone from the consultation."""
+    if not branch_id:
+        return []
+    if not await _verify_branches_in_company(db, [branch_id], company_id, current_user_role):
+        return []
+
+    linked_subq = select(TransferPaymentLink.payment_id)
+    query = (
+        select(Payment, Consultation)
+        .join(Consultation, Payment.consultation_id == Consultation.id)
+        .outerjoin(Branch, Consultation.branch_id == Branch.id)
+        .where(
+            Payment.branch_id == branch_id,
+            Payment.cancelled_at.is_(None),
+            Payment.id.notin_(linked_subq),
+            or_(Consultation.branch_id.is_(None), Branch.company_id == company_id),
+        )
+    )
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                Consultation.first_name.ilike(term),
+                Consultation.last_name.ilike(term),
+                Consultation.phone.ilike(term),
+            )
+        )
+
+    query = query.order_by(Payment.created_at.desc())
+    result = await db.execute(query)
+    rows = result.all()
+
+    items = []
+    for p, c in rows:
+        client_name = f"{c.first_name} {c.last_name or ''}".strip()
+        items.append({
+            "payment_id": str(p.id),
+            "consultation_id": str(c.id),
+            "client_name": client_name,
+            "client_phone": c.phone,
+            "amount": float(p.total_paid or p.total_amount or 0),
+            "document_date": p.document_date.isoformat() if p.document_date else None,
+        })
+    return items
+
+
 async def get_cash_position(
     db: AsyncSession,
     branch_id: uuid.UUID | None = None,

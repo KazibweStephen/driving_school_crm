@@ -14,10 +14,8 @@ import { MessageService } from 'primeng/api';
 import { AuthService } from '../../core/auth/auth.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import {
-  FinanceService, BranchCashPosition, PoolPosition,
+  FinanceService, BranchCashPosition, PoolPosition, UnremittedClientPayment,
 } from '../../core/services/finance.service';
-import { ConsultationService, ClientInfo } from '../../core/services/consultation.service';
-import { PaymentService, PaymentRead } from '../../core/services/payment.service';
 import { CurrencyService } from '../../core/services/currency.service';
 
 interface Pool {
@@ -28,14 +26,6 @@ interface Pool {
 interface Method {
   label: string;
   value: string;
-}
-
-interface LinkablePayment {
-  payment_id: string;
-  consultation_id: string;
-  amount: number;
-  client_name?: string;
-  client_phone?: string;
 }
 
 @Component({
@@ -77,19 +67,16 @@ export class CashPositionCmp implements OnInit {
   };
   receiptFile: File | null = null;
 
-  clientResults = signal<ClientInfo[]>([]);
-  clientSearching = signal(false);
-  clientQuery = signal('');
-  linkablePayments = signal<LinkablePayment[]>([]);
-  selectedPayments = signal<LinkablePayment[]>([]);
-  linkableLoading = signal(false);
+  unremitted = signal<UnremittedClientPayment[]>([]);
+  filteredPayments = signal<UnremittedClientPayment[]>([]);
+  unremittedLoading = signal(false);
+  paymentSearch = signal('');
+  selectedPayments = signal<UnremittedClientPayment[]>([]);
 
   constructor(
     private financeService: FinanceService,
     private companyService: CompanyService,
     private authService: AuthService,
-    private consultationService: ConsultationService,
-    private paymentService: PaymentService,
     private messageService: MessageService,
     public currencyService: CurrencyService,
   ) {}
@@ -152,72 +139,71 @@ export class CashPositionCmp implements OnInit {
       amount: 0,
       reason: '',
     };
-    this.clientResults.set([]);
-    this.clientQuery.set('');
-    this.linkablePayments.set([]);
+    this.unremitted.set([]);
+    this.filteredPayments.set([]);
+    this.paymentSearch.set('');
     this.selectedPayments.set([]);
     this.showSendDialog.set(true);
+    if (this.sendForm.from_branch_id) {
+      this.loadUnremitted(this.sendForm.from_branch_id);
+    }
   }
 
-  async searchClient(q: string) {
-    this.clientQuery.set(q);
-    const search = (q || '').trim();
-    if (search.length < 2) {
-      this.clientResults.set([]);
+  async loadUnremitted(branchId: string) {
+    if (!branchId) {
+      this.unremitted.set([]);
+      this.filteredPayments.set([]);
       return;
     }
-    this.clientSearching.set(true);
+    this.unremittedLoading.set(true);
     try {
-      const res = await this.consultationService.clientSearch(search).toPromise();
-      this.clientResults.set(res || []);
+      const payments = (await this.financeService.getUnremittedClientPayments(branchId).toPromise()) || [];
+      this.unremitted.set(payments);
+      this.applyPaymentFilter();
     } catch {
-      this.clientResults.set([]);
+      this.unremitted.set([]);
+      this.filteredPayments.set([]);
+      this.messageService.add({ severity: 'warn', summary: 'No payments', detail: 'Could not load unremitted client payments' });
     } finally {
-      this.clientSearching.set(false);
+      this.unremittedLoading.set(false);
     }
   }
 
-  async selectClient(c: ClientInfo) {
-    this.clientQuery.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
-    this.clientResults.set([]);
-    if (!c.latest_consultation_id) {
-      this.messageService.add({ severity: 'warn', summary: 'No consultation', detail: 'No consultation to link payments from' });
+  onFromBranchChange() {
+    this.selectedPayments.set([]);
+    this.sendForm.amount = 0;
+    this.paymentSearch.set('');
+    if (this.sendForm.from_branch_id) {
+      this.loadUnremitted(this.sendForm.from_branch_id);
+    } else {
+      this.unremitted.set([]);
+      this.filteredPayments.set([]);
+    }
+  }
+
+  applyPaymentFilter() {
+    const q = (this.paymentSearch() || '').trim().toLowerCase();
+    const all = this.unremitted();
+    if (!q) {
+      this.filteredPayments.set(all);
       return;
     }
-    this.linkableLoading.set(true);
-    try {
-      const payments = (await this.paymentService.getPaymentsByConsultation(c.latest_consultation_id).toPromise()) || [];
-      const links: LinkablePayment[] = payments.map(p => ({
-        payment_id: p.id,
-        consultation_id: c.latest_consultation_id!,
-        amount: Number(p.total_paid ?? p.balance ?? 0),
-        client_name: `${c.first_name}${c.last_name ? ' ' + c.last_name : ''}`,
-        client_phone: c.phone,
-      }));
-      this.linkablePayments.set(links);
-    } catch {
-      this.linkablePayments.set([]);
-      this.messageService.add({ severity: 'warn', summary: 'No payments', detail: 'Could not load payments for this client' });
-    } finally {
-      this.linkableLoading.set(false);
-    }
+    this.filteredPayments.set(all.filter(p =>
+      (p.client_name || '').toLowerCase().includes(q) ||
+      (p.client_phone || '').toLowerCase().includes(q)
+    ));
   }
 
-  togglePayment(p: LinkablePayment) {
+  togglePayment(p: UnremittedClientPayment) {
     const selected = this.selectedPayments();
     const exists = selected.some(s => s.payment_id === p.payment_id);
-    this.selectedPayments.set(exists ? selected.filter(s => s.payment_id !== p.payment_id) : [...selected, p]);
+    const next = exists ? selected.filter(s => s.payment_id !== p.payment_id) : [...selected, p];
+    this.selectedPayments.set(next);
+    this.sendForm.amount = next.reduce((sum, s) => sum + Number(s.amount || 0), 0);
   }
 
   isPaymentSelected(paymentId: string): boolean {
     return this.selectedPayments().some(s => s.payment_id === paymentId);
-  }
-
-  clearClient() {
-    this.clientQuery.set('');
-    this.clientResults.set([]);
-    this.linkablePayments.set([]);
-    this.selectedPayments.set([]);
   }
 
   sendFormValid(): boolean {

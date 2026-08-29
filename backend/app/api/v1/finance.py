@@ -101,9 +101,17 @@ async def upload_expense_receipt(
     file: UploadFile = File(...),
     current_user: User = Depends(require_permission("expenses.create")),
 ):
-    allowed_types = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
-    if file.content_type and file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
+    allowed_ext = {".jpg", ".jpeg", ".png", ".webp", ".pdf", ".heic", ".heif", ".bmp", ".gif"}
+    allowed_types = {
+        "image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf",
+        "image/heic", "image/heif", "image/bmp", "image/gif", "application/octet-stream",
+    }
+    ext = (os.path.splitext(file.filename or "")[1] or "").lower()
+    ct = (file.content_type or "").lower()
+    if ct and ct not in allowed_types and ext not in allowed_ext:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type or ext}")
+    if not ct and ext not in allowed_ext:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
 
     max_size = 10 * 1024 * 1024  # 10MB
     file.file.seek(0, os.SEEK_END)
@@ -115,7 +123,8 @@ async def upload_expense_receipt(
     upload_dir = os.path.join("uploads", "receipts")
     os.makedirs(upload_dir, exist_ok=True)
 
-    ext = os.path.splitext(file.filename or "receipt.jpg")[1] or ".jpg"
+    if ext not in {".jpg", ".jpeg", ".png", ".webp", ".pdf", ".heic", ".heif", ".bmp", ".gif"}:
+        ext = ".jpg"
     filename = f"{uuid.uuid4()}{ext}"
     filepath = os.path.join(upload_dir, filename)
 
@@ -146,6 +155,10 @@ async def get_expense_receipt(
         ".png": "image/png",
         ".webp": "image/webp",
         ".pdf": "application/pdf",
+        ".heic": "image/heic",
+        ".heif": "image/heif",
+        ".bmp": "image/bmp",
+        ".gif": "image/gif",
     }.get(ext, "application/octet-stream")
 
     return FileResponse(path=file_path, media_type=media_type, filename=safe_name)
@@ -717,6 +730,10 @@ async def get_transfer_receipt(
         ".png": "image/png",
         ".webp": "image/webp",
         ".pdf": "application/pdf",
+        ".heic": "image/heic",
+        ".heif": "image/heif",
+        ".bmp": "image/bmp",
+        ".gif": "image/gif",
     }.get(ext, "application/octet-stream")
 
     return FileResponse(path=file_path, media_type=media_type, filename=safe_name)
@@ -891,6 +908,19 @@ async def get_cash_position(
     return await finance_service.get_cash_position(
         db, branch_ids=resolved_branch_ids,
         company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+
+
+@router.get("/cash-position/unremitted-client-payments", response_model=list[dict])
+async def get_unremitted_client_payments(
+    branch_id: uuid.UUID | None = Query(None),
+    search: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("finance.view")),
+):
+    return await finance_service.list_unremitted_client_payments(
+        db, branch_id=branch_id, company_id=current_user.company_id,
+        current_user_role=current_user.role, search=search,
     )
 
 

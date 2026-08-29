@@ -40,6 +40,7 @@ export interface ExpenseCreatePayload {
   vehicle_id?: string;
   expense_date?: string;
   status?: string;
+  receipt_url?: string;
 }
 
 @Injectable({ providedIn: 'root' })

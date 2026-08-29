@@ -178,6 +178,15 @@ export interface BranchCashPosition {
   pools: PoolPosition[];
 }
 
+export interface UnremittedClientPayment {
+  payment_id: string;
+  consultation_id: string;
+  client_name: string;
+  client_phone: string;
+  amount: number;
+  document_date?: string | null;
+}
+
 export interface ProfitLossItem {
   branch_id: string;
   branch_name: string;
@@ -211,6 +220,12 @@ export class FinanceService {
     const fd = new FormData();
     fd.append('file', file);
     return this.http.post<{ url: string }>(`${this.base}/expenses/upload-receipt`, fd);
+  }
+
+  downloadExpenseReceipt(filename: string): Observable<Blob> {
+    return this.http.get(`${this.base}/expenses/receipts/${encodeURIComponent(filename)}`, {
+      responseType: 'blob',
+    });
   }
 
   listExpenses(params?: {
@@ -335,6 +350,12 @@ export class FinanceService {
 
   getCashPosition(): Observable<BranchCashPosition[]> {
     return this.http.get<BranchCashPosition[]>(`${this.base}/cash-position`);
+  }
+
+  getUnremittedClientPayments(branchId: string, search?: string): Observable<UnremittedClientPayment[]> {
+    let p = new HttpParams().set('branch_id', branchId);
+    if (search) p = p.set('search', search);
+    return this.http.get<UnremittedClientPayment[]>(`${this.base}/cash-position/unremitted-client-payments`, { params: p });
   }
 
   getProfitLoss(params?: { from_date?: string; to_date?: string; branch_ids?: string[] }): Observable<ProfitLossResponse> {

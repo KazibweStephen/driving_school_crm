@@ -175,6 +175,7 @@ export class ExpensesCmp implements OnInit {
     const input = event.target as HTMLInputElement;
     if (input.files?.length) {
       this.receiptFile.set(input.files[0]);
+      input.value = '';
     }
   }
 
@@ -355,9 +356,17 @@ export class ExpensesCmp implements OnInit {
     return dt.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
-  receiptLink(e: Expense): string {
-    if (!e.receipt_url) return '';
+  async viewReceipt(e: Expense) {
+    if (!e.receipt_url) return;
     const filename = e.receipt_url.split('/').pop() || '';
-    return `/api/v1/finance/expenses/receipts/${encodeURIComponent(filename)}`;
+    try {
+      const blob = await this.financeService.downloadExpenseReceipt(filename).toPromise();
+      if (!blob) return;
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Could not load receipt' });
+    }
   }
 }

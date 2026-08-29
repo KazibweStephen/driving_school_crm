@@ -239,7 +239,7 @@ export class Expenses {
   private uploadThenCreate(payload: ExpenseCreatePayload) {
     if (this.selectedFile) {
       this.expenseService.uploadReceipt(this.selectedFile).subscribe({
-        next: (res) => this.doCreate({ ...payload, description: payload.description || res.url }),
+        next: (res) => this.doCreate({ ...payload, receipt_url: res.url }),
         error: () => {
           this.submitting.set(false);
           this.messageService.add({ severity: 'error', summary: 'Receipt upload failed' });

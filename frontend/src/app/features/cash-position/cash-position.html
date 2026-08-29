@@ -71,7 +71,7 @@
     <div class="flex flex-col gap-1">
       <label class="text-sm font-medium text-gray-700">From Branch *</label>
       <p-select [(ngModel)]="sendForm.from_branch_id" [options]="branches" optionLabel="name" optionValue="id"
-        placeholder="Select branch" styleClass="w-full" appendTo="body" />
+        placeholder="Select branch" styleClass="w-full" appendTo="body" (onChange)="onFromBranchChange()" />
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-sm font-medium text-gray-700">To Branch (Head Office) *</label>
@@ -102,47 +102,40 @@
 
     <div class="flex flex-col gap-1">
       <label class="text-sm font-medium text-gray-700">
-        Collected from client (optional)
+        Unremitted client payments (collected, not yet sent to head office)
       </label>
-      <div class="relative">
-        <input pInputText [(ngModel)]="clientQuery" (input)="searchClient($any($event.target).value)"
-          placeholder="Search client by name/phone..." class="w-full" />
-        @if (clientQuery()) {
-          <button pButton icon="pi pi-times" class="p-button-sm p-button-text absolute right-1 top-1/2 -translate-y-1/2"
-            (click)="clearClient()"></button>
-        }
-        @if (clientSearching()) {
-          <div class="absolute z-10 w-full bg-white border rounded shadow-lg mt-1 p-2 text-sm text-gray-500">Searching...</div>
-        } @else if (clientResults().length) {
-          <ul class="absolute z-10 w-full bg-white border rounded shadow-lg mt-1 max-h-48 overflow-auto p-0 m-0 list-none">
-            @for (c of clientResults(); track c.phone) {
-              <li class="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 border-b last:border-b-0"
-                (click)="selectClient(c)">
-                <span class="font-medium">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
-                <span class="text-gray-500"> · {{ c.phone }}</span>
-              </li>
+      @if (unremittedLoading()) {
+        <div class="text-sm text-gray-500">Loading payments...</div>
+      } @else {
+        <div class="relative">
+          <input pInputText [(ngModel)]="paymentSearch" (ngModelChange)="applyPaymentFilter()"
+            placeholder="Search by client name or phone..." class="w-full pr-8" />
+          @if (paymentSearch()) {
+            <button pButton icon="pi pi-times" class="p-button-sm p-button-text absolute right-1 top-1/2 -translate-y-1/2"
+              (click)="paymentSearch.set(''); applyPaymentFilter()"></button>
+          }
+        </div>
+        @if (filteredPayments().length) {
+          <div class="flex flex-col gap-2 border rounded p-3 max-h-56 overflow-auto">
+            @for (p of filteredPayments(); track p.payment_id) {
+              <label class="flex items-start gap-2 cursor-pointer text-sm">
+                <input type="checkbox" [checked]="isPaymentSelected(p.payment_id)"
+                  (change)="togglePayment(p)" class="mt-1" />
+                <span class="flex w-full items-center justify-between gap-2">
+                  <span class="min-w-0">
+                    <span class="block font-medium truncate">{{ p.client_name }}</span>
+                    <span class="block text-gray-500">{{ p.client_phone }}</span>
+                  </span>
+                  <span class="font-semibold whitespace-nowrap">{{ currencyService.symbol() }} {{ formatAmount(p.amount) }}</span>
+                </span>
+              </label>
             }
-          </ul>
+          </div>
+        } @else {
+          <div class="text-sm text-gray-500">No unremitted client payments for this branch.</div>
         }
-      </div>
+      }
     </div>
-
-    @if (linkableLoading()) {
-      <div class="text-sm text-gray-500">Loading payments...</div>
-    } @else if (linkablePayments().length) {
-      <div class="flex flex-col gap-2 border rounded p-3 max-h-48 overflow-auto">
-        @for (p of linkablePayments(); track p.payment_id) {
-          <label class="flex items-start gap-2 cursor-pointer text-sm">
-            <input type="checkbox" [checked]="isPaymentSelected(p.payment_id)"
-              (change)="togglePayment(p)" class="mt-1" />
-            <span>
-              <span class="font-medium">{{ p.client_name }}</span>
-              <span class="text-gray-500"> · {{ currencyService.symbol() }} {{ formatAmount(p.amount) }}</span>
-            </span>
-          </label>
-        }
-      </div>
-    }
 
     <div class="flex flex-col gap-1">
       <label class="text-sm font-medium text-gray-700">Reason / Note</label>

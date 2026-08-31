@@ -7,6 +7,20 @@ from pydantic import BaseModel, Field, field_validator
 from app.models.product import EntityStatus
 
 
+class PackageExpectedExpenseRead(BaseModel):
+    id: uuid.UUID
+    package_id: uuid.UUID
+    category: str
+    amount: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class PackageExpectedExpenseInput(BaseModel):
+    category: str = Field(..., min_length=1, max_length=100)
+    amount: Decimal = Field(0, ge=0, decimal_places=2)
+
+
 class PackageCreate(BaseModel):
     product_id: uuid.UUID
     name: str = Field(..., min_length=1, max_length=200)
@@ -93,6 +107,7 @@ class PackageRead(BaseModel):
     commission_rate: PackageCommissionRateRead | None = Field(
         default=None, validation_alias="commission_rates"
     )
+    expected_expenses: list[PackageExpectedExpenseRead] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

@@ -19,6 +19,7 @@ import { ProductService, Product, Package } from '../../core/services/product.se
 import { LessonPlanService, LessonPlanTemplate, LessonPlanTemplateCreate, LessonTemplateItem } from '../../core/services/lesson-plan.service';
 import { LessonLibraryService, LessonLibrary } from '../../core/services/lesson-library.service';
 import { AuthService } from '../../core/auth/auth.service';
+import { FinanceService } from '../../core/services/finance.service';
 
 @Component({
   selector: 'app-products',
@@ -94,6 +95,12 @@ export class Products implements OnInit {
     { label: 'Inactive', value: 'inactive' },
   ];
 
+  // ── Expected Expenses (per package) ──
+  showExpectedExpensesDialog = false;
+  expectedExpensesPackage = signal<Package | null>(null);
+  expectedExpensesRows = signal<{ category: string | null; amount: number }[]>([]);
+  expenseCategoryOptions: { name: string; code: string }[] = [];
+
   // ── Lesson Plan Templates ──
   showTemplatesDialog = signal(false);
   templates = signal<LessonPlanTemplate[]>([]);
@@ -123,6 +130,7 @@ export class Products implements OnInit {
     private productService: ProductService,
     private lessonPlanService: LessonPlanService,
     private lessonLibraryService: LessonLibraryService,
+    private financeService: FinanceService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public currencyService: CurrencyService,
@@ -780,6 +788,57 @@ export class Products implements OnInit {
       this.messageService.add({ severity: 'success', summary: 'Deleted', detail: 'Template deleted' });
     } catch {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete template' });
+    }
+  }
+
+  // ── Expected Expenses (per package) ──
+
+  async openExpectedExpenses(pkg: Package) {
+    this.expectedExpensesPackage.set(pkg);
+    try {
+      const res = await this.financeService.listExpenseCategories({ active: true }).toPromise();
+      this.expenseCategoryOptions = (res?.items || []).map((c) => ({ name: c.name, code: c.code }));
+    } catch {
+      this.expenseCategoryOptions = [];
+    }
+    this.expectedExpensesRows.set(
+      (pkg.expected_expenses || []).map((e) => ({ category: e.category, amount: Number(e.amount) || 0 }))
+    );
+    if (this.expectedExpensesRows().length === 0) {
+      this.expectedExpensesRows.set([{ category: null, amount: 0 }]);
+    }
+    this.showExpectedExpensesDialog = true;
+  }
+
+  addExpectedExpenseRow() {
+    this.expectedExpensesRows.update((rows) => [...rows, { category: null, amount: 0 }]);
+  }
+
+  removeExpectedExpenseRow(index: number) {
+    this.expectedExpensesRows.update((rows) => rows.filter((_, i) => i !== index));
+  }
+
+  formatExpenseTotal(): number {
+    return this.expectedExpensesRows().reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  }
+
+  async saveExpectedExpenses() {
+    const pkg = this.expectedExpensesPackage();
+    if (!pkg) return;
+    const items = this.expectedExpensesRows()
+      .filter((r) => r.category && Number(r.amount) > 0)
+      .map((r) => ({ category: r.category!, amount: Number(r.amount) }));
+    this.loading.set(true);
+    try {
+      await this.productService.setPackageExpectedExpenses(pkg.id, items).toPromise();
+      this.showExpectedExpensesDialog = false;
+      this.expectedExpensesPackage.set(null);
+      await this.loadProducts();
+      this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Expected expenses updated' });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save expected expenses' });
+    } finally {
+      this.loading.set(false);
     }
   }
 }

@@ -6,6 +6,8 @@ from app.core.database import get_db
 from app.models.product import EntityStatus
 from app.models.user import User
 from app.schemas.product import (
+    PackageExpectedExpenseInput,
+    PackageExpectedExpenseRead,
     ProductCreate,
     ProductListResponse,
     ProductRead,
@@ -143,3 +145,31 @@ async def deactivate_product(
         )
     updated = await product_service.deactivate_product(db, product)
     return ProductRead.model_validate(updated)
+
+
+@router.post(
+    "/packages/{package_id}/expected-expenses",
+    response_model=list[PackageExpectedExpenseRead],
+    status_code=status.HTTP_200_OK,
+)
+async def set_package_expected_expenses(
+    package_id: str,
+    data: list[PackageExpectedExpenseInput],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("products.manage")),
+):
+    from uuid import UUID
+    try:
+        pid = UUID(package_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid package ID",
+        )
+    saved = await product_service.set_package_expected_expenses(
+        db,
+        pid,
+        [{"category": d.category, "amount": d.amount} for d in data],
+    )
+    await db.commit()
+    return [PackageExpectedExpenseRead.model_validate(e) for e in saved]

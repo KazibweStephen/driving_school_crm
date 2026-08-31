@@ -9,6 +9,7 @@
       </a>
       <p-selectButton [options]="viewOptions" [(ngModel)]="viewMode" optionLabel="label" optionValue="value"
         styleClass="p-sm" />
+      <p-button label="Fund Branch" icon="pi pi-money-bill" severity="secondary" (onClick)="openFundingDialog()" />
       <p-button label="Send Money to Head Office" icon="pi pi-send" (onClick)="openSendDialog()" />
     </div>
   </div>
@@ -230,6 +231,63 @@
       <p-button label="Cancel" severity="secondary" (onClick)="showSendDialog.set(false)" />
       <p-button label="Send" icon="pi pi-send" [loading]="saving()" [disabled]="!sendFormValid()"
         (onClick)="sendMoney()" />
+    </div>
+  </div>
+</p-dialog>
+
+<p-dialog header="Fund Branch (Head Office Client Balances)" [modal]="true" [(visible)]="showFundingDialog"
+  [style]="{ width: '560px' }" appendTo="body" [closable]="false">
+  <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">To Branch *</label>
+      <p-select [(ngModel)]="fundingToBranchId" [options]="branches" optionLabel="name" optionValue="id"
+        placeholder="Select destination branch" styleClass="w-full" appendTo="body"
+        (onChange)="onFundingBranchChange()" [showClear]="true" />
+    </div>
+
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">
+        Select clients and enter the amount to fund back to this branch
+      </label>
+      @if (fundingLoading()) {
+        <div class="text-sm text-gray-500">Loading client balances...</div>
+      } @else if (!filteredFundingClients.length) {
+        <div class="text-sm text-gray-500">No head-office client balances available.</div>
+      } @else {
+        <div class="relative">
+          <input pInputText [(ngModel)]="fundingSearch" placeholder="Search by client name or phone..." class="w-full pr-8" />
+        </div>
+        <div class="flex flex-col gap-2 border rounded p-3 max-h-64 overflow-auto">
+          @for (c of filteredFundingClients; track c.consultation_id) {
+            <div class="flex items-center gap-2 text-sm" [class.bg-red-50]="fundingOverCap(c)">
+              <input type="checkbox" [checked]="isFundingSelected(c.consultation_id)"
+                (change)="toggleFundingClient(c)" class="mt-0.5" />
+              <span class="min-w-0 flex-1">
+                <span class="block font-medium truncate">{{ c.client_name }}</span>
+                <span class="block text-gray-500">Avail: {{ currencyService.symbol() }} {{ formatAmount(c.available_to_fund) }}</span>
+              </span>
+              <input type="number" [disabled]="!isFundingSelected(c.consultation_id)"
+                [max]="c.available_to_fund" [min]="0"
+                [(ngModel)]="fundingAmounts[c.consultation_id]"
+                placeholder="0" class="w-32 border rounded px-2 py-1 text-right" />
+            </div>
+            @if (fundingOverCap(c)) {
+              <small class="text-xs text-red-500 -mt-1 block">Exceeds available head-office balance for this client.</small>
+            }
+          }
+        </div>
+      }
+    </div>
+
+    <div class="flex items-center justify-between text-sm">
+      <span class="text-gray-500">Selected:</span>
+      <span class="font-semibold">Total {{ currencyService.symbol() }} {{ formatAmount(fundingTotal()) }}</span>
+    </div>
+
+    <div class="flex justify-end gap-2 pt-2">
+      <p-button label="Cancel" severity="secondary" (onClick)="showFundingDialog.set(false)" />
+      <p-button label="Fund" icon="pi pi-money-bill" [loading]="fundingSaving()" [disabled]="!fundingValid()"
+        (onClick)="sendFunding()" />
     </div>
   </div>
 </p-dialog>

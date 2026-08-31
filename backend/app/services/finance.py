@@ -12,6 +12,7 @@ from app.models.company import (
     BorrowStatus,
     Branch,
     BranchTransfer,
+    Company,
     Collection,
     CollectionStatus,
     Expense,
@@ -1551,6 +1552,170 @@ async def list_unremitted_client_payments(
             "document_date": p.document_date.isoformat() if p.document_date else None,
         })
     return items
+
+
+async def _company_head_office_id(
+    db: AsyncSession,
+    company_id: uuid.UUID | None,
+    any_branch_id: uuid.UUID,
+) -> uuid.UUID | None:
+    cid = company_id
+    if cid is None:
+        br = (
+            await db.execute(select(Branch).where(Branch.id == any_branch_id))
+        ).scalar_one_or_none()
+        cid = br.company_id if br else None
+    if cid is None:
+        return None
+    comp = (
+        await db.execute(select(Company).where(Company.id == cid))
+    ).scalar_one_or_none()
+    return comp.head_office_branch_id if comp else None
+
+
+async def ho_available_to_fund(
+    db: AsyncSession,
+    head_office_id: uuid.UUID,
+    company_id: uuid.UUID | None,
+    current_user_role: UserRole | None,
+) -> list[dict]:
+    """Per-client amounts of client-account money held at the head office that
+    can be funded back to a branch.
+
+    available = (client-account transfers received into head office for the
+    client) - (client-account transfers already funded back out of head office).
+    Only clients with a positive available amount are returned."""
+    if not await _verify_branches_in_company(db, [head_office_id], company_id, current_user_role):
+        return []
+    links = (
+        select(
+            TransferPaymentLink,
+            BranchTransfer.from_branch_id.label("from_branch"),
+            BranchTransfer.to_branch_id.label("to_branch"),
+            Payment.consultation_id.label("consultation_id"),
+        )
+        .join(BranchTransfer, TransferPaymentLink.transfer_id == BranchTransfer.id)
+        .join(Payment, TransferPaymentLink.payment_id == Payment.id)
+        .where(
+            BranchTransfer.pool == TransferPool.CLIENT_ACCOUNTS,
+            BranchTransfer.cancelled_at.is_(None),
+        )
+    )
+    rows = (await db.execute(links)).all()
+
+    net: dict[uuid.UUID, float] = {}
+    for link, fb, tb, cid in rows:
+        amt = float(link.amount or 0)
+        if cid is None:
+            continue
+        if tb == head_office_id:
+            net[cid] = net.get(cid, 0.0) + amt
+        if fb == head_office_id:
+            net[cid] = net.get(cid, 0.0) - amt
+
+    positive = {cid: amt for cid, amt in net.items() if amt > 0}
+    if not positive:
+        return []
+    cons = (
+        select(Consultation)
+        .outerjoin(Branch, Consultation.branch_id == Branch.id)
+        .where(
+            Consultation.id.in_(list(positive.keys())),
+            or_(Consultation.branch_id.is_(None), Branch.company_id == company_id),
+        )
+    )
+    cs = (await db.execute(cons)).scalars().all()
+    items = []
+    for c in cs:
+        items.append({
+            "consultation_id": str(c.id),
+            "client_name": f"{c.first_name} {c.last_name or ''}".strip(),
+            "client_phone": c.phone,
+            "available_to_fund": round(positive.get(c.id, 0.0), 2),
+        })
+    items.sort(key=lambda x: x["client_name"].lower())
+    return items
+
+
+async def create_ho_funding(
+    db: AsyncSession,
+    to_branch_id: uuid.UUID,
+    items: list[dict],
+    company_id: uuid.UUID | None,
+    current_user_role: UserRole | None,
+    initiated_by: str | None = None,
+    method: str | None = None,
+    reference: str | None = None,
+    reason: str | None = None,
+) -> BranchTransfer:
+    """Fund client-account money from the head office back to a branch.
+
+    Each selected client's amount is validated against its available-to-fund
+    cap (remitted_to_ho - funded_back). A single client-account transfer is
+    created from head office to the branch, with a TransferPaymentLink per
+    client carrying that client's funded amount, so it never alters the
+    client's outstanding balance."""
+    from fastapi import HTTPException
+    head_office_id = await _company_head_office_id(db, company_id, to_branch_id)
+    if not head_office_id:
+        raise HTTPException(status_code=400, detail="Head office branch not configured for this company")
+    if to_branch_id == head_office_id:
+        raise HTTPException(status_code=400, detail="Destination branch cannot be the head office")
+
+    avail = {
+        c["consultation_id"]: c["available_to_fund"]
+        for c in await ho_available_to_fund(db, head_office_id, company_id, current_user_role)
+    }
+    total = Decimal("0")
+    for it in items:
+        cid = str(it.get("consultation_id") or "")
+        amt = Decimal(str(it.get("amount") or 0))
+        if not cid:
+            raise HTTPException(status_code=400, detail="Each funding item needs a consultation_id")
+        cap = avail.get(cid, 0)
+        if amt <= 0:
+            raise HTTPException(status_code=400, detail="Funding amounts must be greater than zero")
+        if amt > Decimal(str(cap)):
+            raise HTTPException(
+                status_code=400,
+                detail="Funding amount exceeds the available head-office balance for this client",
+            )
+        total += amt
+    if total <= 0:
+        raise HTTPException(status_code=400, detail="Select at least one client with a positive funding amount")
+
+    transfer = await create_branch_transfer(
+        db,
+        from_branch_id=head_office_id,
+        to_branch_id=to_branch_id,
+        amount=total,
+        reason=reason or "Head office client funding",
+        pool=TransferPool.CLIENT_ACCOUNTS.value,
+        method=method,
+        reference=reference,
+        initiated_by=initiated_by,
+        company_id=company_id,
+        current_user_role=current_user_role,
+    )
+    for it in items:
+        cid = uuid.UUID(str(it["consultation_id"]))
+        amt = Decimal(str(it["amount"]))
+        pmt = (
+            await db.execute(
+                select(Payment)
+                .where(Payment.consultation_id == cid, Payment.cancelled_at.is_(None))
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if pmt:
+            db.add(TransferPaymentLink(
+                transfer_id=transfer.id,
+                payment_id=pmt.id,
+                amount=float(amt),
+            ))
+    await db.flush()
+    await db.refresh(transfer)
+    return transfer
 
 
 async def get_cash_position(

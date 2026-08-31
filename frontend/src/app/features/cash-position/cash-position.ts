@@ -16,7 +16,7 @@ import { MessageService } from 'primeng/api';
 import { AuthService } from '../../core/auth/auth.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import {
-  FinanceService, BranchCashPosition, PoolPosition, UnremittedClientPayment,
+  FinanceService, BranchCashPosition, PoolPosition, UnremittedClientPayment, HoFundingClient,
 } from '../../core/services/finance.service';
 import { CurrencyService } from '../../core/services/currency.service';
 
@@ -75,6 +75,15 @@ export class CashPositionCmp implements OnInit {
   unremittedLoading = signal(false);
   paymentSearch = signal('');
   selectedPayments = signal<UnremittedClientPayment[]>([]);
+
+  showFundingDialog = signal(false);
+  fundingLoading = signal(false);
+  fundingSaving = signal(false);
+  fundingClients = signal<HoFundingClient[]>([]);
+  fundingSearch = signal('');
+  fundingToBranchId = '';
+  selectedFunding = signal<HoFundingClient[]>([]);
+  fundingAmounts: Record<string, number> = {};
 
   readonly Math = Math;
 
@@ -287,6 +296,96 @@ export class CashPositionCmp implements OnInit {
 
   clearReceipt() {
     this.receiptFile = null;
+  }
+
+  onFundingBranchChange() {
+    this.selectedFunding.set([]);
+    this.fundingAmounts = {};
+    if (this.fundingToBranchId) {
+      this.loadFundingClients();
+    } else {
+      this.fundingClients.set([]);
+    }
+  }
+
+  async loadFundingClients() {
+    this.fundingLoading.set(true);
+    try {
+      const clients = (await this.financeService.getHoFundingClients().toPromise()) || [];
+      this.fundingClients.set(clients);
+    } catch {
+      this.fundingClients.set([]);
+      this.messageService.add({ severity: 'warn', summary: 'No funding', detail: 'Could not load head-office client balances' });
+    } finally {
+      this.fundingLoading.set(false);
+    }
+  }
+
+  openFundingDialog() {
+    this.fundingToBranchId = '';
+    this.fundingClients.set([]);
+    this.fundingSearch.set('');
+    this.selectedFunding.set([]);
+    this.fundingAmounts = {};
+    this.showFundingDialog.set(true);
+  }
+
+  get filteredFundingClients(): HoFundingClient[] {
+    const q = (this.fundingSearch() || '').trim().toLowerCase();
+    if (!q) return this.fundingClients();
+    return this.fundingClients().filter(c =>
+      c.client_name.toLowerCase().includes(q) || c.client_phone.toLowerCase().includes(q)
+    );
+  }
+
+  toggleFundingClient(c: HoFundingClient) {
+    const sel = this.selectedFunding();
+    this.selectedFunding.set(sel.some(s => s.consultation_id === c.consultation_id)
+      ? sel.filter(s => s.consultation_id !== c.consultation_id)
+      : [...sel, c]);
+  }
+
+  isFundingSelected(consultationId: string): boolean {
+    return this.selectedFunding().some(s => s.consultation_id === consultationId);
+  }
+
+  fundingTotal(): number {
+    return this.selectedFunding().reduce((sum, c) => sum + (Number(this.fundingAmounts[c.consultation_id] || 0)), 0);
+  }
+
+  fundingOverCap(c: HoFundingClient): boolean {
+    return (Number(this.fundingAmounts[c.consultation_id] || 0) || 0) > c.available_to_fund;
+  }
+
+  fundingValid(): boolean {
+    if (!this.fundingToBranchId || this.selectedFunding().length === 0) return false;
+    if (this.branchIsHeadOffice(this.fundingToBranchId)) return false;
+    return this.selectedFunding().every(c => {
+      const a = Number(this.fundingAmounts[c.consultation_id] || 0);
+      return a > 0 && a <= c.available_to_fund;
+    }) && this.fundingTotal() > 0;
+  }
+
+  async sendFunding() {
+    this.fundingSaving.set(true);
+    try {
+      const items = this.selectedFunding()
+        .map(c => ({ consultation_id: c.consultation_id, amount: Number(this.fundingAmounts[c.consultation_id] || 0) }))
+        .filter(i => i.amount > 0);
+      await this.financeService.createHoFunding({
+        to_branch_id: this.fundingToBranchId,
+        items,
+        method: 'cash',
+        reason: 'Head office client funding',
+      }).toPromise();
+      this.showFundingDialog.set(false);
+      await this.loadPositions();
+      this.messageService.add({ severity: 'success', summary: 'Funded', detail: 'Client funds sent to branch' });
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to fund branch' });
+    } finally {
+      this.fundingSaving.set(false);
+    }
   }
 
   formatAmount(n: number): string {

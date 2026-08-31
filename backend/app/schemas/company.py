@@ -306,10 +306,21 @@ class BranchTransferCreate(BaseModel):
     payment_ids: list[uuid.UUID] | None = None
 
 
+class HoFundingItem(BaseModel):
+    consultation_id: uuid.UUID
+    amount: Decimal = Field(..., decimal_places=2, gt=0)
+
+
+class HoFundingCreate(BaseModel):
+    to_branch_id: uuid.UUID
+    items: list[HoFundingItem] = Field(..., min_length=1)
+    method: str | None = None
+    reference: str | None = None
+    reason: str | None = None
+
+
 class TransferReceiveRequest(BaseModel):
     receipt_url: str | None = None
-
-
 class TransferPaymentLinkRead(BaseModel):
     payment_id: uuid.UUID
     amount: Decimal

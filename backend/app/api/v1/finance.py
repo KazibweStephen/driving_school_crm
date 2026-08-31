@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_permission
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.company import BorrowStatus, CollectionStatus, ExpenseStatus, TransferStatus
+from app.models.company import BorrowStatus, CollectionStatus, Company, ExpenseStatus, TransferStatus
 from app.models.user import User
 from app.schemas.company import (
     BorrowedMoneyCreate,
@@ -30,6 +30,7 @@ from app.schemas.company import (
     ExpenseCreate,
     ExpenseRead,
     ExpenseUpdate,
+    HoFundingCreate,
 )
 from app.services import finance as finance_service
 from app.services.permission import has_permission
@@ -930,6 +931,52 @@ async def get_unremitted_client_payments(
         db, branch_id=branch_id, company_id=current_user.company_id,
         current_user_role=current_user.role, search=search,
     )
+
+
+@router.get("/cash-position/ho-funding-clients", response_model=list[dict])
+async def get_ho_funding_clients(
+    company_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("finance.view")),
+):
+    cid = company_id or current_user.company_id
+    if cid is None:
+        return []
+    comp = (
+        await db.execute(select(Company).where(Company.id == cid))
+    ).scalar_one_or_none()
+    if not comp or not comp.head_office_branch_id:
+        return []
+    return await finance_service.ho_available_to_fund(
+        db, comp.head_office_branch_id, cid, current_user.role
+    )
+
+
+@router.post("/ho-funding", response_model=BranchTransferRead, status_code=status.HTTP_201_CREATED)
+async def create_ho_funding(
+    payload: HoFundingCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("transfers.create")),
+):
+    transfer = await finance_service.create_ho_funding(
+        db,
+        to_branch_id=payload.to_branch_id,
+        items=[
+            {"consultation_id": it.consultation_id, "amount": it.amount}
+            for it in payload.items
+        ],
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+        initiated_by=current_user.phone,
+        method=payload.method,
+        reference=payload.reference,
+        reason=payload.reason,
+    )
+    transfer = await finance_service.get_branch_transfer(
+        db, transfer.id,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+    return await _transfer_read(db, transfer)
 
 
 # ── Profit & Loss ──

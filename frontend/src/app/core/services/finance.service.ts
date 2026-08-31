@@ -189,6 +189,21 @@ export interface UnremittedClientPayment {
   document_date?: string | null;
 }
 
+export interface HoFundingClient {
+  consultation_id: string;
+  client_name: string;
+  client_phone: string;
+  available_to_fund: number;
+}
+
+export interface HoFundingCreate {
+  to_branch_id: string;
+  items: { consultation_id: string; amount: number }[];
+  method?: string;
+  reference?: string;
+  reason?: string;
+}
+
 export interface ProfitLossItem {
   branch_id: string;
   branch_name: string;
@@ -358,6 +373,14 @@ export class FinanceService {
     let p = new HttpParams().set('branch_id', branchId);
     if (search) p = p.set('search', search);
     return this.http.get<UnremittedClientPayment[]>(`${this.base}/cash-position/unremitted-client-payments`, { params: p });
+  }
+
+  getHoFundingClients(): Observable<HoFundingClient[]> {
+    return this.http.get<HoFundingClient[]>(`${this.base}/cash-position/ho-funding-clients`);
+  }
+
+  createHoFunding(data: HoFundingCreate): Observable<BranchTransfer> {
+    return this.http.post<BranchTransfer>(`${this.base}/ho-funding`, data);
   }
 
   getProfitLoss(params?: { from_date?: string; to_date?: string; branch_ids?: string[] }): Observable<ProfitLossResponse> {

@@ -50,6 +50,7 @@ export class MainLayout implements OnInit, OnDestroy {
   pendingDiscountCount = signal(0);
   loadingNotifications = signal(false);
   receivingId = signal<string | null>(null);
+  cancellingId = signal<string | null>(null);
   approvingDiscountId = signal<string | null>(null);
   rejectingDiscountId = signal<string | null>(null);
   companies = signal<Company[]>([]);
@@ -249,6 +250,19 @@ export class MainLayout implements OnInit, OnDestroy {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to receive transfer' });
     } finally {
       this.receivingId.set(null);
+    }
+  }
+
+  async cancelTransferNotification(t: TransferNotification) {
+    this.cancellingId.set(t.id);
+    try {
+      await this.financeService.cancelTransfer(t.id).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Cancelled', detail: 'Transfer cancelled' });
+      await this.refreshNotifications();
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to cancel transfer' });
+    } finally {
+      this.cancellingId.set(null);
     }
   }
 

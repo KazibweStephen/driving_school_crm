@@ -643,6 +643,23 @@ async def _verify_branches_in_company(
     return len(list(result.scalars().all())) == len(set(branch_ids))
 
 
+_TRANSFER_PRIVILEGED_ROLES = frozenset(
+    {
+        UserRole.SUPER_USER,
+        UserRole.COMPANY_SUPER_USER,
+        UserRole.OFFICE_ADMIN,
+        UserRole.MANAGER,
+        UserRole.BRANCH_SUPERVISOR,
+    }
+)
+
+
+def _transfer_role_privileged(role: UserRole | None) -> bool:
+    """Whether a role may operate on branch transfers at any branch of its
+    company (mirrors resolve_branch_ids' privileged definition)."""
+    return role is not None and role in _TRANSFER_PRIVILEGED_ROLES
+
+
 async def _user_assigned_branch_ids(
     db: AsyncSession,
     phone: str | None,
@@ -754,7 +771,7 @@ async def create_branch_transfer(
     ):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Branch not found")
-    if current_user_role != UserRole.SUPER_USER:
+    if not _transfer_role_privileged(current_user_role):
         assigned = await _user_assigned_branch_ids(db, initiated_by, company_id)
         if not assigned or {from_branch_id, to_branch_id} - assigned:
             from fastapi import HTTPException
@@ -864,7 +881,7 @@ async def receive_branch_transfer(
     if transfer.status != TransferStatus.INITIATED:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Only initiated transfers can be received")
-    if current_user_role != UserRole.SUPER_USER:
+    if not _transfer_role_privileged(current_user_role):
         assigned = await _user_assigned_branch_ids(db, received_by, company_id)
         if transfer.to_branch_id not in assigned:
             from fastapi import HTTPException
@@ -972,8 +989,8 @@ async def list_transfer_notifications(
     Returns initiated transfers received by (incoming) or sent from (outgoing)
     the user's branches, newest first.
     """
-    is_super = current_user_role == UserRole.SUPER_USER
-    if is_super:
+    is_privileged = _transfer_role_privileged(current_user_role)
+    if is_privileged:
         bq = select(Branch.id)
         if company_id is not None:
             bq = bq.where(Branch.company_id == company_id)

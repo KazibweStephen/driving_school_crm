@@ -162,7 +162,7 @@
               </div>
               <div class="flex shrink-0 flex-col items-end gap-1">
                 @if (n.direction === 'incoming') {
-                  @if (auth.hasPermission('transfers.manage')) {
+                  @if (auth.hasPermission('transfers.receive') || auth.hasPermission('transfers.manage')) {
                     <button
                       class="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                       [disabled]="receivingId() === n.id"
@@ -175,8 +175,20 @@
                       }
                     </button>
                   } @else {
-                    <span class="text-xs text-gray-400">Assign staff can receive</span>
+                    <span class="text-xs text-gray-400">No permission to receive</span>
                   }
+                } @else if (auth.hasPermission('transfers.cancel') || auth.hasPermission('transfers.manage')) {
+                  <button
+                    class="rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+                    [disabled]="cancellingId() === n.id"
+                    (click)="cancelTransferNotification(n)"
+                  >
+                    @if (cancellingId() === n.id) {
+                      <span class="pi pi-spin pi-spinner"></span>
+                    } @else {
+                      Cancel
+                    }
+                  </button>
                 } @else {
                   <p-tag value="Initiated" severity="warn" />
                 }

@@ -75,12 +75,34 @@ test.describe('Mobile PWA', () => {
     await expect(page.getByTestId('finance-cash-position')).toBeVisible();
     await expect(page.getByTestId('finance-branch-transfers')).toBeVisible();
     await expect(page.getByTestId('finance-profit-loss')).toBeVisible();
+    await expect(page.getByTestId('finance-operating-account')).toBeVisible();
     await page.getByTestId('finance-cash-position').click();
     await expect(page.getByRole('heading', { name: 'Cash Position' })).toBeVisible();
     await page.goto('/m/finance/transfers');
     await expect(page.getByRole('heading', { name: 'Branch Transfers' })).toBeVisible();
     await page.goto('/m/finance/profit-loss');
     await expect(page.getByRole('heading', { name: 'Profit & Loss' })).toBeVisible();
+    await page.goto('/m/finance/operating-account');
+    await expect(page.getByRole('heading', { name: 'Operating Account' })).toBeVisible();
+  });
+
+  test('operating account dialog flows render with permission gates', async ({ page }) => {
+    await mobileLogin(page);
+    await page.goto('/m/finance/operating-account');
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('heading', { name: 'Operating Account' })).toBeVisible();
+    await expect(page.getByTestId('finance-operating-record')).toBeVisible();
+    await expect(page.getByTestId('finance-operating-fund')).toBeVisible();
+    // Record Entry dialog
+    await page.getByTestId('finance-operating-record').click();
+    await expect(page.getByTestId('operating-record-dialog')).toBeVisible();
+    await expect(page.getByTestId('operating-record-amount')).toBeVisible();
+    await page.getByText('Cancel').click();
+    // Fund Branch dialog
+    await page.getByTestId('finance-operating-fund').click();
+    await expect(page.getByTestId('operating-fund-dialog')).toBeVisible();
+    await expect(page.getByTestId('operating-fund-branch')).toBeVisible();
+    await page.getByText('Cancel').click();
   });
 
   test('transfers page: initiate, fund, and receive/reject actions rendered with permission gates', async ({ page }) => {

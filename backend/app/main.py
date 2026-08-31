@@ -6,7 +6,7 @@ from app.api.v1 import (
     dashboard, discounts, finance, fuel, instructor_qualifications, lead, lesson_plan, lesson_execution,
     library, packages, payments, permit, permissions, products, receipts, reports,
     schedule_breaks, scheduling, sms, training, users, vehicle_assignments,
-    vehicle_schedule, vehicles, video_library,
+    vehicle_schedule, vehicles, video_library, operating,
 )
 from app.core.config import settings
 
@@ -49,6 +49,7 @@ app.include_router(companies.router)
 app.include_router(commission.router, prefix="/api/v1")
 app.include_router(lead.router, prefix="/api/v1")
 app.include_router(finance.router, prefix="/api/v1")
+app.include_router(operating.router, prefix="/api/v1")
 app.include_router(fuel.router, prefix="/api/v1")
 app.include_router(receipts.router)
 app.include_router(reports.router, prefix="/api/v1")

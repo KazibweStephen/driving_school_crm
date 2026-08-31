@@ -1,0 +1,169 @@
+<p-toast></p-toast>
+
+<div class="p-4 sm:p-6">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-gray-900">Operating Account</h1>
+    <div class="flex flex-wrap gap-2">
+      @if (canRecord) {
+        <p-button label="Record Entry" icon="pi pi-plus" severity="secondary" (onClick)="openRecord()" />
+      }
+      @if (loans().length && canRecord) {
+        <p-button label="Repay Loan" icon="pi pi-undo" severity="danger" (onClick)="openRepay()" />
+      }
+      @if (canFund) {
+        <p-button label="Fund Branch" icon="pi pi-send" (onClick)="openFund()" />
+      }
+    </div>
+  </div>
+
+  @if (summary(); as s) {
+    <div class="mb-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+      <p-card>
+        <div class="text-xs text-gray-500">Available Balance</div>
+        <div class="text-lg font-bold text-gray-900">{{ currencyService.symbol() }} {{ formatAmount(s.balance) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-xs text-gray-500">Equity</div>
+        <div class="text-lg font-bold text-green-600">{{ currencyService.symbol() }} {{ formatAmount(s.equity) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-xs text-gray-500">Loans Outstanding</div>
+        <div class="text-lg font-bold text-amber-600">{{ currencyService.symbol() }} {{ formatAmount(s.loans_outstanding) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-xs text-gray-500">Loans Received</div>
+        <div class="text-sm font-bold text-gray-700">{{ currencyService.symbol() }} {{ formatAmount(s.loans_received) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-xs text-gray-500">Profit</div>
+        <div class="text-lg font-bold text-emerald-600">{{ currencyService.symbol() }} {{ formatAmount(s.profit) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-xs text-gray-500">Funding Out</div>
+        <div class="text-lg font-bold text-red-500">-{{ currencyService.symbol() }} {{ formatAmount(s.branch_funding_out) }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-xs text-gray-500">Op. Expenses</div>
+        <div class="text-lg font-bold text-red-500">-{{ currencyService.symbol() }} {{ formatAmount(s.operating_expenses) }}</div>
+      </p-card>
+    </div>
+  }
+
+  <p-table [value]="entries()" [loading]="loading()" [paginator]="true" [rows]="20">
+    <ng-template pTemplate="header">
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th>Description</th>
+        <th>Reference</th>
+        <th>Target Pool</th>
+        <th class="text-right">Amount</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-e>
+      <tr>
+        <td class="whitespace-nowrap">{{ (e.entry_date || e.created_at || '').slice(0, 10) }}</td>
+        <td>
+          <span class="px-2 py-0.5 rounded-full text-xs font-medium
+            {{ e.direction === 'credit' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }}">
+            {{ entryLabel(e) }}
+          </span>
+        </td>
+        <td>{{ e.description }}</td>
+        <td>{{ e.reference || '-' }}</td>
+        <td>{{ poolLabel(e) }}</td>
+        <td class="text-right font-semibold whitespace-nowrap {{ e.direction === 'credit' ? 'text-green-600' : 'text-red-500' }}">
+          {{ e.direction === 'credit' ? '' : '-' }}{{ currencyService.symbol() }} {{ formatAmount(e.amount) }}
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="6" class="text-center text-gray-500 py-6">
+          {{ loaded ? 'No operating account entries yet' : 'Loading...' }}
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<p-dialog header="Record Operating Entry" [(visible)]="showRecord" [modal]="true" [style]="{ width: '420px' }" appendTo="body">
+  <div class="grid gap-3">
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Entry Type</label>
+      <p-select [(ngModel)]="record.entry_type" [options]="recordTypes()" optionLabel="label" optionValue="value"
+        appendTo="body" styleClass="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+      <p-inputNumber [(ngModel)]="record.amount" mode="decimal" [min]="0" styleClass="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+      <input pInputText type="text" class="w-full" [(ngModel)]="record.description" placeholder="e.g. Owner injection" />
+    </div>
+    <div class="flex gap-2">
+      <div class="flex-1">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Reference</label>
+        <input pInputText type="text" class="w-full" [(ngModel)]="record.reference" placeholder="Optional ref" />
+      </div>
+      <div class="flex-1">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+        <p-datepicker [(ngModel)]="record.entryDate" dateFormat="yy-mm-dd" [showIcon]="true" appendTo="body" styleClass="w-full" />
+      </div>
+    </div>
+  </div>
+  <div class="flex justify-end gap-2 mt-4">
+    <p-button label="Cancel" severity="secondary" (onClick)="showRecord = false" />
+    <p-button label="Save" (onClick)="saveRecord()" />
+  </div>
+</p-dialog>
+
+<p-dialog header="Fund Branch from Operating" [(visible)]="showFund" [modal]="true" [style]="{ width: '420px' }" appendTo="body">
+  <div class="grid gap-3">
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Branch</label>
+      <p-select [(ngModel)]="fund.to_branch_id" [options]="branches" optionLabel="name" optionValue="id" appendTo="body"
+        styleClass="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Target Pool</label>
+      <p-select [(ngModel)]="fund.pool" [options]="poolOptions" optionLabel="label" optionValue="value" appendTo="body"
+        styleClass="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+      <p-inputNumber [(ngModel)]="fund.amount" mode="decimal" [min]="0" styleClass="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+      <input pInputText type="text" class="w-full" [(ngModel)]="fund.description" placeholder="Optional" />
+    </div>
+  </div>
+  <div class="flex justify-end gap-2 mt-4">
+    <p-button label="Cancel" severity="secondary" (onClick)="showFund = false" />
+    <p-button label="Fund" icon="pi pi-send" (onClick)="saveFund()" />
+  </div>
+</p-dialog>
+
+<p-dialog header="Repay Loan" [(visible)]="showRepay" [modal]="true" [style]="{ width: '420px' }" appendTo="body">
+  <div class="grid gap-3">
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Loan</label>
+      <p-select [(ngModel)]="repay.loan_entry_id" [options]="loans()" optionLabel="repayLabel" optionValue="id"
+        appendTo="body" styleClass="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+      <p-inputNumber [(ngModel)]="repay.amount" mode="decimal" [min]="0" styleClass="w-full" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+      <input pInputText type="text" class="w-full" [(ngModel)]="repay.description" placeholder="Optional" />
+    </div>
+  </div>
+  <div class="flex justify-end gap-2 mt-4">
+    <p-button label="Cancel" severity="secondary" (onClick)="showRepay = false" />
+    <p-button label="Repay" icon="pi pi-undo" severity="danger" (onClick)="saveRepay()" />
+  </div>
+</p-dialog>

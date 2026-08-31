@@ -68,6 +68,10 @@ export const routes: Routes = [
             path: 'profit-loss',
             loadComponent: () => import('./features/finance/profit-loss').then((m) => m.ProfitLoss),
           },
+          {
+            path: 'operating-account',
+            loadComponent: () => import('./features/finance/operating-account').then((m) => m.OperatingAccount),
+          },
         ],
       },
     ],

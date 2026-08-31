@@ -79,6 +79,33 @@ export interface CompanyInfo {
   currency?: string;
 }
 
+export interface OperatingSummary {
+  balance: number;
+  equity: number;
+  loans_outstanding: number;
+  loans_received: number;
+  profit: number;
+  branch_funding_out: number;
+  operating_expenses: number;
+}
+
+export interface OperatingEntry {
+  id: string;
+  company_id: string;
+  branch_id: string | null;
+  entry_type: string;
+  direction: string;
+  amount: number;
+  description: string;
+  reference: string | null;
+  entry_date: string | null;
+  loan_entry_id: string | null;
+  transfer_id: string | null;
+  target_pool: string | null;
+  created_by: string | null;
+  created_at: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class FinanceService {
   private base = '/api/v1/finance';
@@ -147,5 +174,29 @@ export class FinanceService {
     const fd = new FormData();
     fd.append('file', file);
     return this.http.post<{ url: string }>(`${this.base}/transfers/upload-receipt`, fd);
+  }
+
+  getOperatingSummary(): Observable<OperatingSummary> {
+    return this.http.get<OperatingSummary>('/api/v1/operating/summary');
+  }
+
+  listOperatingEntries(limit = 200): Observable<OperatingEntry[]> {
+    return this.http.get<OperatingEntry[]>('/api/v1/operating/entries', { params: { limit: String(limit) } });
+  }
+
+  createOperatingEntry(data: { entry_type: string; amount: number; description: string; reference?: string | null; entry_date?: string | null }): Observable<OperatingEntry> {
+    return this.http.post<OperatingEntry>('/api/v1/operating/entries', data);
+  }
+
+  fundBranchFromOperating(data: { to_branch_id: string; pool: string; amount: number; description?: string | null }): Observable<any> {
+    return this.http.post<any>('/api/v1/operating/fund-branch', data);
+  }
+
+  repayOperatingLoan(loanEntryId: string, amount: number, description?: string | null): Observable<OperatingEntry> {
+    return this.http.post<OperatingEntry>('/api/v1/operating/repay-loan', {
+      loan_entry_id: loanEntryId,
+      amount,
+      description,
+    });
   }
 }

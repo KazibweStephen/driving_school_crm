@@ -1,62 +1,35 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Component, computed, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
-import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
-import { formatMoney } from '../../shared/format';
 
-interface PoolPosition {
-  pool: string;
-  collected: number;
-  received: number;
-  remitted: number;
-  pending_remitted: number;
-  expenses: number;
-  net_in_hand: number;
-  outstanding: number;
-}
-
-interface BranchCashPosition {
-  branch_id: string;
-  branch_name: string;
-  pools: PoolPosition[];
+interface FinanceTile {
+  label: string;
+  icon: string;
+  route: string;
+  color: string;
+  permission: string;
+  testId: string;
 }
 
 @Component({
   selector: 'app-finance',
-  imports: [LoadingOverlay],
   templateUrl: './finance.html',
 })
-export class Finance implements OnInit {
-  private http = inject(HttpClient);
+export class Finance {
   private auth = inject(AuthService);
+  private router = inject(Router);
 
-  currency = this.auth.currencyCode;
-  loading = signal(true);
-  positions = signal<BranchCashPosition[]>([]);
+  tiles = computed<FinanceTile[]>(() => {
+    const perms = this.auth.permissions();
+    const all: FinanceTile[] = [
+      { label: 'Cash Position', icon: 'pi-wallet', route: '/finance/cash-position', color: 'bg-slate-900 text-white', permission: 'finance.cash_position', testId: 'finance-cash-position' },
+      { label: 'Branch Transfers', icon: 'pi-arrow-right-arrow-left', route: '/finance/transfers', color: 'bg-blue-600 text-white', permission: 'transfers.view', testId: 'finance-branch-transfers' },
+      { label: 'Profit & Loss', icon: 'pi-chart-line', route: '/finance/profit-loss', color: 'bg-green-600 text-white', permission: 'finance.pnl', testId: 'finance-profit-loss' },
+    ];
+    return all.filter((t) => perms.includes(t.permission));
+  });
 
-  ngOnInit() {
-    this.load();
-  }
-
-  load() {
-    this.loading.set(true);
-    this.http.get<BranchCashPosition[]>('/api/v1/finance/cash-position').subscribe({
-      next: (res) => {
-        this.positions.set(res);
-        this.loading.set(false);
-      },
-      error: () => {
-        this.positions.set([]);
-        this.loading.set(false);
-      },
-    });
-  }
-
-  money(value: number) {
-    return formatMoney(value, this.currency());
-  }
-
-  pool(branch: BranchCashPosition, name: string): PoolPosition {
-    return branch.pools?.find((p) => p.pool === name) || { pool: name, collected: 0, received: 0, remitted: 0, pending_remitted: 0, expenses: 0, net_in_hand: 0, outstanding: 0 };
+  goTo(route: string) {
+    this.router.navigate([route]);
   }
 }

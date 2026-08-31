@@ -68,6 +68,21 @@ test.describe('Mobile PWA', () => {
     await expect(page.getByText('Fuel for office car').first()).toBeVisible();
   });
 
+  test('finance page lists sub-items and navigates to cash position, transfers and profit & loss', async ({ page }) => {
+    await mobileLogin(page);
+    await page.goto('/m/finance');
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('finance-cash-position')).toBeVisible();
+    await expect(page.getByTestId('finance-branch-transfers')).toBeVisible();
+    await expect(page.getByTestId('finance-profit-loss')).toBeVisible();
+    await page.getByTestId('finance-cash-position').click();
+    await expect(page.getByRole('heading', { name: 'Cash Position' })).toBeVisible();
+    await page.goto('/m/finance/transfers');
+    await expect(page.getByRole('heading', { name: 'Branch Transfers' })).toBeVisible();
+    await page.goto('/m/finance/profit-loss');
+    await expect(page.getByRole('heading', { name: 'Profit & Loss' })).toBeVisible();
+  });
+
   test('invalid PIN shows error', async ({ page }) => {
     await page.goto('/m/login');
     await page.waitForLoadState('networkidle');

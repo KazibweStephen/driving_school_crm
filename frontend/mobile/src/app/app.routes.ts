@@ -51,7 +51,24 @@ export const routes: Routes = [
       },
       {
         path: 'finance',
-        loadComponent: () => import('./features/finance/finance').then((m) => m.Finance),
+        children: [
+          {
+            path: '',
+            loadComponent: () => import('./features/finance/finance').then((m) => m.Finance),
+          },
+          {
+            path: 'cash-position',
+            loadComponent: () => import('./features/finance/cash-position').then((m) => m.CashPosition),
+          },
+          {
+            path: 'transfers',
+            loadComponent: () => import('./features/finance/transfers').then((m) => m.Transfers),
+          },
+          {
+            path: 'profit-loss',
+            loadComponent: () => import('./features/finance/profit-loss').then((m) => m.ProfitLoss),
+          },
+        ],
       },
     ],
   },

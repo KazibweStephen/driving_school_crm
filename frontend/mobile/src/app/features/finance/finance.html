@@ -1,50 +1,26 @@
 <div class="space-y-4 pt-2">
-  <div class="flex items-center justify-between">
-    <h1 class="text-lg font-semibold">Finance</h1>
-    <button
-      type="button"
-      class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
-      (click)="load()"
-      data-testid="finance-refresh"
-    >
-      <span class="pi pi-refresh"></span>
-    </button>
+  <div class="rounded-xl bg-slate-900 p-4 text-white">
+    <h1 class="text-base font-semibold">Finance</h1>
+    <div class="mt-0.5 text-xs text-slate-300">Cash position, transfers &amp; reporting</div>
   </div>
 
-  @if (positions().length === 0 && !loading()) {
+  @if (tiles().length === 0) {
     <div class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-      No cash position available.
+      You do not have access to any finance functions.
     </div>
   }
 
-  @for (b of positions(); track b.branch_id) {
-    <div class="rounded-xl border border-slate-200 bg-white p-4">
-      <div class="mb-3 font-semibold text-slate-900">{{ b.branch_name }}</div>
-      <div class="space-y-3">
-        @let petty = pool(b, 'petty_cash');
-        @let clients = pool(b, 'client_accounts');
-        <div class="flex items-center justify-between text-sm">
-          <span class="text-slate-600">Petty Cash</span>
-          <span class="font-semibold text-slate-900">{{ money(petty.net_in_hand) }}</span>
-        </div>
-        <div class="flex items-center justify-between text-sm">
-          <span class="text-slate-600">Client Account</span>
-          <span class="font-semibold text-slate-900">{{ money(clients.net_in_hand) }}</span>
-        </div>
-        <div class="border-t border-slate-100 pt-2">
-          <div class="mb-1 text-xs font-medium text-slate-500">Client Account breakdown</div>
-          <div class="space-y-1 text-xs text-slate-500">
-            <div class="flex justify-between"><span>Collected</span><span>{{ money(clients.collected) }}</span></div>
-            <div class="flex justify-between"><span>Received (funded)</span><span>{{ money(clients.received) }}</span></div>
-            <div class="flex justify-between"><span>Remitted</span><span>-{{ money(clients.remitted) }}</span></div>
-            <div class="flex justify-between"><span>Pending remitted</span><span>-{{ money(clients.pending_remitted) }}</span></div>
-            <div class="flex justify-between"><span>Expenses</span><span>-{{ money(clients.expenses) }}</span></div>
-            <div class="flex justify-between"><span>Outstanding</span><span>{{ money(clients.outstanding) }}</span></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  }
+  <div class="grid grid-cols-2 gap-3">
+    @for (tile of tiles(); track tile.route) {
+      <button
+        type="button"
+        class="flex flex-col items-center gap-2 rounded-xl p-4 {{ tile.color }} transition-transform active:scale-95"
+        (click)="goTo(tile.route)"
+        [attr.data-testid]="tile.testId"
+      >
+        <span class="pi {{ tile.icon }} text-2xl"></span>
+        <span class="text-sm font-medium leading-tight text-center">{{ tile.label }}</span>
+      </button>
+    }
+  </div>
 </div>
-
-<app-loading-overlay [visible]="loading()" message="Loading finance..." />

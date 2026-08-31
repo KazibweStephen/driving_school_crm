@@ -177,7 +177,7 @@
     @if (sendForm.pool === 'client_accounts') {
       <div class="flex flex-col gap-1">
         <label class="text-sm font-medium text-gray-700">
-          Select clients whose collected cash has not been sent to head office
+          Select clients whose client-account money (collected or funded) should be sent back to head office
         </label>
         @if (unremittedLoading()) {
           <div class="text-sm text-gray-500">Loading payments...</div>
@@ -199,9 +199,12 @@
                   <div class="min-w-0 flex-1">
                     <span class="block font-medium truncate">{{ p.client_name }}</span>
                     <span class="block text-gray-500">{{ p.client_phone }}</span>
-                    <span class="block text-gray-400">Balance: {{ currencyService.symbol() }} {{ formatAmount(p.amount) }}</span>
+                    <span class="block text-xs text-gray-400">Paid: {{ currencyService.symbol() }} {{ formatAmount(p.total_paid ?? 0) }}</span>
+                    <span class="block text-xs text-gray-500">Unremitted: {{ currencyService.symbol() }} {{ formatAmount(p.unremitted ?? 0) }}</span>
+                    <span class="block text-xs text-gray-500">Funded: {{ currencyService.symbol() }} {{ formatAmount(p.funded ?? 0) }}</span>
+                    <span class="block text-sm font-semibold text-gray-800">On Expense Account: {{ currencyService.symbol() }} {{ formatAmount(p.amount) }}</span>
                     @if (sendAmountExceedsCap(p)) {
-                      <small class="text-xs text-red-500 -mt-1 block">Exceeds the unremitted balance.</small>
+                      <small class="text-xs text-red-500 -mt-1 block">Exceeds the expense-account balance.</small>
                     }
                   </div>
                   <input type="number" [disabled]="!isPaymentSelected(p.payment_id)"
@@ -214,7 +217,7 @@
               }
             </div>
           } @else {
-            <div class="text-sm text-gray-500">No unremitted client payments for this branch.</div>
+            <div class="text-sm text-gray-500">No client-account money at this branch to send to head office.</div>
           }
         }
       </div>

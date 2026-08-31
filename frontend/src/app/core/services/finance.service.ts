@@ -104,6 +104,8 @@ export interface BranchTransfer {
   from_branch_name?: string;
   to_branch_name?: string;
   initiated_by_name?: string;
+  received_by_name?: string;
+  cancelled_by_name?: string;
   payment_links?: TransferPaymentLink[];
   created_at: string;
   updated_at: string;
@@ -186,6 +188,9 @@ export interface UnremittedClientPayment {
   consultation_id: string;
   client_name: string;
   client_phone: string;
+  total_paid?: number;
+  unremitted?: number;
+  funded?: number;
   amount: number;
   document_date?: string | null;
 }

@@ -825,17 +825,45 @@ async def create_branch_transfer(
             )
         )
         valid_payments = {p.id: p for p in pmt_result.scalars().all()}
-        # Already-remitted amounts per payment, so partial remittances respect the cap
-        already = {
+        # Already-remitted (sent out of this sending branch) and funded-in
+        # (client-account money received into this branch) per payment, so the
+        # net "on expense account" cap is respected:
+        #   cap = total_paid - sent_out + funded_in
+        sent_out = {
             row[0]: float(row[1] or 0)
             for row in (
                 await db.execute(
                     select(
                         TransferPaymentLink.payment_id,
                         func.coalesce(func.sum(TransferPaymentLink.amount), 0),
-                    ).where(TransferPaymentLink.payment_id.in_(linked_ids)).group_by(
-                        TransferPaymentLink.payment_id
                     )
+                    .join(BranchTransfer, TransferPaymentLink.transfer_id == BranchTransfer.id)
+                    .where(
+                        TransferPaymentLink.payment_id.in_(linked_ids),
+                        BranchTransfer.from_branch_id == from_branch_id,
+                        BranchTransfer.cancelled_at.is_(None),
+                    )
+                    .group_by(TransferPaymentLink.payment_id)
+                )
+            ).all()
+        }
+        funded_in = {
+            row[0]: float(row[1] or 0)
+            for row in (
+                await db.execute(
+                    select(
+                        TransferPaymentLink.payment_id,
+                        func.coalesce(func.sum(TransferPaymentLink.amount), 0),
+                    )
+                    .join(BranchTransfer, TransferPaymentLink.transfer_id == BranchTransfer.id)
+                    .where(
+                        TransferPaymentLink.payment_id.in_(linked_ids),
+                        BranchTransfer.to_branch_id == from_branch_id,
+                        BranchTransfer.pool == TransferPool.CLIENT_ACCOUNTS,
+                        BranchTransfer.status == TransferStatus.RECEIVED,
+                        BranchTransfer.cancelled_at.is_(None),
+                    )
+                    .group_by(TransferPaymentLink.payment_id)
                 )
             ).all()
         }
@@ -850,17 +878,23 @@ async def create_branch_transfer(
                     per_amount = float(match[0]["amount"])
             if per_amount is None:
                 per_amount = float(p.total_paid or p.total_amount or 0)
-            # Cap at the unremitted balance of this client's payment
+            # Cap at the net "on expense account" balance of this client's payment
+            # held at the sending branch (collected - sent out + funded in).
             unremitted = per_amount  # validation handled below
             if payment_amounts:
-                max_cap = float(p.total_paid or p.total_amount or 0) - already.get(pid, 0.0)
+                max_cap = max(
+                    0.0,
+                    float(p.total_paid or p.total_amount or 0)
+                    - sent_out.get(pid, 0.0)
+                    + funded_in.get(pid, 0.0),
+                )
                 if per_amount > max_cap + 0.001:
                     from fastapi import HTTPException
                     raise HTTPException(
                         status_code=400,
                         detail=(
-                            f"Amount {per_amount} for this client exceeds the unremitted "
-                            f"balance {max_cap:.2f} on their payment account"
+                            f"Amount {per_amount} for this client exceeds the "
+                            f"balance {max_cap:.2f} on their expense account"
                         ),
                     )
                 unremitted = per_amount
@@ -1582,25 +1616,45 @@ async def list_unremitted_client_payments(
     if not await _verify_branches_in_company(db, [branch_id], company_id, current_user_role):
         return []
 
-    linked_sum = (
+    # Net client-account cash this branch holds per payment:
+    #   on_expense_account = total_paid - sent_out_from_branch + funded_in_to_branch
+    # where sent_out sums links on transfers FROM this branch and funded_in sums
+    # links on client-account transfers INTO this branch (e.g. head-office funding).
+    sent_out_sum = (
         select(
             TransferPaymentLink.payment_id,
-            func.coalesce(func.sum(TransferPaymentLink.amount), 0).label("remitted"),
+            func.coalesce(func.sum(TransferPaymentLink.amount), 0).label("sent_out"),
+        )
+        .join(BranchTransfer, TransferPaymentLink.transfer_id == BranchTransfer.id)
+        .where(BranchTransfer.from_branch_id == branch_id, BranchTransfer.cancelled_at.is_(None))
+        .group_by(TransferPaymentLink.payment_id)
+        .subquery()
+    )
+    funded_sum = (
+        select(
+            TransferPaymentLink.payment_id,
+            func.coalesce(func.sum(TransferPaymentLink.amount), 0).label("funded_in"),
+        )
+        .join(BranchTransfer, TransferPaymentLink.transfer_id == BranchTransfer.id)
+        .where(
+            BranchTransfer.to_branch_id == branch_id,
+            BranchTransfer.pool == TransferPool.CLIENT_ACCOUNTS,
+            BranchTransfer.status == TransferStatus.RECEIVED,
+            BranchTransfer.cancelled_at.is_(None),
         )
         .group_by(TransferPaymentLink.payment_id)
         .subquery()
     )
     query = (
-        select(Payment, Consultation, func.coalesce(linked_sum.c.remitted, 0))
+        select(Payment, Consultation, func.coalesce(sent_out_sum.c.sent_out, 0), func.coalesce(funded_sum.c.funded_in, 0))
         .join(Consultation, Payment.consultation_id == Consultation.id)
         .outerjoin(Branch, Consultation.branch_id == Branch.id)
-        .outerjoin(linked_sum, Payment.id == linked_sum.c.payment_id)
+        .outerjoin(sent_out_sum, Payment.id == sent_out_sum.c.payment_id)
+        .outerjoin(funded_sum, Payment.id == funded_sum.c.payment_id)
         .where(
             Payment.branch_id == branch_id,
             Payment.cancelled_at.is_(None),
             or_(Consultation.branch_id.is_(None), Branch.company_id == company_id),
-            func.coalesce(Payment.total_paid, Payment.total_amount, 0)
-            > func.coalesce(linked_sum.c.remitted, 0) + 0.001,
         )
     )
     if search and search.strip():
@@ -1618,17 +1672,28 @@ async def list_unremitted_client_payments(
     rows = result.all()
 
     items = []
-    for p, c, remitted in rows:
+    for p, c, sent_out, funded_in in rows:
         client_name = f"{c.first_name} {c.last_name or ''}".strip()
-        remaining = float(p.total_paid or p.total_amount or 0) - float(remitted or 0)
-        if remaining <= 0.001:
+        total_paid = float(p.total_paid or p.total_amount or 0)
+        sent_out = float(sent_out or 0)
+        funded_in = float(funded_in or 0)
+        # Outgoing money is first allocated to the client's own collected amount;
+        # anything beyond that is treated as returning head-office funded money.
+        unremitted = max(0.0, round(total_paid - sent_out, 2))
+        returned_from_funded = max(0.0, sent_out - total_paid)
+        funded = max(0.0, round(funded_in - returned_from_funded, 2))
+        on_account = round(max(0.0, total_paid - sent_out + funded_in), 2)
+        if on_account <= 0.001:
             continue
         items.append({
             "payment_id": str(p.id),
             "consultation_id": str(c.id),
             "client_name": client_name,
             "client_phone": c.phone,
-            "amount": round(remaining, 2),
+            "total_paid": round(total_paid, 2),
+            "unremitted": unremitted,
+            "funded": funded,
+            "amount": on_account,
             "document_date": p.document_date.isoformat() if p.document_date else None,
         })
     return items

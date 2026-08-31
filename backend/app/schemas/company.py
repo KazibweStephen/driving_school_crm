@@ -355,8 +355,10 @@ class BranchTransferRead(BaseModel):
     initiated_by_name: str | None = None
     initiated_at: datetime
     received_by: str | None = None
+    received_by_name: str | None = None
     received_at: datetime | None = None
     cancelled_by: str | None = None
+    cancelled_by_name: str | None = None
     cancelled_at: datetime | None = None
     payment_links: list[TransferPaymentLinkRead] = []
     created_at: datetime

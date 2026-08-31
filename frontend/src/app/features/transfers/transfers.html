@@ -59,13 +59,31 @@
       <tr>
         <td class="font-medium">{{ branchName(t.from_branch_id) }}</td>
         <td class="font-medium">{{ branchName(t.to_branch_id) }}</td>
-        <td class="font-bold whitespace-nowrap">{{ formatAmount(t.amount) }}</td>
+        <td class="font-bold whitespace-nowrap">{{ formatAmount(t.amount) }}
+          @if (t.pool) {
+            <div class="text-[10px] font-normal text-gray-400 uppercase">
+              {{ t.pool === 'client_accounts' ? 'Client Accts' : 'Petty Cash' }}@if (t.method) { · {{ t.method }} }
+            </div>
+          }
+        </td>
         <td><p-tag [value]="statusLabel(t)" [severity]="statusSeverity(t)" /></td>
         <td class="text-sm text-gray-500">
-          <div class="flex flex-col">
-            <span>{{ formatDateTime(t.initiated_at) }}</span>
-            @if (t.initiated_by) {
-              <span class="text-xs text-gray-400">by {{ t.initiated_by }}</span>
+          <div class="flex flex-col gap-1">
+            <div class="flex flex-col">
+              <span class="font-medium text-gray-700">{{ t.initiated_by_name || t.initiated_by || '—' }}</span>
+              <span class="text-xs text-gray-400">Sent {{ formatDateTime(t.initiated_at) }}</span>
+            </div>
+            @if (t.status === 'received') {
+              <div class="flex flex-col border-t pt-1">
+                <span class="font-medium text-green-700">{{ t.received_by_name || t.received_by || '—' }}</span>
+                <span class="text-xs text-gray-400">Received {{ formatDateTime(t.received_at) }}</span>
+              </div>
+            }
+            @if (t.status === 'cancelled') {
+              <div class="flex flex-col border-t pt-1">
+                <span class="font-medium text-red-700">{{ t.cancelled_by_name || t.cancelled_by || '—' }}</span>
+                <span class="text-xs text-gray-400">Cancelled {{ formatDateTime(t.cancelled_at) }}</span>
+              </div>
             }
           </div>
         </td>

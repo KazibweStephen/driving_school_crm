@@ -62,10 +62,14 @@ async def _transfer_read(db: AsyncSession, t) -> BranchTransferRead:
     read = BranchTransferRead.model_validate(t)
     from_name = t.from_branch.name if t.from_branch else None
     to_name = t.to_branch.name if t.to_branch else None
-    init_name = None
-    if t.initiated_by:
-        u = (await db.execute(select(User).where(User.phone == t.initiated_by))).scalar_one_or_none()
-        init_name = u.name if u else None
+    phones = [ph for ph in (t.initiated_by, t.received_by, t.cancelled_by) if ph]
+    name_map: dict[str, str] = {}
+    if phones:
+        users = (await db.execute(select(User).where(User.phone.in_(phones)))).scalars().all()
+        name_map = {u.phone: u.name or u.phone for u in users}
+    init_name = name_map.get(t.initiated_by) if t.initiated_by else None
+    recv_name = name_map.get(t.received_by) if t.received_by else None
+    canc_name = name_map.get(t.cancelled_by) if t.cancelled_by else None
     links = []
     if t.payment_links:
         pmt_ids = [link.payment_id for link in t.payment_links]
@@ -93,6 +97,8 @@ async def _transfer_read(db: AsyncSession, t) -> BranchTransferRead:
         "from_branch_name": from_name,
         "to_branch_name": to_name,
         "initiated_by_name": init_name,
+        "received_by_name": recv_name,
+        "cancelled_by_name": canc_name,
         "payment_links": links,
     })
 

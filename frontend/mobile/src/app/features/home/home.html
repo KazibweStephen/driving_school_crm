@@ -1,0 +1,20 @@
+<div class="space-y-6 pt-2">
+  <div class="rounded-xl bg-slate-900 p-4 text-white">
+    <div class="text-base font-semibold">Drive CRM</div>
+    <div class="mt-0.5 text-xs text-slate-300">{{ user() || 'Admin' }}</div>
+  </div>
+
+  <div class="grid grid-cols-4 gap-3">
+    @for (tile of tiles(); track tile.route) {
+      <button
+        type="button"
+        class="flex flex-col items-center gap-2 rounded-xl p-3 {{ tile.color }} transition-transform active:scale-95"
+        (click)="goTo(tile.route)"
+        [attr.data-testid]="'home-' + tile.label.toLowerCase()"
+      >
+        <span class="pi {{ tile.icon }} text-2xl"></span>
+        <span class="text-[11px] font-medium leading-tight text-center">{{ tile.label }}</span>
+      </button>
+    }
+  </div>
+</div>

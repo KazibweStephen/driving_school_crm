@@ -74,6 +74,8 @@ PERMISSION_GROUPS: list[PermissionGroup] = [
             "finance.pnl",
             "finance.send",
             "finance.fund",
+            "finance.operating",
+            "finance.capital",
         ],
     ),
     PermissionGroup(
@@ -212,7 +214,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.OFFICE_ADMIN: [
         "dashboard.view",
         "reports.view",
-        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund",
+        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating", "finance.capital",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
@@ -243,7 +245,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.BRANCH_SUPERVISOR: [
         "dashboard.view",
         "reports.view",
-        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund",
+        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
@@ -274,7 +276,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.MANAGER: [
         "dashboard.view",
         "reports.view",
-        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund",
+        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating", "finance.capital",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",

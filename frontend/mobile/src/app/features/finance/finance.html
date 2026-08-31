@@ -1,0 +1,26 @@
+<div class="space-y-4 pt-2">
+  <div class="rounded-xl bg-slate-900 p-4 text-white">
+    <h1 class="text-base font-semibold">Finance</h1>
+    <div class="mt-0.5 text-xs text-slate-300">Cash position, transfers &amp; reporting</div>
+  </div>
+
+  @if (tiles().length === 0) {
+    <div class="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+      You do not have access to any finance functions.
+    </div>
+  }
+
+  <div class="grid grid-cols-2 gap-3">
+    @for (tile of tiles(); track tile.route) {
+      <button
+        type="button"
+        class="flex flex-col items-center gap-2 rounded-xl p-4 {{ tile.color }} transition-transform active:scale-95"
+        (click)="goTo(tile.route)"
+        [attr.data-testid]="tile.testId"
+      >
+        <span class="pi {{ tile.icon }} text-2xl"></span>
+        <span class="text-sm font-medium leading-tight text-center">{{ tile.label }}</span>
+      </button>
+    }
+  </div>
+</div>

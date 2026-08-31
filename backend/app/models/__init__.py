@@ -72,6 +72,11 @@ from app.models.commission import Commission, CommissionRate, CommissionStatus, 
 from app.models.discount import CartItemDiscount, Discount, DiscountAppliesTo, DiscountStatus, DiscountType
 from app.models.lead import Lead, LeadStatus
 from app.models.fuel import FuelRate, FuelRefueling, PackageFuelRate
+from app.models.operating import (
+    OperatingDirection,
+    OperatingEntry,
+    OperatingEntryType,
+)
 from app.models.schedule_break import ScheduleBreak
 from app.models.sms import SmsLog, SmsTemplate, SmsTemplateCategory
 from app.models.training import TrainingSession
@@ -105,6 +110,7 @@ __all__ = [
     "Lead", "LeadStatus",
     "FuelRate", "FuelRefueling", "PackageFuelRate",
     "CompanySmsSettings", "SmsTemplate", "SmsTemplateCategory", "SmsLog",
+    "OperatingEntry", "OperatingEntryType", "OperatingDirection",
     "RolePermission",
     "Discount", "CartItemDiscount", "DiscountStatus", "DiscountType", "DiscountAppliesTo",
 ]

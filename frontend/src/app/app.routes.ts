@@ -112,6 +112,12 @@ export const routes: Routes = [
           import('./features/profit-loss/profit-loss').then((c) => c.ProfitLossCmp),
       },
       {
+        path: 'operating-account',
+        data: { permission: 'finance.operating' },
+        loadComponent: () =>
+          import('./features/operating-account/operating-account').then((c) => c.OperatingAccountCmp),
+      },
+      {
         path: 'expense-categories',
         data: { permission: 'expenses.view' },
         loadComponent: () =>

@@ -61,6 +61,10 @@ class CartItem(Base):
     permit_processing_duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Fuel budget snapshot inherited from Package's active fuel rate at creation
     fuel_rate_per_session: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # Expected-expense snapshot captured at conversion (keeps already-spent packages stable)
+    expected_expense_snapshot: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
     # Commission attribution captured at consult/sale time (FK users.phone)
     converter_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.phone"), nullable=True

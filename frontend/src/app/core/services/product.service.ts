@@ -41,6 +41,17 @@ export interface Package {
     active_from: string;
     active_until: string | null;
   } | null;
+  expected_expenses?: {
+    id: string;
+    package_id: string;
+    category: string;
+    amount: string;
+  }[];
+}
+
+export interface PackageExpectedExpenseInput {
+  category: string;
+  amount: number;
 }
 
 export interface ProductCreate {
@@ -214,5 +225,9 @@ export class ProductService {
 
   deactivatePackage(id: string) {
     return this.http.delete<Package>(`/api/v1/packages/${id}`);
+  }
+
+  setPackageExpectedExpenses(packageId: string, data: PackageExpectedExpenseInput[]) {
+    return this.http.post<Package>(`/api/v1/products/packages/${packageId}/expected-expenses`, data);
   }
 }

@@ -2,7 +2,7 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
-import { FinanceService, OperatingEntry, OperatingSummary, Branch } from '../../core/services/finance.service';
+import { FinanceService, OperatingEntry, OperatingSummary, OperatingClientAccount, OperatingOwedSummary, Branch } from '../../core/services/finance.service';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { formatMoney, todayISO } from '../../shared/format';
 
@@ -44,6 +44,14 @@ export class OperatingAccount implements OnInit {
   record = { entry_type: 'equity', amount: null as number | null, description: '', reference: '', entry_date: todayISO() };
   fund = { to_branch_id: null as string | null, pool: 'petty_cash', amount: null as number | null, description: '' };
   repay = { loan_entry_id: null as string | null, amount: null as number | null, description: '' };
+
+  accounts = signal<OperatingClientAccount[]>([]);
+  owed = signal<OperatingOwedSummary | null>(null);
+  showPost = false;
+  showReconcile = false;
+  postNotes = '';
+  postEntries = signal<{ consultation_id: string; amount: number | null }[]>([]);
+  reconcileEntries = signal<{ post_id: string; amount: number | null }[]>([]);
 
   get canRecord() {
     return this.auth.hasPermission('finance.capital');
@@ -163,6 +171,65 @@ export class OperatingAccount implements OnInit {
     try {
       await this.finance.repayOperatingLoan(this.repay.loan_entry_id, this.repay.amount, this.repay.description || null).toPromise();
       this.showRepay = false;
+      await this.load();
+    } catch {
+      // surface error via inline handling
+    }
+  }
+
+  async openPost() {
+    try {
+      const accounts = (await this.finance.listClientAccounts().toPromise()) || [];
+      this.accounts.set(accounts);
+    } catch {
+      this.accounts.set([]);
+    }
+    this.postEntries.set(this.accounts().map((a) => ({ consultation_id: a.consultation_id, amount: null })));
+    this.postNotes = '';
+    this.showPost = true;
+  }
+
+  postSelected(): { consultation_id: string; amount: number }[] {
+    return this.postEntries().filter((e) => e.amount && e.amount > 0) as { consultation_id: string; amount: number }[];
+  }
+
+  async savePost() {
+    const items = this.postSelected();
+    if (items.length === 0) return;
+    try {
+      await this.finance.postFromClients(items, this.postNotes || undefined).toPromise();
+      this.showPost = false;
+      await this.load();
+    } catch {
+      // surface error via inline handling
+    }
+  }
+
+  async openReconcile() {
+    try {
+      const owed = (await this.finance.getOwedToClients().toPromise()) || null;
+      this.owed.set(owed);
+    } catch {
+      this.owed.set(null);
+    }
+    this.reconcileEntries.set(
+      (this.owed()?.accounts || []).flatMap((a) =>
+        (a.posts || []).map((p) => ({ post_id: p.post_id, amount: p.owed_back || null }))
+      )
+    );
+    this.showReconcile = true;
+  }
+
+  reconcileSelected(): { post_id: string; amount: number }[] {
+    return this.reconcileEntries().filter((e) => e.amount && e.amount > 0) as { post_id: string; amount: number }[];
+  }
+
+  async saveReconcile() {
+    const items = this.reconcileSelected();
+    if (items.length === 0) return;
+    try {
+      await this.finance.reconcileBack(items).toPromise();
+      this.showReconcile = false;
       await this.load();
     } catch {
       // surface error via inline handling

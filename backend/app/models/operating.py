@@ -26,6 +26,8 @@ class OperatingEntryType(str, enum.Enum):
     PROFIT = "profit"                      # profit transferred into company
     OPERATING_EXPENSE = "operating_expense"  # a company-level expense (debit)
     BRANCH_FUNDING = "branch_funding"      # funding sent to a branch (debit)
+    CLIENT_ACCOUNT_POST = "client_account_post"  # money taken from a head-office client account into operating (credit)
+    ACCOUNT_REPAY = "account_repay"        # money returned from operating to a client account (debit)
 
 
 class OperatingDirection(str, enum.Enum):
@@ -62,6 +64,14 @@ class OperatingEntry(Base):
     # For BRANCH_FUNDING entries, the BranchTransfer that moved the cash.
     transfer_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("branch_transfers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # For CLIENT_ACCOUNT_POST / ACCOUNT_REPAY entries, the client account (consultation) involved.
+    consultation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("consultations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # For ACCOUNT_REPAY entries, the CLIENT_ACCOUNT_POST entry this reconciles back against.
+    repays_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("company_operating_entries.id", ondelete="SET NULL"), nullable=True, index=True
     )
     target_pool: Mapped[str | None] = mapped_column(String(30), nullable=True)
     created_by: Mapped[str | None] = mapped_column(

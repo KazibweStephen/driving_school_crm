@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, joinedload
 
-from app.models.product import EntityStatus, Package, Product
+from app.models.product import EntityStatus, Package, PackageExpectedExpense, Product
 from app.models.commission import CommissionRate, commission_rate_packages
 
 
@@ -30,7 +30,10 @@ async def create_product(
     result = await db.execute(
         select(Product)
         .where(Product.id == product.id)
-        .options(selectinload(Product.packages).selectinload(Package.commission_rates))
+        .options(
+            selectinload(Product.packages).selectinload(Package.commission_rates),
+            selectinload(Product.packages).selectinload(Package.expected_expenses),
+        )
     )
     return result.scalar_one()
 
@@ -39,7 +42,10 @@ async def get_product_by_id(db: AsyncSession, product_id: uuid.UUID, company_id:
     query = (
         select(Product)
         .where(Product.id == product_id)
-        .options(selectinload(Product.packages).selectinload(Package.commission_rates))
+        .options(
+            selectinload(Product.packages).selectinload(Package.commission_rates),
+            selectinload(Product.packages).selectinload(Package.expected_expenses),
+        )
     )
     if company_id:
         query = query.where(Product.company_id == company_id)
@@ -57,7 +63,10 @@ async def list_products(
 ) -> tuple[list[Product], int]:
     query = (
         select(Product)
-        .options(selectinload(Product.packages).selectinload(Package.commission_rates))
+        .options(
+            selectinload(Product.packages).selectinload(Package.commission_rates),
+            selectinload(Product.packages).selectinload(Package.expected_expenses),
+        )
     )
 
     if company_id:
@@ -96,7 +105,10 @@ async def update_product(
     result = await db.execute(
         select(Product)
         .where(Product.id == product.id)
-        .options(selectinload(Product.packages).selectinload(Package.commission_rates))
+        .options(
+            selectinload(Product.packages).selectinload(Package.commission_rates),
+            selectinload(Product.packages).selectinload(Package.expected_expenses),
+        )
     )
     return result.scalar_one()
 
@@ -107,7 +119,10 @@ async def deactivate_product(db: AsyncSession, product: Product) -> Product:
     result = await db.execute(
         select(Product)
         .where(Product.id == product.id)
-        .options(selectinload(Product.packages).selectinload(Package.commission_rates))
+        .options(
+            selectinload(Product.packages).selectinload(Package.commission_rates),
+            selectinload(Product.packages).selectinload(Package.expected_expenses),
+        )
     )
     return result.scalar_one()
 
@@ -209,7 +224,11 @@ async def get_package_by_id(db: AsyncSession, package_id: uuid.UUID, company_id:
     query = (
         select(Package)
         .where(Package.id == package_id)
-        .options(selectinload(Package.product), selectinload(Package.commission_rates))
+        .options(
+            selectinload(Package.product),
+            selectinload(Package.commission_rates),
+            selectinload(Package.expected_expenses),
+        )
     )
     if company_id:
         query = query.join(Package.product).where(Product.company_id == company_id)
@@ -254,6 +273,46 @@ async def update_package(
     await db.flush()
     await db.refresh(pkg)
     return pkg
+
+
+async def set_package_expected_expenses(
+    db: AsyncSession,
+    package_id: uuid.UUID,
+    items: list[dict],
+) -> list:
+    """Replace the package's expected-expense totals per category.
+
+    Capped at the package price so expected expenses cannot exceed the sale.
+    items: [{"category": str, "amount": number}]
+    Returns the saved list.
+    """
+    from fastapi import HTTPException
+    from sqlalchemy import delete as sa_delete
+    pkg = await get_package_by_id(db, package_id)
+    if pkg is None:
+        raise HTTPException(status_code=404, detail="Package not found")
+    total = sum(float(i.get("amount") or 0) for i in items)
+    if total > float(pkg.price):
+        raise HTTPException(
+            status_code=400,
+            detail="Expected expenses cannot exceed the package price.",
+        )
+    await db.execute(
+        sa_delete(PackageExpectedExpense).where(
+            PackageExpectedExpense.package_id == package_id
+        )
+    )
+    saved = []
+    for it in items:
+        cat = (it.get("category") or "").strip()
+        amt = float(it.get("amount") or 0)
+        if not cat or amt <= 0:
+            continue
+        row = PackageExpectedExpense(package_id=package_id, category=cat, amount=amt)
+        db.add(row)
+        saved.append(row)
+    await db.flush()
+    return saved
 
 
 async def get_package_commission_rate(

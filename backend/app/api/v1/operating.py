@@ -6,13 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, require_permission
 from app.models.user import User
 from app.schemas.operating import (
+    OperatingClientAccount,
     OperatingEntryCreate,
     OperatingEntryRead,
     OperatingFundBranch,
     OperatingLoanRepay,
+    OperatingOwedSummary,
+    OperatingPostFromClients,
+    OperatingPostResult,
+    OperatingReconcileBack,
+    OperatingReconcileResult,
     OperatingSummary,
 )
 from app.services import operating as operating_service
+from app.services import operating_clients as operating_clients_service
 
 from app.models.company import BranchTransfer
 
@@ -130,3 +137,71 @@ async def repay_loan(
     await db.commit()
     await db.refresh(entry)
     return _read(entry)
+
+
+@router.get("/client-accounts", response_model=list[OperatingClientAccount])
+async def list_client_accounts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("finance.operating")),
+):
+    if current_user.company_id is None:
+        raise HTTPException(status_code=400, detail="Company not resolved")
+    accounts = await operating_clients_service.list_client_accounts(
+        db, current_user.company_id
+    )
+    return [OperatingClientAccount(**a) for a in accounts]
+
+
+@router.post(
+    "/post-from-clients",
+    response_model=list[OperatingPostResult],
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_from_clients(
+    data: OperatingPostFromClients,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("finance.capital")),
+):
+    if current_user.company_id is None:
+        raise HTTPException(status_code=400, detail="Company not resolved")
+    results = await operating_clients_service.post_from_clients(
+        db,
+        current_user.company_id,
+        [{"consultation_id": i.consultation_id, "amount": i.amount, "reason": i.reason} for i in data.items],
+        data.notes,
+        current_user.phone,
+    )
+    return [OperatingPostResult(**r) for r in results]
+
+
+@router.get("/owed-to-clients", response_model=OperatingOwedSummary)
+async def owed_to_clients(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("finance.operating")),
+):
+    if current_user.company_id is None:
+        raise HTTPException(status_code=400, detail="Company not resolved")
+    return await operating_clients_service.owed_to_clients(
+        db, current_user.company_id
+    )
+
+
+@router.post(
+    "/reconcile-back",
+    response_model=list[OperatingReconcileResult],
+    status_code=status.HTTP_201_CREATED,
+)
+async def reconcile_back(
+    data: OperatingReconcileBack,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("finance.capital")),
+):
+    if current_user.company_id is None:
+        raise HTTPException(status_code=400, detail="Company not resolved")
+    results = await operating_clients_service.reconcile_back(
+        db,
+        current_user.company_id,
+        [{"post_id": i.post_id, "amount": i.amount} for i in data.items],
+        current_user.phone,
+    )
+    return [OperatingReconcileResult(**r) for r in results]

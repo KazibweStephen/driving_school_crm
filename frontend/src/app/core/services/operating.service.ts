@@ -45,6 +45,65 @@ export interface OperatingFundBranch {
   method?: string | null;
 }
 
+export interface OperatingClientAccount {
+  consultation_id: string;
+  client_name: string;
+  client_phone: string;
+  confirmed_profit: number;
+  expected_profit: number;
+  funds_available: number;
+  already_posted: number;
+  unreconciled_excess: number;
+}
+
+export interface OperatingPostItem {
+  consultation_id: string;
+  amount: number;
+  reason?: string | null;
+}
+
+export interface OperatingPostResult {
+  post_id: string;
+  consultation_id: string;
+  client_name: string;
+  amount: number;
+  confirmed_profit: number;
+  expected_profit: number;
+  excess: number;
+}
+
+export interface OperatingOwedPost {
+  post_id: string;
+  amount: number;
+  excess: number;
+  reconciled: number;
+  owed_back: number;
+}
+
+export interface OperatingOwedAccount {
+  consultation_id: string;
+  posted: number;
+  confirmed_profit: number;
+  excess: number;
+  reconciled: number;
+  owed_back: number;
+  posts: OperatingOwedPost[];
+}
+
+export interface OperatingOwedSummary {
+  total_taken: number;
+  total_confirmed_profit: number;
+  total_excess: number;
+  total_reconciled: number;
+  total_owed_back: number;
+  accounts: OperatingOwedAccount[];
+}
+
+export interface OperatingReconcileItem {
+  post_id: string;
+  amount: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class OperatingService {
   private base = '/api/v1/operating';
@@ -73,5 +132,21 @@ export class OperatingService {
       amount,
       description,
     });
+  }
+
+  listClientAccounts(): Observable<OperatingClientAccount[]> {
+    return this.http.get<OperatingClientAccount[]>(`${this.base}/client-accounts`);
+  }
+
+  postFromClients(items: OperatingPostItem[], notes?: string): Observable<OperatingPostResult[]> {
+    return this.http.post<OperatingPostResult[]>(`${this.base}/post-from-clients`, { items, notes });
+  }
+
+  getOwedToClients(): Observable<OperatingOwedSummary> {
+    return this.http.get<OperatingOwedSummary>(`${this.base}/owed-to-clients`);
+  }
+
+  reconcileBack(items: OperatingReconcileItem[]): Observable<any[]> {
+    return this.http.post<any[]>(`${this.base}/reconcile-back`, { items });
   }
 }

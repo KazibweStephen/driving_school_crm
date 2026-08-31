@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -76,3 +76,31 @@ class Package(Base):
     )
 
     product: Mapped["Product"] = relationship("Product", back_populates="packages")
+
+    expected_expenses: Mapped[list["PackageExpectedExpense"]] = relationship(
+        "PackageExpectedExpense", back_populates="package", cascade="all, delete-orphan"
+    )
+
+
+class PackageExpectedExpense(Base):
+    """An expected cost, per category, that will be incurred to deliver a
+    package. Used to estimate profit per sale:
+    profit = net sale (price - discounts) - sum(expected expenses)."""
+    __tablename__ = "package_expected_expenses"
+    __table_args__ = (
+        UniqueConstraint(
+            "package_id", "category", name="uq_package_expected_expense_category"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    package_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("packages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    category: Mapped[str] = mapped_column(String(100), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    package: Mapped["Package"] = relationship("Package", back_populates="expected_expenses")

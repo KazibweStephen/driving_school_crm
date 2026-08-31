@@ -17,6 +17,8 @@ import {
   OperatingService,
   OperatingSummary,
   OperatingEntry,
+  OperatingClientAccount,
+  OperatingOwedSummary,
 } from '../../core/services/operating.service';
 import { CurrencyService } from '../../core/services/currency.service';
 
@@ -53,6 +55,14 @@ export class OperatingAccountCmp implements OnInit {
   record = { entry_type: 'equity', amount: null as number | null, description: '', reference: '', entryDate: null as Date | null };
   fund = { to_branch_id: null as string | null, pool: 'petty_cash', amount: null as number | null, description: '' };
   repay = { loan_entry_id: null as string | null, amount: null as number | null, description: '' };
+
+  accounts = signal<OperatingClientAccount[]>([]);
+  owed = signal<OperatingOwedSummary | null>(null);
+  showPost = false;
+  showOwed = false;
+  postNotes = '';
+  postEntries = signal<{ consultation_id: string; amount: number | null }[]>([]);
+  reconcileEntries = signal<{ post_id: string; amount: number | null }[]>([]);
 
   constructor(
     private operatingService: OperatingService,
@@ -203,5 +213,81 @@ export class OperatingAccountCmp implements OnInit {
 
   formatAmount(n: number): string {
     return Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+
+  async openPost() {
+    try {
+      this.accounts.set((await this.operatingService.listClientAccounts().toPromise()) || []);
+    } catch {
+      this.accounts.set([]);
+    }
+    this.postEntries.set(this.accounts().map((a) => ({ consultation_id: a.consultation_id, amount: null })));
+    this.postNotes = '';
+    this.showPost = true;
+  }
+
+  postSelected(): { consultation_id: string; amount: number }[] {
+    return this.postEntries().filter((e) => e.amount && e.amount > 0) as { consultation_id: string; amount: number }[];
+  }
+
+  async savePost() {
+    const items = this.postSelected();
+    if (items.length === 0) {
+      this.messageService.add({ severity: 'warn', summary: 'Required', detail: 'Enter an amount for at least one account' });
+      return;
+    }
+    try {
+      await this.operatingService.postFromClients(items, this.postNotes || undefined).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Posted from client accounts' });
+      this.showPost = false;
+      await this.load();
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to post from client accounts' });
+    }
+  }
+
+  async openOwed() {
+    try {
+      this.owed.set((await this.operatingService.getOwedToClients().toPromise()) || null);
+    } catch {
+      this.owed.set(null);
+    }
+    this.reconcileEntries.set(
+      (this.owed()?.accounts || []).flatMap((a) => (a.posts || []).map((p) => ({ post_id: p.post_id, amount: p.owed_back || null })))
+    );
+    this.showOwed = true;
+  }
+
+  reconcileSelected(): { post_id: string; amount: number }[] {
+    return this.reconcileEntries().filter((e) => e.amount && e.amount > 0) as { post_id: string; amount: number }[];
+  }
+
+  async saveReconcile() {
+    const items = this.reconcileSelected();
+    if (items.length === 0) {
+      this.messageService.add({ severity: 'warn', summary: 'Required', detail: 'Enter an amount to return' });
+      return;
+    }
+    try {
+      await this.operatingService.reconcileBack(items).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Reconciled back to client accounts' });
+      this.showOwed = false;
+      await this.load();
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to reconcile' });
+    }
+  }
+
+  accountLabel(postId: string): string {
+    const acc = this.owed()?.accounts.find((a) => (a.posts || []).some((p) => p.post_id === postId));
+    return acc ? 'Client account (post)' : 'Client account';
+  }
+
+  postOwed(postId: string): number {
+    for (const a of this.owed()?.accounts || []) {
+      const p = (a.posts || []).find((pp) => pp.post_id === postId);
+      if (p) return Number(p.owed_back) || 0;
+    }
+    return 0;
   }
 }

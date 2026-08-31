@@ -14,7 +14,7 @@ import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { DatePickerModule } from 'primeng/datepicker';
 import { ConfirmationService, MessageService } from 'primeng/api';
-import { FinanceService, Expense, ExpenseCreate, ExpenseCategory } from '../../core/services/finance.service';
+import { FinanceService, Expense, ExpenseCreate, ExpenseCategory, UnremittedClientPayment } from '../../core/services/finance.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
 import { ConsultationService, ClientInfo } from '../../core/services/consultation.service';
@@ -67,9 +67,78 @@ export class ExpensesCmp implements OnInit {
     return this.categoryOptions().find(c => c.value === this.form.category) ?? null;
   }
 
+  selectedCategoryAccount(): string {
+    if (this.form.category === '__other__') return 'petty_cash';
+    const cat = this.categories().find(c => c.name === this.form.category);
+    return cat?.account || 'petty_cash';
+  }
+
+  isClientAccountCategory(): boolean {
+    return this.selectedCategoryAccount() === 'client_accounts';
+  }
+
+  async loadClientAccountDetail() {
+    if (this.isClientAccountCategory() && this.form.branch_id) {
+      this.clientAccountAccountLoading.set(true);
+      this.clientAccountPayments.set([]);
+      this.clientAccountPaymentsFiltered.set([]);
+      try {
+        const positions = (await this.financeService.getCashPosition().toPromise()) || [];
+        const branch = positions.find(p => p.branch_id === this.form.branch_id);
+        const pool = branch?.pools?.find(p => p.pool === 'client_accounts');
+        this.clientAccountAvailable.set(pool?.net_in_hand ?? 0);
+      } catch {
+        this.clientAccountAvailable.set(0);
+      }
+      try {
+        const payments = (await this.financeService.getUnremittedClientPayments(this.form.branch_id).toPromise()) || [];
+        this.clientAccountPayments.set(payments);
+        this.applyClientAccountPaymentFilter();
+      } catch {
+        this.clientAccountPayments.set([]);
+        this.clientAccountPaymentsFiltered.set([]);
+      } finally {
+        this.clientAccountAccountLoading.set(false);
+      }
+    } else {
+      this.clientAccountAvailable.set(0);
+      this.clientAccountPayments.set([]);
+      this.clientAccountPaymentsFiltered.set([]);
+    }
+  }
+
+  applyClientAccountPaymentFilter() {
+    const q = (this.clientAccountPaymentsSearch() || '').trim().toLowerCase();
+    const all = this.clientAccountPayments();
+    if (!q) {
+      this.clientAccountPaymentsFiltered.set(all);
+      return;
+    }
+    this.clientAccountPaymentsFiltered.set(all.filter(p =>
+      (p.client_name || '').toLowerCase().includes(q) ||
+      (p.client_phone || '').toLowerCase().includes(q)
+    ));
+  }
+
+  onClientAccountSearch(value: string) {
+    this.clientAccountPaymentsSearch.set(value);
+    this.applyClientAccountPaymentFilter();
+  }
+
+  canFundFromClientAccount(): boolean {
+    return (this.form.amount ?? 0) <= this.clientAccountAvailable() + 0.001;
+  }
+
   clientResults = signal<ClientInfo[]>([]);
   clientSearching = signal(false);
   clientQuery = signal('');
+
+  clientAccountAvailable = signal(0);
+  clientAccountAccountLoading = signal(false);
+  clientAccountPayments = signal<UnremittedClientPayment[]>([]);
+  clientAccountPaymentsFiltered = signal<UnremittedClientPayment[]>([]);
+  clientAccountPaymentsSearch = signal('');
+  clientAccountSearchFocus = signal('set');
 
   form = {
     branch_id: '',
@@ -171,6 +240,18 @@ export class ExpensesCmp implements OnInit {
     this.showDialog.set(true);
   }
 
+  onBranchChangeInDialog() {
+    this.loadVehiclesForBranch();
+    this.loadClientAccountDetail();
+  }
+
+  onCategoryChangeInDialog() {
+    this.clientResults.set([]);
+    this.clientQuery.set('');
+    this.form.consultation_id = '';
+    this.loadClientAccountDetail();
+  }
+
   onReceiptSelected(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files?.length) {
@@ -213,8 +294,12 @@ export class ExpensesCmp implements OnInit {
       this.messageService.add({ severity: 'success', summary: 'Created', detail: 'Expense created' });
       this.showDialog.set(false);
       await this.loadExpenses();
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to create expense' });
+    } catch (err: any) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: err?.error?.detail || 'Failed to create expense',
+      });
     } finally {
       this.loading.set(false);
       this.uploading.set(false);
@@ -301,6 +386,7 @@ export class ExpensesCmp implements OnInit {
     if (!this.form.branch_id || (this.form.amount ?? 0) <= 0) return false;
     if (this.form.category === '__other__' && !this.form.otherDetail.trim()) return false;
     if (this.selectedCategory()?.requires_client && !this.form.consultation_id) return false;
+    if (this.isClientAccountCategory() && !this.canFundFromClientAccount()) return false;
     return true;
   }
 

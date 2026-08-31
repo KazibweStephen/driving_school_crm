@@ -92,6 +92,9 @@
             @if (e.status === 'approved') {
               <p-button *appHasPermission="'expenses.pay'" icon="pi pi-credit-card" severity="info" rounded="true" pTooltip="Mark Paid" (onClick)="markPaid(e.id)" />
             }
+            @if (e.status === 'rejected') {
+              <p-button *appHasPermission="'expenses.manage'" icon="pi pi-trash" severity="secondary" rounded="true" pTooltip="Delete rejected" (onClick)="confirmDelete(e)" />
+            }
           </div>
         </td>
       </tr>
@@ -118,7 +121,7 @@
       <label class="mb-1 block text-sm font-medium text-gray-700">Branch *</label>
       <p-select [(ngModel)]="form.branch_id" [options]="branches()" optionLabel="name" optionValue="id"
         placeholder="Select branch" styleClass="w-full" appendTo="body"
-        (onChange)="loadVehiclesForBranch()" />
+        (onChange)="onBranchChangeInDialog()" />
     </div>
     <div>
       <label class="mb-1 block text-sm font-medium text-gray-700">Amount *</label>
@@ -128,7 +131,8 @@
     <div>
       <label class="mb-1 block text-sm font-medium text-gray-700">Category</label>
       <p-select [(ngModel)]="form.category" [options]="categoryOptions()" optionLabel="label" optionValue="value"
-        placeholder="Select category" styleClass="w-full" appendTo="body" [filter]="true" filterPlaceholder="Search..." />
+        placeholder="Select category" styleClass="w-full" appendTo="body" [filter]="true" filterPlaceholder="Search..."
+        (onChange)="onCategoryChangeInDialog()" />
     </div>
     @if (form.category === '__other__') {
       <div>
@@ -171,6 +175,53 @@
             </ul>
           }
         </div>
+      </div>
+    }
+    @if (isClientAccountCategory()) {
+      <div class="rounded border p-3 bg-slate-50">
+        <div class="flex items-center justify-between">
+          <label class="text-sm font-medium text-gray-700">Client Account (funding source)</label>
+          @if (clientAccountAccountLoading()) {
+            <span class="text-xs text-gray-500">Loading...</span>
+          }
+        </div>
+        <div class="mt-1 text-xs text-gray-600">
+          Available in this branch:
+          <span class="font-semibold" [class.text-red-600]="!canFundFromClientAccount()">
+            {{ currencyService.symbol() }} {{ (clientAccountAvailable()).toLocaleString() }}
+          </span>
+        </div>
+        @if (!canFundFromClientAccount()) {
+          <div class="mt-1 text-xs text-red-600">
+            This amount exceeds the available client-account funds. Fund the client account from head office first.
+          </div>
+        }
+        <div class="mt-2 text-sm font-medium text-gray-700">Client-account money at this branch</div>
+        <div class="relative mt-1">
+          <input pInputText [(ngModel)]="clientAccountPaymentsSearch"
+            (ngModelChange)="onClientAccountSearch($event)"
+            placeholder="Search by client name or phone..." class="w-full pr-8" />
+          @if (clientAccountPaymentsSearch()) {
+            <button pButton icon="pi pi-times" class="p-button-sm p-button-text absolute right-1 top-1/2 -translate-y-1/2"
+              (click)="clientAccountPaymentsSearch.set(''); onClientAccountSearch('')"></button>
+          }
+        </div>
+        @if (clientAccountPaymentsFiltered().length) {
+          <div class="mt-1 max-h-48 overflow-auto border rounded bg-white">
+            @for (p of clientAccountPaymentsFiltered(); track p.payment_id) {
+              <div class="border-b last:border-b-0 px-3 py-2 text-sm">
+                <div class="font-medium">{{ p.client_name }}</div>
+                <div class="text-gray-500">{{ p.client_phone }}</div>
+                <div class="text-xs text-gray-400">Paid: {{ currencyService.symbol() }} {{ (p.total_paid ?? 0).toLocaleString() }}</div>
+                <div class="text-xs text-gray-500">Unremitted: {{ currencyService.symbol() }} {{ (p.unremitted ?? 0).toLocaleString() }}</div>
+                <div class="text-xs text-gray-500">Funded: {{ currencyService.symbol() }} {{ (p.funded ?? 0).toLocaleString() }}</div>
+                <div class="text-sm font-semibold text-gray-800">On Expense Account: {{ currencyService.symbol() }} {{ (p.amount).toLocaleString() }}</div>
+              </div>
+            }
+          </div>
+        } @else if (!clientAccountAccountLoading()) {
+          <div class="mt-1 text-sm text-gray-500">No client-account money at this branch.</div>
+        }
       </div>
     }
     <div>

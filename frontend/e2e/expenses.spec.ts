@@ -90,7 +90,7 @@ test.describe('Expenses Workflow', () => {
           const res = await fetch('/api/v1/finance/expenses', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ branch_id: branchId, amount: 42000, description, category: 'fuel' }),
+            body: JSON.stringify({ branch_id: branchId, amount: 42000, description, category: 'Permit Payment' }),
           });
           return (await res.json()) as { id: string };
         };

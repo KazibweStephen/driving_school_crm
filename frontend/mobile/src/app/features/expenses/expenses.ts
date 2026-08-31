@@ -7,7 +7,7 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
 import { DialogModule } from 'primeng/dialog';
 import { AuthService } from '../../core/auth/auth.service';
-import { ExpenseService, Expense, ExpenseCreatePayload } from '../../core/services/expense.service';
+import { ExpenseService, Expense, ExpenseCreatePayload, UnremittedClientPayment } from '../../core/services/expense.service';
 import { PaymentService, BranchInfo } from '../../core/services/payment.service';
 import { CatalogService, Vehicle } from '../../core/services/catalog.service';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
@@ -97,6 +97,14 @@ export class Expenses {
     })),
   );
 
+  categoriesMeta = new Map<string, string>();
+  clientAccountAvailable = signal(0);
+  clientAccountLoading = signal(false);
+  clientAccountPayments = signal<UnremittedClientPayment[]>([]);
+  clientAccountPaymentsFiltered = signal<UnremittedClientPayment[]>([]);
+  clientAccountSearch = signal('');
+  accountCategories = new Set<string>();
+
   statusOptions = [
     { label: 'All', value: '' },
     { label: 'Pending', value: 'pending' },
@@ -109,6 +117,78 @@ export class Expenses {
   constructor() {
     this.loadExpenses();
     this.loadBranches();
+    this.loadCategoryAccounts();
+  }
+
+  private loadCategoryAccounts() {
+    this.expenseService.listExpenseCategories().subscribe({
+      next: (res) => {
+        const meta = new Map<string, string>();
+        const clientAcc = new Set<string>();
+        for (const c of res.items ?? []) {
+          meta.set(c.name, c.account || 'petty_cash');
+          if ((c.account || 'petty_cash') === 'client_accounts') clientAcc.add(c.name);
+        }
+        this.categoriesMeta = meta;
+        this.accountCategories = clientAcc;
+      },
+      error: () => {},
+    });
+  }
+
+  isClientAccountCategory(): boolean {
+    return this.accountCategories.has(this.category());
+  }
+
+  canFundFromClientAccount(): boolean {
+    return (this.amount() ?? 0) <= this.clientAccountAvailable() + 0.001;
+  }
+
+  async loadClientAccountDetail() {
+    const branchId = this.branchId();
+    if (this.isClientAccountCategory() && branchId) {
+      this.clientAccountLoading.set(true);
+      this.clientAccountPayments.set([]);
+      this.clientAccountPaymentsFiltered.set([]);
+      this.expenseService.getClientAccountAvailable(branchId).subscribe({
+        next: (v) => this.clientAccountAvailable.set(v),
+        error: () => this.clientAccountAvailable.set(0),
+      });
+      this.expenseService.getUnremittedClientPayments(branchId).subscribe({
+        next: (p) => {
+          this.clientAccountPayments.set(p);
+          this.applyClientAccountPaymentFilter();
+          this.clientAccountLoading.set(false);
+        },
+        error: () => {
+          this.clientAccountPayments.set([]);
+          this.clientAccountPaymentsFiltered.set([]);
+          this.clientAccountLoading.set(false);
+        },
+      });
+      return;
+    }
+    this.clientAccountAvailable.set(0);
+    this.clientAccountPayments.set([]);
+    this.clientAccountPaymentsFiltered.set([]);
+  }
+
+  applyClientAccountPaymentFilter() {
+    const q = (this.clientAccountSearch() || '').trim().toLowerCase();
+    const all = this.clientAccountPayments();
+    if (!q) {
+      this.clientAccountPaymentsFiltered.set(all);
+      return;
+    }
+    this.clientAccountPaymentsFiltered.set(all.filter((p) =>
+      (p.client_name || '').toLowerCase().includes(q) ||
+      (p.client_phone || '').toLowerCase().includes(q),
+    ));
+  }
+
+  onClientAccountSearch(value: string) {
+    this.clientAccountSearch.set(value);
+    this.applyClientAccountPaymentFilter();
   }
 
   parseDate(value: string | null | undefined): Date | null {
@@ -208,13 +288,24 @@ export class Expenses {
     if (this.branches().length > 0 && !this.branchId()) {
       this.branchId.set(this.branches()[0].id);
     }
+    this.clientAccountAvailable.set(0);
+    this.clientAccountPayments.set([]);
+    this.clientAccountPaymentsFiltered.set([]);
+    this.clientAccountSearch.set('');
     this.loadVehiclesForBranch();
+    this.loadClientAccountDetail();
     this.step.set('create');
   }
 
   onCreateBranchChange(value: string | null) {
     this.branchId.set(value);
     this.loadVehiclesForBranch();
+    this.loadClientAccountDetail();
+  }
+
+  onCategoryChange(value: string) {
+    this.category.set(value);
+    this.loadClientAccountDetail();
   }
 
   private loadVehiclesForBranch() {
@@ -278,6 +369,14 @@ export class Expenses {
     }
     if (amount == null || amount <= 0) {
       this.messageService.add({ severity: 'warn', summary: 'Enter a valid amount' });
+      return;
+    }
+    if (this.isClientAccountCategory() && !this.canFundFromClientAccount()) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Insufficient client-account funds',
+        detail: `Available: ${this.money(this.clientAccountAvailable())}. Fund the client account from head office first.`,
+      });
       return;
     }
     if (this.category() === 'Fuel' && !this.vehicleId()) {

@@ -204,7 +204,7 @@
             optionLabel="label"
             optionValue="value"
             [ngModel]="category()"
-            (ngModelChange)="category.set($event)"
+            (ngModelChange)="onCategoryChange($event)"
             placeholder="Select category"
             appendTo="body"
             class="w-full"
@@ -241,6 +241,53 @@
               (ngModelChange)="mileage.set($event ?? null)"
               data-testid="expense-mileage"
             />
+          </div>
+        }
+
+        @if (isClientAccountCategory()) {
+          <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div class="flex items-center justify-between">
+              <label class="text-sm font-medium text-slate-700">Client Account (funding source)</label>
+              @if (clientAccountLoading()) {
+                <span class="text-xs text-slate-500">Loading...</span>
+              }
+            </div>
+            <div class="mt-1 text-xs text-slate-600">
+              Available in this branch:
+              <span class="font-semibold" [class.text-red-600]="!canFundFromClientAccount()">
+                {{ money(clientAccountAvailable()) }}
+              </span>
+            </div>
+            @if (!canFundFromClientAccount()) {
+              <p class="mt-1 text-xs text-red-600">
+                This amount exceeds the available client-account funds. Fund the client account from head office first.
+              </p>
+            }
+            <div class="mt-2 text-sm font-medium text-slate-700">Client-account money at this branch</div>
+            <input
+              type="text"
+              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              [ngModel]="clientAccountSearch()"
+              (ngModelChange)="onClientAccountSearch($event)"
+              placeholder="Search by client name or phone..."
+              data-testid="expense-client-account-search"
+            />
+            @if (clientAccountPaymentsFiltered().length) {
+              <div class="mt-1 max-h-48 overflow-auto rounded-lg border border-slate-200 bg-white">
+                @for (p of clientAccountPaymentsFiltered(); track p.payment_id) {
+                  <div class="border-b last:border-b-0 px-3 py-2 text-sm">
+                    <div class="font-medium text-slate-900">{{ p.client_name }}</div>
+                    <div class="text-xs text-slate-500">{{ p.client_phone }}</div>
+                    <div class="text-xs text-slate-400">Paid: {{ money(p.total_paid ?? 0) }}</div>
+                    <div class="text-xs text-slate-500">Unremitted: {{ money(p.unremitted ?? 0) }}</div>
+                    <div class="text-xs text-slate-500">Funded: {{ money(p.funded ?? 0) }}</div>
+                    <div class="text-sm font-semibold text-slate-800">On Expense Account: {{ money(p.amount) }}</div>
+                  </div>
+                }
+              </div>
+            } @else if (!clientAccountLoading()) {
+              <p class="mt-1 text-sm text-slate-500">No client-account money at this branch.</p>
+            }
           </div>
         }
 

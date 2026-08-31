@@ -145,12 +145,27 @@ async def create_expense(
         ).scalar_one_or_none()
         if match is not None:
             account = match.account or "petty_cash"
+    resolved_account = account or "petty_cash"
+    # Gate client-account expenses at creation: the branch's client-account
+    # pool must already hold enough funds (the client account is typically
+    # funded from head office before paying client-related expenses).
+    if resolved_account == "client_accounts":
+        available = await pool_available(db, branch_id, "client_accounts")
+        if float(amount) > available:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Insufficient funds in the client account to fund this expense. "
+                    f"Available: {available}. Fund the client account first."
+                ),
+            )
     expense = Expense(
         branch_id=branch_id,
         amount=amount,
         description=description,
         category=category,
-        account=account or "petty_cash",
+        account=resolved_account,
         consultation_id=consultation_id,
         mileage=mileage,
         vehicle_id=vehicle_id,

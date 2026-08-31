@@ -1,5 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 export interface Expense {
   id: string;
@@ -41,6 +43,47 @@ export interface ExpenseCreatePayload {
   expense_date?: string;
   status?: string;
   receipt_url?: string;
+}
+
+export interface ClientAccountPool {
+  pool: string;
+  collected: number;
+  received: number;
+  remitted: number;
+  pending_remitted: number;
+  expenses: number;
+  net_in_hand: number;
+  outstanding: number;
+}
+
+export interface BranchCashPosition {
+  branch_id: string;
+  branch_name: string;
+  pools: ClientAccountPool[];
+}
+
+export interface UnremittedClientPayment {
+  payment_id: string;
+  consultation_id: string;
+  client_name: string;
+  client_phone: string;
+  total_paid?: number;
+  unremitted?: number;
+  funded?: number;
+  amount: number;
+  document_date?: string | null;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  code: string;
+  requires_client: boolean;
+  is_operating: boolean;
+  account: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -89,5 +132,28 @@ export class ExpenseService {
     const formData = new FormData();
     formData.append('file', file);
     return this.http.post<{ url: string }>('/api/v1/finance/expenses/upload-receipt', formData);
+  }
+
+  getClientAccountAvailable(branchId: string): Observable<number> {
+    return this.http
+      .get<BranchCashPosition[]>('/api/v1/finance/cash-position', { params: { branch_id: branchId } })
+      .pipe(
+        map(
+          (positions) =>
+            positions
+              .find((b) => b.branch_id === branchId)
+              ?.pools?.find((p) => p.pool === 'client_accounts')?.net_in_hand ?? 0,
+        ),
+      );
+  }
+
+  getUnremittedClientPayments(branchId: string): Observable<UnremittedClientPayment[]> {
+    return this.http.get<UnremittedClientPayment[]>('/api/v1/finance/cash-position/unremitted-client-payments', {
+      params: { branch_id: branchId },
+    });
+  }
+
+  listExpenseCategories(): Observable<{ items: ExpenseCategory[] }> {
+    return this.http.get<{ items: ExpenseCategory[] }>('/api/v1/finance/expense-categories');
   }
 }

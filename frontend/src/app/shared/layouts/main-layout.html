@@ -161,7 +161,7 @@
                 }
               </div>
               <div class="flex shrink-0 flex-col items-end gap-1">
-                @if (n.direction === 'incoming') {
+                @if (n.direction === 'incoming' && n.initiated_by !== auth.currentUser()) {
                   @if (auth.hasPermission('transfers.receive') || auth.hasPermission('transfers.manage')) {
                     <button
                       class="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
@@ -177,6 +177,8 @@
                   } @else {
                     <span class="text-xs text-gray-400">No permission to receive</span>
                   }
+                } @else if (n.direction === 'incoming' && n.initiated_by === auth.currentUser()) {
+                  <span class="text-xs text-gray-400 italic">You initiated</span>
                 } @else if (auth.hasPermission('transfers.cancel') || auth.hasPermission('transfers.manage')) {
                   <button
                     class="rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"

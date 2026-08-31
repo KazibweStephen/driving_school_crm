@@ -679,6 +679,10 @@ async def create_branch_transfer(
         consultation_id=data.consultation_id,
         payment_id=data.payment_id,
         payment_ids=data.payment_ids,
+        payment_amounts=(
+            [{"payment_id": pa.payment_id, "amount": float(pa.amount)}
+             for pa in data.payment_amounts] if data.payment_amounts else None
+        ),
         initiated_by=current_user.phone,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
@@ -904,7 +908,7 @@ async def get_cash_position(
     branch_id: uuid.UUID | None = Query(None),
     branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("finance.view")),
+    current_user: User = Depends(require_permission("finance.cash_position")),
 ):
     requested = (
         [uuid.UUID(b) for b in branch_ids.split(",") if b]
@@ -925,7 +929,7 @@ async def get_unremitted_client_payments(
     branch_id: uuid.UUID | None = Query(None),
     search: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("finance.view")),
+    current_user: User = Depends(require_permission("finance.cash_position")),
 ):
     return await finance_service.list_unremitted_client_payments(
         db, branch_id=branch_id, company_id=current_user.company_id,
@@ -937,7 +941,7 @@ async def get_unremitted_client_payments(
 async def get_ho_funding_clients(
     company_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("finance.view")),
+    current_user: User = Depends(require_permission("finance.fund")),
 ):
     cid = company_id or current_user.company_id
     if cid is None:
@@ -956,7 +960,7 @@ async def get_ho_funding_clients(
 async def create_ho_funding(
     payload: HoFundingCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("transfers.create")),
+    current_user: User = Depends(require_permission("finance.fund")),
 ):
     transfer = await finance_service.create_ho_funding(
         db,
@@ -989,7 +993,7 @@ async def get_profit_loss(
     from_date: date | None = Query(None),
     to_date: date | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("finance.manage")),
+    current_user: User = Depends(require_permission("finance.pnl")),
 ):
     requested = (
         [uuid.UUID(b) for b in branch_ids.split(",") if b]

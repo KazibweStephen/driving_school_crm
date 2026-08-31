@@ -281,6 +281,7 @@ export class TransfersCmp implements OnInit {
 
   canReceive(t: BranchTransfer): boolean {
     if (t.status !== 'initiated') return false;
+    if (t.initiated_by === this.authService.currentUser()) return false;
     if (this.authService.hasPermission('transfers.manage')) return true;
     if (this.authService.hasPermission('transfers.receive')) return true;
     return this.selectedBranchIds.length === 1 && this.selectedBranchIds[0] === t.to_branch_id;

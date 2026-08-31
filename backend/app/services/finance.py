@@ -759,6 +759,7 @@ async def create_branch_transfer(
     consultation_id: uuid.UUID | None = None,
     payment_id: uuid.UUID | None = None,
     payment_ids: list[uuid.UUID] | None = None,
+    payment_amounts: list[dict] | None = None,
     initiated_by: str | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
@@ -809,6 +810,8 @@ async def create_branch_transfer(
         linked_ids.add(payment_id)
     if payment_ids:
         linked_ids.update(payment_ids)
+    if payment_amounts:
+        linked_ids.update(pa["payment_id"] for pa in payment_amounts)
     if linked_ids and company_id is not None:
         # Validate linked payments belong to the company's branches
         pmt_result = await db.execute(
@@ -818,14 +821,55 @@ async def create_branch_transfer(
             .where(
                 Payment.id.in_(linked_ids),
                 or_(Consultation.branch_id.is_(None), Branch.company_id == company_id),
+                Payment.cancelled_at.is_(None),
             )
         )
-        valid_payments = list(pmt_result.scalars().all())
-        for p in valid_payments:
+        valid_payments = {p.id: p for p in pmt_result.scalars().all()}
+        # Already-remitted amounts per payment, so partial remittances respect the cap
+        already = {
+            row[0]: float(row[1] or 0)
+            for row in (
+                await db.execute(
+                    select(
+                        TransferPaymentLink.payment_id,
+                        func.coalesce(func.sum(TransferPaymentLink.amount), 0),
+                    ).where(TransferPaymentLink.payment_id.in_(linked_ids)).group_by(
+                        TransferPaymentLink.payment_id
+                    )
+                )
+            ).all()
+        }
+        for pid in linked_ids:
+            if pid not in valid_payments:
+                continue
+            p = valid_payments[pid]
+            per_amount = None
+            if payment_amounts:
+                match = [pa for pa in payment_amounts if pa["payment_id"] == pid]
+                if match:
+                    per_amount = float(match[0]["amount"])
+            if per_amount is None:
+                per_amount = float(p.total_paid or p.total_amount or 0)
+            # Cap at the unremitted balance of this client's payment
+            unremitted = per_amount  # validation handled below
+            if payment_amounts:
+                max_cap = float(p.total_paid or p.total_amount or 0) - already.get(pid, 0.0)
+                if per_amount > max_cap + 0.001:
+                    from fastapi import HTTPException
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Amount {per_amount} for this client exceeds the unremitted "
+                            f"balance {max_cap:.2f} on their payment account"
+                        ),
+                    )
+                unremitted = per_amount
+            else:
+                unremitted = float(p.total_paid or p.total_amount or 0)
             db.add(TransferPaymentLink(
                 transfer_id=transfer.id,
                 payment_id=p.id,
-                amount=float(p.total_paid or p.total_amount or 0),
+                amount=unremitted,
             ))
 
     await db.flush()
@@ -881,6 +925,12 @@ async def receive_branch_transfer(
     if transfer.status != TransferStatus.INITIATED:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Only initiated transfers can be received")
+    if received_by and transfer.initiated_by == received_by:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot receive a transfer you initiated. Use Cancel instead.",
+        )
     if not _transfer_role_privileged(current_user_role):
         assigned = await _user_assigned_branch_ids(db, received_by, company_id)
         if transfer.to_branch_id not in assigned:
@@ -1523,24 +1573,34 @@ async def list_unremitted_client_payments(
     current_user_role: UserRole | None,
     search: str | None = None,
 ) -> list[dict]:
-    """Return client payments collected at `branch_id` that have not yet been
-    remitted (linked to any branch transfer). Each entry carries the client's
-    name and phone from the consultation."""
+    """Return client payments collected at `branch_id` that still have an
+    unremitted balance (not fully linked to branch transfers). Each entry
+    carries the client's name/phone and the remaining unremitted amount, which
+    is the cap that can be sent when remitting to head office."""
     if not branch_id:
         return []
     if not await _verify_branches_in_company(db, [branch_id], company_id, current_user_role):
         return []
 
-    linked_subq = select(TransferPaymentLink.payment_id)
+    linked_sum = (
+        select(
+            TransferPaymentLink.payment_id,
+            func.coalesce(func.sum(TransferPaymentLink.amount), 0).label("remitted"),
+        )
+        .group_by(TransferPaymentLink.payment_id)
+        .subquery()
+    )
     query = (
-        select(Payment, Consultation)
+        select(Payment, Consultation, func.coalesce(linked_sum.c.remitted, 0))
         .join(Consultation, Payment.consultation_id == Consultation.id)
         .outerjoin(Branch, Consultation.branch_id == Branch.id)
+        .outerjoin(linked_sum, Payment.id == linked_sum.c.payment_id)
         .where(
             Payment.branch_id == branch_id,
             Payment.cancelled_at.is_(None),
-            Payment.id.notin_(linked_subq),
             or_(Consultation.branch_id.is_(None), Branch.company_id == company_id),
+            func.coalesce(Payment.total_paid, Payment.total_amount, 0)
+            > func.coalesce(linked_sum.c.remitted, 0) + 0.001,
         )
     )
     if search and search.strip():
@@ -1558,14 +1618,17 @@ async def list_unremitted_client_payments(
     rows = result.all()
 
     items = []
-    for p, c in rows:
+    for p, c, remitted in rows:
         client_name = f"{c.first_name} {c.last_name or ''}".strip()
+        remaining = float(p.total_paid or p.total_amount or 0) - float(remitted or 0)
+        if remaining <= 0.001:
+            continue
         items.append({
             "payment_id": str(p.id),
             "consultation_id": str(c.id),
             "client_name": client_name,
             "client_phone": c.phone,
-            "amount": float(p.total_paid or p.total_amount or 0),
+            "amount": round(remaining, 2),
             "document_date": p.document_date.isoformat() if p.document_date else None,
         })
     return items

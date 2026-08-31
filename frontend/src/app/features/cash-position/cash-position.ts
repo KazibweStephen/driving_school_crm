@@ -75,6 +75,7 @@ export class CashPositionCmp implements OnInit {
   unremittedLoading = signal(false);
   paymentSearch = signal('');
   selectedPayments = signal<UnremittedClientPayment[]>([]);
+  sendAmounts: Record<string, number> = {};
 
   showFundingDialog = signal(false);
   fundingLoading = signal(false);
@@ -96,7 +97,7 @@ export class CashPositionCmp implements OnInit {
   constructor(
     private financeService: FinanceService,
     private companyService: CompanyService,
-    private authService: AuthService,
+    public authService: AuthService,
     private messageService: MessageService,
     public currencyService: CurrencyService,
   ) {}
@@ -168,6 +169,7 @@ export class CashPositionCmp implements OnInit {
     this.filteredPayments.set([]);
     this.paymentSearch.set('');
     this.selectedPayments.set([]);
+    this.sendAmounts = {};
     this.showSendDialog.set(true);
     if (this.sendForm.from_branch_id) {
       this.loadUnremitted(this.sendForm.from_branch_id);
@@ -196,6 +198,7 @@ export class CashPositionCmp implements OnInit {
 
   onFromBranchChange() {
     this.selectedPayments.set([]);
+    this.sendAmounts = {};
     this.sendForm.amount = 0;
     this.paymentSearch.set('');
     if (this.sendForm.from_branch_id) {
@@ -208,6 +211,7 @@ export class CashPositionCmp implements OnInit {
 
   onPoolChange() {
     this.selectedPayments.set([]);
+    this.sendAmounts = {};
     this.sendForm.amount = 0;
     this.paymentSearch.set('');
     if (this.sendForm.pool === 'client_accounts') {
@@ -240,8 +244,38 @@ export class CashPositionCmp implements OnInit {
     const selected = this.selectedPayments();
     const exists = selected.some(s => s.payment_id === p.payment_id);
     const next = exists ? selected.filter(s => s.payment_id !== p.payment_id) : [...selected, p];
+    if (exists) {
+      delete this.sendAmounts[p.payment_id];
+    } else {
+      this.sendAmounts[p.payment_id] = Number(p.amount || 0);
+    }
     this.selectedPayments.set(next);
-    this.sendForm.amount = next.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+    this.recomputeSendTotal();
+  }
+
+  recomputeSendTotal() {
+    this.sendForm.amount = this.selectedPayments().reduce(
+      (sum, s) => sum + Number(this.sendAmounts[s.payment_id] ?? s.amount ?? 0),
+      0
+    );
+  }
+
+  setSendAmount(paymentId: string, value: number | null) {
+    const p = this.unremitted().find(x => x.payment_id === paymentId);
+    const cap = p ? Number(p.amount || 0) : 0;
+    let amt = Number(value || 0);
+    if (amt < 0) amt = 0;
+    if (amt > cap) amt = cap;
+    this.sendAmounts[paymentId] = amt;
+    this.recomputeSendTotal();
+  }
+
+  sendAmountFor(paymentId: string): number {
+    return this.sendAmounts[paymentId] ?? 0;
+  }
+
+  sendAmountExceedsCap(p: UnremittedClientPayment): boolean {
+    return (this.sendAmounts[p.payment_id] ?? 0) > Number(p.amount || 0) + 0.001;
   }
 
   isPaymentSelected(paymentId: string): boolean {
@@ -254,7 +288,9 @@ export class CashPositionCmp implements OnInit {
     const available = Math.max(0, this.availableForFromBranch(this.sendForm.pool));
     const withinAvailable = this.sendForm.amount > 0 && this.sendForm.amount <= available + 0.001;
     if (this.sendForm.pool === 'client_accounts') {
-      return this.selectedPayments().length > 0 && withinAvailable;
+      const selected = this.selectedPayments();
+      const allUnderCap = selected.every(s => !this.sendAmountExceedsCap(s));
+      return selected.length > 0 && allUnderCap && withinAvailable;
     }
     return withinAvailable;
   }
@@ -262,7 +298,10 @@ export class CashPositionCmp implements OnInit {
   async sendMoney() {
     this.saving.set(true);
     try {
-      const payment_ids = this.selectedPayments().map(p => p.payment_id);
+      const payment_amounts = this.selectedPayments().map(p => ({
+        payment_id: p.payment_id,
+        amount: Number(this.sendAmounts[p.payment_id] ?? p.amount ?? 0),
+      }));
       let receipt_url: string | undefined;
       if (this.receiptFile) {
         const up = await this.financeService.uploadTransferReceipt(this.receiptFile).toPromise();
@@ -276,7 +315,7 @@ export class CashPositionCmp implements OnInit {
         pool: this.sendForm.pool,
         method: this.sendForm.method,
         reference: this.sendForm.reference || undefined,
-        payment_ids: payment_ids.length ? payment_ids : undefined,
+        payment_amounts: payment_amounts.length ? payment_amounts : undefined,
         receipt_url,
       }).toPromise();
       this.showSendDialog.set(false);

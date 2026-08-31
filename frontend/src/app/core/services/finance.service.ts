@@ -117,6 +117,7 @@ export interface BranchTransferCreate {
   consultation_id?: string;
   payment_id?: string;
   payment_ids?: string[];
+  payment_amounts?: { payment_id: string; amount: number }[];
   pool?: string;
   method?: string;
   reference?: string;

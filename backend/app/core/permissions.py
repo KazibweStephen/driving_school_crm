@@ -67,7 +67,14 @@ PERMISSION_GROUPS: list[PermissionGroup] = [
     PermissionGroup(
         "finance",
         "Finance & P&L",
-        ["finance.manage", "finance.view"],
+        [
+            "finance.manage",
+            "finance.view",
+            "finance.cash_position",
+            "finance.pnl",
+            "finance.send",
+            "finance.fund",
+        ],
     ),
     PermissionGroup(
         "sales",
@@ -205,7 +212,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.OFFICE_ADMIN: [
         "dashboard.view",
         "reports.view",
-        "finance.view",
+        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
@@ -236,7 +243,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.BRANCH_SUPERVISOR: [
         "dashboard.view",
         "reports.view",
-        "finance.view",
+        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
@@ -267,7 +274,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.MANAGER: [
         "dashboard.view",
         "reports.view",
-        "finance.view",
+        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",

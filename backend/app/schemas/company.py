@@ -304,6 +304,12 @@ class BranchTransferCreate(BaseModel):
     consultation_id: uuid.UUID | None = None
     payment_id: uuid.UUID | None = None
     payment_ids: list[uuid.UUID] | None = None
+    payment_amounts: list["TransferPaymentAmount"] | None = None
+
+
+class TransferPaymentAmount(BaseModel):
+    payment_id: uuid.UUID
+    amount: Decimal = Field(..., decimal_places=2, gt=0)
 
 
 class HoFundingItem(BaseModel):

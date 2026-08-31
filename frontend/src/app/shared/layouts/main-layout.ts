@@ -99,9 +99,9 @@ export class MainLayout implements OnInit, OnDestroy {
     {
       label: 'Finance', icon: 'pi pi-dollar', expanded: false,
       children: [
-        { path: '/cash-position', label: 'Cash Position', icon: 'pi pi-wallet', permission: 'finance.view' },
+        { path: '/cash-position', label: 'Cash Position', icon: 'pi pi-wallet', permission: 'finance.cash_position' },
         { path: '/transfers', label: 'Branch Transfers', icon: 'pi pi-arrow-right-arrow-left', permission: 'transfers.view' },
-        { path: '/profit-loss', label: 'Profit & Loss', icon: 'pi pi-chart-line', permission: 'finance.manage' },
+        { path: '/profit-loss', label: 'Profit & Loss', icon: 'pi pi-chart-line', permission: 'finance.pnl' },
       ],
     },
     {

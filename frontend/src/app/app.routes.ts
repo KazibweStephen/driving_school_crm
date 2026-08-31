@@ -101,13 +101,13 @@ export const routes: Routes = [
       },
       {
         path: 'cash-position',
-        data: { permission: 'finance.view' },
+        data: { permission: 'finance.cash_position' },
         loadComponent: () =>
           import('./features/cash-position/cash-position').then((c) => c.CashPositionCmp),
       },
       {
         path: 'profit-loss',
-        data: { permission: 'finance.manage' },
+        data: { permission: 'finance.pnl' },
         loadComponent: () =>
           import('./features/profit-loss/profit-loss').then((c) => c.ProfitLossCmp),
       },

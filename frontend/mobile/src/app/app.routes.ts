@@ -2,7 +2,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth.guard';
 
 export const routes: Routes = [
-  { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+  { path: '', redirectTo: 'home', pathMatch: 'full' },
   {
     path: 'login',
     loadComponent: () => import('./features/login/login').then((m) => m.Login),
@@ -12,6 +12,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/shell/shell').then((m) => m.Shell),
     children: [
+      {
+        path: 'home',
+        loadComponent: () => import('./features/home/home').then((m) => m.Home),
+      },
       {
         path: 'dashboard',
         loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.Dashboard),
@@ -45,7 +49,11 @@ export const routes: Routes = [
         path: 'expenses',
         loadComponent: () => import('./features/expenses/expenses').then((m) => m.Expenses),
       },
+      {
+        path: 'finance',
+        loadComponent: () => import('./features/finance/finance').then((m) => m.Finance),
+      },
     ],
   },
-  { path: '**', redirectTo: 'dashboard' },
+  { path: '**', redirectTo: 'home' },
 ];

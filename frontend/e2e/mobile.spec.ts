@@ -18,7 +18,7 @@ async function mobileLogin(page: Page) {
   } catch {
     // No company selection; proceed to dashboard
   }
-  await expect(page).toHaveURL(/\/m\/dashboard$/, { timeout: 10000 });
+  await expect(page).toHaveURL(/\/m\/home$/, { timeout: 10000 });
 }
 
 test.describe('Mobile PWA', () => {
@@ -32,8 +32,13 @@ test.describe('Mobile PWA', () => {
     await expect(page.getByTestId('login-btn')).toBeVisible();
   });
 
-  test('office admin can log in and see dashboard', async ({ page }) => {
+  test('office admin can log in and see home menu, dashboard stats are under Dashboard', async ({ page }) => {
     await mobileLogin(page);
+    // Home is now the icon-grid menu
+    await expect(page.getByTestId('home-dashboard')).toBeVisible();
+    await expect(page.getByTestId('home-finance')).toBeVisible();
+    // The stats that used to be on Home moved to /dashboard
+    await page.goto('/m/dashboard');
     await expect(page.getByText('Daily Collection')).toBeVisible();
     await expect(page.getByTestId('qa-sale')).toBeVisible();
   });

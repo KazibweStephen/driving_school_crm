@@ -262,7 +262,7 @@ export class Login {
       localStorage.removeItem(MOBILE_REDIRECT_KEY);
       this.router.navigateByUrl(redirectUrl);
     } else {
-      this.router.navigate(['/dashboard']);
+      this.router.navigate(['/home']);
     }
   }
 

@@ -71,7 +71,7 @@ export class Shell implements OnInit {
   tabs = computed<NavTab[]>(() => {
     const perms = this.auth.permissions();
     const tabs: NavTab[] = [];
-    tabs.push({ route: '/dashboard', label: 'Home', icon: 'pi-home' });
+    tabs.push({ route: '/home', label: 'Home', icon: 'pi-home' });
     if (perms.includes('consultations.create')) {
       tabs.push({ route: '/sales', label: 'Sales', icon: 'pi-tags' });
     }

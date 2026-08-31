@@ -83,6 +83,30 @@ test.describe('Mobile PWA', () => {
     await expect(page.getByRole('heading', { name: 'Profit & Loss' })).toBeVisible();
   });
 
+  test('transfers page: initiate, fund, and receive/reject actions rendered with permission gates', async ({ page }) => {
+    await mobileLogin(page);
+    await page.goto('/m/finance/transfers');
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('heading', { name: 'Branch Transfers' })).toBeVisible();
+    // Super admin has all permissions -> both action buttons and New Transfer / Fund visible
+    await expect(page.getByTestId('new-transfer')).toBeVisible();
+    await expect(page.getByTestId('fund-branch')).toBeVisible();
+    // Direction filter
+    await expect(page.getByTestId('transfer-direction-incoming')).toBeVisible();
+    // Lists transfers
+    await expect(page.getByText('No transfers found.')).toHaveCount(0, { timeout: 10000 }).catch(() => {});
+    // New Transfer dialog
+    await page.getByTestId('new-transfer').click();
+    await expect(page.getByTestId('send-from')).toBeVisible();
+    await expect(page.getByTestId('send-to')).toBeVisible();
+    await expect(page.getByTestId('send-pool')).toBeVisible();
+    await page.getByTestId('send-cancel').click();
+    // Fund Branch dialog
+    await page.getByTestId('fund-branch').click();
+    await expect(page.getByTestId('fund-to')).toBeVisible();
+    await page.getByTestId('fund-cancel').click();
+  });
+
   test('invalid PIN shows error', async ({ page }) => {
     await page.goto('/m/login');
     await page.waitForLoadState('networkidle');

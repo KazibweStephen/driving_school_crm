@@ -57,7 +57,7 @@ PERMISSION_GROUPS: list[PermissionGroup] = [
     PermissionGroup(
         "expenses",
         "Expenses",
-        ["expenses.manage", "expenses.view", "expenses.create", "expenses.edit", "expenses.delete", "expenses.approve", "expenses.reject", "expenses.pay"],
+        ["expenses.manage", "expenses.view", "expenses.create", "expenses.edit", "expenses.delete", "expenses.approve", "expenses.reject", "expenses.pay", "expenses.expected_expenses"],
     ),
     PermissionGroup(
         "collections",

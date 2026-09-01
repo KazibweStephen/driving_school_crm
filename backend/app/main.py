@@ -5,9 +5,9 @@ from app.api.v1 import (
     auth, bulk_onboarding, cart, clients, commission, competency_catalogue, companies, consultations,
     dashboard, discounts, finance, fuel, instructor_qualifications, lead, lesson_plan, lesson_execution,
     library, packages, payments, permit, permissions, products, receipts, reports,
-    schedule_breaks, scheduling, sms, training, users, vehicle_assignments,
-    vehicle_schedule, vehicles, video_library, operating,
-)
+        schedule_breaks, scheduling, sms, training, users, vehicle_assignments,
+        vehicle_schedule, vehicles, video_library, operating, expected_expense,
+    )
 from app.core.config import settings
 
 app = FastAPI(
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(products.router, prefix="/api/v1")
+app.include_router(expected_expense.router, prefix="/api/v1")
 app.include_router(packages.router, prefix="/api/v1")
 app.include_router(consultations.router, prefix="/api/v1")
 app.include_router(clients.router)

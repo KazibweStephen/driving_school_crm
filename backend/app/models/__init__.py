@@ -78,6 +78,7 @@ from app.models.operating import (
     OperatingEntryType,
 )
 from app.models.operating_client_post import OperatingClientPost
+from app.models.expected_expense import ExpectedExpenseItem, PackageExpenseLink
 from app.models.schedule_break import ScheduleBreak
 from app.models.sms import SmsLog, SmsTemplate, SmsTemplateCategory
 from app.models.training import TrainingSession
@@ -116,4 +117,5 @@ __all__ = [
     "RolePermission",
     "Discount", "CartItemDiscount", "DiscountStatus", "DiscountType", "DiscountAppliesTo",
     "PackageExpectedExpense",
+    "ExpectedExpenseItem", "PackageExpenseLink",
 ]

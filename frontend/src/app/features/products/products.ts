@@ -15,11 +15,13 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import { TableModule } from 'primeng/table';
 import { CurrencyService } from '../../core/services/currency.service';
 import { DatePickerModule } from 'primeng/datepicker';
-import { ProductService, Product, Package } from '../../core/services/product.service';
+import {
+  ProductService, Product, Package, ExpectedExpenseItem, ExpectedExpenseItemCreate,
+  ExpectedExpenseItemUpdate, ExpenseCategoryOption,
+} from '../../core/services/product.service';
 import { LessonPlanService, LessonPlanTemplate, LessonPlanTemplateCreate, LessonTemplateItem } from '../../core/services/lesson-plan.service';
 import { LessonLibraryService, LessonLibrary } from '../../core/services/lesson-library.service';
 import { AuthService } from '../../core/auth/auth.service';
-import { FinanceService } from '../../core/services/finance.service';
 
 @Component({
   selector: 'app-products',
@@ -95,11 +97,20 @@ export class Products implements OnInit {
     { label: 'Inactive', value: 'inactive' },
   ];
 
-  // ── Expected Expenses (per package) ──
+  // ── Expected Expenses (per package, from catalogue) ──
   showExpectedExpensesDialog = false;
   expectedExpensesPackage = signal<Package | null>(null);
-  expectedExpensesRows = signal<{ category: string | null; amount: number }[]>([]);
-  expenseCategoryOptions: { name: string; code: string }[] = [];
+  expenseRows = signal<{ item_id: string | null; name: string | null; unit_cost: number; multiplier: number }[]>([]);
+  expenseCatalogue = signal<ExpectedExpenseItem[]>([]);
+  expenseCategories: ExpenseCategoryOption[] = [];
+
+  // ── Expected Expense Catalogue Manager ──
+  showCatalogueDialog = false;
+  catalogueItems = signal<ExpectedExpenseItem[]>([]);
+  catalogueForm: { name: string; category_id: string | null; unit_cost: number; default_multiplier: number; description: string; is_active: boolean } = {
+    name: '', category_id: null, unit_cost: 0, default_multiplier: 1, description: '', is_active: true,
+  };
+  editingCatalogueItem = signal<ExpectedExpenseItem | null>(null);
 
   // ── Lesson Plan Templates ──
   showTemplatesDialog = signal(false);
@@ -130,7 +141,6 @@ export class Products implements OnInit {
     private productService: ProductService,
     private lessonPlanService: LessonPlanService,
     private lessonLibraryService: LessonLibraryService,
-    private financeService: FinanceService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public currencyService: CurrencyService,
@@ -791,54 +801,178 @@ export class Products implements OnInit {
     }
   }
 
-  // ── Expected Expenses (per package) ──
+  // ── Expected Expenses (per package, from catalogue) ──
 
   async openExpectedExpenses(pkg: Package) {
     this.expectedExpensesPackage.set(pkg);
     try {
-      const res = await this.financeService.listExpenseCategories({ active: true }).toPromise();
-      this.expenseCategoryOptions = (res?.items || []).map((c) => ({ name: c.name, code: c.code }));
+      const cats = await this.productService.listExpectedExpenseCategories().toPromise();
+      this.expenseCategories = cats || [];
     } catch {
-      this.expenseCategoryOptions = [];
+      this.expenseCategories = [];
     }
-    this.expectedExpensesRows.set(
-      (pkg.expected_expenses || []).map((e) => ({ category: e.category, amount: Number(e.amount) || 0 }))
-    );
-    if (this.expectedExpensesRows().length === 0) {
-      this.expectedExpensesRows.set([{ category: null, amount: 0 }]);
+    try {
+      this.expenseCatalogue.set(await this.productService.listExpectedExpenses(true).toPromise() || []);
+    } catch {
+      this.expenseCatalogue.set([]);
+    }
+    this.expenseRows.set([]);
+    try {
+      const res = await this.productService.getPackageExpectedExpenses(pkg.id).toPromise();
+      if (res?.items) {
+        this.expenseRows.set(
+          res.items.map((it) => ({ item_id: it.item_id, name: it.name, unit_cost: it.unit_cost, multiplier: it.multiplier }))
+        );
+      }
+    } catch {
+      this.expenseRows.set([]);
     }
     this.showExpectedExpensesDialog = true;
   }
 
-  addExpectedExpenseRow() {
-    this.expectedExpensesRows.update((rows) => [...rows, { category: null, amount: 0 }]);
+  addingExpenseRow = false;
+  async addExpectedExpenseRow() {
+    this.addingExpenseRow = true;
+    try {
+      if (this.expenseCatalogue().length === 0) {
+        this.expenseCatalogue.set(await this.productService.listExpectedExpenses(true).toPromise() || []);
+      }
+      this.expenseRows.update((rows) => [...rows, { item_id: null, name: null, unit_cost: 0, multiplier: 1 }]);
+    } finally {
+      this.addingExpenseRow = false;
+    }
+  }
+
+  onExpenseItemSelect(row: { item_id: string | null; name: string | null; unit_cost: number; multiplier: number }) {
+    const item = this.expenseCatalogue().find((c) => c.id === row.item_id);
+    if (item) {
+      row.name = item.name;
+      row.unit_cost = Number(item.unit_cost) || 0;
+      row.multiplier = Number(item.default_multiplier) || 1;
+    }
   }
 
   removeExpectedExpenseRow(index: number) {
-    this.expectedExpensesRows.update((rows) => rows.filter((_, i) => i !== index));
+    this.expenseRows.update((rows) => rows.filter((_, i) => i !== index));
+  }
+
+  expenseLineTotal(row: { item_id: string | null; name: string | null; unit_cost: number; multiplier: number }): number {
+    return (Number(row.unit_cost) || 0) * (Number(row.multiplier) || 0);
   }
 
   formatExpenseTotal(): number {
-    return this.expectedExpensesRows().reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    return this.expenseRows().reduce((sum, r) => sum + this.expenseLineTotal(r), 0);
   }
 
   async saveExpectedExpenses() {
     const pkg = this.expectedExpensesPackage();
     if (!pkg) return;
-    const items = this.expectedExpensesRows()
-      .filter((r) => r.category && Number(r.amount) > 0)
-      .map((r) => ({ category: r.category!, amount: Number(r.amount) }));
+    const links = this.expenseRows()
+      .filter((r) => r.item_id && (Number(r.unit_cost) || 0) > 0 && (Number(r.multiplier) || 0) > 0)
+      .map((r) => ({ item_id: r.item_id!, multiplier: Number(r.multiplier) || 1 }));
     this.loading.set(true);
     try {
-      await this.productService.setPackageExpectedExpenses(pkg.id, items).toPromise();
+      await this.productService.setPackageExpectedExpensesCatalogue(pkg.id, links).toPromise();
       this.showExpectedExpensesDialog = false;
       this.expectedExpensesPackage.set(null);
-      await this.loadProducts();
       this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Expected expenses updated' });
     } catch {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save expected expenses' });
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  // ── Expected Expense Catalogue Manager ──
+
+  expenseCatalogueLoading = signal(false);
+  async openExpenseCatalogue() {
+    this.expenseCatalogueLoading.set(true);
+    try {
+      this.catalogueItems.set(await this.productService.listExpectedExpenses().toPromise() || []);
+      this.showCatalogueDialog = true;
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load expense catalogue' });
+    } finally {
+      this.expenseCatalogueLoading.set(false);
+    }
+  }
+
+  resetCatalogueForm() {
+    this.editingCatalogueItem.set(null);
+    this.catalogueForm = { name: '', category_id: null, unit_cost: 0, default_multiplier: 1, description: '', is_active: true };
+  }
+
+  addCatalogueItem() {
+    this.resetCatalogueForm();
+  }
+
+  editCatalogueItem(item: ExpectedExpenseItem) {
+    this.editingCatalogueItem.set(item);
+    this.catalogueForm = {
+      name: item.name,
+      category_id: item.category_id,
+      unit_cost: Number(item.unit_cost) || 0,
+      default_multiplier: Number(item.default_multiplier) || 1,
+      description: item.description || '',
+      is_active: item.is_active,
+    };
+  }
+
+  async saveCatalogueItem() {
+    const f = this.catalogueForm;
+    if (!f.name?.trim()) {
+      this.messageService.add({ severity: 'warn', summary: 'Required', detail: 'Item name is required' });
+      return;
+    }
+    this.expenseCatalogueLoading.set(true);
+    try {
+      const editing = this.editingCatalogueItem();
+      const payload: ExpectedExpenseItemCreate = {
+        name: f.name.trim(),
+        category_id: f.category_id,
+        unit_cost: Number(f.unit_cost) || 0,
+        default_multiplier: Number(f.default_multiplier) || 1,
+        description: f.description || null,
+        is_active: f.is_active,
+      };
+      if (editing) {
+        await this.productService.updateExpectedExpense(editing.id, payload as ExpectedExpenseItemUpdate).toPromise();
+      } else {
+        await this.productService.createExpectedExpense(payload).toPromise();
+      }
+      this.catalogueItems.set(await this.productService.listExpectedExpenses().toPromise() || []);
+      this.resetCatalogueForm();
+      this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Catalogue item saved' });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save catalogue item' });
+    } finally {
+      this.expenseCatalogueLoading.set(false);
+    }
+  }
+
+  async toggleCatalogueItem(item: ExpectedExpenseItem) {
+    this.expenseCatalogueLoading.set(true);
+    try {
+      await this.productService.updateExpectedExpense(item.id, { is_active: !item.is_active }).toPromise();
+      this.catalogueItems.set(await this.productService.listExpectedExpenses().toPromise() || []);
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to update item' });
+    } finally {
+      this.expenseCatalogueLoading.set(false);
+    }
+  }
+
+  async deleteCatalogueItem(item: ExpectedExpenseItem) {
+    this.expenseCatalogueLoading.set(true);
+    try {
+      await this.productService.deleteExpectedExpense(item.id).toPromise();
+      this.catalogueItems.set(await this.productService.listExpectedExpenses().toPromise() || []);
+      this.messageService.add({ severity: 'success', summary: 'Deleted', detail: 'Catalogue item deleted' });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete item' });
+    } finally {
+      this.expenseCatalogueLoading.set(false);
     }
   }
 }

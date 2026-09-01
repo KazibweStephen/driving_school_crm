@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
 
 export interface Product {
   id: string;
@@ -52,6 +53,62 @@ export interface Package {
 export interface PackageExpectedExpenseInput {
   category: string;
   amount: number;
+}
+
+export interface ExpectedExpenseItem {
+  id: string;
+  company_id: string | null;
+  name: string;
+  category_id: string | null;
+  category_name: string | null;
+  unit_cost: number;
+  default_multiplier: number;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExpectedExpenseItemCreate {
+  name: string;
+  category_id?: string | null;
+  unit_cost?: number;
+  default_multiplier?: number;
+  description?: string | null;
+  is_active?: boolean;
+}
+
+export interface ExpectedExpenseItemUpdate {
+  name?: string;
+  category_id?: string | null;
+  unit_cost?: number;
+  default_multiplier?: number;
+  description?: string | null;
+  is_active?: boolean;
+}
+
+export interface PackageExpenseLinkLine {
+  link_id: string;
+  item_id: string;
+  name: string;
+  category_id: string | null;
+  category_name: string | null;
+  unit_cost: number;
+  multiplier: number;
+  line_total: number;
+}
+
+export interface PackageExpectedExpenses {
+  package_id: string;
+  items: PackageExpenseLinkLine[];
+  total: number;
+}
+
+export interface ExpenseCategoryOption {
+  id: string;
+  name: string;
+  code: string;
+  account: string | null;
 }
 
 export interface ProductCreate {
@@ -229,5 +286,37 @@ export class ProductService {
 
   setPackageExpectedExpenses(packageId: string, data: PackageExpectedExpenseInput[]) {
     return this.http.post<Package>(`/api/v1/products/packages/${packageId}/expected-expenses`, data);
+  }
+
+  // ── Expected Expense Catalogue (replaces the legacy per-package flow) ──
+
+  listExpectedExpenses(active?: boolean): Observable<ExpectedExpenseItem[]> {
+    let p = new HttpParams();
+    if (active !== undefined) p = p.set('active', active ? 'true' : 'false');
+    return this.http.get<ExpectedExpenseItem[]>('/api/v1/expected-expenses/', { params: p });
+  }
+
+  createExpectedExpense(data: ExpectedExpenseItemCreate): Observable<ExpectedExpenseItem> {
+    return this.http.post<ExpectedExpenseItem>('/api/v1/expected-expenses/', data);
+  }
+
+  updateExpectedExpense(id: string, data: ExpectedExpenseItemUpdate): Observable<ExpectedExpenseItem> {
+    return this.http.patch<ExpectedExpenseItem>(`/api/v1/expected-expenses/${id}`, data);
+  }
+
+  deleteExpectedExpense(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/v1/expected-expenses/${id}`);
+  }
+
+  getPackageExpectedExpenses(packageId: string): Observable<PackageExpectedExpenses> {
+    return this.http.get<PackageExpectedExpenses>(`/api/v1/expected-expenses/package/${packageId}`);
+  }
+
+  setPackageExpectedExpensesCatalogue(packageId: string, links: { item_id: string; multiplier: number }[]): Observable<PackageExpectedExpenses> {
+    return this.http.put<PackageExpectedExpenses>(`/api/v1/expected-expenses/package/${packageId}`, { links });
+  }
+
+  listExpectedExpenseCategories(): Observable<ExpenseCategoryOption[]> {
+    return this.http.get<ExpenseCategoryOption[]>('/api/v1/expected-expenses/categories');
   }
 }

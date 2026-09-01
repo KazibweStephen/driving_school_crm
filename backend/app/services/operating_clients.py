@@ -1,10 +1,12 @@
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.company import Branch, Expense, ExpenseStatus, TransferPool
+from app.models.company import (
+    Branch, BranchTransfer, Expense, ExpenseStatus, TransferPool, TransferStatus,
+)
 from app.models.payment import Payment
 from app.models.consultation import Consultation
 from app.models.cart import CartItem, CartItemStatus
@@ -15,7 +17,7 @@ from app.models.operating import (
     OperatingEntryType,
 )
 from app.models.operating_client_post import OperatingClientPost
-from app.models.product import Package, PackageExpectedExpense
+from app.models.product import Package
 
 
 OperatingTransferCategory = "Operating Transfer"
@@ -35,29 +37,45 @@ async def _head_office(
     ).scalar_one_or_none()
 
 
-async def _expected_expenses_for(
-    db: AsyncSession, package_id: str | None
-) -> dict[str, float]:
-    if not package_id:
-        return {}
+async def _expected_expense_for_item(
+    db: AsyncSession, cart_item: CartItem, company_id: uuid.UUID
+) -> float:
+    """Uses the conversion-time snapshot when present (keeps already-spent
+    packages stable), otherwise computes the live expected total from the
+    package's active catalogue links."""
+    if cart_item.expected_expense_snapshot is not None:
+        return float(cart_item.expected_expense_snapshot)
+    if not cart_item.package_id:
+        return 0.0
     try:
-        pid = uuid.UUID(str(package_id))
+        pid = uuid.UUID(str(cart_item.package_id))
     except (ValueError, TypeError):
-        return {}
+        return 0.0
+    from app.models.expected_expense import ExpectedExpenseItem, PackageExpenseLink
     rows = (
         await db.execute(
-            select(PackageExpectedExpense.category, PackageExpectedExpense.amount).where(
-                PackageExpectedExpense.package_id == pid
+            select(PackageExpenseLink.multiplier, ExpectedExpenseItem.unit_cost)
+            .join(
+                ExpectedExpenseItem,
+                ExpectedExpenseItem.id == PackageExpenseLink.item_id,
+            )
+            .where(
+                PackageExpenseLink.package_id == pid,
+                ExpectedExpenseItem.company_id == company_id,
+                ExpectedExpenseItem.is_active.is_(True),
             )
         )
     ).all()
-    return {cat: float(amt) for cat, amt in rows}
+    return round(
+        float(sum(float(m) * float(u) for m, u in rows)), 2
+    )
 
 
 async def _account_profit(
     db: AsyncSession,
     consultation_id: uuid.UUID,
     head_office_id: uuid.UUID,
+    company_id: uuid.UUID,
 ) -> tuple[float, float, float]:
     """Returns (confirmed_profit, expected_profit, funds_in_ho_pool) for a
     client account (consultation)."""
@@ -125,8 +143,9 @@ async def _account_profit(
             if total_due <= 0:
                 continue
             net_sale = total_due  # already price minus discounts
-            exp = await _expected_expenses_for(db, ci.package_id)
-            expected_expense = sum(exp.values())
+            expected_expense = await _expected_expense_for_item(
+                db, ci, company_id
+            )
             profit_item = max(net_sale - expected_expense, 0.0)
             expected_profit += profit_item
             # profit confirms as the client pays (installment-aware)
@@ -143,7 +162,22 @@ async def _account_profit(
         )
     ).scalar() or Decimal("0")
 
-    funds = round(float(ho_payment_sum) - float(already_posted), 2)
+    # all funds reaching the HO pool for this account: HO-direct payments plus
+    # branch payments remitted to HO (recipient transfers in RECEIVED state).
+    # These are disjoint sources so there is no double-count.
+    remitted_ho = (
+        await db.execute(
+            select(func.coalesce(func.sum(BranchTransfer.amount), 0)).where(
+                BranchTransfer.consultation_id == consultation_id,
+                BranchTransfer.to_branch_id == head_office_id,
+                BranchTransfer.status == TransferStatus.RECEIVED,
+            )
+        )
+    ).scalar() or Decimal("0")
+
+    funds = (
+        round(float(ho_payment_sum) + float(remitted_ho) - float(already_posted), 2)
+    )
 
     return round(confirmed_profit, 2), round(expected_profit, 2), funds
 
@@ -154,15 +188,27 @@ async def list_client_accounts(
     ho = await _head_office(db, company_id)
     if not ho:
         return []
-    # consultations with payments sitting at head office
+    # consultations with funds at head office: direct HO-branch payments OR
+    # branch payments remitted to HO (recipient transfers in RECEIVED state),
+    # so clients of any branch whose funds reached HO are postable.
     rows = (
         await db.execute(
             select(Consultation.id, Consultation.phone, Consultation.first_name,
                    Consultation.middle_name, Consultation.last_name)
-            .join(Payment, Payment.consultation_id == Consultation.id)
+            .select_from(Consultation)
+            .outerjoin(Payment, Payment.consultation_id == Consultation.id)
+            .outerjoin(
+                BranchTransfer,
+                (BranchTransfer.consultation_id == Consultation.id)
+                & (BranchTransfer.to_branch_id == ho.id)
+                & (BranchTransfer.status == TransferStatus.RECEIVED),
+            )
             .where(
-                Payment.branch_id == ho.id,
                 Payment.cancelled_at.is_(None),
+                or_(
+                    Payment.branch_id == ho.id,
+                    BranchTransfer.id.isnot(None),
+                ),
             )
             .group_by(Consultation.id)
         )
@@ -171,7 +217,7 @@ async def list_client_accounts(
     accounts = []
     for cid, phone, fn, mn, ln in rows:
         confirmed, expected, funds = await _account_profit(
-            db, cid, ho.id
+            db, cid, ho.id, company_id
         )
         name = " ".join(x for x in (fn, mn, ln) if x) or phone
         already_posted = (
@@ -236,7 +282,7 @@ async def post_from_clients(
                 status_code=404, detail=f"Client account {cid} not found"
             )
 
-        confirmed, expected, funds = await _account_profit(db, cid, ho.id)
+        confirmed, expected, funds = await _account_profit(db, cid, ho.id, company_id)
         if amount > funds:
             raise HTTPException(
                 status_code=400,

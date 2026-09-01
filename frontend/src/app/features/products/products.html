@@ -1005,7 +1005,7 @@
     header="Expected Expenses"
     [(visible)]="showExpectedExpensesDialog"
     [modal]="true"
-    [style]="{ width: '520px' }"
+    [style]="{ width: '620px' }"
     appendTo="body"
   >
     @if (expectedExpensesPackage(); as pkg) {
@@ -1016,32 +1016,47 @@
         </div>
       </div>
       <div class="mb-2 text-sm text-gray-600">
-        Define the expected expenses per sale for this package. Profit is computed as
-        net sale (price − discounts) minus the total of these expected expenses.
+        Pick active expense items from the company catalogue and set how many are expected
+        per sale (multiplier). Profit is net sale (price − discounts) minus the total below.
       </div>
-      <p-table [value]="expectedExpensesRows()" [style]="{ minWidth: '100%' }">
+      @if (expenseCatalogue().length === 0) {
+        <div class="mb-2 rounded bg-orange-50 p-2 text-sm text-orange-700">
+          No active expense items in the catalogue yet.
+          <a class="cursor-pointer font-medium underline" (click)="openExpenseCatalogue()">Manage catalogue</a>.
+        </div>
+      }
+      <p-table [value]="expenseRows()" [style]="{ minWidth: '100%' }">
         <ng-template pTemplate="header">
           <tr>
-            <th style="width: 55%">Category</th>
-            <th style="width: 35%">Amount</th>
-            <th style="width: 10%"></th>
+            <th style="width: 45%">Expense item</th>
+            <th style="width: 15%">Unit cost</th>
+            <th style="width: 20%">Multiplier</th>
+            <th style="width: 20%">Line total</th>
+            <th style="width: 5%"></th>
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-row let-i="rowIndex">
           <tr>
             <td>
               <p-select
-                [(ngModel)]="row.category"
-                [options]="expenseCategoryOptions"
+                [(ngModel)]="row.item_id"
+                [options]="expenseCatalogue()"
                 optionLabel="name"
-                optionValue="name"
-                placeholder="Select category"
+                optionValue="id"
+                placeholder="Select expense item"
                 appendTo="body"
                 styleClass="w-full"
+                (onChange)="onExpenseItemSelect(row)"
               />
             </td>
             <td>
-              <p-inputNumber [(ngModel)]="row.amount" mode="decimal" [min]="0" styleClass="w-full" />
+              <div class="py-2 text-sm text-gray-700">{{ row.unit_cost | number:'1.0-0' }}</div>
+            </td>
+            <td>
+              <p-inputNumber [(ngModel)]="row.multiplier" [min]="0" [minFractionDigits]="0" [maxFractionDigits]="2" styleClass="w-full" />
+            </td>
+            <td>
+              <div class="py-2 text-sm text-gray-700">{{ expenseLineTotal(row) | number:'1.0-0' }}</div>
             </td>
             <td>
               <p-button icon="pi pi-times" severity="danger" styleClass="p-button-sm p-button-text"
@@ -1050,17 +1065,113 @@
           </tr>
         </ng-template>
       </p-table>
-      <div class="mt-2 flex items-center justify-between">
-        <p-button label="Add expense category" icon="pi pi-plus" severity="secondary" size="small"
-          (onClick)="addExpectedExpenseRow()" />
+      <div class="mt-2 flex items-center justify-between gap-2">
+        <div class="flex gap-2">
+          <p-button label="Add expense line" icon="pi pi-plus" severity="secondary" size="small"
+            [loading]="addingExpenseRow" (onClick)="addExpectedExpenseRow()" />
+          <p-button label="Manage catalogue" icon="pi pi-list" severity="secondary" size="small"
+            (onClick)="openExpenseCatalogue()" />
+        </div>
         <div class="text-sm text-gray-700">
-          Total expected: <span class="font-semibold">{{ formatExpenseTotal() }} {{ currencyService.symbol() }}</span>
+          Total expected: <span class="font-semibold">{{ formatExpenseTotal() | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
         </div>
       </div>
     }
     <div class="mt-4 flex justify-end gap-2">
       <p-button label="Cancel" severity="secondary" (onClick)="showExpectedExpensesDialog = false" />
       <p-button label="Save" icon="pi pi-check" (onClick)="saveExpectedExpenses()" />
+    </div>
+  </p-dialog>
+
+  <p-dialog
+    header="Expected Expense Catalogue"
+    [(visible)]="showCatalogueDialog"
+    [modal]="true"
+    [style]="{ width: '720px' }"
+    appendTo="body"
+  >
+    <div class="mb-3 flex items-center justify-between">
+      <div class="text-sm text-gray-600">
+        Company-wide expense items. Only active items can be picked for a package.
+      </div>
+      <p-button label="Add item" icon="pi pi-plus" severity="primary" size="small" (onClick)="addCatalogueItem()" />
+    </div>
+    <p-table [value]="catalogueItems()" [loading]="expenseCatalogueLoading()" [style]="{ minWidth: '100%' }">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Unit cost</th>
+          <th>Default mult.</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-item>
+        <tr>
+          <td>{{ item.name }}</td>
+          <td>{{ item.category_name || '—' }}</td>
+          <td>{{ item.unit_cost | number:'1.0-0' }} {{ currencyService.symbol() }}</td>
+          <td>{{ item.default_multiplier }}</td>
+          <td>
+            <p-tag [value]="item.is_active ? 'Active' : 'Inactive'" [severity]="item.is_active ? 'success' : 'secondary'" />
+          </td>
+          <td>
+            <p-button icon="pi pi-pencil" severity="secondary" styleClass="p-button-sm p-button-text" (onClick)="editCatalogueItem(item)" />
+            <p-button [icon]="item.is_active ? 'pi pi-ban' : 'pi pi-check'"
+              [pTooltip]="item.is_active ? 'Deactivate' : 'Activate'" styleClass="p-button-sm p-button-text"
+              (onClick)="toggleCatalogueItem(item)" />
+            <p-button icon="pi pi-trash" severity="danger" styleClass="p-button-sm p-button-text" (onClick)="deleteCatalogueItem(item)" />
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr><td colspan="6" class="p-3 text-center text-gray-500">No catalogue items yet.</td></tr>
+      </ng-template>
+    </p-table>
+    <div class="mt-4 rounded-lg bg-gray-50 p-3">
+      <div class="mb-2 font-medium text-gray-900">
+        {{ editingCatalogueItem() ? 'Edit item' : 'New item' }}
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-600">Name</label>
+          <input pInputText [(ngModel)]="catalogueForm.name" class="w-full" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-600">Category</label>
+          <p-select
+            [(ngModel)]="catalogueForm.category_id"
+            [options]="expenseCategories"
+            optionLabel="name"
+            optionValue="id"
+            placeholder="Select category"
+            appendTo="body"
+            styleClass="w-full"
+          />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-600">Unit cost</label>
+          <p-inputNumber [(ngModel)]="catalogueForm.unit_cost" mode="decimal" [min]="0" styleClass="w-full" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-600">Default multiplier</label>
+          <p-inputNumber [(ngModel)]="catalogueForm.default_multiplier" [min]="0" [minFractionDigits]="0" [maxFractionDigits]="2" styleClass="w-full" />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-600">Description</label>
+          <input pInputText [(ngModel)]="catalogueForm.description" class="w-full" />
+        </div>
+        <div class="flex items-end gap-2 pb-1">
+          <p-checkbox [(ngModel)]="catalogueForm.is_active" binary="true" inputId="eeActive" />
+          <label for="eeActive" class="text-sm text-gray-700">Active</label>
+        </div>
+      </div>
+      <div class="mt-3 flex justify-end gap-2">
+        <p-button label="Cancel edit" severity="secondary" size="small" (onClick)="resetCatalogueForm()" />
+        <p-button label="Save item" icon="pi pi-check" size="small" [loading]="expenseCatalogueLoading()"
+          (onClick)="saveCatalogueItem()" />
+      </div>
     </div>
   </p-dialog>
 

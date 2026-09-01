@@ -104,6 +104,7 @@ class ConsultationRead(BaseModel):
     notes: str | None
     status: ConsultationStatus
     branch_id: uuid.UUID | None = None
+    branch_name: str | None = None
     created_by_phone: str | None
     created_at: datetime
     updated_at: datetime
@@ -129,6 +130,7 @@ class ConsultationRead(BaseModel):
             notes=c.notes,
             status=c.status,
             branch_id=c.branch_id,
+            branch_name=(c.branch.name if c.branch else None),
             created_by_phone=c.created_by_phone,
             created_at=c.created_at,
             updated_at=c.updated_at,

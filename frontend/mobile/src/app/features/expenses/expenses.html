@@ -244,6 +244,53 @@
           </div>
         }
 
+        @if (categoryRequiresClient()) {
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700">Client *</label>
+            @if (selectedClientLabel()) {
+              <div
+                class="flex items-center justify-between rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+              >
+                <span class="truncate text-slate-900">{{ selectedClientLabel() }}</span>
+                <button
+                  type="button"
+                  class="ml-2 text-slate-400 hover:text-slate-600"
+                  (click)="clearClient()"
+                  aria-label="Clear client"
+                >
+                  <span class="pi pi-times"></span>
+                </button>
+              </div>
+            } @else {
+              <input
+                type="text"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                [ngModel]="clientSearchQuery()"
+                (ngModelChange)="searchClient($event)"
+                placeholder="Search client by name or phone..."
+                data-testid="expense-client-search"
+              />
+              @if (clientSearching()) {
+                <p class="mt-1 text-xs text-slate-500">Searching...</p>
+              }
+              @if (clientResults().length) {
+                <div class="mt-1 max-h-48 overflow-auto rounded-lg border border-slate-200 bg-white">
+                  @for (c of clientResults(); track c.phone) {
+                    <button
+                      type="button"
+                      class="block w-full border-b last:border-b-0 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                      (click)="selectClient(c)"
+                    >
+                      <span class="font-medium text-slate-900">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
+                      <span class="text-slate-500"> · {{ c.phone }}</span>
+                    </button>
+                  }
+                </div>
+              }
+            }
+          </div>
+        }
+
         @if (isClientAccountCategory()) {
           <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div class="flex items-center justify-between">

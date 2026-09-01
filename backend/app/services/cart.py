@@ -81,6 +81,13 @@ async def add_cart_item(
             )
             if active_fuel_rate:
                 item.fuel_rate_per_session = active_fuel_rate.fuel_rate_per_session
+            # Snapshot the expected expense catalogue total at sale time so
+            # later catalogue edits don't change already-sold items.
+            if company_id:
+                from app.services.expected_expense import compute_package_total
+                item.expected_expense_snapshot = await compute_package_total(
+                    db, pkg.id, company_id
+                )
 
     db.add(item)
     await db.flush()

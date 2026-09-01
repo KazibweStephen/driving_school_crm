@@ -10,6 +10,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { ExpenseService, Expense, ExpenseCreatePayload, UnremittedClientPayment } from '../../core/services/expense.service';
 import { PaymentService, BranchInfo } from '../../core/services/payment.service';
 import { CatalogService, Vehicle } from '../../core/services/catalog.service';
+import { ConsultationService, ClientInfo } from '../../core/services/consultation.service';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { PageHeader } from '../../shared/page-header/page-header';
 import { formatMoney, toISODate, todayISO } from '../../shared/format';
@@ -52,6 +53,7 @@ export class Expenses {
   private expenseService = inject(ExpenseService);
   private paymentService = inject(PaymentService);
   private catalog = inject(CatalogService);
+  private consultationService = inject(ConsultationService);
   private messageService = inject(MessageService);
 
   currency = this.auth.currencyCode;
@@ -105,6 +107,14 @@ export class Expenses {
   clientAccountSearch = signal('');
   accountCategories = new Set<string>();
 
+  // client-linked expense support (categories with requires_client)
+  requiresClientCategories = new Set<string>();
+  clientSearchQuery = signal('');
+  clientResults = signal<ClientInfo[]>([]);
+  clientSearching = signal(false);
+  consultationId = signal<string | null>(null);
+  selectedClientLabel = signal('');
+
   statusOptions = [
     { label: 'All', value: '' },
     { label: 'Pending', value: 'pending' },
@@ -125,15 +135,67 @@ export class Expenses {
       next: (res) => {
         const meta = new Map<string, string>();
         const clientAcc = new Set<string>();
+        const clientReq = new Set<string>();
         for (const c of res.items ?? []) {
           meta.set(c.name, c.account || 'petty_cash');
           if ((c.account || 'petty_cash') === 'client_accounts') clientAcc.add(c.name);
+          if (c.requires_client) clientReq.add(c.name);
         }
         this.categoriesMeta = meta;
         this.accountCategories = clientAcc;
+        this.requiresClientCategories = clientReq;
       },
       error: () => {},
     });
+  }
+
+  categoryRequiresClient(): boolean {
+    return this.requiresClientCategories.has(this.category());
+  }
+
+  searchClient(query: string) {
+    this.clientSearchQuery.set(query);
+    const q = (query || '').trim();
+    if (!q) {
+      this.clientResults.set([]);
+      this.clientSearching.set(false);
+      return;
+    }
+    this.clientSearching.set(true);
+    this.consultationService.clientSearch(q).subscribe({
+      next: (res) => {
+        this.clientResults.set(res ?? []);
+        this.clientSearching.set(false);
+      },
+      error: () => {
+        this.clientResults.set([]);
+        this.clientSearching.set(false);
+      },
+    });
+  }
+
+  selectClient(c: ClientInfo) {
+    if (!c.latest_consultation_id) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'No consultation',
+        detail: 'This client has no consultation to attach',
+      });
+      return;
+    }
+    this.consultationId.set(c.latest_consultation_id);
+    this.selectedClientLabel.set(
+      `${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`,
+    );
+    this.clientResults.set([]);
+    this.clientSearchQuery.set('');
+  }
+
+  clearClient() {
+    this.consultationId.set(null);
+    this.selectedClientLabel.set('');
+    this.clientResults.set([]);
+    this.clientSearchQuery.set('');
   }
 
   isClientAccountCategory(): boolean {
@@ -292,6 +354,7 @@ export class Expenses {
     this.clientAccountPayments.set([]);
     this.clientAccountPaymentsFiltered.set([]);
     this.clientAccountSearch.set('');
+    this.clearClient();
     this.loadVehiclesForBranch();
     this.loadClientAccountDetail();
     this.step.set('create');
@@ -305,6 +368,7 @@ export class Expenses {
 
   onCategoryChange(value: string) {
     this.category.set(value);
+    this.clearClient();
     this.loadClientAccountDetail();
   }
 
@@ -379,6 +443,10 @@ export class Expenses {
       });
       return;
     }
+    if (this.categoryRequiresClient() && !this.consultationId()) {
+      this.messageService.add({ severity: 'warn', summary: 'Select a client for this expense' });
+      return;
+    }
     if (this.category() === 'Fuel' && !this.vehicleId()) {
       this.messageService.add({ severity: 'warn', summary: 'Select the vehicle being fueled' });
       return;
@@ -392,6 +460,7 @@ export class Expenses {
       category: this.category() || undefined,
       vehicle_id: isFuel ? (this.vehicleId() ?? undefined) : undefined,
       mileage: isFuel ? (this.mileage() ?? undefined) : undefined,
+      consultation_id: this.consultationId() ?? undefined,
       expense_date: this.expenseDate(),
       status: 'pending',
     };

@@ -86,6 +86,7 @@ async def create_consultation(
         .options(
             selectinload(Consultation.follow_ups).selectinload(FollowUp.cart_items),
             selectinload(Consultation.cart_items),
+            selectinload(Consultation.branch),
         )
     )
     return result.scalar_one()
@@ -104,6 +105,7 @@ async def get_consultation_by_id(
         .options(
             selectinload(Consultation.follow_ups).selectinload(FollowUp.cart_items),
             selectinload(Consultation.cart_items),
+            selectinload(Consultation.branch),
         )
     )
     if branch_id:
@@ -140,6 +142,7 @@ async def search_consultations(
     query = select(Consultation).options(
         selectinload(Consultation.follow_ups).selectinload(FollowUp.cart_items),
         selectinload(Consultation.cart_items),
+        selectinload(Consultation.branch),
     )
 
     effective_branch_ids: list[uuid.UUID] | None = None
@@ -255,6 +258,7 @@ async def update_consultation(
         .options(
             selectinload(Consultation.follow_ups).selectinload(FollowUp.cart_items),
             selectinload(Consultation.cart_items),
+            selectinload(Consultation.branch),
         )
     )
     return result.scalar_one()
@@ -269,6 +273,7 @@ async def deactivate_consultation(db: AsyncSession, consultation: Consultation) 
         .options(
             selectinload(Consultation.follow_ups).selectinload(FollowUp.cart_items),
             selectinload(Consultation.cart_items),
+            selectinload(Consultation.branch),
         )
     )
     return result.scalar_one()

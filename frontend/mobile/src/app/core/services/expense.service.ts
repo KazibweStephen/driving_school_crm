@@ -40,6 +40,7 @@ export interface ExpenseCreatePayload {
   category?: string;
   mileage?: number;
   vehicle_id?: string;
+  consultation_id?: string;
   expense_date?: string;
   status?: string;
   receipt_url?: string;

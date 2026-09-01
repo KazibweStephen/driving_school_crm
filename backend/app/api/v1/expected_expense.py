@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, require_permission
@@ -156,7 +157,6 @@ async def list_expected_expense_categories(
 async def _category_name(db: AsyncSession, category_id: uuid.UUID | None) -> str | None:
     if not category_id:
         return None
-    from sqlalchemy import select
     cat = (
         await db.execute(
             select(ExpenseCategory).where(ExpenseCategory.id == category_id)

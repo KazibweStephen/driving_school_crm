@@ -44,7 +44,7 @@ test.describe('Operating Account + Expected Expenses', () => {
     const dialog = page.locator('.p-dialog-mask');
     await expect(dialog).toBeVisible({ timeout: 5000 });
     await expect(dialog.getByText('Expected Expenses', { exact: false }).first()).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Add expense category' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Add expense line' })).toBeVisible();
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toBeHidden({ timeout: 5000 });
   });

@@ -7,7 +7,7 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
 import { DialogModule } from 'primeng/dialog';
 import { AuthService } from '../../core/auth/auth.service';
-import { ExpenseService, Expense, ExpenseCreatePayload, UnremittedClientPayment } from '../../core/services/expense.service';
+import { ExpenseService, Expense, ExpenseCreatePayload, UnremittedClientPayment, ExpenseCategory } from '../../core/services/expense.service';
 import { PaymentService, BranchInfo } from '../../core/services/payment.service';
 import { CatalogService, Vehicle } from '../../core/services/catalog.service';
 import { ConsultationService, ClientInfo } from '../../core/services/consultation.service';
@@ -20,19 +20,6 @@ type StatusFilter = '' | 'pending' | 'approved' | 'rejected' | 'paid';
 type ExpenseTab = 'expenses' | 'sms';
 
 const SMS_CATEGORY = 'SMS';
-
-const CATEGORIES = [
-  'Fuel',
-  'Maintenance',
-  'Office supplies',
-  'Travel',
-  'Meals',
-  'Marketing',
-  'Utilities',
-  'Permit Payment',
-  'Learner Permit Payment',
-  'Other',
-];
 
 @Component({
   selector: 'app-expenses',
@@ -122,7 +109,11 @@ export class Expenses {
     { label: 'Rejected', value: 'rejected' },
     { label: 'Paid', value: 'paid' },
   ];
-  categoryOptions = CATEGORIES.map((c) => ({ label: c, value: c }));
+  categories = signal<ExpenseCategory[]>([]);
+  categoryOptions = computed(() => {
+    const opts = this.categories().map((c) => ({ label: c.name, value: c.name }));
+    return [...opts, { label: 'Other', value: 'Other' }];
+  });
 
   constructor() {
     this.loadExpenses();
@@ -144,6 +135,7 @@ export class Expenses {
         this.categoriesMeta = meta;
         this.accountCategories = clientAcc;
         this.requiresClientCategories = clientReq;
+        this.categories.set((res.items ?? []).filter((c) => c.is_active));
       },
       error: () => {},
     });

@@ -390,6 +390,11 @@ export class ExpensesCmp implements OnInit {
     return true;
   }
 
+  onClientQueryChange(q: string) {
+    this.clientQuery.set(q);
+    this.searchClient(q);
+  }
+
   async searchClient(q: string) {
     this.clientQuery.set(q);
     const search = (q || '').trim();
@@ -411,10 +416,10 @@ export class ExpensesCmp implements OnInit {
   selectClient(c: ClientInfo) {
     this.form.consultation_id = c.latest_consultation_id || '';
     this.clientQuery.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
+    this.clientResults.set([]);
     if (!c.latest_consultation_id) {
       this.messageService.add({ severity: 'warn', summary: 'No consultation', detail: 'This client has no consultation to attach' });
     }
-    this.clientResults.set([]);
   }
 
   clearClient() {

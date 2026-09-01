@@ -155,7 +155,7 @@
       <div>
         <label class="mb-1 block text-sm font-medium text-gray-700">Client *</label>
         <div class="relative">
-          <input pInputText [(ngModel)]="clientQuery" (input)="searchClient($any($event.target).value)"
+          <input pInputText [ngModel]="clientQuery()" (ngModelChange)="onClientQueryChange($event)"
             placeholder="Search client by name or phone..." class="w-full" />
           @if (form.consultation_id) {
             <button pButton icon="pi pi-times" class="p-button-sm p-button-text absolute right-1 top-1/2 -translate-y-1/2"
@@ -167,7 +167,7 @@
             <ul class="absolute z-10 w-full bg-white border rounded shadow-lg mt-1 max-h-56 overflow-auto p-0 m-0 list-none">
               @for (c of clientResults(); track c.phone) {
                 <li class="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 border-b last:border-b-0"
-                  (click)="selectClient(c)">
+                  (mousedown)="selectClient(c); $event.preventDefault()">
                   <span class="font-medium">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
                   <span class="text-gray-500"> · {{ c.phone }}</span>
                 </li>
@@ -198,7 +198,7 @@
         }
         <div class="mt-2 text-sm font-medium text-gray-700">Client-account money at this branch</div>
         <div class="relative mt-1">
-          <input pInputText [(ngModel)]="clientAccountPaymentsSearch"
+          <input pInputText [ngModel]="clientAccountPaymentsSearch()"
             (ngModelChange)="onClientAccountSearch($event)"
             placeholder="Search by client name or phone..." class="w-full pr-8" />
           @if (clientAccountPaymentsSearch()) {

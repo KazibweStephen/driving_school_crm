@@ -200,7 +200,7 @@
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-700">Category</label>
           <p-select
-            [options]="categoryOptions"
+            [options]="categoryOptions()"
             optionLabel="label"
             optionValue="value"
             [ngModel]="category()"
@@ -279,7 +279,7 @@
                     <button
                       type="button"
                       class="block w-full border-b last:border-b-0 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                      (click)="selectClient(c)"
+                      (mousedown)="selectClient(c); $event.preventDefault()"
                     >
                       <span class="font-medium text-slate-900">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
                       <span class="text-slate-500"> · {{ c.phone }}</span>

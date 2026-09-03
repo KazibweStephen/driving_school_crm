@@ -77,6 +77,11 @@
                 {{ client.first_name }} {{ client.last_name }}
               </div>
               <div class="text-xs text-slate-500">{{ client.phone }}</div>
+              @if (client.branch_name) {
+                <div class="mt-0.5 text-[11px] text-slate-400">
+                  <span class="pi pi-map-marker"></span> {{ client.branch_name }}
+                </div>
+              }
               <div class="mt-1 text-xs text-slate-600">
                 Active products: <span class="font-medium">{{ client.active_products_count }}</span>
                 · Paid: <span class="font-medium text-green-600">{{ money(client.total_paid) }}</span>

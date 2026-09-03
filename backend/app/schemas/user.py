@@ -32,6 +32,7 @@ class UserRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     branch_ids: list[uuid.UUID] = []
+    branch_names: list[str] = []
 
     model_config = {"from_attributes": True}
 

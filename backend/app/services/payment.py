@@ -757,6 +757,7 @@ async def list_clients(
     query = select(Consultation).where(Consultation.id.in_(select(subq))).options(
         selectinload(Consultation.cart_items),
         selectinload(Consultation.follow_ups),
+        selectinload(Consultation.branch),
     )
 
     if outstanding_only:

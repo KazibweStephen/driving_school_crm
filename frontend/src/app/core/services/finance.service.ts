@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 export interface Expense {
   id: string;
   branch_id: string;
+  branch_name?: string;
   amount: number;
   description?: string;
   category?: string;

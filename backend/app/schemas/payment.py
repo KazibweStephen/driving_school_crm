@@ -112,6 +112,7 @@ class ClientSummary(BaseModel):
     last_name: str | None
     location: str | None
     interest_level: str | None
+    branch_name: str | None = None
     active_products_count: int = 0
     upgradable_products_count: int = 0
     total_paid: Decimal = Decimal("0.00")

@@ -895,8 +895,21 @@ async def create_branch_transfer(
                 per_amount = float(p.total_paid or p.total_amount or 0)
             # Cap at the net "on expense account" balance of this client's payment
             # held at the sending branch (collected - sent out + funded in).
-            unremitted = per_amount  # validation handled below
-            if payment_amounts:
+            is_remote = p.branch_id != from_branch_id
+            if is_remote:
+                # Payment collected at another branch; only funded_in is available here
+                max_cap = funded_in.get(pid, 0.0)
+                if per_amount > max_cap + 0.001:
+                    from fastapi import HTTPException
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Amount {per_amount} for this client exceeds the "
+                            f"remitted balance {max_cap:.2f} available at this branch"
+                        ),
+                    )
+                unremitted = per_amount
+            else:
                 max_cap = max(
                     0.0,
                     float(p.total_paid or p.total_amount or 0)
@@ -913,8 +926,6 @@ async def create_branch_transfer(
                         ),
                     )
                 unremitted = per_amount
-            else:
-                unremitted = float(p.total_paid or p.total_amount or 0)
             db.add(TransferPaymentLink(
                 transfer_id=transfer.id,
                 payment_id=p.id,
@@ -1622,17 +1633,32 @@ async def list_unremitted_client_payments(
     current_user_role: UserRole | None,
     search: str | None = None,
 ) -> list[dict]:
-    """Return client payments collected at `branch_id` that still have an
-    unremitted balance (not fully linked to branch transfers). Each entry
-    carries the client's name/phone and the remaining unremitted amount, which
-    is the cap that can be sent when remitting to head office."""
+    """Return client payments available for posting at `branch_id` that still
+    have an unremitted balance. Includes:
+    1. Payments collected at this branch (Payment.branch_id == branch_id)
+    2. Payments from OTHER branches that have been remitted IN to this branch
+       via client-accounts transfers (available for HO posting even though the
+       original client belongs to another branch)."""
     if not branch_id:
         return []
     if not await _verify_branches_in_company(db, [branch_id], company_id, current_user_role):
         return []
 
+    # Subquery: payments remitted IN to this branch via client-accounts transfers
+    remitted_in_payments = (
+        select(TransferPaymentLink.payment_id)
+        .join(BranchTransfer, TransferPaymentLink.transfer_id == BranchTransfer.id)
+        .where(
+            BranchTransfer.to_branch_id == branch_id,
+            BranchTransfer.pool == TransferPool.CLIENT_ACCOUNTS,
+            BranchTransfer.status == TransferStatus.RECEIVED,
+            BranchTransfer.cancelled_at.is_(None),
+        )
+        .distinct()
+    )
+
     # Net client-account cash this branch holds per payment:
-    #   on_expense_account = total_paid - sent_out_from_branch + funded_in_to_branch
+    #   on_account = total_paid - sent_out_from_branch + funded_in_to_branch
     # where sent_out sums links on transfers FROM this branch and funded_in sums
     # links on client-account transfers INTO this branch (e.g. head-office funding).
     sent_out_sum = (
@@ -1667,7 +1693,10 @@ async def list_unremitted_client_payments(
         .outerjoin(sent_out_sum, Payment.id == sent_out_sum.c.payment_id)
         .outerjoin(funded_sum, Payment.id == funded_sum.c.payment_id)
         .where(
-            Payment.branch_id == branch_id,
+            or_(
+                Payment.branch_id == branch_id,
+                Payment.id.in_(remitted_in_payments),
+            ),
             Payment.cancelled_at.is_(None),
             or_(Consultation.branch_id.is_(None), Branch.company_id == company_id),
         )
@@ -1692,12 +1721,17 @@ async def list_unremitted_client_payments(
         total_paid = float(p.total_paid or p.total_amount or 0)
         sent_out = float(sent_out or 0)
         funded_in = float(funded_in or 0)
-        # Outgoing money is first allocated to the client's own collected amount;
-        # anything beyond that is treated as returning head-office funded money.
-        unremitted = max(0.0, round(total_paid - sent_out, 2))
-        returned_from_funded = max(0.0, sent_out - total_paid)
-        funded = max(0.0, round(funded_in - returned_from_funded, 2))
-        on_account = round(max(0.0, total_paid - sent_out + funded_in), 2)
+        is_remote = p.branch_id != branch_id  # payment collected at a different branch
+        if is_remote:
+            # Remitted-in payment: only the funded_in amount is available here
+            on_account = round(funded_in, 2)
+        else:
+            # Outgoing money is first allocated to the client's own collected amount;
+            # anything beyond that is treated as returning head-office funded money.
+            unremitted = max(0.0, round(total_paid - sent_out, 2))
+            returned_from_funded = max(0.0, sent_out - total_paid)
+            funded = max(0.0, round(funded_in - returned_from_funded, 2))
+            on_account = round(max(0.0, total_paid - sent_out + funded_in), 2)
         if on_account <= 0.001:
             continue
         items.append({
@@ -1706,8 +1740,8 @@ async def list_unremitted_client_payments(
             "client_name": client_name,
             "client_phone": c.phone,
             "total_paid": round(total_paid, 2),
-            "unremitted": unremitted,
-            "funded": funded,
+            "unremitted": unremitted if not is_remote else round(funded_in, 2),
+            "funded": funded if not is_remote else round(funded_in, 2),
             "amount": on_account,
             "document_date": p.document_date.isoformat() if p.document_date else None,
         })

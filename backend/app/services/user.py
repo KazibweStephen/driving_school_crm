@@ -111,7 +111,11 @@ async def create_user(
 
 async def get_user_by_phone(db: AsyncSession, phone: str) -> User | None:
     result = await db.execute(
-        select(User).options(selectinload(User.branch_assignments)).where(User.phone == phone)
+        select(User)
+        .options(
+            selectinload(User.branch_assignments).selectinload(UserBranchAssignment.branch)
+        )
+        .where(User.phone == phone)
     )
     return result.scalar_one_or_none()
 
@@ -123,7 +127,9 @@ async def get_user_by_phone_with_company(
     current_user_role: UserRole | None = None,
 ) -> User | None:
     """Lookup user by phone, scoped to the user's effective company."""
-    query = select(User).options(selectinload(User.branch_assignments)).where(User.phone == phone)
+    query = select(User).options(
+        selectinload(User.branch_assignments).selectinload(UserBranchAssignment.branch)
+    ).where(User.phone == phone)
     if company_id is not None:
         query = query.where(User.company_id == company_id)
     result = await db.execute(query)
@@ -140,7 +146,9 @@ async def list_users(
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> tuple[list[User], int]:
-    query = select(User).options(selectinload(User.branch_assignments))
+    query = select(User).options(
+        selectinload(User.branch_assignments).selectinload(UserBranchAssignment.branch)
+    )
 
     if company_id is not None:
         query = query.where(User.company_id == company_id)

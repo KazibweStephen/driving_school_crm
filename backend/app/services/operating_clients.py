@@ -5,7 +5,8 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import (
-    Branch, BranchTransfer, Expense, ExpenseStatus, TransferPool, TransferStatus,
+    Branch, BranchTransfer, Expense, ExpenseStatus, TransferPaymentLink,
+    TransferPool, TransferStatus,
 )
 from app.models.payment import Payment
 from app.models.consultation import Consultation
@@ -164,13 +165,23 @@ async def _account_profit(
 
     # all funds reaching the HO pool for this account: HO-direct payments plus
     # branch payments remitted to HO (recipient transfers in RECEIVED state).
-    # These are disjoint sources so there is no double-count.
+    # Attribute remitted funds per client via the payment links (the source of
+    # truth for who the money was collected from), so remittances created with
+    # multiple client payments (e.g. the cash-position "Send Money to Head
+    # Office" dialog) are still credited to the correct client account.
     remitted_ho = (
         await db.execute(
-            select(func.coalesce(func.sum(BranchTransfer.amount), 0)).where(
-                BranchTransfer.consultation_id == consultation_id,
+            select(func.coalesce(func.sum(TransferPaymentLink.amount), 0))
+            .join(
+                BranchTransfer,
+                BranchTransfer.id == TransferPaymentLink.transfer_id,
+            )
+            .join(Payment, Payment.id == TransferPaymentLink.payment_id)
+            .where(
+                Payment.consultation_id == consultation_id,
                 BranchTransfer.to_branch_id == head_office_id,
                 BranchTransfer.status == TransferStatus.RECEIVED,
+                BranchTransfer.cancelled_at.is_(None),
             )
         )
     ).scalar() or Decimal("0")
@@ -190,27 +201,42 @@ async def list_client_accounts(
         return []
     # consultations with funds at head office: direct HO-branch payments OR
     # branch payments remitted to HO (recipient transfers in RECEIVED state),
-    # so clients of any branch whose funds reached HO are postable.
+    # so clients of any branch whose funds reached HO are postable. Remittances
+    # are attributed via TransferPaymentLink.payment_id -> Payment.consultation_id.
+    remitted_payments = (
+        select(TransferPaymentLink.payment_id)
+        .join(
+            BranchTransfer,
+            BranchTransfer.id == TransferPaymentLink.transfer_id,
+        )
+        .where(
+            BranchTransfer.to_branch_id == ho.id,
+            BranchTransfer.status == TransferStatus.RECEIVED,
+            BranchTransfer.cancelled_at.is_(None),
+        )
+    )
     rows = (
         await db.execute(
-            select(Consultation.id, Consultation.phone, Consultation.first_name,
-                   Consultation.middle_name, Consultation.last_name)
+            select(
+                Consultation.id,
+                Consultation.phone,
+                Consultation.first_name,
+                Consultation.middle_name,
+                Consultation.last_name,
+            )
             .select_from(Consultation)
-            .outerjoin(Payment, Payment.consultation_id == Consultation.id)
-            .outerjoin(
-                BranchTransfer,
-                (BranchTransfer.consultation_id == Consultation.id)
-                & (BranchTransfer.to_branch_id == ho.id)
-                & (BranchTransfer.status == TransferStatus.RECEIVED),
+            .join(
+                Payment,
+                Payment.consultation_id == Consultation.id,
             )
             .where(
                 Payment.cancelled_at.is_(None),
                 or_(
                     Payment.branch_id == ho.id,
-                    BranchTransfer.id.isnot(None),
+                    Payment.id.in_(remitted_payments),
                 ),
             )
-            .group_by(Consultation.id)
+            .distinct()
         )
     ).all()
 

@@ -82,6 +82,7 @@ export interface ClientSummary {
   last_name: string | null;
   location: string | null;
   interest_level: string | null;
+  branch_name: string | null;
   active_products_count: number;
   upgradable_products_count: number;
   total_paid: string;

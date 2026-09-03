@@ -82,6 +82,14 @@ class User(Base):
     def branch_ids(self) -> list[uuid.UUID]:
         return [a.branch_id for a in self.branch_assignments]
 
+    @property
+    def branch_names(self) -> list[str]:
+        names = []
+        for a in self.branch_assignments:
+            if a.branch is not None and a.branch.name:
+                names.append(a.branch.name)
+        return names
+
 
 class UserTransferHistory(Base):
     __tablename__ = "user_transfer_history"

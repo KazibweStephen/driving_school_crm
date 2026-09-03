@@ -159,6 +159,7 @@ async def list_clients(
             last_name=c.last_name,
             location=c.location,
             interest_level=c.interest_level.value if c.interest_level else None,
+            branch_name=c.branch.name if c.branch else None,
             active_products_count=active_count,
             upgradable_products_count=upgradable_count,
             total_paid=total_paid,

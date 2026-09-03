@@ -9,6 +9,9 @@ import { UserService, User } from '../../core/services/user.service';
   template: `
     @if (user) {
       <span class="font-medium text-gray-900">{{ user.name }}</span>
+      @if (user.branch_names?.length) {
+        <span class="block text-xs text-gray-400">{{ (user.branch_names || []).join(', ') }}</span>
+      }
       <span class="text-xs text-gray-500 ml-1">{{ user.phone }}</span>
     } @else if (loading) {
       <span class="text-xs text-gray-400 italic">loading...</span>

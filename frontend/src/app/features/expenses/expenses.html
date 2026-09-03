@@ -30,6 +30,7 @@
         <th pSortableColumn="expense_date">Date <p-sortIcon field="expense_date"></p-sortIcon></th>
         <th pSortableColumn="amount">Amount <p-sortIcon field="amount"></p-sortIcon></th>
         <th pSortableColumn="category">Category <p-sortIcon field="category"></p-sortIcon></th>
+        <th>Branch</th>
         <th pSortableColumn="status">Status <p-sortIcon field="status"></p-sortIcon></th>
         <th>Requested</th>
         <th>Approved</th>
@@ -55,6 +56,7 @@
             </button>
           }
         </td>
+        <td class="text-sm text-gray-500">{{ e.branch_name || '—' }}</td>
         <td><p-tag [value]="e.status.toUpperCase()" [severity]="severityMap[e.status]"></p-tag>
           @if (e.status === 'rejected' && e.rejection_reason) {
             <div class="text-xs text-red-500 mt-1">{{ e.rejection_reason }}</div>
@@ -101,7 +103,7 @@
     </ng-template>
     <ng-template pTemplate="emptymessage">
       <tr>
-        <td colspan="8" class="text-center text-gray-500 py-4">No expenses found</td>
+        <td colspan="9" class="text-center text-gray-500 py-4">No expenses found</td>
       </tr>
     </ng-template>
   </p-table>

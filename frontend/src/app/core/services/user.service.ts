@@ -15,6 +15,7 @@ export interface User {
   created_at: string;
   updated_at: string;
   branch_ids: string[];
+  branch_names?: string[];
 }
 
 export interface UserCreate {

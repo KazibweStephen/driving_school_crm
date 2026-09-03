@@ -103,6 +103,7 @@ export class BulkOnboarding implements OnInit {
   wizardClient = signal<ClientDraft | null>(null);
   wizardPhoneWarning = signal('');
   receiptWarnings = signal<Record<string, string>>({});
+  collapsedLessons = signal<Set<number>>(new Set());
 
   // Quick Generate lessons
   quickGenOpen = signal(false);
@@ -222,6 +223,19 @@ export class BulkOnboarding implements OnInit {
     const p = this.productById().get(productId);
     const pkg = p?.packages?.find((x) => x.id === packageId);
     return pkg ? Number(pkg.price) || 0 : 0;
+  }
+
+  packageEffectivePrice(pkg: PackageDraft): number {
+    const price = this.packagePriceFor(pkg.product_id, pkg.package_id);
+    return Math.max(0, price - this.discountApplied(pkg, price));
+  }
+
+  packagePaid(pkg: PackageDraft): number {
+    return pkg.installments.reduce((s, i) => s + (i.amount || 0), 0);
+  }
+
+  packageBalance(pkg: PackageDraft): number {
+    return Math.max(0, this.packageEffectivePrice(pkg) - this.packagePaid(pkg));
   }
 
   vehicleOptionsFor(transmission: string) {
@@ -829,6 +843,27 @@ export class BulkOnboarding implements OnInit {
     this.updateWizard({ packages: pkgs });
   }
 
+  clearLessons(pkgIndex: number) {
+    const c = this.wizardClient();
+    if (!c) return;
+    const pkgs = [...c.packages];
+    pkgs[pkgIndex] = { ...pkgs[pkgIndex], lessons: [] };
+    this.updateWizard({ packages: pkgs });
+  }
+
+  lessonsCollapsed(pkgIndex: number): boolean {
+    return this.collapsedLessons().has(pkgIndex);
+  }
+
+  toggleLessons(pkgIndex: number) {
+    this.collapsedLessons.update((s) => {
+      const n = new Set(s);
+      if (n.has(pkgIndex)) n.delete(pkgIndex);
+      else n.add(pkgIndex);
+      return n;
+    });
+  }
+
   onLessonTypeChange(pkgIndex: number, lessonIndex: number, type: string) {
     const c = this.wizardClient();
     if (!c) return;
@@ -911,7 +946,7 @@ export class BulkOnboarding implements OnInit {
         instructor_id: instructorId,
         vehicle_id: vehicleId,
         notes: `Practical ${weekdays[practicalDates[i].getDay()]}`,
-        status: 'completed',
+        status: 'scheduled',
       });
     }
 
@@ -926,7 +961,7 @@ export class BulkOnboarding implements OnInit {
         instructor_id: instructorId,
         vehicle_id: vehicleId,
         notes: `Theory ${weekdays[6]}`,
-        status: 'completed',
+        status: 'scheduled',
       });
       satCursor.setDate(satCursor.getDate() + 7);
     }

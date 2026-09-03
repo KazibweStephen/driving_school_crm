@@ -341,7 +341,9 @@ async def client_search(
         )
     )
     if company_id is not None:
-        stmt = stmt.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
+        stmt = stmt.outerjoin(Branch, Consultation.branch_id == Branch.id).where(
+            or_(Consultation.branch_id.is_(None), Branch.company_id == company_id)
+        )
     stmt = stmt.order_by(Consultation.created_at.desc())
 
     result = await db.execute(stmt)

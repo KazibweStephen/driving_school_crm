@@ -115,7 +115,13 @@
 
       <p-steps [model]="wizardItems()" [activeIndex]="wizardStep()" styleClass="text-sm" (activeIndexChange)="goStep($event)" />
 
-      @if (wizardStep() < 3 && stepErrors(wizardStep()).length > 0) {
+      @if (validatingStep()) {
+        <div class="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700">
+          <i class="pi pi-spin pi-spinner"></i> Validating against server…
+        </div>
+      }
+
+      @if (wizardStep() < 3 && stepErrors(wizardStep()).length > 0 && !validatingStep()) {
         <div class="rounded-xl border border-red-200 bg-red-50 p-3">
           <div class="text-xs font-semibold text-red-700">Please fix these issues:</div>
           <ul class="mt-1 list-inside list-disc space-y-0.5 text-xs text-red-600">
@@ -522,10 +528,11 @@
             <p-button label="Back" severity="secondary" icon="pi pi-arrow-left" (click)="prevStep()" styleClass="justify-center" data-testid="bo-back" />
           }
           <p-button
-            label="Next"
+            label="{{ validatingStep() ? 'Validating…' : 'Next' }}"
             icon="pi pi-arrow-right"
             iconPos="right"
-            [disabled]="stepValid(wizardStep()) === false"
+            [loading]="validatingStep()"
+            [disabled]="stepValid(wizardStep()) === false || validatingStep()"
             (click)="nextStep()"
             styleClass="flex-1 justify-center"
             data-testid="bo-next"
@@ -545,10 +552,16 @@
         <button type="button" class="text-xs font-medium text-gray-500" (click)="closeQuickGen()">Close</button>
       </div>
       <div class="grid grid-cols-1 gap-2">
-        <label class="block text-xs text-gray-600">
-          Start date *
-          <p-datepicker [ngModel]="quickGenStartDate()" (ngModelChange)="quickGenStartDate.set($event)" dateFormat="dd/mm/yy" [minDate]="documentDateMin()" appendTo="body" class="w-full" />
-        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block text-xs text-gray-600">
+            Covered start *
+            <p-datepicker [ngModel]="quickGenStartDate()" (ngModelChange)="quickGenStartDate.set($event)" dateFormat="dd/mm/yy" [minDate]="documentDateMin()" appendTo="body" class="w-full" />
+          </label>
+          <label class="block text-xs text-gray-600">
+            Last done date
+            <p-datepicker [ngModel]="quickGenEndDate()" (ngModelChange)="quickGenEndDate.set($event)" dateFormat="dd/mm/yy" [minDate]="quickGenStartDate() && documentDateMin()" appendTo="body" class="w-full" />
+          </label>
+        </div>
         <div class="grid grid-cols-2 gap-2">
           <label class="block text-xs text-gray-600">
             Practical days ({{ quickGenPlannedPractical() }} planned)
@@ -579,14 +592,16 @@
       @if (quickGenPreview().length > 0) {
         <div class="mt-3 space-y-1">
           <div class="flex flex-wrap gap-1 text-[11px]">
-            <span class="rounded-full bg-green-100 px-2 py-0.5 font-semibold text-green-700">Covered: {{ quickGenPracticalCovered() }} P / {{ quickGenTheoryCovered() }} T</span>
+            <span class="rounded-full bg-green-100 px-2 py-0.5 font-semibold text-green-700">Done: {{ quickGenPracticalCovered() }} P / {{ quickGenTheoryCovered() }} T</span>
             <span class="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700">To schedule: {{ quickGenRemainingPractical() }} P / {{ quickGenRemainingTheory() }} T</span>
           </div>
-          <div class="text-xs font-semibold text-gray-700">{{ quickGenPreview().length }} new scheduled lesson(s)</div>
+          <div class="text-xs font-semibold text-gray-700">{{ quickGenPreview().length }} lesson(s)</div>
           @for (lesson of quickGenPreview(); track $index) {
-            <div class="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs">
+            <div class="flex items-center justify-between rounded-md border px-2 py-1 text-xs {{ lesson.status === 'completed' ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50' }}">
               <span>
-                <span class="mr-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">Scheduled</span>
+                <span class="mr-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold {{ lesson.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700' }}">
+                  {{ lesson.status === 'completed' ? 'Done' : 'Scheduled' }}
+                </span>
                 {{ lesson.date ? (lesson.date.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})) : '' }} · {{ lesson.lesson_type }}
               </span>
               <span class="text-gray-500">{{ lesson.duration_minutes }} min</span>

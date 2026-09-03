@@ -109,6 +109,7 @@ export class BulkOnboarding implements OnInit {
   quickGenOpen = signal(false);
   quickGenPkgIndex = signal(0);
   quickGenStartDate = signal<Date | null>(new Date());
+  quickGenEndDate = signal<Date | null>(null);
   quickGenPlannedPractical = signal<number>(0);
   quickGenPlannedTheory = signal<number>(0);
   quickGenPracticalCovered = signal<number>(0);
@@ -117,6 +118,7 @@ export class BulkOnboarding implements OnInit {
   quickGenVehicleId = signal('');
   quickGenPreview = signal<LessonDraft[]>([]);
   quickGenBusy = signal(false);
+  validatingStep = signal(false);
 
   private productById = computed(() => {
     const map = new Map<string, Product>();
@@ -627,6 +629,7 @@ export class BulkOnboarding implements OnInit {
   private async validatePhoneAsync(): Promise<boolean> {
     const c = this.wizardClient();
     if (!c || !c.phone) return true;
+    this.validatingStep.set(true);
     try {
       const results = await firstValueFrom(this.consultationService.clientSearch(c.phone));
       const match = results?.find((r) => r.phone === c.phone);
@@ -644,6 +647,8 @@ export class BulkOnboarding implements OnInit {
       return true;
     } catch {
       return true;
+    } finally {
+      this.validatingStep.set(false);
     }
   }
 
@@ -657,6 +662,7 @@ export class BulkOnboarding implements OnInit {
       }),
     );
     if (receipts.length === 0) return true;
+    this.validatingStep.set(true);
     try {
       const res = await firstValueFrom(this.consultationService.checkBulkReceipts(receipts));
       if (res.existing && res.existing.length > 0) {
@@ -669,6 +675,8 @@ export class BulkOnboarding implements OnInit {
       return true;
     } catch {
       return true;
+    } finally {
+      this.validatingStep.set(false);
     }
   }
 
@@ -902,7 +910,9 @@ export class BulkOnboarding implements OnInit {
 
   openQuickGen(pkgIndex: number) {
     this.quickGenPkgIndex.set(pkgIndex);
-    this.quickGenStartDate.set(this.documentDateMin());
+    const start = this.documentDateMin();
+    this.quickGenStartDate.set(start);
+    this.quickGenEndDate.set(new Date(start));
     const config = this.quickGenPackageConfig();
     this.quickGenPlannedPractical.set(config.practicalDays ?? 0);
     this.quickGenPlannedTheory.set(config.theoryLessons ?? 0);
@@ -920,50 +930,117 @@ export class BulkOnboarding implements OnInit {
   }
 
   quickGenGenerate() {
-    const days = this.quickGenRemainingPractical();
-    const theoryCount = this.quickGenRemainingTheory();
+    const remainingPrac = this.quickGenRemainingPractical();
+    const remainingTheory = this.quickGenRemainingTheory();
+    const coveredPrac = this.quickGenPracticalCovered() || 0;
+    const coveredTheory = this.quickGenTheoryCovered() || 0;
     const instructorId = this.quickGenInstructorId();
     const vehicleId = this.quickGenVehicleId();
     const start = this.quickGenStartDate();
+    const end = this.quickGenEndDate();
     if (!start) return;
+    if (coveredPrac + remainingPrac + coveredTheory + remainingTheory === 0) {
+      this.quickGenPreview.set([]);
+      return;
+    }
     const startDate = new Date(start);
     startDate.setHours(0, 0, 0, 0);
+    const endDate = end ? new Date(end) : new Date(startDate);
+    endDate.setHours(0, 0, 0, 0);
+    if (endDate < startDate) endDate.setTime(startDate.getTime());
+    const lastCovered = new Date(endDate);
+    lastCovered.setHours(0, 0, 0, 0);
     const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const lessons: LessonDraft[] = [];
 
-    const practicalDates: Date[] = [];
-    const cursor = new Date(startDate);
-    while (practicalDates.length < days) {
-      const dow = cursor.getDay();
-      if (dow >= 1 && dow <= 5) practicalDates.push(new Date(cursor));
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    for (let i = 0; i < days; i++) {
-      lessons.push({
-        date: practicalDates[i],
-        duration_minutes: 30,
-        lesson_type: 'practical',
-        instructor_id: instructorId,
-        vehicle_id: vehicleId,
-        notes: `Practical ${weekdays[practicalDates[i].getDay()]}`,
-        status: 'scheduled',
-      });
+    // Spread covered practical lessons across weekdays in [start, end]
+    if (coveredPrac > 0) {
+      const doneDates: Date[] = [];
+      const cursor = new Date(startDate);
+      while (cursor <= lastCovered && doneDates.length < coveredPrac) {
+        const dow = cursor.getDay();
+        if (dow >= 1 && dow <= 5) doneDates.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      for (const d of doneDates) {
+        lessons.push({
+          date: d,
+          duration_minutes: 30,
+          lesson_type: 'practical',
+          instructor_id: instructorId,
+          vehicle_id: vehicleId,
+          notes: `Practical ${weekdays[d.getDay()]}`,
+          status: 'completed',
+        });
+      }
     }
 
-    const firstSat = new Date(startDate);
-    while (firstSat.getDay() !== 6) firstSat.setDate(firstSat.getDate() + 1);
-    const satCursor = new Date(firstSat);
-    for (let i = 0; i < theoryCount; i++) {
-      lessons.push({
-        date: new Date(satCursor),
-        duration_minutes: 120,
-        lesson_type: 'theory',
-        instructor_id: instructorId,
-        vehicle_id: vehicleId,
-        notes: `Theory ${weekdays[6]}`,
-        status: 'scheduled',
-      });
-      satCursor.setDate(satCursor.getDate() + 7);
+    // Spread covered theory lessons across Saturdays in [start, end]
+    if (coveredTheory > 0) {
+      const doneTheory: Date[] = [];
+      let sat = new Date(startDate);
+      while (sat.getDay() !== 6) sat.setDate(sat.getDate() + 1);
+      while (sat <= lastCovered && doneTheory.length < coveredTheory) {
+        doneTheory.push(new Date(sat));
+        sat.setDate(sat.getDate() + 7);
+      }
+      for (const d of doneTheory) {
+        lessons.push({
+          date: d,
+          duration_minutes: 120,
+          lesson_type: 'theory',
+          instructor_id: instructorId,
+          vehicle_id: vehicleId,
+          notes: `Theory ${weekdays[6]}`,
+          status: 'completed',
+        });
+      }
+    }
+
+    // Schedule remaining practical lessons on weekdays AFTER the last covered date
+    if (remainingPrac > 0) {
+      const scheduledDates: Date[] = [];
+      const cursor = new Date(lastCovered);
+      cursor.setDate(cursor.getDate() + 1);
+      while (scheduledDates.length < remainingPrac) {
+        const dow = cursor.getDay();
+        if (dow >= 1 && dow <= 5) scheduledDates.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      for (const d of scheduledDates) {
+        lessons.push({
+          date: d,
+          duration_minutes: 30,
+          lesson_type: 'practical',
+          instructor_id: instructorId,
+          vehicle_id: vehicleId,
+          notes: `Practical ${weekdays[d.getDay()]}`,
+          status: 'scheduled',
+        });
+      }
+    }
+
+    // Schedule remaining theory lessons on Saturdays AFTER the last covered date
+    if (remainingTheory > 0) {
+      let sat = new Date(lastCovered);
+      sat.setDate(sat.getDate() + 1);
+      while (sat.getDay() !== 6) sat.setDate(sat.getDate() + 1);
+      const scheduledTheory: Date[] = [];
+      while (scheduledTheory.length < remainingTheory) {
+        scheduledTheory.push(new Date(sat));
+        sat.setDate(sat.getDate() + 7);
+      }
+      for (const d of scheduledTheory) {
+        lessons.push({
+          date: d,
+          duration_minutes: 120,
+          lesson_type: 'theory',
+          instructor_id: instructorId,
+          vehicle_id: vehicleId,
+          notes: `Theory ${weekdays[6]}`,
+          status: 'scheduled',
+        });
+      }
     }
 
     lessons.sort((a, b) => (a.date!.getTime() - b.date!.getTime()));

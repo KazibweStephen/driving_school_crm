@@ -598,8 +598,9 @@
           <div class="text-xs font-semibold text-gray-700">{{ quickGenPreview().length }} lesson(s)</div>
           @for (lesson of quickGenPreview(); track $index) {
             <div class="flex items-center justify-between rounded-md border px-2 py-1 text-xs {{ lesson.status === 'completed' ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50' }}">
-              <span>
-                <span class="mr-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold {{ lesson.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700' }}">
+              <span class="flex items-center gap-1.5">
+                <span class="font-semibold text-gray-400">{{ $index + 1 }}.</span>
+                <span class="rounded-full px-1.5 py-0.5 text-[10px] font-semibold {{ lesson.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700' }}">
                   {{ lesson.status === 'completed' ? 'Done' : 'Scheduled' }}
                 </span>
                 {{ lesson.date ? (lesson.date.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})) : '' }} · {{ lesson.lesson_type }}

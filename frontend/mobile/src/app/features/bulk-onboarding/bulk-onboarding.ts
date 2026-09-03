@@ -662,6 +662,22 @@ export class BulkOnboarding implements OnInit {
       }),
     );
     if (receipts.length === 0) return true;
+
+    // Repeat receipt numbers within the same submission are not allowed
+    const seen = new Set<string>();
+    const duplicates = new Set<string>();
+    for (const r of receipts) {
+      if (seen.has(r)) duplicates.add(r);
+      seen.add(r);
+    }
+    if (duplicates.size > 0) {
+      this.msg.add({
+        severity: 'warn',
+        summary: `Receipt repeated in this submission: ${[...duplicates].join(', ')}`,
+      });
+      return false;
+    }
+
     this.validatingStep.set(true);
     try {
       const res = await firstValueFrom(this.consultationService.checkBulkReceipts(receipts));
@@ -738,6 +754,20 @@ export class BulkOnboarding implements OnInit {
       return n;
     });
     if (!receiptNumber || receiptNumber.length < 2) return;
+    const c = this.wizardClient();
+    const duplicate = c?.packages.some((p, pi) =>
+      p.installments.some((i, ii) => {
+        if (pi === pkgIndex && ii === instIndex) return false;
+        return i.receipt_number === receiptNumber;
+      }),
+    );
+    if (duplicate) {
+      this.receiptWarnings.update((w) => ({
+        ...w,
+        [key]: `Receipt "${receiptNumber}" repeated in this submission`,
+      }));
+      return;
+    }
     this.consultationService.checkBulkReceipts([receiptNumber]).subscribe({
       next: (res) => {
         if (res.existing && res.existing.includes(receiptNumber)) {
@@ -1228,6 +1258,6 @@ export class BulkOnboarding implements OnInit {
 
   viewClients() {
     this.showSuccess.set(false);
-    this.router.navigate(['/dashboard']);
+    this.router.navigate(['/payments']);
   }
 }

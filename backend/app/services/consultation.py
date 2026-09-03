@@ -196,7 +196,7 @@ async def search_consultations(
             query = query.where(Consultation.id.in_(select(paid_consultations.c.consultation_id)))
         elif stage == 'completed':
             not_completed = select(CartItem.consultation_id).where(
-                CartItem.status != CartItemStatus.CONVERTED_COMPLETED
+                CartItem.status != CartItemStatus.CONVERTED_PAID
             ).distinct().subquery()
             query = query.where(~Consultation.id.in_(select(not_completed.c.consultation_id)))
         elif stage == 'lost':

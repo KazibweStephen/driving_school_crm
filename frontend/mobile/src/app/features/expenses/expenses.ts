@@ -194,6 +194,10 @@ export class Expenses {
     return this.accountCategories.has(this.category());
   }
 
+  needsClient(): boolean {
+    return this.requiresClientCategories.has(this.category()) || this.isClientAccountCategory();
+  }
+
   canFundFromClientAccount(): boolean {
     return (this.amount() ?? 0) <= this.clientAccountAvailable() + 0.001;
   }

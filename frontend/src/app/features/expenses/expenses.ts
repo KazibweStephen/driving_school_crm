@@ -77,6 +77,10 @@ export class ExpensesCmp implements OnInit {
     return this.selectedCategoryAccount() === 'client_accounts';
   }
 
+  needsClient(): boolean {
+    return !!(this.selectedCategory()?.requires_client || this.isClientAccountCategory());
+  }
+
   async loadClientAccountDetail() {
     if (this.isClientAccountCategory() && this.form.branch_id) {
       this.clientAccountAccountLoading.set(true);

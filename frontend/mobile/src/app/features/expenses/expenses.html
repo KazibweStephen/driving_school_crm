@@ -186,18 +186,6 @@
         </div>
 
         <div>
-          <label class="mb-1 block text-sm font-medium text-slate-700">Amount</label>
-          <input
-            type="number"
-            min="0"
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            [ngModel]="amount()"
-            (ngModelChange)="amount.set($event ?? null)"
-            data-testid="expense-amount"
-          />
-        </div>
-
-        <div>
           <label class="mb-1 block text-sm font-medium text-slate-700">Category</label>
           <p-select
             [options]="categoryOptions()"
@@ -209,6 +197,82 @@
             appendTo="body"
             class="w-full"
             data-testid="expense-category"
+          />
+        </div>
+
+        @if (needsClient()) {
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700">Client {{ categoryRequiresClient() ? '*' : '' }}</label>
+            @if (selectedClientLabel()) {
+              <div
+                class="flex items-center justify-between rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm"
+              >
+                <span class="truncate font-medium text-blue-900">{{ selectedClientLabel() }}</span>
+                <button
+                  type="button"
+                  class="ml-2 text-blue-400 hover:text-blue-600"
+                  (click)="clearClient()"
+                  aria-label="Clear client"
+                >
+                  <span class="pi pi-times"></span>
+                </button>
+              </div>
+            } @else {
+              <input
+                type="text"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                [ngModel]="clientSearchQuery()"
+                (ngModelChange)="searchClient($event)"
+                placeholder="Search client by name or phone..."
+                data-testid="expense-client-search"
+              />
+              @if (clientSearching()) {
+                <p class="mt-1 text-xs text-slate-500">Searching...</p>
+              }
+              @if (clientResults().length) {
+                <div class="mt-1 max-h-48 overflow-auto rounded-lg border border-slate-200 bg-white">
+                  @for (c of clientResults(); track c.phone) {
+                    <button
+                      type="button"
+                      class="block w-full border-b px-3 py-2 text-left text-sm last:border-b-0"
+                      [class.bg-blue-50]="c.latest_consultation_id"
+                      [class.bg-blue-100]="c.latest_consultation_id"
+                      [class.font-medium]="c.latest_consultation_id"
+                      [class.text-slate-400]="!c.latest_consultation_id"
+                      [class.hover:bg-blue-100]="c.latest_consultation_id"
+                      (mousedown)="selectClient(c); $event.preventDefault()"
+                    >
+                      <span class="font-medium text-slate-900">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
+                      <span class="text-slate-500"> · {{ c.phone }}</span>
+                    </button>
+                  }
+                </div>
+              }
+            }
+          </div>
+        }
+
+        @if (isClientAccountCategory()) {
+          <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <span class="font-medium">Funding:</span> client-account money at this branch
+            <span class="font-semibold" [class.text-red-600]="!canFundFromClientAccount()">
+              {{ money(clientAccountAvailable()) }}
+            </span>
+            @if (!canFundFromClientAccount() && (amount() ?? 0) > 0) {
+              <span class="text-red-600"> — exceeds available</span>
+            }
+          </div>
+        }
+
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">Amount</label>
+          <input
+            type="number"
+            min="0"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            [ngModel]="amount()"
+            (ngModelChange)="amount.set($event ?? null)"
+            data-testid="expense-amount"
           />
         </div>
 
@@ -241,100 +305,6 @@
               (ngModelChange)="mileage.set($event ?? null)"
               data-testid="expense-mileage"
             />
-          </div>
-        }
-
-        @if (categoryRequiresClient()) {
-          <div>
-            <label class="mb-1 block text-sm font-medium text-slate-700">Client *</label>
-            @if (selectedClientLabel()) {
-              <div
-                class="flex items-center justify-between rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
-              >
-                <span class="truncate text-slate-900">{{ selectedClientLabel() }}</span>
-                <button
-                  type="button"
-                  class="ml-2 text-slate-400 hover:text-slate-600"
-                  (click)="clearClient()"
-                  aria-label="Clear client"
-                >
-                  <span class="pi pi-times"></span>
-                </button>
-              </div>
-            } @else {
-              <input
-                type="text"
-                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                [ngModel]="clientSearchQuery()"
-                (ngModelChange)="searchClient($event)"
-                placeholder="Search client by name or phone..."
-                data-testid="expense-client-search"
-              />
-              @if (clientSearching()) {
-                <p class="mt-1 text-xs text-slate-500">Searching...</p>
-              }
-              @if (clientResults().length) {
-                <div class="mt-1 max-h-48 overflow-auto rounded-lg border border-slate-200 bg-white">
-                  @for (c of clientResults(); track c.phone) {
-                    <button
-                      type="button"
-                      class="block w-full border-b last:border-b-0 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                      (mousedown)="selectClient(c); $event.preventDefault()"
-                    >
-                      <span class="font-medium text-slate-900">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
-                      <span class="text-slate-500"> · {{ c.phone }}</span>
-                    </button>
-                  }
-                </div>
-              }
-            }
-          </div>
-        }
-
-        @if (isClientAccountCategory()) {
-          <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div class="flex items-center justify-between">
-              <label class="text-sm font-medium text-slate-700">Client Account (funding source)</label>
-              @if (clientAccountLoading()) {
-                <span class="text-xs text-slate-500">Loading...</span>
-              }
-            </div>
-            <div class="mt-1 text-xs text-slate-600">
-              Available in this branch:
-              <span class="font-semibold" [class.text-red-600]="!canFundFromClientAccount()">
-                {{ money(clientAccountAvailable()) }}
-              </span>
-            </div>
-            @if (!canFundFromClientAccount()) {
-              <p class="mt-1 text-xs text-red-600">
-                This amount exceeds the available client-account funds. Fund the client account from head office first.
-              </p>
-            }
-            <div class="mt-2 text-sm font-medium text-slate-700">Client-account money at this branch</div>
-            <input
-              type="text"
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              [ngModel]="clientAccountSearch()"
-              (ngModelChange)="onClientAccountSearch($event)"
-              placeholder="Search by client name or phone..."
-              data-testid="expense-client-account-search"
-            />
-            @if (clientAccountPaymentsFiltered().length) {
-              <div class="mt-1 max-h-48 overflow-auto rounded-lg border border-slate-200 bg-white">
-                @for (p of clientAccountPaymentsFiltered(); track p.payment_id) {
-                  <div class="border-b last:border-b-0 px-3 py-2 text-sm">
-                    <div class="font-medium text-slate-900">{{ p.client_name }}</div>
-                    <div class="text-xs text-slate-500">{{ p.client_phone }}</div>
-                    <div class="text-xs text-slate-400">Paid: {{ money(p.total_paid ?? 0) }}</div>
-                    <div class="text-xs text-slate-500">Unremitted: {{ money(p.unremitted ?? 0) }}</div>
-                    <div class="text-xs text-slate-500">Funded: {{ money(p.funded ?? 0) }}</div>
-                    <div class="text-sm font-semibold text-slate-800">On Expense Account: {{ money(p.amount) }}</div>
-                  </div>
-                }
-              </div>
-            } @else if (!clientAccountLoading()) {
-              <p class="mt-1 text-sm text-slate-500">No client-account money at this branch.</p>
-            }
           </div>
         }
 

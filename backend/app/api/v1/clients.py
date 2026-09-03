@@ -1,6 +1,6 @@
 import logging
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -151,6 +151,15 @@ async def list_clients(
                 commission_total=commission_total,
             ))
 
+        active_dates = [
+            ci.created_at for ci in (c.cart_items or [])
+            if ci.status in active_statuses and ci.created_at
+        ]
+        active_started = min(active_dates) if active_dates else c.created_at
+        active_for_days = 0
+        if active_started:
+            active_for_days = max(0, (datetime.now(timezone.utc) - active_started).days)
+
         clients.append(ClientSummary(
             id=c.id,
             phone=c.phone,
@@ -164,6 +173,7 @@ async def list_clients(
             upgradable_products_count=upgradable_count,
             total_paid=total_paid,
             last_payment_date=last_payment_date,
+            active_for_days=active_for_days,
             created_at=c.created_at,
             products=products,
         ))

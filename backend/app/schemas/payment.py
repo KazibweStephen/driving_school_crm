@@ -117,6 +117,7 @@ class ClientSummary(BaseModel):
     upgradable_products_count: int = 0
     total_paid: Decimal = Decimal("0.00")
     last_payment_date: date | None = None
+    active_for_days: int = 0
     created_at: datetime
     products: list[ClientActiveProduct] = []
 

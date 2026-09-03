@@ -112,6 +112,7 @@ export interface ClientSummary {
   upgradable_products_count: number;
   total_paid: string;
   last_payment_date: string | null;
+  active_for_days: number;
   created_at: string;
   products?: ClientActiveProduct[];
 }

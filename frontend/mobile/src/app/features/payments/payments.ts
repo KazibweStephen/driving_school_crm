@@ -202,6 +202,23 @@ export class Payments {
     return (client.products ?? []).filter((p) => parseFloat(p.balance || '0') > 0).length;
   }
 
+  lastPaymentLabel(client: ClientSummary): string {
+    if (!client.last_payment_date) return '';
+    const d = new Date(client.last_payment_date);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  activeForLabel(client: ClientSummary): string {
+    const days = client.active_for_days ?? 0;
+    if (days <= 0) return '';
+    if (days < 30) return `Active ${days}d`;
+    const months = Math.floor(days / 30);
+    const rem = days % 30;
+    if (months === 1) return rem > 0 ? `Active 1m ${rem}d` : 'Active 1m';
+    return rem > 0 ? `Active ${months}m ${rem}d` : `Active ${months}m`;
+  }
+
   openOutstandingClient(client: ClientSummary) {
     this.client = {
       phone: client.phone,

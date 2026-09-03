@@ -34,6 +34,14 @@
               <span class="text-sm font-bold text-amber-600">{{ money(outstandingBalanceFor(c)) }}</span>
             </div>
             <div class="mt-0.5 text-xs text-slate-500">{{ c.phone }}</div>
+            <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
+              @if (lastPaymentLabel(c)) {
+                <span data-testid="outstanding-last-payment">Last payment: {{ lastPaymentLabel(c) }}</span>
+              }
+              @if (activeForLabel(c)) {
+                <span data-testid="outstanding-active-for" class="text-emerald-600">{{ activeForLabel(c) }}</span>
+              }
+            </div>
             @if (outstandingItemsCount(c) > 0) {
               <div class="mt-1 text-xs text-slate-400">
                 {{ outstandingItemsCount(c) }} pending item(s)

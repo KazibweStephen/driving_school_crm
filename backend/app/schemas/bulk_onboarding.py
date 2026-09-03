@@ -33,6 +33,7 @@ class BulkOnboardingPackage(BaseModel):
     lessons: list[BulkOnboardingLesson] = []
     transmission_type: str | None = Field(default=None, pattern=r"^(manual|automatic|both)$")
     lesson_plan_template_id: uuid.UUID | None = None
+    discount_id: uuid.UUID | None = None
 
 
 class BulkOnboardingClient(BaseModel):

@@ -22,6 +22,7 @@ import { VehicleService } from '../../core/services/vehicle.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { LessonPlanService, LessonPlanTemplate, LessonTemplateItem } from '../../core/services/lesson-plan.service';
+import { DiscountService, Discount } from '../../core/services/discount.service';
 
 interface LessonDraft {
   date: Date | null;
@@ -51,6 +52,7 @@ interface PackageDraft {
   lessons: LessonDraft[];
   transmission_type: string;
   lesson_plan_template_id: string | null;
+  discount_id: string;
 }
 
 interface QuickGenForm {
@@ -123,6 +125,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   private phoneTimers: Record<number, ReturnType<typeof setTimeout>> = {};
   private receiptTimers: ReturnType<typeof setTimeout>[] = [];
   clientStepIndex = signal<Record<number, number>>({});
+  discountsForProduct = signal<Record<string, Discount[]>>({});
 
   showQuickGen = signal(false);
   quickGenClientIndex = signal(0);
@@ -234,6 +237,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     private vehicleService: VehicleService,
     private companyService: CompanyService,
     private lessonPlanService: LessonPlanService,
+    private discountService: DiscountService,
     private auth: AuthService,
     private msg: MessageService,
     private confirm: ConfirmationService,
@@ -536,6 +540,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
         })),
         transmission_type: p.transmission_type || 'manual',
         lesson_plan_template_id: p.lesson_plan_template_id || null,
+        discount_id: p.discount_id || '',
       })),
     };
   }
@@ -587,6 +592,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
           })),
           transmission_type: p.transmission_type || 'manual',
           lesson_plan_template_id: p.lesson_plan_template_id || null,
+          discount_id: p.discount_id || '',
         })),
       })),
     };
@@ -807,11 +813,67 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
         ...updated[clientIndex],
         packages: [
           ...updated[clientIndex].packages,
-          { product_id: '', package_id: '', installments: [], lessons: [], transmission_type: 'manual', lesson_plan_template_id: null },
+          { product_id: '', package_id: '', installments: [], lessons: [], transmission_type: 'manual', lesson_plan_template_id: null, discount_id: '' },
         ],
       };
       return updated;
     });
+  }
+
+  discountKey(productId: string, packageId: string): string {
+    return `${productId}::${packageId || ''}`;
+  }
+
+  discountOptionsFor(pkg: PackageDraft): { label: string; value: string }[] {
+    const result: { label: string; value: string }[] = [{ label: 'No discount', value: '' }];
+    const key = this.discountKey(pkg.product_id, pkg.package_id);
+    for (const d of this.discountsForProduct()[key] || []) {
+      const amount = d.discount_type === 'fixed' ? `${d.discount_value.toLocaleString()} UGX` : `${d.discount_value}%`;
+      result.push({ label: `${d.name} (${d.code}) — ${amount}`, value: d.id });
+    }
+    return result;
+  }
+
+  loadDiscountsForPackage(pkg: PackageDraft) {
+    if (!pkg.product_id) return;
+    const key = this.discountKey(pkg.product_id, pkg.package_id);
+    this.discountService.getApplicableDiscountsForProduct(pkg.product_id, pkg.package_id || null).subscribe({
+      next: (discounts) => {
+        this.discountsForProduct.update(m => ({ ...m, [key]: discounts || [] }));
+      },
+    });
+  }
+
+  onPackageProductChange(clientIndex: number, pkgIndex: number, productId: string) {
+    this.clients.update(clients => {
+      const updated = [...clients];
+      const pkgs = [...updated[clientIndex].packages];
+      pkgs[pkgIndex] = { ...pkgs[pkgIndex], product_id: productId, package_id: '', discount_id: '' };
+      updated[clientIndex] = { ...updated[clientIndex], packages: pkgs };
+      return updated;
+    });
+    this.loadDiscountsForPackage(this.clients()[clientIndex].packages[pkgIndex]);
+  }
+
+  onPackageChange(clientIndex: number, pkgIndex: number, packageId: string) {
+    this.clients.update(clients => {
+      const updated = [...clients];
+      const pkgs = [...updated[clientIndex].packages];
+      pkgs[pkgIndex] = { ...pkgs[pkgIndex], package_id: packageId, discount_id: '' };
+      updated[clientIndex] = { ...updated[clientIndex], packages: pkgs };
+      return updated;
+    });
+    this.loadDiscountsForPackage(this.clients()[clientIndex].packages[pkgIndex]);
+  }
+
+  discountApplied(pkg: PackageDraft): number {
+    if (!pkg.discount_id) return 0;
+    const key = this.discountKey(pkg.product_id, pkg.package_id);
+    const d = (this.discountsForProduct()[key] || []).find(x => x.id === pkg.discount_id);
+    if (!d) return 0;
+    const price = this.packagePriceById(pkg.product_id, pkg.package_id);
+    if (d.discount_type === 'fixed') return Math.min(d.discount_value, price);
+    return Math.round((price * d.discount_value) / 100);
   }
 
   removePackage(clientIndex: number, pkgIndex: number) {
@@ -1645,6 +1707,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
               package_id: p.package_id || undefined,
               transmission_type: p.transmission_type || 'manual',
               lesson_plan_template_id: p.lesson_plan_template_id || undefined,
+              discount_id: p.discount_id || undefined,
               installments: p.installments.map(i => ({
                 receipt_number: i.receipt_number,
                 document_date: i.document_date!.toISOString().split('T')[0],

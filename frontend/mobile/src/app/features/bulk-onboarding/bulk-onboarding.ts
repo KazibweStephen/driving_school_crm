@@ -9,9 +9,11 @@ import { TextareaModule } from 'primeng/textarea';
 import { SelectModule } from 'primeng/select';
 import { DatePickerModule } from 'primeng/datepicker';
 import { StepsModule } from 'primeng/steps';
+import { DialogModule } from 'primeng/dialog';
 import { AuthService } from '../../core/auth/auth.service';
 import { CatalogService, Product, Branch } from '../../core/services/catalog.service';
 import { ConsultationService, BulkOnboardingRequest } from '../../core/services/consultation.service';
+import { DiscountService, Discount } from '../../core/services/discount.service';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 
@@ -36,6 +38,7 @@ interface PackageDraft {
   product_id: string;
   package_id: string;
   transmission_type: string;
+  discount_id: string;
   installments: InstallmentDraft[];
   lessons: LessonDraft[];
 }
@@ -67,6 +70,7 @@ const STORAGE_KEY = 'mobile_bulk_onboarding_draft';
     SelectModule,
     DatePickerModule,
     StepsModule,
+    DialogModule,
     ToastModule,
   ],
   providers: [MessageService],
@@ -77,6 +81,7 @@ export class BulkOnboarding implements OnInit {
   private auth = inject(AuthService);
   private catalog = inject(CatalogService);
   private consultationService = inject(ConsultationService);
+  private discountService = inject(DiscountService);
   private msg = inject(MessageService);
 
   clients = signal<ClientDraft[]>([]);
@@ -96,6 +101,18 @@ export class BulkOnboarding implements OnInit {
   editIndex = signal(-1);
   wizardClient = signal<ClientDraft | null>(null);
   wizardPhoneWarning = signal('');
+  receiptWarnings = signal<Record<string, string>>({});
+
+  // Quick Generate lessons
+  quickGenOpen = signal(false);
+  quickGenPkgIndex = signal(0);
+  quickGenStartDate = signal<Date | null>(new Date());
+  quickGenPracticalDays = signal<number | null>(null);
+  quickGenTheoryLessons = signal<number | null>(null);
+  quickGenInstructorId = signal('');
+  quickGenVehicleId = signal('');
+  quickGenPreview = signal<LessonDraft[]>([]);
+  quickGenBusy = signal(false);
 
   private productById = computed(() => {
     const map = new Map<string, Product>();
@@ -141,6 +158,58 @@ export class BulkOnboarding implements OnInit {
   branchOptions = computed(() =>
     this.branches().map((b) => ({ label: b.name, value: b.id })),
   );
+
+  discountsForProduct = signal<Map<string, Discount[]>>(new Map());
+
+  discountOptionsFor(pkg: PackageDraft): { label: string; value: string }[] {
+    const result: { label: string; value: string }[] = [{ label: 'No discount', value: '' }];
+    const key = this.discountKey(pkg.product_id, pkg.package_id);
+    for (const d of this.discountsForProduct().get(key) || []) {
+      const amount =
+        d.discount_type === 'fixed'
+          ? `${d.discount_value.toLocaleString()} UGX`
+          : `${d.discount_value}%`;
+      result.push({ label: `${d.name} (${d.code}) — ${amount}`, value: d.id });
+    }
+    return result;
+  }
+
+  private discountKey(productId: string, packageId: string): string {
+    return `${productId}::${packageId || ''}`;
+  }
+
+  quickGenTransmission(): string {
+    return this.wizardClient()?.packages[this.quickGenPkgIndex()]?.transmission_type || 'manual';
+  }
+
+  loadDiscountsForPackage(pkg: PackageDraft) {
+    if (!pkg.product_id) return;
+    const key = this.discountKey(pkg.product_id, pkg.package_id);
+    this.discountService
+      .getApplicableDiscountsForProduct(pkg.product_id, pkg.package_id || null)
+      .subscribe({
+        next: (discounts) => {
+          const map = new Map(this.discountsForProduct());
+          map.set(key, discounts);
+          this.discountsForProduct.set(map);
+        },
+      });
+  }
+
+  discountApplied(pkg: PackageDraft, packagePrice: number): number {
+    if (!pkg.discount_id) return 0;
+    const key = this.discountKey(pkg.product_id, pkg.package_id);
+    const d = (this.discountsForProduct().get(key) || []).find((x) => x.id === pkg.discount_id);
+    if (!d) return 0;
+    if (d.discount_type === 'fixed') return Math.min(d.discount_value, packagePrice);
+    return Math.round((packagePrice * d.discount_value) / 100);
+  }
+
+  packagePriceFor(productId: string, packageId: string): number {
+    const p = this.productById().get(productId);
+    const pkg = p?.packages?.find((x) => x.id === packageId);
+    return pkg ? Number(pkg.price) || 0 : 0;
+  }
 
   vehicleOptionsFor(transmission: string) {
     return this.vehicles()
@@ -196,10 +265,14 @@ export class BulkOnboarding implements OnInit {
     }
     try {
       const res = await this.catalog.listInstructors().toPromise();
-      if (res?.users) {
-        this.instructors.set(res.users);
-        this.users.set(res.users);
-      }
+      if (res?.users) this.instructors.set(res.users);
+    } catch {
+      /* ignore */
+    }
+    try {
+      const res = await this.catalog.listUsers({ page_size: 100 }).toPromise();
+      if (res?.users) this.users.set(res.users);
+      else if (this.instructors().length) this.users.set(this.instructors());
     } catch {
       /* ignore */
     }
@@ -233,6 +306,7 @@ export class BulkOnboarding implements OnInit {
           product_id: p.product_id || '',
           package_id: p.package_id || '',
           transmission_type: p.transmission_type || 'manual',
+          discount_id: p.discount_id || '',
           installments: (p.installments || []).map((i: any) => ({
             receipt_number: i.receipt_number || '',
             document_date: i.document_date ? new Date(i.document_date + 'T00:00:00') : null,
@@ -276,6 +350,7 @@ export class BulkOnboarding implements OnInit {
             product_id: p.product_id,
             package_id: p.package_id,
             transmission_type: p.transmission_type,
+            discount_id: p.discount_id,
             installments: p.installments.map((i) => ({
               receipt_number: i.receipt_number,
               document_date: i.document_date ? this.fmt(i.document_date) : null,
@@ -472,13 +547,33 @@ export class BulkOnboarding implements OnInit {
     });
   }
 
+  checkReceipt(pkgIndex: number, instIndex: number, receiptNumber: string) {
+    const key = `${pkgIndex}-${instIndex}`;
+    this.receiptWarnings.update((w) => {
+      const n = { ...w };
+      delete n[key];
+      return n;
+    });
+    if (!receiptNumber || receiptNumber.length < 2) return;
+    this.consultationService.checkBulkReceipts([receiptNumber]).subscribe({
+      next: (res) => {
+        if (res.existing && res.existing.includes(receiptNumber)) {
+          this.receiptWarnings.update((w) => ({
+            ...w,
+            [key]: `Receipt "${receiptNumber}" already exists`,
+          }));
+        }
+      },
+    });
+  }
+
   addPackage() {
     const c = this.wizardClient();
     if (!c) return;
     this.updateWizard({
       packages: [
         ...c.packages,
-        { product_id: '', package_id: '', transmission_type: 'manual', installments: [], lessons: [] },
+        { product_id: '', package_id: '', transmission_type: 'manual', discount_id: '', installments: [], lessons: [] },
       ],
     });
   }
@@ -495,16 +590,24 @@ export class BulkOnboarding implements OnInit {
     const c = this.wizardClient();
     if (!c) return;
     const pkgs = [...c.packages];
-    pkgs[pkgIndex] = { ...pkgs[pkgIndex], product_id: productId, package_id: '' };
+    pkgs[pkgIndex] = { ...pkgs[pkgIndex], product_id: productId, package_id: '', discount_id: '' };
     this.updateWizard({ packages: pkgs });
+    this.loadDiscountsForPackage(pkgs[pkgIndex]);
   }
 
   onPackageUpdate(pkgIndex: number, patch: Partial<PackageDraft>) {
     const c = this.wizardClient();
     if (!c) return;
     const pkgs = [...c.packages];
-    pkgs[pkgIndex] = { ...pkgs[pkgIndex], ...patch };
+    const prev = pkgs[pkgIndex];
+    pkgs[pkgIndex] = { ...prev, ...patch };
+    if ('package_id' in patch && patch.package_id !== prev.package_id) {
+      pkgs[pkgIndex] = { ...pkgs[pkgIndex], discount_id: '' };
+    }
     this.updateWizard({ packages: pkgs });
+    if ('package_id' in patch) {
+      this.loadDiscountsForPackage(pkgs[pkgIndex]);
+    }
   }
 
   addInstallment(pkgIndex: number) {
@@ -586,6 +689,91 @@ export class BulkOnboarding implements OnInit {
     this.updateWizard({ packages: pkgs });
   }
 
+  // ── Quick Generate lessons ──
+  openQuickGen(pkgIndex: number) {
+    this.quickGenPkgIndex.set(pkgIndex);
+    this.quickGenStartDate.set(new Date());
+    this.quickGenPracticalDays.set(null);
+    this.quickGenTheoryLessons.set(null);
+    this.quickGenInstructorId.set('');
+    this.quickGenVehicleId.set('');
+    this.quickGenPreview.set([]);
+    this.quickGenOpen.set(true);
+  }
+
+  closeQuickGen() {
+    this.quickGenOpen.set(false);
+    this.quickGenPreview.set([]);
+  }
+
+  quickGenGenerate() {
+    const days = this.quickGenPracticalDays() || 0;
+    const theoryCount = this.quickGenTheoryLessons() || 0;
+    const instructorId = this.quickGenInstructorId();
+    const vehicleId = this.quickGenVehicleId();
+    const start = this.quickGenStartDate();
+    if (!start) return;
+    const startDate = new Date(start);
+    startDate.setHours(0, 0, 0, 0);
+    const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const lessons: LessonDraft[] = [];
+
+    const practicalDates: Date[] = [];
+    const cursor = new Date(startDate);
+    while (practicalDates.length < days) {
+      const dow = cursor.getDay();
+      if (dow >= 1 && dow <= 5) practicalDates.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    for (let i = 0; i < days; i++) {
+      lessons.push({
+        date: practicalDates[i],
+        duration_minutes: 30,
+        lesson_type: 'practical',
+        instructor_id: instructorId,
+        vehicle_id: vehicleId,
+        notes: `Practical ${weekdays[practicalDates[i].getDay()]}`,
+        status: 'completed',
+      });
+    }
+
+    const firstSat = new Date(startDate);
+    while (firstSat.getDay() !== 6) firstSat.setDate(firstSat.getDate() + 1);
+    const satCursor = new Date(firstSat);
+    for (let i = 0; i < theoryCount; i++) {
+      lessons.push({
+        date: new Date(satCursor),
+        duration_minutes: 120,
+        lesson_type: 'theory',
+        instructor_id: instructorId,
+        vehicle_id: vehicleId,
+        notes: `Theory ${weekdays[6]}`,
+        status: 'completed',
+      });
+      satCursor.setDate(satCursor.getDate() + 7);
+    }
+
+    lessons.sort((a, b) => (a.date!.getTime() - b.date!.getTime()));
+    this.quickGenPreview.set(lessons);
+  }
+
+  quickGenApply() {
+    const c = this.wizardClient();
+    if (!c) return;
+    const preview = this.quickGenPreview();
+    if (preview.length === 0) {
+      this.msg.add({ severity: 'warn', summary: 'Generate lessons first' });
+      return;
+    }
+    const pi = this.quickGenPkgIndex();
+    const pkgs = [...c.packages];
+    pkgs[pi] = { ...pkgs[pi], lessons: preview.map((l) => ({ ...l })) };
+    this.updateWizard({ packages: pkgs });
+    this.quickGenOpen.set(false);
+    this.quickGenPreview.set([]);
+    this.msg.add({ severity: 'success', summary: `${preview.length} lesson(s) generated` });
+  }
+
   countExpandedLessons(lessons: LessonDraft[]): number {
     let count = 0;
     for (const lesson of lessons) {
@@ -597,6 +785,34 @@ export class BulkOnboarding implements OnInit {
       }
     }
     return count;
+  }
+
+  lessonCounts(lessons: LessonDraft[]) {
+    const expanded = lessons.flatMap((l) => {
+      if (!l.duration_minutes || l.duration_minutes <= 0) return [];
+      if (l.lesson_type === 'theory') return [{ ...l }];
+      const n = Math.ceil(l.duration_minutes / 30);
+      return Array.from({ length: n }, () => ({ ...l }));
+    });
+    const practicalDone = expanded.filter(
+      (l) => l.lesson_type === 'practical' && l.status !== 'scheduled',
+    ).length;
+    const practicalScheduled = expanded.filter(
+      (l) => l.lesson_type === 'practical' && l.status === 'scheduled',
+    ).length;
+    const theoryDone = expanded.filter(
+      (l) => l.lesson_type === 'theory' && l.status !== 'scheduled',
+    ).length;
+    const theoryScheduled = expanded.filter(
+      (l) => l.lesson_type === 'theory' && l.status === 'scheduled',
+    ).length;
+    return {
+      total: expanded.length,
+      practicalDone,
+      practicalScheduled,
+      theoryDone,
+      theoryScheduled,
+    };
   }
 
   productName(id: string): string {
@@ -653,6 +869,7 @@ export class BulkOnboarding implements OnInit {
           product_id: p.product_id,
           package_id: p.package_id || undefined,
           transmission_type: p.transmission_type || 'manual',
+          discount_id: p.discount_id || undefined,
           installments: p.installments.map((i) => ({
             receipt_number: i.receipt_number,
             document_date: i.document_date ? this.fmt(i.document_date) : '',

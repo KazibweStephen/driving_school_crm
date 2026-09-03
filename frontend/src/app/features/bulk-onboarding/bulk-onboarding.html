@@ -238,13 +238,13 @@
             <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Product *</label>
-                <p-select [options]="productOptions()" [(ngModel)]="pkg.product_id"
-                  placeholder="Select Product" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
+                <p-select [options]="productOptions()" [ngModel]="pkg.product_id"
+                  (ngModelChange)="onPackageProductChange(ci, pi, $event)" placeholder="Select Product" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Package</label>
-                <p-select [options]="getPackagesForProduct(pkg.product_id)" [(ngModel)]="pkg.package_id"
-                  placeholder="Select Package" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
+                <p-select [options]="getPackagesForProduct(pkg.product_id)" [ngModel]="pkg.package_id"
+                  (ngModelChange)="onPackageChange(ci, pi, $event)" placeholder="Select Package" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
               </div>
             </div>
 
@@ -254,6 +254,17 @@
                 {{ packageNameById(pkg.product_id, pkg.package_id) }}
                 <span class="text-indigo-400">·</span>
                 {{ packagePriceById(pkg.product_id, pkg.package_id) | number }}
+              </div>
+            }
+
+            @if (pkg.product_id) {
+              <div class="mx-4 mb-3">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Discount</label>
+                <p-select [options]="discountOptionsFor(pkg)" [(ngModel)]="pkg.discount_id"
+                  placeholder="Select discount" appendTo="body" class="w-full" [filter]="true" filterBy="label" />
+                @if (pkg.discount_id && discountApplied(pkg) > 0) {
+                  <p class="text-xs text-green-600 mt-1">Discount applied: −{{ discountApplied(pkg) | number }} UGX</p>
+                }
               </div>
             }
 

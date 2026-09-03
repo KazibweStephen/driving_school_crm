@@ -11,6 +11,12 @@ from fastapi import HTTPException
 from app.models.cart import CartItem, CartItemStatus
 from app.models.company import Branch
 from app.models.consultation import Consultation, ConsultationStatus
+from app.models.discount import (
+    CartItemDiscount,
+    Discount,
+    DiscountAppliesTo,
+    DiscountStatus,
+)
 from app.models.lesson_plan import (
     ClientLesson,
     ClientLessonPlan,
@@ -24,7 +30,12 @@ from app.models.product import Package
 from app.models.training import TrainingSession
 from app.schemas.bulk_onboarding import BulkOnboardingRequest
 from app.services.commission import create_commission_from_conversion
+from app.services.discount import compute_discount_amount
 from app.services.payment import _generate_system_receipt_number, generate_transaction_id
+
+
+def _effective_price(package_price: Decimal, applied_amount: Decimal) -> Decimal:
+    return max(Decimal("0"), package_price - applied_amount)
 
 
 async def bulk_onboard_clients(
@@ -75,7 +86,51 @@ async def bulk_onboard_clients(
 
             total_paid = sum(inst.amount for inst in pkg_data.installments)
             package_price = Decimal(str(package.price)) if package else total_paid
-            balance = max(Decimal("0"), package_price - total_paid)
+
+            discount_amount = Decimal("0")
+            if pkg_data.discount_id:
+                discount = await db.get(Discount, pkg_data.discount_id)
+                if discount is None:
+                    raise HTTPException(status_code=400, detail="Discount not found")
+                if discount.company_id != branch.company_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Discount does not belong to the company",
+                    )
+                if discount.status not in (DiscountStatus.APPROVED, DiscountStatus.PENDING):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Discount must be approved or pending to be applied",
+                    )
+                if not discount.is_active:
+                    raise HTTPException(status_code=400, detail="Discount is not active")
+                today = date.today()
+                if discount.start_date > today:
+                    raise HTTPException(status_code=400, detail="Discount has not started yet")
+                if discount.end_date is not None and discount.end_date < today:
+                    raise HTTPException(status_code=400, detail="Discount has expired")
+                if discount.max_uses is not None and discount.used_count >= discount.max_uses:
+                    raise HTTPException(status_code=400, detail="Discount usage limit reached")
+
+                if discount.applies_to == DiscountAppliesTo.PRODUCT:
+                    applies = str(pkg_data.product_id) in (discount.product_ids or [])
+                elif discount.applies_to == DiscountAppliesTo.PACKAGE:
+                    applies = bool(discount.package_ids) and str(pkg_data.package_id) in (
+                        discount.package_ids or []
+                    )
+                else:
+                    applies = True
+                if not applies:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Discount does not apply to this product/package",
+                    )
+
+                discount_amount = Decimal(str(compute_discount_amount(discount, float(package_price))))
+                discount.used_count += 1
+
+            effective_price = _effective_price(package_price, discount_amount)
+            balance = max(Decimal("0"), effective_price - total_paid)
             is_fully_paid = balance == 0
 
             cart_item = CartItem(
@@ -97,6 +152,17 @@ async def bulk_onboard_clients(
             db.add(cart_item)
             await db.flush()
 
+            if pkg_data.discount_id:
+                db.add(
+                    CartItemDiscount(
+                        cart_item_id=cart_item.id,
+                        discount_id=pkg_data.discount_id,
+                        applied_amount=float(discount_amount),
+                        applied_by=user.phone,
+                    )
+                )
+                await db.flush()
+
             await create_commission_from_conversion(
                 db,
                 cart_item,
@@ -113,9 +179,9 @@ async def bulk_onboard_clients(
                     created_by_phone=inst_data.received_by_phone,
                     product_id=pkg_data.product_id,
                     package_id=pkg_data.package_id,
-                    total_amount=package_price,
+                    total_amount=effective_price,
                     total_paid=inst_data.amount,
-                    balance=package_price - inst_data.amount,
+                    balance=effective_price - inst_data.amount,
                     document_date=inst_data.document_date,
                     receipt_number=inst_data.receipt_number,
                     system_receipt_number=_generate_system_receipt_number(),

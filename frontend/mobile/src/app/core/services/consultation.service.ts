@@ -160,6 +160,7 @@ export interface BulkOnboardingPackage {
   lessons: BulkOnboardingLesson[];
   transmission_type?: string;
   lesson_plan_template_id?: string;
+  discount_id?: string;
 }
 
 export interface BulkOnboardingClient {

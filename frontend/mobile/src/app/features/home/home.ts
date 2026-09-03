@@ -31,6 +31,7 @@ export class Home {
       { label: 'Lessons', icon: 'pi-calendar', route: '/lessons', color: 'bg-purple-600 text-white', permission: 'lesson_plans.edit' },
       { label: 'Schedule', icon: 'pi-plus-circle', route: '/schedule', color: 'bg-teal-600 text-white', permission: 'lesson_plans.create' },
       { label: 'SMS', icon: 'pi-comments', route: '/sms', color: 'bg-pink-600 text-white', permission: 'sms.send' },
+      { label: 'Bulk Onboard', icon: 'pi-users', route: '/bulk-onboarding', color: 'bg-indigo-600 text-white', permission: 'bulk_onboarding.manage' },
     ];
     return all.filter((t) => !t.permission || perms.includes(t.permission));
   });

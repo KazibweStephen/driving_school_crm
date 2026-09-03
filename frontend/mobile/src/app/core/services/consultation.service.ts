@@ -132,9 +132,72 @@ export interface ConsultationListResponse {
   total_pages: number;
 }
 
+export interface BulkOnboardingLesson {
+  date: string;
+  duration_minutes: number;
+  lesson_type: string;
+  instructor_id?: string;
+  vehicle_id?: string;
+  notes?: string;
+  template_item_id?: string;
+  title?: string;
+  lesson_objectives?: string[];
+  practical_objectives?: string[];
+  status?: string;
+}
+
+export interface BulkOnboardingInstallment {
+  receipt_number: string;
+  document_date: string;
+  amount: number;
+  received_by_phone: string;
+}
+
+export interface BulkOnboardingPackage {
+  product_id: string;
+  package_id?: string;
+  installments: BulkOnboardingInstallment[];
+  lessons: BulkOnboardingLesson[];
+  transmission_type?: string;
+  lesson_plan_template_id?: string;
+}
+
+export interface BulkOnboardingClient {
+  phone: string;
+  first_name: string;
+  middle_name?: string;
+  last_name?: string;
+  location?: string;
+  branch_id?: string;
+  document_date?: string;
+  converter_id?: string;
+  primary_recommender_id?: string;
+  secondary_recommender_id?: string;
+  packages: BulkOnboardingPackage[];
+}
+
+export interface BulkOnboardingRequest {
+  clients: BulkOnboardingClient[];
+}
+
+export interface BulkOnboardingResponse {
+  created: number;
+  consultation_ids: string[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ConsultationService {
   constructor(private http: HttpClient) {}
+
+  bulkOnboard(data: BulkOnboardingRequest) {
+    return this.http.post<BulkOnboardingResponse>('/api/v1/bulk-onboarding', data);
+  }
+
+  checkBulkReceipts(receiptNumbers: string[]) {
+    return this.http.post<{ existing: string[] }>('/api/v1/bulk-onboarding/check-receipts', {
+      receipt_numbers: receiptNumbers,
+    });
+  }
 
   clientSearch(search: string) {
     const params = new HttpParams().set('search', search);

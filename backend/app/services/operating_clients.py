@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.company import (
     Branch, BranchTransfer, Expense, ExpenseStatus, TransferPaymentLink,
@@ -455,7 +456,9 @@ async def reconcile_back(
 
         post = (
             await db.execute(
-                select(OperatingClientPost).where(
+                select(OperatingClientPost)
+                .options(selectinload(OperatingClientPost.expense))
+                .where(
                     OperatingClientPost.id == post_id,
                     OperatingClientPost.company_id == company_id,
                 )

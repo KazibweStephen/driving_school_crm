@@ -50,6 +50,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/expenses/expenses').then((m) => m.Expenses),
       },
       {
+        path: 'bulk-onboarding',
+        loadComponent: () => import('./features/bulk-onboarding/bulk-onboarding').then((m) => m.BulkOnboarding),
+      },
+      {
         path: 'finance',
         children: [
           {

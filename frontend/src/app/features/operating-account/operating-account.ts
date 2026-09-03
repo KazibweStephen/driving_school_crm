@@ -60,6 +60,8 @@ export class OperatingAccountCmp implements OnInit {
   owed = signal<OperatingOwedSummary | null>(null);
   showPost = false;
   showOwed = false;
+  postLoading = signal(false);
+  owedLoading = signal(false);
   postNotes = '';
   postEntries = signal<{ consultation_id: string; amount: number | null }[]>([]);
   reconcileEntries = signal<{ post_id: string; amount: number | null }[]>([]);
@@ -216,14 +218,17 @@ export class OperatingAccountCmp implements OnInit {
   }
 
   async openPost() {
+    this.showPost = true;
+    this.postLoading.set(true);
     try {
       this.accounts.set((await this.operatingService.listClientAccounts().toPromise()) || []);
     } catch {
       this.accounts.set([]);
+    } finally {
+      this.postLoading.set(false);
     }
     this.postEntries.set(this.accounts().map((a) => ({ consultation_id: a.consultation_id, amount: null })));
     this.postNotes = '';
-    this.showPost = true;
   }
 
   postSelected(): { consultation_id: string; amount: number }[] {
@@ -247,15 +252,18 @@ export class OperatingAccountCmp implements OnInit {
   }
 
   async openOwed() {
+    this.showOwed = true;
+    this.owedLoading.set(true);
     try {
       this.owed.set((await this.operatingService.getOwedToClients().toPromise()) || null);
     } catch {
       this.owed.set(null);
+    } finally {
+      this.owedLoading.set(false);
     }
     this.reconcileEntries.set(
       (this.owed()?.accounts || []).flatMap((a) => (a.posts || []).map((p) => ({ post_id: p.post_id, amount: p.owed_back || null })))
     );
-    this.showOwed = true;
   }
 
   reconcileSelected(): { post_id: string; amount: number }[] {

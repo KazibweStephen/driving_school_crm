@@ -57,3 +57,4 @@ class OperatingClientPost(Base):
 
     consultation: Mapped["Consultation"] = relationship("Consultation")
     entry: Mapped["OperatingEntry | None"] = relationship("OperatingEntry")
+    expense: Mapped["Expense | None"] = relationship("Expense")

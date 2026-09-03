@@ -1,0 +1,428 @@
+<p-toast position="top-center" />
+
+@if (!wizardOpen()) {
+  <div class="space-y-4 pt-1">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-lg font-bold text-gray-900">Bulk Client Onboarding</h1>
+        <p class="text-xs text-gray-500">Add clients one at a time, step by step</p>
+      </div>
+      <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+        {{ totalClients() }} client(s)
+      </span>
+    </div>
+
+    <!-- Branch -->
+    <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+      <label class="mb-1 block text-sm font-medium text-gray-700">Branch *</label>
+      @if (branches().length === 0) {
+        <p class="text-xs text-amber-600">No branches available. Assign a branch to this user before bulk onboarding.</p>
+      } @else if (branches().length === 1) {
+        <p class="text-sm text-gray-600 bg-green-50 border border-green-100 rounded-lg px-3 py-2">{{ branches()[0].name }} (auto-assigned)</p>
+      } @else {
+        <p-select
+          [options]="branchOptions()"
+          [(ngModel)]="branchId"
+          appendTo="body"
+          placeholder="Select branch"
+          class="w-full"
+          data-testid="bo-branch"
+        />
+      }
+    </div>
+
+    <!-- Add client -->
+    <p-button label="Add Client" icon="pi pi-plus" (click)="addClient()" styleClass="w-full justify-center" data-testid="bo-add-client" />
+
+    <!-- Added clients -->
+    @if (totalClients() > 0) {
+      <div class="space-y-2">
+        @for (client of clients(); track $index; let i = $index) {
+          <div class="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-sm font-semibold text-white">
+              {{ initial(client) }}
+            </span>
+            <button type="button" class="min-w-0 flex-1 text-left" (click)="editClient(i)">
+              <span class="block truncate text-sm font-medium text-gray-900">
+                {{ client.first_name || 'New client' }} {{ client.last_name }}
+              </span>
+              <span class="block text-xs text-gray-500">{{ client.phone }}</span>
+              <span class="mt-0.5 block truncate text-xs text-gray-400">
+                {{ client.packages.length }} pkg(s) · {{ client.packages.reduce((s,p)=>s+p.lessons.length,0) }} lesson(s)
+              </span>
+            </button>
+            <span
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs"
+              [class.bg-green-100]="isComplete(client)"
+              [class.text-green-700]="isComplete(client)"
+              [class.pi]="isComplete(client)"
+              [class.pi-check]="isComplete(client)"
+            >
+              @if (!isComplete(client)) {
+                <i class="pi pi-pencil text-xs text-amber-500"></i>
+              }
+            </span>
+            <button type="button" class="shrink-0 p-1 text-red-500" (click)="removeClient(i)" aria-label="Remove client">
+              <i class="pi pi-trash"></i>
+            </button>
+          </div>
+        }
+      </div>
+
+      <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+        <div class="grid grid-cols-4 gap-2 text-center">
+          <div><div class="text-lg font-bold text-gray-900">{{ totalClients() }}</div><div class="text-[11px] text-gray-500">Clients</div></div>
+          <div><div class="text-lg font-bold text-gray-900">{{ totalPackages() }}</div><div class="text-[11px] text-gray-500">Packages</div></div>
+          <div><div class="text-lg font-bold text-gray-900">{{ totalInstallments() }}</div><div class="text-[11px] text-gray-500">Payments</div></div>
+          <div><div class="text-lg font-bold text-gray-900">{{ totalLessons() }}</div><div class="text-[11px] text-gray-500">Lessons</div></div>
+        </div>
+      </div>
+
+      <div class="flex gap-2">
+        <p-button label="Save Draft" severity="secondary" icon="pi pi-save" (click)="saveDraft()" styleClass="flex-1 justify-center" />
+        <p-button label="" severity="danger" icon="pi pi-trash" (click)="clearDraft()" styleClass="justify-center" />
+      </div>
+
+      <p-button
+        label="Submit Onboarding"
+        icon="pi pi-check"
+        [loading]="submitting()"
+        [disabled]="!isValid()"
+        (click)="submit()"
+        styleClass="w-full justify-center"
+        data-testid="bo-submit"
+      />
+      @if (!isValid() && !submitting()) {
+        <p class="mt-1 text-center text-xs text-gray-400">Tap any incomplete client to finish it before submitting.</p>
+      }
+    }
+  </div>
+}
+
+<!-- Wizard (stepped per client) -->
+@if (wizardClient(); as wc) {
+  @if (wizardOpen()) {
+    <div class="space-y-4 pt-1">
+      <div class="flex items-center justify-between">
+        <button type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" (click)="cancelWizard()" aria-label="Cancel" data-testid="bo-cancel">
+          <i class="pi pi-arrow-left"></i>
+        </button>
+        <h1 class="text-base font-bold text-gray-900">
+          {{ editIndex() >= 0 ? 'Edit Client' : 'Add Client' }}
+        </h1>
+        <span class="w-8"></span>
+      </div>
+
+      <p-steps [model]="wizardItems()" [activeIndex]="wizardStep()" [readonly]="true" styleClass="text-sm" (activeIndexChange)="goStep($event)" />
+
+      <!-- Step 0: Info -->
+      @if (wizardStep() === 0) {
+        <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm space-y-3">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Client info</h3>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="block text-xs text-gray-600">
+              Phone *
+              <input pInputText class="w-full" [ngModel]="wc.phone" (ngModelChange)="updateWizard({phone:$event}); checkPhone($event)" data-testid="bo-phone" />
+            </label>
+            <label class="block text-xs text-gray-600">
+              First name *
+              <input pInputText class="w-full" [ngModel]="wc.first_name" (ngModelChange)="updateWizard({first_name:$event})" data-testid="bo-first" />
+            </label>
+            <label class="block text-xs text-gray-600">
+              Middle name
+              <input pInputText class="w-full" [ngModel]="wc.middle_name" (ngModelChange)="updateWizard({middle_name:$event})" />
+            </label>
+            <label class="block text-xs text-gray-600">
+              Last name
+              <input pInputText class="w-full" [ngModel]="wc.last_name" (ngModelChange)="updateWizard({last_name:$event})" />
+            </label>
+            <label class="col-span-2 block text-xs text-gray-600">
+              Location
+              <input pInputText class="w-full" [ngModel]="wc.location" (ngModelChange)="updateWizard({location:$event})" />
+            </label>
+          </div>
+          @if (wizardPhoneWarning()) {
+            <p class="text-xs text-amber-600">{{ wizardPhoneWarning() }}</p>
+          }
+          <div>
+            <label class="block text-xs text-gray-600">Document date</label>
+            <p-datepicker
+              [ngModel]="wc.document_date"
+              (ngModelChange)="updateWizard({document_date:$event})"
+              dateFormat="dd/mm/yy"
+              appendTo="body"
+              class="w-full"
+            />
+          </div>
+          <div class="grid grid-cols-1 gap-2">
+            <label class="block text-xs text-gray-600">
+              Converter
+              <p-select [options]="userOptions()" [ngModel]="wc.converter_id" (ngModelChange)="updateWizard({converter_id:$event})" appendTo="body" class="w-full" />
+            </label>
+            <label class="block text-xs text-gray-600">
+              Primary recommender
+              <p-select [options]="userOptions()" [ngModel]="wc.primary_recommender_id" (ngModelChange)="updateWizard({primary_recommender_id:$event})" appendTo="body" class="w-full" />
+            </label>
+            <label class="block text-xs text-gray-600">
+              Secondary recommender
+              <p-select [options]="userOptions()" [ngModel]="wc.secondary_recommender_id" (ngModelChange)="updateWizard({secondary_recommender_id:$event})" appendTo="body" class="w-full" />
+            </label>
+          </div>
+        </div>
+      }
+
+      <!-- Step 1: Payments -->
+      @if (wizardStep() === 1) {
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Packages &amp; payments</h3>
+            <button type="button" class="text-xs font-medium text-indigo-600" (click)="addPackage()">+ Add package</button>
+          </div>
+          @if (wc.packages.length === 0) {
+            <div class="rounded-xl border border-gray-200 bg-white p-4 text-center">
+              <p class="text-sm text-gray-500">No packages yet.</p>
+              <p-button label="Add a package" size="small" (click)="addPackage()" class="mt-2" />
+            </div>
+          }
+          @for (pkg of wc.packages; track $index; let pi = $index) {
+            <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+              <div class="mb-2 flex items-center justify-between">
+                <span class="text-xs font-semibold text-gray-700">Package {{ pi + 1 }}</span>
+                <button type="button" class="text-xs font-medium text-red-600" (click)="removePackage(pi)">Remove</button>
+              </div>
+              <div class="grid grid-cols-1 gap-2">
+                <label class="block text-xs text-gray-600">
+                  Product *
+                  <p-select
+                    [options]="productOptions()"
+                    [ngModel]="pkg.product_id"
+                    (ngModelChange)="onPackageProductChange(pi, $event)"
+                    appendTo="body"
+                    class="w-full"
+                  />
+                </label>
+                @if (packageMap().get(pkg.product_id)?.length) {
+                  <label class="block text-xs text-gray-600">
+                    Package
+                    <p-select
+                      [options]="packageMap().get(pkg.product_id)"
+                      [ngModel]="pkg.package_id"
+                      (ngModelChange)="onPackageUpdate(pi, {package_id:$event})"
+                      appendTo="body"
+                      class="w-full"
+                    />
+                  </label>
+                }
+                <label class="block text-xs text-gray-600">
+                  Transmission
+                  <p-select
+                    [options]="[{label:'Manual',value:'manual'},{label:'Automatic',value:'automatic'},{label:'Both',value:'both'}]"
+                    [ngModel]="pkg.transmission_type"
+                    (ngModelChange)="onPackageUpdate(pi, {transmission_type:$event})"
+                    appendTo="body"
+                    class="w-full"
+                  />
+                </label>
+              </div>
+
+              <div class="mt-3">
+                <div class="mb-1 flex items-center justify-between">
+                  <span class="text-xs font-semibold text-gray-600">Installments</span>
+                  <button type="button" class="text-xs font-medium text-indigo-600" (click)="addInstallment(pi)">+ Add</button>
+                </div>
+                @if (pkg.installments.length === 0) {
+                  <p class="text-xs text-gray-400">Add at least one installment.</p>
+                }
+                <div class="space-y-2">
+                  @for (inst of pkg.installments; track $index; let ii = $index) {
+                    <div class="rounded-md border border-gray-200 bg-gray-50 p-2">
+                      <div class="mb-1 flex items-center justify-between">
+                        <span class="text-xs font-medium text-gray-600">Payment {{ ii + 1 }}</span>
+                        <button type="button" class="text-xs text-red-600" (click)="removeInstallment(pi, ii)">Remove</button>
+                      </div>
+                      <div class="grid grid-cols-1 gap-2">
+                        <label class="block text-xs text-gray-600">
+                          Receipt number *
+                          <input pInputText class="w-full" [ngModel]="inst.receipt_number" (ngModelChange)="onInstallmentUpdate(pi, ii, {receipt_number:$event})" />
+                        </label>
+                        <div class="grid grid-cols-2 gap-2">
+                          <label class="block text-xs text-gray-600">
+                            Date *
+                            <p-datepicker [ngModel]="inst.document_date" (ngModelChange)="onInstallmentUpdate(pi, ii, {document_date:$event})" dateFormat="dd/mm/yy" appendTo="body" class="w-full" />
+                          </label>
+                          <label class="block text-xs text-gray-600">
+                            Amount *
+                            <p-inputNumber [ngModel]="inst.amount" (ngModelChange)="onInstallmentUpdate(pi, ii, {amount:$event})" mode="currency" currency="UGX" locale="en-UG" class="w-full" />
+                          </label>
+                        </div>
+                        <label class="block text-xs text-gray-600">
+                          Received by (phone) *
+                          <input pInputText class="w-full" [ngModel]="inst.received_by_phone" (ngModelChange)="onInstallmentUpdate(pi, ii, {received_by_phone:$event})" />
+                        </label>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Step 2: Lessons -->
+      @if (wizardStep() === 2) {
+        <div class="space-y-3">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Lessons</h3>
+          @if (wc.packages.length === 0) {
+            <div class="rounded-xl border border-gray-200 bg-white p-4 text-center">
+              <p class="text-sm text-gray-500">Add a package in the Payments step first.</p>
+            </div>
+          }
+          @for (pkg of wc.packages; track $index; let pi = $index) {
+            <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+              <div class="mb-1 flex items-center justify-between">
+                <span class="text-xs font-semibold text-gray-700">Package {{ pi + 1 }} — {{ productName(pkg.product_id) }}</span>
+                <button type="button" class="text-xs font-medium text-indigo-600" (click)="addLesson(pi)">+ Add lesson</button>
+              </div>
+              @if (pkg.lessons.length === 0) {
+                <p class="text-xs text-gray-400">No lessons yet. Optionally add lesson history.</p>
+              }
+              <div class="space-y-2">
+                @for (lesson of pkg.lessons; track $index; let li = $index) {
+                  <div class="rounded-md border border-gray-200 bg-gray-50 p-2">
+                    <div class="mb-1 flex items-center justify-between">
+                      <span class="text-xs font-medium text-gray-600">Lesson {{ li + 1 }}</span>
+                      <button type="button" class="text-xs text-red-600" (click)="removeLesson(pi, li)">Remove</button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                      <label class="block text-xs text-gray-600">
+                        Type
+                        <p-select
+                          [options]="[{label:'Practical',value:'practical'},{label:'Theory',value:'theory'}]"
+                          [ngModel]="lesson.lesson_type"
+                          (ngModelChange)="onLessonTypeChange(pi, li, $event)"
+                          appendTo="body"
+                          class="w-full"
+                        />
+                      </label>
+                      <label class="block text-xs text-gray-600">
+                        Duration (min)
+                        <p-inputNumber [ngModel]="lesson.duration_minutes" (ngModelChange)="onLessonUpdate(pi, li, {duration_minutes:$event})" [min]="1" [max]="480" class="w-full" />
+                      </label>
+                      <label class="block text-xs text-gray-600">
+                        Date *
+                        <p-datepicker [ngModel]="lesson.date" (ngModelChange)="onLessonUpdate(pi, li, {date:$event})" dateFormat="dd/mm/yy" appendTo="body" class="w-full" />
+                      </label>
+                      <label class="block text-xs text-gray-600">
+                        Status
+                        <p-select
+                          [options]="[{label:'Completed',value:'completed'},{label:'Scheduled',value:'scheduled'}]"
+                          [ngModel]="lesson.status"
+                          (ngModelChange)="onLessonUpdate(pi, li, {status:$event})"
+                          appendTo="body"
+                          class="w-full"
+                        />
+                      </label>
+                      <label class="block text-xs text-gray-600">
+                        Instructor
+                        <p-select [options]="instructorOptions()" [ngModel]="lesson.instructor_id" (ngModelChange)="onLessonUpdate(pi, li, {instructor_id:$event})" appendTo="body" class="w-full" />
+                      </label>
+                      <label class="block text-xs text-gray-600">
+                        Vehicle
+                        <p-select
+                          [options]="vehicleOptionsFor(pkg.transmission_type)"
+                          [ngModel]="lesson.vehicle_id"
+                          (ngModelChange)="onLessonUpdate(pi, li, {vehicle_id:$event})"
+                          appendTo="body"
+                          class="w-full"
+                        />
+                      </label>
+                      <label class="col-span-2 block text-xs text-gray-600">
+                        Notes
+                        <textarea pTextarea rows="2" class="w-full" [ngModel]="lesson.notes" (ngModelChange)="onLessonUpdate(pi, li, {notes:$event})"></textarea>
+                      </label>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Step 3: Preview -->
+      @if (wizardStep() === 3) {
+        <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm space-y-3">
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Preview</h3>
+          <div class="space-y-2">
+            <div>
+              <div class="text-sm font-semibold text-gray-900">{{ wc.first_name }} {{ wc.middle_name }} {{ wc.last_name }}</div>
+              <div class="text-xs text-gray-500">{{ wc.phone }} · {{ wc.location || 'No location' }}</div>
+            </div>
+            @for (pkg of wc.packages; track $index; let pi = $index) {
+              <div class="rounded-md border border-gray-200 p-2">
+                <div class="text-xs font-semibold text-gray-700">
+                  {{ productName(pkg.product_id) || 'Product' }} <span class="font-normal text-gray-500">· {{ packageName(pkg.product_id, pkg.package_id) || 'Package' }}</span>
+                </div>
+                <div class="mt-1 text-xs text-gray-500">
+                  {{ pkg.installments.length }} payment(s) — {{ pkg.installments.reduce((s,i)=>s+(i.amount||0),0) }} UGX
+                </div>
+                <div class="text-xs text-gray-500">{{ pkg.lessons.length }} lesson(s)</div>
+              </div>
+            }
+            @if (wc.packages.length === 0) {
+              <p class="text-xs text-amber-600">No packages added.</p>
+            }
+          </div>
+          <div class="flex gap-2">
+            <p-button
+              label="{{ editIndex() >= 0 ? 'Save changes' : 'Add to list' }}"
+              icon="pi pi-plus"
+              [disabled]="!infoValid() || !paymentsValid()"
+              (click)="saveClientFromWizard()"
+              styleClass="flex-1 justify-center"
+              data-testid="bo-save-client"
+            />
+          </div>
+        </div>
+      }
+
+      <!-- Wizard footer nav -->
+      @if (wizardStep() < 3) {
+        <div class="flex gap-2">
+          @if (wizardStep() > 0) {
+            <p-button label="Back" severity="secondary" icon="pi pi-arrow-left" (click)="prevStep()" styleClass="justify-center" data-testid="bo-back" />
+          }
+          <p-button
+            label="Next"
+            icon="pi pi-arrow-right"
+            iconPos="right"
+            [disabled]="stepValid(wizardStep()) === false"
+            (click)="nextStep()"
+            styleClass="flex-1 justify-center"
+            data-testid="bo-next"
+          />
+        </div>
+      }
+    </div>
+  }
+}
+
+<!-- Success dialog -->
+@if (showSuccess()) {
+  <div class="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+    <div class="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+      <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-600">
+        <i class="pi pi-check text-2xl"></i>
+      </span>
+      <h2 class="mt-3 text-lg font-bold text-gray-900">Onboarding complete</h2>
+      <p class="mt-1 text-sm text-gray-500">
+        {{ successCreated() }} client(s) onboarded successfully.
+      </p>
+      <div class="mt-5 flex flex-col gap-2">
+        <p-button label="Go to Dashboard" (click)="goConsultations()" styleClass="w-full justify-center" />
+        <p-button label="Back to Home" severity="secondary" (click)="goHome()" styleClass="w-full justify-center" />
+      </div>
+    </div>
+  </div>
+}

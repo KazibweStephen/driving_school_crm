@@ -176,7 +176,9 @@
   <div class="mb-2 text-sm text-gray-600">
     Post funds from head-office client accounts into the operating account.
   </div>
-  @if (accounts().length === 0) {
+  @if (postLoading()) {
+    <div class="py-6 text-center text-gray-500">Loading client accounts...</div>
+  } @else if (accounts().length === 0) {
     <div class="py-6 text-center text-gray-500">No client accounts with head-office funds available.</div>
   } @else {
     <p-table [value]="accounts()" [style]="{ minWidth: '100%' }">
@@ -218,7 +220,9 @@
       <div class="rounded-lg bg-amber-50 p-2"><div class="text-xs text-gray-500">Owed back</div><div class="font-semibold text-amber-700">{{ currencyService.symbol() }} {{ formatAmount(o.total_owed_back) }}</div></div>
       <div class="rounded-lg bg-gray-50 p-2"><div class="text-xs text-gray-500">Reconciled</div><div class="font-semibold">{{ currencyService.symbol() }} {{ formatAmount(o.total_reconciled) }}</div></div>
     </div>
-    @if (reconcileEntries().length === 0) {
+    @if (owedLoading()) {
+      <div class="py-6 text-center text-gray-500">Loading...</div>
+    } @else if (reconcileEntries().length === 0) {
       <div class="py-6 text-center text-gray-500">Nothing owed back to client accounts.</div>
     } @else {
       <p-table [value]="reconcileEntries()" [style]="{ minWidth: '100%' }">

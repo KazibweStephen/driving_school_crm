@@ -16,6 +16,7 @@ import { ConsultationService, BulkOnboardingRequest } from '../../core/services/
 import { DiscountService, Discount } from '../../core/services/discount.service';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
+import { firstValueFrom } from 'rxjs';
 
 interface InstallmentDraft {
   receipt_number: string;
@@ -107,8 +108,10 @@ export class BulkOnboarding implements OnInit {
   quickGenOpen = signal(false);
   quickGenPkgIndex = signal(0);
   quickGenStartDate = signal<Date | null>(new Date());
-  quickGenPracticalDays = signal<number | null>(null);
-  quickGenTheoryLessons = signal<number | null>(null);
+  quickGenPlannedPractical = signal<number>(0);
+  quickGenPlannedTheory = signal<number>(0);
+  quickGenPracticalCovered = signal<number>(0);
+  quickGenTheoryCovered = signal<number>(0);
   quickGenInstructorId = signal('');
   quickGenVehicleId = signal('');
   quickGenPreview = signal<LessonDraft[]>([]);
@@ -182,6 +185,16 @@ export class BulkOnboarding implements OnInit {
     return this.wizardClient()?.packages[this.quickGenPkgIndex()]?.transmission_type || 'manual';
   }
 
+  documentDateMin = computed(() => this.wizardClient()?.document_date || new Date());
+
+  quickGenRemainingPractical = computed(() =>
+    Math.max(0, (this.quickGenPlannedPractical() || 0) - (this.quickGenPracticalCovered() || 0)),
+  );
+
+  quickGenRemainingTheory = computed(() =>
+    Math.max(0, (this.quickGenPlannedTheory() || 0) - (this.quickGenTheoryCovered() || 0)),
+  );
+
   loadDiscountsForPackage(pkg: PackageDraft) {
     if (!pkg.product_id) return;
     const key = this.discountKey(pkg.product_id, pkg.package_id);
@@ -217,12 +230,19 @@ export class BulkOnboarding implements OnInit {
       .map((v) => ({ label: `${v.name} (${v.plate_number})`, value: v.id }));
   }
 
-  wizardItems = computed(() => [
-    { label: 'Info', icon: 'pi pi-user' },
-    { label: 'Payments', icon: 'pi pi-wallet' },
-    { label: 'Lessons', icon: 'pi pi-book' },
-    { label: 'Preview', icon: 'pi pi-eye' },
-  ]);
+  wizardItems = computed(() => {
+    const infoIncomplete = !this.infoValid();
+    const phoneDuplicate = this.wizardPhoneWarning().length > 0;
+    const info = infoIncomplete || phoneDuplicate;
+    const pay = !this.paymentsValid();
+    const lessons = this.hasStepError(2);
+    return [
+      { label: 'Info', icon: info ? 'pi pi-exclamation-circle' : 'pi pi-user', danger: info },
+      { label: 'Payments', icon: pay ? 'pi pi-exclamation-circle' : 'pi pi-wallet', danger: pay },
+      { label: 'Lessons', icon: lessons ? 'pi pi-exclamation-circle' : 'pi pi-book', danger: lessons },
+      { label: 'Preview', icon: 'pi pi-eye', danger: false },
+    ];
+  });
 
   totalClients = computed(() => this.clients().length);
   totalPackages = computed(() =>
@@ -292,84 +312,107 @@ export class BulkOnboarding implements OnInit {
     if (!raw) return;
     try {
       const draft = JSON.parse(raw);
-      const restored: ClientDraft[] = (draft.clients || []).map((c: any) => ({
-        phone: c.phone || '',
-        first_name: c.first_name || '',
-        middle_name: c.middle_name || '',
-        last_name: c.last_name || '',
-        location: c.location || '',
-        document_date: c.document_date ? new Date(c.document_date + 'T00:00:00') : null,
-        converter_id: c.converter_id || this.currentPhone(),
-        primary_recommender_id: c.primary_recommender_id || this.currentPhone(),
-        secondary_recommender_id: c.secondary_recommender_id || this.currentPhone(),
-        packages: (c.packages || []).map((p: any) => ({
-          product_id: p.product_id || '',
-          package_id: p.package_id || '',
-          transmission_type: p.transmission_type || 'manual',
-          discount_id: p.discount_id || '',
-          installments: (p.installments || []).map((i: any) => ({
-            receipt_number: i.receipt_number || '',
-            document_date: i.document_date ? new Date(i.document_date + 'T00:00:00') : null,
-            amount: i.amount ?? null,
-            received_by_phone: i.received_by_phone || '',
-          })),
-          lessons: (p.lessons || []).map((l: any) => ({
-            date: l.date ? new Date(l.date + 'T00:00:00') : null,
-            duration_minutes: l.duration_minutes ?? null,
-            lesson_type: l.lesson_type || 'practical',
-            instructor_id: l.instructor_id || '',
-            vehicle_id: l.vehicle_id || '',
-            notes: l.notes || '',
-            status: l.status === 'scheduled' ? 'scheduled' : 'completed',
-          })),
-        })),
-      }));
-      this.clients.set(restored);
+      this.clients.set((draft.clients || []).map((c: any) => this.deserializeClient(c)));
+      if (draft.branch_id) this.branchId.set(draft.branch_id);
+      if (draft.wizard && draft.wizard.client) {
+        this.wizardClient.set(this.deserializeClient(draft.wizard.client));
+        this.wizardStep.set(draft.wizard.step ?? 0);
+        this.editIndex.set(draft.wizard.editIndex ?? -1);
+        this.wizardOpen.set(true);
+      }
       this.msg.add({ severity: 'info', summary: 'Draft restored from local storage' });
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
   }
 
+  private deserializeClient(c: any): ClientDraft {
+    return {
+      phone: c.phone || '',
+      first_name: c.first_name || '',
+      middle_name: c.middle_name || '',
+      last_name: c.last_name || '',
+      location: c.location || '',
+      document_date: c.document_date ? new Date(c.document_date + 'T00:00:00') : null,
+      converter_id: c.converter_id || this.currentPhone(),
+      primary_recommender_id: c.primary_recommender_id || this.currentPhone(),
+      secondary_recommender_id: c.secondary_recommender_id || this.currentPhone(),
+      packages: (c.packages || []).map((p: any) => ({
+        product_id: p.product_id || '',
+        package_id: p.package_id || '',
+        transmission_type: p.transmission_type || 'manual',
+        discount_id: p.discount_id || '',
+        installments: (p.installments || []).map((i: any) => ({
+          receipt_number: i.receipt_number || '',
+          document_date: i.document_date ? new Date(i.document_date + 'T00:00:00') : null,
+          amount: i.amount ?? null,
+          received_by_phone: i.received_by_phone || '',
+        })),
+        lessons: (p.lessons || []).map((l: any) => ({
+          date: l.date ? new Date(l.date + 'T00:00:00') : null,
+          duration_minutes: l.duration_minutes ?? null,
+          lesson_type: l.lesson_type || 'practical',
+          instructor_id: l.instructor_id || '',
+          vehicle_id: l.vehicle_id || '',
+          notes: l.notes || '',
+          status: l.status === 'scheduled' ? 'scheduled' : 'completed',
+        })),
+      })),
+    };
+  }
+
   private persistDraft() {
+    const wc = this.wizardClient();
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         saved_at: new Date().toISOString(),
-        clients: this.clients().map((c) => ({
-          phone: c.phone,
-          first_name: c.first_name,
-          middle_name: c.middle_name,
-          last_name: c.last_name,
-          location: c.location,
-          document_date: c.document_date ? this.fmt(c.document_date) : null,
-          converter_id: c.converter_id,
-          primary_recommender_id: c.primary_recommender_id,
-          secondary_recommender_id: c.secondary_recommender_id,
-          packages: c.packages.map((p) => ({
-            product_id: p.product_id,
-            package_id: p.package_id,
-            transmission_type: p.transmission_type,
-            discount_id: p.discount_id,
-            installments: p.installments.map((i) => ({
-              receipt_number: i.receipt_number,
-              document_date: i.document_date ? this.fmt(i.document_date) : null,
-              amount: i.amount,
-              received_by_phone: i.received_by_phone,
-            })),
-            lessons: p.lessons.map((l) => ({
-              date: l.date ? this.fmt(l.date) : null,
-              duration_minutes: l.duration_minutes,
-              lesson_type: l.lesson_type,
-              instructor_id: l.instructor_id,
-              vehicle_id: l.vehicle_id,
-              notes: l.notes,
-              status: l.status,
-            })),
-          })),
-        })),
+        branch_id: this.branchId(),
+        clients: this.clients().map((c) => this.serializeClient(c)),
+        wizard: this.wizardOpen() && wc
+          ? {
+              client: this.serializeClient(wc),
+              step: this.wizardStep(),
+              editIndex: this.editIndex(),
+            }
+          : null,
       }),
     );
+  }
+
+  private serializeClient(c: ClientDraft): any {
+    return {
+      phone: c.phone,
+      first_name: c.first_name,
+      middle_name: c.middle_name,
+      last_name: c.last_name,
+      location: c.location,
+      document_date: c.document_date ? this.fmt(c.document_date) : null,
+      converter_id: c.converter_id,
+      primary_recommender_id: c.primary_recommender_id,
+      secondary_recommender_id: c.secondary_recommender_id,
+      packages: c.packages.map((p) => ({
+        product_id: p.product_id,
+        package_id: p.package_id,
+        transmission_type: p.transmission_type,
+        discount_id: p.discount_id,
+        installments: p.installments.map((i) => ({
+          receipt_number: i.receipt_number,
+          document_date: i.document_date ? this.fmt(i.document_date) : null,
+          amount: i.amount,
+          received_by_phone: i.received_by_phone,
+        })),
+        lessons: p.lessons.map((l) => ({
+          date: l.date ? this.fmt(l.date) : null,
+          duration_minutes: l.duration_minutes,
+          lesson_type: l.lesson_type,
+          instructor_id: l.instructor_id,
+          vehicle_id: l.vehicle_id,
+          notes: l.notes,
+          status: l.status,
+        })),
+      })),
+    };
   }
 
   private fmt(d: Date): string {
@@ -438,19 +481,22 @@ export class BulkOnboarding implements OnInit {
   // ── Wizard validation ──
   infoValid(): boolean {
     const c = this.wizardClient();
-    return !!c && !!c.phone && !!c.first_name;
+    return !!c && !!c.first_name && this.phoneValid();
   }
 
   paymentsValid(): boolean {
     const c = this.wizardClient();
     if (!c || c.packages.length === 0) return false;
-    return c.packages.every(
-      (p) =>
-        !!p.product_id &&
-        p.installments.length > 0 &&
-        p.installments.every(
-          (i) => !!i.receipt_number && !!i.document_date && !!i.amount && !!i.received_by_phone,
-        ),
+    const receiptsOk = Object.keys(this.receiptWarnings()).length === 0;
+    return (
+      c.packages.every(
+        (p) =>
+          !!p.product_id &&
+          p.installments.length > 0 &&
+          p.installments.every(
+            (i) => !!i.receipt_number && !!i.document_date && !!i.amount && !!i.received_by_phone,
+          ),
+      ) && receiptsOk
     );
   }
 
@@ -471,21 +517,79 @@ export class BulkOnboarding implements OnInit {
     return this.infoValid() && this.paymentsValid() && this.lessonsValid();
   }
 
-  nextStep() {
+  phoneValid(): boolean {
+    const c = this.wizardClient();
+    return !!c?.phone && c.phone.trim().length > 0;
+  }
+
+  stepErrors(step: number): string[] {
+    const errs: string[] = [];
+    const c = this.wizardClient();
+    if (step === 0) {
+      if (!c) return errs;
+      if (c.first_name && !this.phoneValid()) errs.push('Enter a valid phone number');
+    } else if (step === 1) {
+      if (!c || c.packages.length === 0) {
+        errs.push('Add at least one package');
+      } else {
+        c.packages.forEach((p) => {
+          if (!p.product_id) errs.push('Select a product for each package');
+          if (p.installments.length === 0) errs.push('Add at least one payment per package');
+          p.installments.forEach((i) => {
+            if (!i.receipt_number) errs.push('Receipt number is required per payment');
+            if (!i.document_date) errs.push('Payment date is required');
+            if (!i.amount || i.amount <= 0) errs.push('Payment amount is required');
+            if (!i.received_by_phone) errs.push('Received-by user is required');
+          });
+        });
+      }
+    } else if (step === 2) {
+      if (!c) return errs;
+      c.packages.forEach((p) => {
+        p.lessons.forEach((l) => {
+          if (!l.date) errs.push('Lesson date is required');
+          if (!l.duration_minutes || l.duration_minutes <= 0) errs.push('Lesson duration is required');
+        });
+      });
+    }
+    return errs;
+  }
+
+  hasStepError(step: number): boolean {
+    return this.stepErrors(step).length > 0;
+  }
+
+  async nextStep() {
     if (!this.stepValid(this.wizardStep())) {
-      this.msg.add({ severity: 'warn', summary: 'Complete this step first' });
+      const errs = this.stepErrors(this.wizardStep());
+      if (errs.length) {
+        this.msg.add({ severity: 'warn', summary: 'Fix the issues on this step first' });
+      } else {
+        this.msg.add({ severity: 'warn', summary: 'Complete this step first' });
+      }
       return;
     }
-    this.wizardStep.update((s) => Math.min(3, s + 1));
+    const step = this.wizardStep();
+    if (step === 0) {
+      const ok = await this.validatePhoneAsync();
+      if (!ok) return;
+    } else if (step === 1) {
+      const ok = await this.validateReceiptsAsync();
+      if (!ok) return;
+    }
+    this.wizardStep.set(Math.min(3, step + 1));
+    this.persistDraft();
   }
 
   prevStep() {
     this.wizardStep.update((s) => Math.max(0, s - 1));
+    this.persistDraft();
   }
 
-  goStep(step: number) {
+  async goStep(step: number) {
     if (step < this.wizardStep()) {
       this.wizardStep.set(step);
+      this.persistDraft();
       return;
     }
     if (step === this.wizardStep()) return;
@@ -494,8 +598,64 @@ export class BulkOnboarding implements OnInit {
         this.msg.add({ severity: 'warn', summary: 'Complete previous steps first' });
         return;
       }
+      if (s === 0) {
+        const ok = await this.validatePhoneAsync();
+        if (!ok) return;
+      } else if (s === 1) {
+        const ok = await this.validateReceiptsAsync();
+        if (!ok) return;
+      }
     }
     this.wizardStep.set(step);
+    this.persistDraft();
+  }
+
+  private async validatePhoneAsync(): Promise<boolean> {
+    const c = this.wizardClient();
+    if (!c || !c.phone) return true;
+    try {
+      const results = await firstValueFrom(this.consultationService.clientSearch(c.phone));
+      const match = results?.find((r) => r.phone === c.phone);
+      if (match) {
+        this.wizardPhoneWarning.set(
+          `Client exists: ${match.first_name} ${match.last_name || ''} (${match.latest_status})`,
+        );
+        this.msg.add({
+          severity: 'warn',
+          summary: `Phone belongs to existing client — check before proceeding`,
+        });
+        return false;
+      }
+      this.wizardPhoneWarning.set('');
+      return true;
+    } catch {
+      return true;
+    }
+  }
+
+  private async validateReceiptsAsync(): Promise<boolean> {
+    const c = this.wizardClient();
+    if (!c) return true;
+    const receipts: string[] = [];
+    c.packages.forEach((p) =>
+      p.installments.forEach((i) => {
+        if (i.receipt_number) receipts.push(i.receipt_number);
+      }),
+    );
+    if (receipts.length === 0) return true;
+    try {
+      const res = await firstValueFrom(this.consultationService.checkBulkReceipts(receipts));
+      if (res.existing && res.existing.length > 0) {
+        this.msg.add({
+          severity: 'warn',
+          summary: `Receipt(s) already exist: ${res.existing.join(', ')}`,
+        });
+        return false;
+      }
+      return true;
+    } catch {
+      return true;
+    }
   }
 
   saveClientFromWizard() {
@@ -530,6 +690,7 @@ export class BulkOnboarding implements OnInit {
   // ── Wizard field helpers ──
   updateWizard(patch: Partial<ClientDraft>) {
     this.wizardClient.update((c) => (c ? { ...c, ...patch } : c));
+    if (this.wizardOpen()) this.persistDraft();
   }
 
   checkPhone(phone: string) {
@@ -690,11 +851,28 @@ export class BulkOnboarding implements OnInit {
   }
 
   // ── Quick Generate lessons ──
+  quickGenPackageConfig() {
+    const c = this.wizardClient();
+    const pkg = c?.packages[this.quickGenPkgIndex()];
+    const config = this.productById()
+      .get(pkg?.product_id || '')
+      ?.packages?.find((x) => x.id === pkg?.package_id);
+    return {
+      practicalDays: config?.driving_training_duration_days ?? null,
+      theoryLessons: config?.theory_training_hours
+        ? Math.ceil(Number(config.theory_training_hours) / 2)
+        : null,
+    };
+  }
+
   openQuickGen(pkgIndex: number) {
     this.quickGenPkgIndex.set(pkgIndex);
-    this.quickGenStartDate.set(new Date());
-    this.quickGenPracticalDays.set(null);
-    this.quickGenTheoryLessons.set(null);
+    this.quickGenStartDate.set(this.documentDateMin());
+    const config = this.quickGenPackageConfig();
+    this.quickGenPlannedPractical.set(config.practicalDays ?? 0);
+    this.quickGenPlannedTheory.set(config.theoryLessons ?? 0);
+    this.quickGenPracticalCovered.set(0);
+    this.quickGenTheoryCovered.set(0);
     this.quickGenInstructorId.set('');
     this.quickGenVehicleId.set('');
     this.quickGenPreview.set([]);
@@ -707,8 +885,8 @@ export class BulkOnboarding implements OnInit {
   }
 
   quickGenGenerate() {
-    const days = this.quickGenPracticalDays() || 0;
-    const theoryCount = this.quickGenTheoryLessons() || 0;
+    const days = this.quickGenRemainingPractical();
+    const theoryCount = this.quickGenRemainingTheory();
     const instructorId = this.quickGenInstructorId();
     const vehicleId = this.quickGenVehicleId();
     const start = this.quickGenStartDate();
@@ -767,11 +945,24 @@ export class BulkOnboarding implements OnInit {
     }
     const pi = this.quickGenPkgIndex();
     const pkgs = [...c.packages];
-    pkgs[pi] = { ...pkgs[pi], lessons: preview.map((l) => ({ ...l })) };
+    const existing = pkgs[pi].lessons;
+    const existingKeys = new Set(
+      existing
+        .filter((l) => l.date)
+        .map((l) => `${this.fmt(l.date!)}::${l.lesson_type}`),
+    );
+    const toAdd = preview.filter((l) => l.date && !existingKeys.has(`${this.fmt(l.date!)}::${l.lesson_type}`));
+    const merged = [...existing, ...toAdd].sort(
+      (a, b) => (a.date?.getTime() ?? 0) - (b.date?.getTime() ?? 0),
+    );
+    pkgs[pi] = { ...pkgs[pi], lessons: merged };
     this.updateWizard({ packages: pkgs });
     this.quickGenOpen.set(false);
     this.quickGenPreview.set([]);
-    this.msg.add({ severity: 'success', summary: `${preview.length} lesson(s) generated` });
+    this.msg.add({
+      severity: 'success',
+      summary: `${toAdd.length} future lesson(s) scheduled (${existing.length} already covered)`,
+    });
   }
 
   countExpandedLessons(lessons: LessonDraft[]): number {
@@ -915,7 +1106,15 @@ export class BulkOnboarding implements OnInit {
     this.router.navigate(['/home']);
   }
 
-  goConsultations() {
+  addMore() {
+    this.showSuccess.set(false);
+    this.clients.set([]);
+    this.wizardClient.set(null);
+    this.wizardOpen.set(false);
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  viewClients() {
     this.showSuccess.set(false);
     this.router.navigate(['/dashboard']);
   }

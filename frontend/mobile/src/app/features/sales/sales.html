@@ -143,6 +143,11 @@
                 {{ c.first_name }} {{ c.middle_name }} {{ c.last_name }}
               </div>
               <div class="text-xs text-slate-500">{{ c.phone }}</div>
+              @if (c.branch_name) {
+                <div class="mt-0.5 text-[11px] text-slate-400">
+                  <span class="pi pi-map-marker"></span> {{ c.branch_name }}
+                </div>
+              }
               <div class="mt-1 text-xs font-medium text-slate-600">{{ c.status }}</div>
             </button>
           }

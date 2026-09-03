@@ -24,22 +24,17 @@ async def _resolve_branch_ids(
     current_user: User,
     requested_branch_ids: list[str] | None,
 ) -> list[uuid.UUID] | None:
-    """Return resolved branch UUIDs or None (all).
+    """Return resolved branch UUIDs for the current user's list views.
 
-    For non-super users: returns only branches within their company.
+    Only ``super_user`` may see all company branches. Every other user is
+    limited to their assigned branches (via ``UserBranchAssignment``).
     """
     # Start with the base branch query scoped to the user's company
     base_query = select(Branch)
-    if current_user.company_id is not None:
-        base_query = base_query.where(Branch.company_id == current_user.company_id)
 
-    is_privileged = current_user.role in (
-        UserRole.SUPER_USER, UserRole.OFFICE_ADMIN, UserRole.MANAGER, UserRole.BRANCH_SUPERVISOR,
-    )
-
-    if is_privileged:
-        # Privileged users (super, office admin, manager, branch supervisor) can see
-        # all branches in their company when no specific branch filter is requested.
+    if current_user.role == UserRole.SUPER_USER:
+        if current_user.company_id is not None:
+            base_query = base_query.where(Branch.company_id == current_user.company_id)
         if not requested_branch_ids:
             result = await db.execute(base_query)
             return [b.id for b in result.scalars().all()]
@@ -51,7 +46,7 @@ async def _resolve_branch_ids(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No branch access")
         return resolved
 
-    # Non-privileged: use assigned branches (scoped to company)
+    # Non-super: use assigned branches (scoped to company)
     result = await db.execute(
         select(UserBranchAssignment.branch_id)
         .join(Branch, UserBranchAssignment.branch_id == Branch.id)
@@ -63,6 +58,11 @@ async def _resolve_branch_ids(
     assigned = [row[0] for row in result.all()]
     if not assigned:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No branch access")
+    if requested_branch_ids:
+        valid = set(uuid.UUID(b) for b in requested_branch_ids) & set(assigned)
+        if not valid:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No branch access")
+        return list(valid)
     return assigned
 
 
@@ -75,10 +75,7 @@ async def accessible_branches(
     if current_user.company_id is not None:
         base_query = base_query.where(Branch.company_id == current_user.company_id)
 
-    is_privileged = current_user.role in (
-        UserRole.SUPER_USER, UserRole.OFFICE_ADMIN, UserRole.MANAGER, UserRole.BRANCH_SUPERVISOR,
-    )
-    if is_privileged:
+    if current_user.role == UserRole.SUPER_USER:
         branches = (await db.execute(base_query.order_by(Branch.name))).scalars().all()
     else:
         result = await db.execute(

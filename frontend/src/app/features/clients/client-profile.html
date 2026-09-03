@@ -23,6 +23,7 @@
           <div class="mt-2 space-y-1 text-sm text-gray-600">
             <p><span class="font-medium">Phone:</span> {{ c.phone }}</p>
             @if (c.location) { <p><span class="font-medium">Location:</span> {{ c.location }}</p> }
+            @if (c.branch_name) { <p><span class="font-medium">Branch:</span> {{ c.branch_name }}</p> }
             @if (c.how_they_knew_us) { <p><span class="font-medium">How they knew us:</span> {{ c.how_they_knew_us }}</p> }
             @if (c.interest_level) { <p><span class="font-medium">Interest Level:</span> {{ c.interest_level }}</p> }
             @if (c.start_date) { <p><span class="font-medium">Expected Start Date:</span> {{ c.start_date }}</p> }

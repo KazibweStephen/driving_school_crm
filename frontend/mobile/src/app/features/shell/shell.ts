@@ -69,28 +69,7 @@ export class Shell implements OnInit {
   }
 
   tabs = computed<NavTab[]>(() => {
-    const perms = this.auth.permissions();
-    const tabs: NavTab[] = [];
-    tabs.push({ route: '/home', label: 'Home', icon: 'pi-home' });
-    if (perms.includes('consultations.create')) {
-      tabs.push({ route: '/sales', label: 'Sales', icon: 'pi-tags' });
-    }
-    if (perms.includes('payments.record')) {
-      tabs.push({ route: '/payments', label: 'Payments', icon: 'pi-wallet' });
-    }
-    if (perms.includes('lesson_plans.edit')) {
-      tabs.push({ route: '/lessons', label: 'Lessons', icon: 'pi-calendar' });
-    }
-    if (perms.includes('lesson_plans.create')) {
-      tabs.push({ route: '/schedule', label: 'Schedule', icon: 'pi-plus-circle' });
-    }
-    if (perms.includes('sms.send')) {
-      tabs.push({ route: '/sms', label: 'SMS', icon: 'pi-comments' });
-    }
-    if (perms.includes('expenses.view')) {
-      tabs.push({ route: '/expenses', label: 'Expenses', icon: 'pi-money-bill' });
-    }
-    return tabs;
+    return [{ route: '/home', label: 'Home', icon: 'pi-home' }];
   });
 
   logout() {

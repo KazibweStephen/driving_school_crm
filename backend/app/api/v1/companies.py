@@ -53,19 +53,16 @@ async def my_branches(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("branches.view")),
 ):
-    """Branches accessible to the current user (all in company if privileged, else assigned)."""
+    """Branches accessible to the current user (all in company for super users, else assigned)."""
     base_query = select(Branch)
     if current_user.company_id is not None:
         base_query = base_query.where(Branch.company_id == current_user.company_id)
 
-    is_privileged = current_user.role in (
+    is_super = current_user.role in (
         UserRole.SUPER_USER,
         UserRole.COMPANY_SUPER_USER,
-        UserRole.OFFICE_ADMIN,
-        UserRole.MANAGER,
-        UserRole.BRANCH_SUPERVISOR,
     )
-    if is_privileged:
+    if is_super:
         result = await db.execute(base_query.order_by(Branch.name))
         branches = result.scalars().all()
     else:

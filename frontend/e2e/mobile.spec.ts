@@ -43,16 +43,10 @@ test.describe('Mobile PWA', () => {
     await expect(page.getByTestId('qa-sale')).toBeVisible();
   });
 
-  test('bottom nav shows home and admin tabs', async ({ page }) => {
+  test('bottom nav shows only home button', async ({ page }) => {
     await mobileLogin(page);
     const nav = page.locator('nav');
     await expect(nav.getByText('Home')).toBeVisible();
-    await expect(nav.getByText('Sales')).toBeVisible();
-    await expect(nav.getByText('Payments')).toBeVisible();
-    await expect(nav.getByText('Lessons')).toBeVisible();
-    await expect(nav.getByText('Schedule')).toBeVisible();
-    await expect(nav.getByText('SMS')).toBeVisible();
-    await expect(nav.getByText('Expenses')).toBeVisible();
   });
 
   test('expenses page loads and can create an expense', async ({ page }) => {

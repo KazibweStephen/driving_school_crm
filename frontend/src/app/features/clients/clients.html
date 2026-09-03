@@ -40,7 +40,7 @@
                 <p-checkbox [binary]="true" [ngModel]="isAllSelected()" (onChange)="toggleSelectAll()" />
               </th>
             }
-            <th>Name</th><th>Phone</th><th>Location</th><th>Status</th><th>Actions</th>
+            <th>Name</th><th>Phone</th><th>Location</th><th>Branch</th><th>Status</th><th>Actions</th>
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-item>
@@ -53,12 +53,13 @@
             <td class="font-medium text-blue-600 hover:text-blue-800 hover:underline">{{ fullName(item) }}</td>
             <td class="text-sm text-gray-600">{{ item.phone }}</td>
             <td class="text-sm text-gray-500">{{ item.location || '—' }}</td>
+            <td class="text-sm text-gray-500">{{ item.branch_name || '—' }}</td>
             <td>@if (item.latest_status) { <p-tag [value]="item.latest_status" [severity]="statusSeverity(item.latest_status)" /> } @else { <span class="text-sm text-gray-400">—</span> }</td>
             <td><p-button icon="pi pi-eye" severity="secondary" [routerLink]="['/consultations', item.latest_consultation_id]" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="View" /></td>
           </tr>
         </ng-template>
         <ng-template pTemplate="emptydata">
-          <tr><td [colSpan]="authService.currentUserRole() === 'super_user' ? 6 : 5" class="py-8 text-center text-gray-400">
+          <tr><td [colSpan]="authService.currentUserRole() === 'super_user' ? 7 : 6" class="py-8 text-center text-gray-400">
             @if (loading()) { <p>Searching...</p> } @else { <p class="mb-2">No person found matching "<span class="font-medium">{{ search() }}</span>"</p><p-button label="Create Consultation" icon="pi pi-plus" severity="success" (onClick)="openCreate()" /> }
           </td></tr>
         </ng-template>
@@ -95,7 +96,7 @@
                 <p-checkbox [binary]="true" [ngModel]="isAllSelected()" (onChange)="toggleSelectAll()" />
               </th>
             }
-            <th>Name</th><th>Phone</th><th>Location</th><th>Status</th><th>Stage</th><th>Actions</th>
+            <th>Name</th><th>Phone</th><th>Location</th><th>Branch</th><th>Status</th><th>Stage</th><th>Actions</th>
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-c>
@@ -108,6 +109,7 @@
             <td class="font-medium"><a [routerLink]="['/consultations', c.id]" class="text-blue-600 hover:text-blue-800 hover:underline">{{ fullName(c) }}</a></td>
             <td class="text-sm text-gray-600">{{ c.phone }}</td>
             <td class="text-sm text-gray-500">{{ c.location || '—' }}</td>
+            <td class="text-sm text-gray-500">{{ c.branch_name || '—' }}</td>
             <td><p-tag [value]="c.status" [severity]="statusSeverity(c.status)" /></td>
             <td class="text-sm text-gray-500">{{ stageLabel(c) }}</td>
             <td>
@@ -119,7 +121,7 @@
           </tr>
         </ng-template>
         <ng-template pTemplate="emptydata">
-          <tr><td [colSpan]="authService.currentUserRole() === 'super_user' ? 7 : 6" class="py-8 text-center text-gray-400">@if (loading()) { <p>Loading...</p> } @else { <p>No consultations yet</p> }</td></tr>
+          <tr><td [colSpan]="authService.currentUserRole() === 'super_user' ? 8 : 7" class="py-8 text-center text-gray-400">@if (loading()) { <p>Loading...</p> } @else { <p>No consultations yet</p> }</td></tr>
         </ng-template>
       </p-table>
     </div>

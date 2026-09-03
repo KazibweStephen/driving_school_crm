@@ -10,7 +10,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { ExpenseService, Expense, ExpenseCreatePayload, UnremittedClientPayment, ExpenseCategory } from '../../core/services/expense.service';
 import { PaymentService, BranchInfo } from '../../core/services/payment.service';
 import { CatalogService, Vehicle } from '../../core/services/catalog.service';
-import { ConsultationService, ClientInfo } from '../../core/services/consultation.service';
+import { ConsultationService } from '../../core/services/consultation.service';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { PageHeader } from '../../shared/page-header/page-header';
 import { formatMoney, toISODate, todayISO } from '../../shared/format';
@@ -96,11 +96,9 @@ export class Expenses {
 
   // client-linked expense support (categories with requires_client)
   requiresClientCategories = new Set<string>();
-  clientSearchQuery = signal('');
-  clientResults = signal<ClientInfo[]>([]);
-  clientSearching = signal(false);
   consultationId = signal<string | null>(null);
   selectedClientLabel = signal('');
+  selectedClientAvailable = signal<number | null>(null);
 
   statusOptions = [
     { label: 'All', value: '' },
@@ -145,49 +143,27 @@ export class Expenses {
     return this.requiresClientCategories.has(this.category());
   }
 
-  searchClient(query: string) {
-    this.clientSearchQuery.set(query);
-    const q = (query || '').trim();
-    if (!q) {
-      this.clientResults.set([]);
-      this.clientSearching.set(false);
-      return;
-    }
-    this.clientSearching.set(true);
-    this.consultationService.clientSearch(q).subscribe({
-      next: (res) => {
-        this.clientResults.set(res ?? []);
-        this.clientSearching.set(false);
-      },
-      error: () => {
-        this.clientResults.set([]);
-        this.clientSearching.set(false);
-      },
-    });
-  }
-
-  selectClient(c: ClientInfo) {
-    if (!c.latest_consultation_id) {
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'No consultation',
-        detail: 'This client has no consultation to attach',
-      });
-      return;
-    }
-    this.consultationId.set(c.latest_consultation_id);
-    this.selectedClientLabel.set(
-      `${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`,
-    );
-    this.clientResults.set([]);
-    this.clientSearchQuery.set('');
+  selectClientAccount(p: UnremittedClientPayment) {
+    this.consultationId.set(p.consultation_id);
+    this.selectedClientLabel.set(`${p.client_name || p.client_phone} · ${p.client_phone}`);
+    this.selectedClientAvailable.set(p.amount ?? 0);
+    this.clientAccountSearch.set('');
+    this.applyClientAccountPaymentFilter();
   }
 
   clearClient() {
     this.consultationId.set(null);
     this.selectedClientLabel.set('');
-    this.clientResults.set([]);
-    this.clientSearchQuery.set('');
+    this.selectedClientAvailable.set(null);
+    this.clientAccountSearch.set('');
+    this.applyClientAccountPaymentFilter();
+  }
+
+  clientFundsOk(): boolean {
+    const avail = this.selectedClientAvailable();
+    if (avail == null) return true;
+    if (!(this.amount() ?? 0)) return true;
+    return (this.amount() ?? 0) <= avail + 0.001;
   }
 
   isClientAccountCategory(): boolean {
@@ -198,13 +174,9 @@ export class Expenses {
     return this.requiresClientCategories.has(this.category()) || this.isClientAccountCategory();
   }
 
-  canFundFromClientAccount(): boolean {
-    return (this.amount() ?? 0) <= this.clientAccountAvailable() + 0.001;
-  }
-
   async loadClientAccountDetail() {
     const branchId = this.branchId();
-    if (this.isClientAccountCategory() && branchId) {
+    if (this.needsClient() && branchId) {
       this.clientAccountLoading.set(true);
       this.clientAccountPayments.set([]);
       this.clientAccountPaymentsFiltered.set([]);
@@ -431,16 +403,16 @@ export class Expenses {
       this.messageService.add({ severity: 'warn', summary: 'Enter a valid amount' });
       return;
     }
-    if (this.isClientAccountCategory() && !this.canFundFromClientAccount()) {
-      this.messageService.add({
-        severity: 'error',
-        summary: 'Insufficient client-account funds',
-        detail: `Available: ${this.money(this.clientAccountAvailable())}. Fund the client account from head office first.`,
-      });
+    if (this.needsClient() && !this.consultationId()) {
+      this.messageService.add({ severity: 'warn', summary: 'Select a client for this expense' });
       return;
     }
-    if (this.categoryRequiresClient() && !this.consultationId()) {
-      this.messageService.add({ severity: 'warn', summary: 'Select a client for this expense' });
+    if (this.needsClient() && !this.clientFundsOk()) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Insufficient client funds',
+        detail: `Selected client has only ${this.money(this.selectedClientAvailable() ?? 0)} available.`,
+      });
       return;
     }
     if (this.category() === 'Fuel' && !this.vehicleId()) {

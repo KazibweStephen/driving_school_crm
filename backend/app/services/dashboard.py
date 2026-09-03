@@ -60,13 +60,13 @@ async def _resolve_branch_ids(
 ) -> list[uuid.UUID] | None:
     """Branches accessible to the user.
 
-    Returns None (all branches, no filter) for super users without a company,
-    all company branches for privileged roles, otherwise the user's assigned
-    branches (possibly empty).
+    Returns None (all branches, no filter) only for super users without a
+    company. Every other user (including privileged roles) is limited to their
+    assigned branches (possibly empty) via ``UserBranchAssignment``.
     """
     if company_id is None:
         return None
-    if user_role in PRIVILEGED_ROLES:
+    if user_role == UserRole.SUPER_USER:
         result = await db.execute(
             select(Branch.id).where(Branch.company_id == company_id)
         )

@@ -30,6 +30,7 @@ export interface Consultation {
   notes: string | null;
   status: string;
   branch_id: string | null;
+  branch_name: string | null;
   created_by_phone: string | null;
   created_at: string;
   updated_at: string;

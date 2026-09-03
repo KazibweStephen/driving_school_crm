@@ -120,7 +120,16 @@ async def list_clients(
             paid = sum((p.total_paid or Decimal("0.00")) for p in pays)
             balance = max(Decimal("0.00"), item_total - paid)
             commission = commissions_map.get(str(ci.id))
-            commission_total = commission.total_amount if commission else Decimal("0.00")
+            commission_total = Decimal("0.00")
+            if commission:
+                if commission.converter_id == current_user.phone:
+                    commission_total = commission.converter_amount
+                elif commission.primary_recommender_id == current_user.phone:
+                    commission_total = commission.primary_recommender_amount
+                elif commission.secondary_recommender_id == current_user.phone:
+                    commission_total = commission.secondary_recommender_amount
+                else:
+                    commission_total = Decimal("0.00")
             commission_earned = Decimal("0.00")
             if commission_total and item_total > 0:
                 ratio = min(Decimal("1.00"), paid / item_total)

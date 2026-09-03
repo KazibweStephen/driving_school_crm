@@ -6,6 +6,7 @@ import { map } from 'rxjs/operators';
 export interface Expense {
   id: string;
   branch_id: string;
+  branch_name?: string | null;
   amount: number;
   description: string | null;
   category: string | null;

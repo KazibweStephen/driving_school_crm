@@ -78,6 +78,6 @@
   <router-outlet />
 </main>
 
-@if (tabs().length > 1) {
+@if (tabs().length >= 1) {
   <app-bottom-nav [tabs]="tabs()" />
 }

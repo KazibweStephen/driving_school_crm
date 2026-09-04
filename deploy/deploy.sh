@@ -6,6 +6,9 @@ set -euo pipefail
 
 COMPOSE_FILE="docker-compose.prod.yml"
 
+docker compose -f docker-compose.prod.yml down  frontend
+
+
 # Optional target service. Usage:
 #   ./deploy/deploy.sh            full deployment (build & restart all services)
 #   ./deploy/deploy.sh frontend   rebuild & restart only the frontend

@@ -8,6 +8,7 @@ export interface ClientLesson {
   week_number: number | null;
   title: string;
   status: string;
+  is_active: boolean;
   is_locked: boolean;
   difficulty: string | null;
   outcome: string | null;
@@ -74,5 +75,9 @@ export class LessonService {
 
   getTimer(lessonId: string) {
     return this.http.get<LessonTimer>(`/api/v1/lessons/${lessonId}/timer`);
+  }
+
+  updateLesson(lessonId: string, data: Partial<ClientLesson>) {
+    return this.http.patch<ClientLesson>(`/api/v1/lesson-plans/lessons/${lessonId}`, data);
   }
 }

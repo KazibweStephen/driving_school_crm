@@ -1,7 +1,44 @@
 <app-page-header title="Lessons" />
 
-@if (step() === 'week') {
+@if (step() === 'list') {
   <div class="space-y-3">
+    <div class="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+      @for (mode of views; track mode) {
+        <button
+          type="button"
+          [class.bg-slate-900]="view() === mode"
+          [class.text-white]="view() === mode"
+          [class.text-slate-600]="view() !== mode"
+          class="flex-1 rounded-md py-1.5 text-xs font-medium"
+          (click)="setView(mode)"
+          data-testid="view-toggle"
+        >
+          {{ viewLabel(mode) }}
+        </button>
+      }
+    </div>
+
+    <div class="flex items-center justify-between">
+      <button
+        type="button"
+        class="rounded-lg border border-slate-200 p-2 text-slate-600"
+        (click)="shift(-1)"
+        data-testid="prev-period"
+      ><span class="pi pi-chevron-left"></span></button>
+      <button
+        type="button"
+        class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700"
+        (click)="today()"
+        data-testid="go-today"
+      >Today</button>
+      <button
+        type="button"
+        class="rounded-lg border border-slate-200 p-2 text-slate-600"
+        (click)="shift(1)"
+        data-testid="next-period"
+      ><span class="pi pi-chevron-right"></span></button>
+    </div>
+
     <div class="flex gap-1 overflow-x-auto pb-1">
       @for (d of days(); track d.date) {
         <button
@@ -9,12 +46,15 @@
           [class.bg-slate-900]="selectedDate() === d.date"
           [class.text-white]="selectedDate() === d.date"
           [class.bg-white]="selectedDate() !== d.date"
-          class="flex-1 rounded-lg border border-slate-200 py-2 text-center text-xs"
+          class="flex-1 rounded-lg border border-slate-200 py-2 text-center text-[10px]"
           (click)="selectDate(d.date)"
           data-testid="day-chip"
         >
           <div class="font-medium">{{ d.label }}</div>
           <div class="{{ isToday(d.date) ? 'font-bold' : 'text-slate-500' }}">{{ d.day }}</div>
+          @if (countFor(d.date) > 0) {
+            <span class="mt-0.5 block h-1 w-1 rounded-full bg-slate-900"></span>
+          }
         </button>
       }
     </div>
@@ -22,7 +62,7 @@
     @if (selectedSlots().length === 0) {
       <div class="rounded-xl border border-slate-200 bg-white p-6 text-center">
         <span class="mb-2 block text-2xl text-slate-300"><span class="pi pi-calendar"></span></span>
-        <p class="text-sm text-slate-500">No lessons scheduled for this day.</p>
+        <p class="text-sm text-slate-500">No lessons scheduled for this {{ counterLabel() }}.</p>
       </div>
     } @else {
       <div class="space-y-3">
@@ -34,11 +74,8 @@
                 <div class="text-xs text-slate-500">{{ slot.title }}</div>
                 <div class="mt-1 text-xs text-slate-500">
                   {{ slotTime(slot) }}
-                  @if (slot.instructor_name || slot.vehicle_name) {
-                    · {{ slot.instructor_name || 'No instructor' }}
-                    @if (slot.vehicle_name) {
-                      · {{ slot.vehicle_name }} ({{ slot.vehicle_plate }})
-                    }
+                  @if (slot.vehicle_name) {
+                    · {{ slot.vehicle_name }} ({{ slot.vehicle_plate }})
                   }
                 </div>
               </div>
@@ -52,7 +89,8 @@
                 class="rounded-full px-2 py-0.5 text-[10px] font-medium"
               >{{ statusLabel(slot.status) }}</span>
             </div>
-            @if (canStart(slot) && (slot.status === 'pending' || slot.status === 'unlocked')) {
+
+            @if (canStart(slot)) {
               <p-button
                 label="Start lesson"
                 size="small"
@@ -61,6 +99,22 @@
                 (click)="startLesson(slot)"
                 data-testid="start-lesson"
               />
+            }
+            @if (canReschedule(slot)) {
+              <div class="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  class="flex-1 rounded-lg border border-slate-200 p-2 text-xs font-medium text-slate-600"
+                  (click)="openReschedule(slot)"
+                  data-testid="reschedule-lesson"
+                ><span class="pi pi-calendar"></span> Reschedule</button>
+                <button
+                  type="button"
+                  class="flex-1 rounded-lg border border-slate-200 p-2 text-xs font-medium text-red-600"
+                  (click)="removeLesson(slot)"
+                  data-testid="remove-lesson"
+                ><span class="pi pi-trash"></span> Remove</button>
+              </div>
             }
           </div>
         }
@@ -112,6 +166,55 @@
       </div>
     </div>
   }
+}
+
+@if (showReschedule()) {
+  <div class="fixed inset-0 z-50 flex items-end bg-black/40" data-testid="reschedule-dialog">
+    <div class="w-full rounded-t-2xl bg-white p-4">
+      <div class="mb-3 flex items-center justify-between">
+        <h2 class="text-base font-semibold">Reschedule lesson</h2>
+        <button type="button" class="text-slate-400" (click)="showReschedule.set(false)"><span class="pi pi-times"></span></button>
+      </div>
+      <div class="space-y-3">
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Date</label>
+          <input
+            type="date"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            [ngModel]="rsDate()"
+            (ngModelChange)="rsDate.set($event)"
+            data-testid="rs-date"
+          />
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">Start time</label>
+            <input
+              type="time"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              [ngModel]="rsStart()"
+              (ngModelChange)="rsStart.set($event)"
+              data-testid="rs-start"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">End time</label>
+            <input
+              type="time"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              [ngModel]="rsEnd()"
+              (ngModelChange)="rsEnd.set($event)"
+              data-testid="rs-end"
+            />
+          </div>
+        </div>
+        <div class="flex gap-2 pt-1">
+          <button type="button" class="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-medium text-slate-600" (click)="showReschedule.set(false)">Cancel</button>
+          <button type="button" class="flex-1 rounded-lg bg-blue-600 p-2 text-sm font-medium text-white" [disabled]="saving()" (click)="submitReschedule()" data-testid="confirm-reschedule">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
 }
 
 <app-loading-overlay [visible]="loading()" message="Loading schedule..." />

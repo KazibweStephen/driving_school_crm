@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time as _time
 from decimal import Decimal
 
 from sqlalchemy import or_, select, update
@@ -1105,6 +1105,8 @@ async def update_client_lesson(
     status: str | None = None,
     difficulty: str | None = None,
     scheduled_date: date | None = None,
+    scheduled_start_time: str | None = None,
+    scheduled_end_time: str | None = None,
     duration_minutes: int | None = None,
     vehicle_inspection_minutes: int | None = None,
     cockpit_drill_minutes: int | None = None,
@@ -1214,6 +1216,12 @@ async def update_client_lesson(
         lesson.difficulty = LessonDifficulty(difficulty)
     if scheduled_date is not None:
         lesson.scheduled_date = scheduled_date
+    if scheduled_start_time is not None:
+        _st = _time.fromisoformat(scheduled_start_time) if ":" in str(scheduled_start_time) else None
+        lesson.scheduled_start_time = _st
+    if scheduled_end_time is not None:
+        _et = _time.fromisoformat(scheduled_end_time) if ":" in str(scheduled_end_time) else None
+        lesson.scheduled_end_time = _et
     if duration_minutes is not None:
         lesson.duration_minutes = duration_minutes
     if vehicle_inspection_minutes is not None:

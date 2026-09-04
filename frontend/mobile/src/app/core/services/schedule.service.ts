@@ -59,8 +59,11 @@ export interface ClientLessonPlan {
 export class ScheduleService {
   constructor(private http: HttpClient) {}
 
-  getWeeklySchedule(startDate: string) {
-    const params = new HttpParams().set('start_date', startDate);
+  getWeeklySchedule(startDate: string, view: string = 'week', applyInstructorScope = false) {
+    const params = new HttpParams()
+      .set('start_date', startDate)
+      .set('view', view)
+      .set('apply_instructor_scope', String(applyInstructorScope));
     return this.http.get<WeeklyScheduleResponse>('/api/v1/schedule/weekly', { params });
   }
 

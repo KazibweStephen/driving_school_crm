@@ -919,9 +919,16 @@ async def get_weekly_schedule(
     db: AsyncSession, start_date: date,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
+    instructor_id: str | None = None,
+    days: int = 7,
 ) -> list[dict]:
-    """Get all scheduled lessons for a week (start_date to start_date+6)."""
-    end_date = start_date + timedelta(days=6)
+    """Get all scheduled lessons for a range (start_date to start_date + days - 1).
+
+    `days` supports day (1), week (7) or month (30/31 via the caller computing start_date
+    over the month start). An instructor-scoped user sees only their own lessons if
+    `instructor_id` is provided.
+    """
+    end_date = start_date + timedelta(days=days - 1)
     query = (
         select(ClientLesson)
         .join(ClientLesson.plan)
@@ -930,9 +937,10 @@ async def get_weekly_schedule(
         .where(
             ClientLesson.scheduled_date.between(start_date, end_date),
             ClientLesson.is_active == True,
-            ClientLesson.scheduled_start_time.isnot(None),
         )
     )
+    if instructor_id is not None:
+        query = query.where(ClientLesson.instructor_id == instructor_id)
     if company_id is not None:
         query = query.outerjoin(Branch, Consultation.branch_id == Branch.id).where(
             or_(Consultation.branch_id.is_(None), Branch.company_id == company_id)
@@ -973,7 +981,7 @@ async def get_weekly_schedule(
         for v in veh_result.scalars().all():
             vehicles[v.id] = {"name": v.name, "plate": v.plate_number, "transmission": v.transmission.value if v.transmission else None}
 
-    days = [start_date + timedelta(days=i) for i in range(7)]
+    days = [start_date + timedelta(days=i) for i in range(days)]
     slots = []
     for lesson in lessons:
         client_name = (

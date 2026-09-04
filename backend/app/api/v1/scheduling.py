@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_permission
 from app.core.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.lesson_plan import (
     ClientAvailabilityCreate,
     ClientAvailabilityRead,
@@ -135,7 +135,9 @@ async def get_instructor_schedule(
 
 @router.get("/api/v1/schedule/weekly", response_model=WeeklyScheduleResponse)
 async def get_weekly_schedule(
-    start_date: str = Query(..., description="Start date in YYYY-MM-DD format (Monday)"),
+    start_date: str = Query(..., description="Start date in YYYY-MM-DD format"),
+    view: str = Query("week", description="day | week | month"),
+    apply_instructor_scope: bool = Query(False, description="Scope to current user as instructor"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("availabilities.view")),
 ):
@@ -143,10 +145,25 @@ async def get_weekly_schedule(
         d = date.fromisoformat(start_date)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format")
+    days = 7
+    if view == "day":
+        days = 1
+    elif view == "month":
+        # extend to cover a full month window starting at `d`
+        if d.month == 12:
+            next_month = date(d.year + 1, 1, 1)
+        else:
+            next_month = date(d.year, d.month + 1, 1)
+        days = (next_month - d).days
+    instructor_id = None
+    if apply_instructor_scope or current_user.role == UserRole.INSTRUCTOR:
+        instructor_id = current_user.phone
     result = await scheduling_service.get_weekly_schedule(
         db, d,
         company_id=current_user.company_id,
         current_user_role=current_user.role,
+        instructor_id=instructor_id,
+        days=days,
     )
     return WeeklyScheduleResponse(
         start_date=result["start_date"],

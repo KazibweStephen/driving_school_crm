@@ -286,6 +286,7 @@ class ClientLessonUpdate(BaseModel):
     enforce_prerequisites: bool | None = None
     scheduled_date: date | None = None
     scheduled_start_time: str | None = None
+    scheduled_end_time: str | None = None
     duration_minutes: int | None = None
 
 

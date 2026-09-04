@@ -504,10 +504,10 @@ export class Sales {
           .map(String)
           .filter((id) => branches.some((b) => b.id === id));
         if (assigned.length >= 1) this.branchId.set(assigned[0]);
-        else if (branches.length === 1) this.branchId.set(branches[0].id);
+        else if (branches.length >= 1) this.branchId.set(branches[0].id);
       },
       error: () => {
-        if (branches.length === 1) this.branchId.set(branches[0].id);
+        if (branches.length >= 1) this.branchId.set(branches[0].id);
       },
     });
   }
@@ -985,6 +985,15 @@ export class Sales {
 
   private submitNewSale() {
     if (this.submitting()) return;
+    if (!this.branchId() || !this.branches().some((b) => b.id === this.branchId())) {
+      this.submitting.set(false);
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Branch required',
+        detail: 'Please select a collecting branch before submitting.',
+      });
+      return;
+    }
     this.submitting.set(true);
     const consulting = this.saleMode() === 'consulting';
     const items: FullConsultationItem[] = this.selectedItems().map((item) => ({

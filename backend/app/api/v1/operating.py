@@ -40,6 +40,8 @@ def _read(e) -> OperatingEntryRead:
         loan_entry_id=e.loan_entry_id,
         transfer_id=e.transfer_id,
         target_pool=e.target_pool,
+        funded_by=e.funded_by,
+        repay_from_profit=e.repay_from_profit,
         created_by=e.created_by,
         created_at=e.created_at,
     )
@@ -83,6 +85,8 @@ async def create_entry(
         description=data.description,
         reference=data.reference,
         entry_date=data.entry_date,
+        funded_by=data.funded_by,
+        repay_from_profit=data.repay_from_profit,
         created_by=current_user.phone,
     )
     await db.commit()

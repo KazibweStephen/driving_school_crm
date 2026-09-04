@@ -74,6 +74,10 @@ class OperatingEntry(Base):
         ForeignKey("company_operating_entries.id", ondelete="SET NULL"), nullable=True, index=True
     )
     target_pool: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # Who provided/funded the money for this entry (e.g. an equity injection or loan).
+    funded_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Whether LOAN/equity entries must be repaid from future profit.
+    repay_from_profit: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     created_by: Mapped[str | None] = mapped_column(
         ForeignKey("users.phone"), nullable=True
     )

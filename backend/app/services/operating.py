@@ -145,6 +145,8 @@ async def create_entry(
     description: str,
     reference: str | None = None,
     entry_date=None,
+    funded_by: str | None = None,
+    repay_from_profit: bool = False,
     created_by: str | None = None,
 ) -> OperatingEntry:
     from fastapi import HTTPException
@@ -159,6 +161,8 @@ async def create_entry(
         description=description,
         reference=reference,
         entry_date=entry_date,
+        funded_by=funded_by,
+        repay_from_profit=repay_from_profit,
         created_by=created_by,
     )
     db.add(entry)

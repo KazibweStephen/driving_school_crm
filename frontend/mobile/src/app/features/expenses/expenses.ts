@@ -67,6 +67,7 @@ export class Expenses {
 
   // create form
   amount = signal<number | null>(null);
+  charges = signal<number>(0);
   description = signal('');
   category = signal<string>('');
   expenseDate = signal<string>(todayISO());
@@ -75,6 +76,13 @@ export class Expenses {
   );
   receiptUrl = signal<string | null>(null);
   selectedFile: File | null = null;
+
+  // pay dialog state
+  showPayDialog = signal(false);
+  payingExpense = signal<Expense | null>(null);
+  payCharges = signal(0);
+  payReceiptUrl = signal<string | null>(null);
+  paySelectedFile: File | null = null;
 
   vehicles = signal<Vehicle[]>([]);
   vehicleId = signal<string | null>(null);
@@ -307,6 +315,7 @@ export class Expenses {
 
   openCreate() {
     this.amount.set(null);
+    this.charges.set(0);
     this.description.set('');
     this.category.set('');
     this.expenseDate.set(todayISO());
@@ -424,6 +433,7 @@ export class Expenses {
     const payload: ExpenseCreatePayload = {
       branch_id: branchId,
       amount,
+      charges: this.charges() || 0,
       description: this.description() || undefined,
       category: this.category() || undefined,
       vehicle_id: isFuel ? (this.vehicleId() ?? undefined) : undefined,
@@ -453,12 +463,59 @@ export class Expenses {
     );
   }
 
-  markPaid(expense: Expense) {
-    this.runAction(
-      expense.id,
-      () => this.expenseService.markPaid(expense.id),
-      'Expense marked paid',
-    );
+  openPay(expense: Expense) {
+    this.payingExpense.set(expense);
+    this.payCharges.set(expense.charges ?? 0);
+    this.payReceiptUrl.set(null);
+    this.paySelectedFile = null;
+    this.showPayDialog.set(true);
+  }
+
+  onPayFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.paySelectedFile = file;
+    input.value = '';
+  }
+
+  submitPayment() {
+    const expense = this.payingExpense();
+    if (!expense) return;
+    this.loading.set(true);
+    if (this.paySelectedFile) {
+      this.expenseService.uploadReceipt(this.paySelectedFile).subscribe({
+        next: (res) => this.doPay(expense, this.payCharges() || 0, res.url),
+        error: () => {
+          this.loading.set(false);
+          this.messageService.add({ severity: 'error', summary: 'Receipt upload failed' });
+        },
+      });
+      return;
+    }
+    this.doPay(expense, this.payCharges() || 0, this.payReceiptUrl());
+  }
+
+  private doPay(expense: Expense, charges: number, receiptUrl: string | null) {
+    this.expenseService.markPaid(expense.id, {
+      charges,
+      receipt_url: receiptUrl || undefined,
+    }).subscribe({
+      next: () => {
+        this.loading.set(false);
+        this.showPayDialog.set(false);
+        this.messageService.add({ severity: 'success', summary: 'Expense marked paid' });
+        this.loadExpenses();
+      },
+      error: (err) => {
+        this.loading.set(false);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Could not mark paid',
+          detail: err.error?.detail || 'Try again',
+        });
+      },
+    });
   }
 
   deleteExpense(expense: Expense) {

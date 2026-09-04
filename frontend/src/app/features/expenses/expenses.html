@@ -92,7 +92,7 @@
               <p-button *appHasPermission="'expenses.delete'" icon="pi pi-trash" severity="secondary" rounded="true" pTooltip="Delete" (onClick)="confirmDelete(e)" />
             }
             @if (e.status === 'approved') {
-              <p-button *appHasPermission="'expenses.pay'" icon="pi pi-credit-card" severity="info" rounded="true" pTooltip="Mark Paid" (onClick)="markPaid(e.id)" />
+              <p-button *appHasPermission="'expenses.pay'" icon="pi pi-credit-card" severity="info" rounded="true" pTooltip="Mark Paid" (onClick)="openPay(e)" />
             }
             @if (e.status === 'rejected') {
               <p-button *appHasPermission="'expenses.manage'" icon="pi pi-trash" severity="secondary" rounded="true" pTooltip="Delete rejected" (onClick)="confirmDelete(e)" />
@@ -198,6 +198,11 @@
       <p-inputNumber [(ngModel)]="form.amount" [min]="0" [max]="999999" mode="decimal"
         [maxFractionDigits]="2" styleClass="w-full" inputStyleClass="w-full" />
     </div>
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700">Charges (additional monies)</label>
+      <p-inputNumber [(ngModel)]="form.charges" [min]="0" [max]="999999" mode="decimal"
+        [maxFractionDigits]="2" styleClass="w-full" inputStyleClass="w-full" />
+    </div>
     @if (form.category === 'Fuel') {
       <div>
         <label class="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
@@ -260,6 +265,44 @@
   <ng-template pTemplate="footer">
     <p-button label="Cancel" severity="secondary" (onClick)="showRejectDialog.set(false)" />
     <p-button label="Reject" severity="danger" [disabled]="!rejectReason().trim()" (onClick)="reject()" />
+  </ng-template>
+</p-dialog>
+
+<p-dialog
+  [(visible)]="showPayDialog"
+  header="Mark Expense Paid"
+  [modal]="true"
+  [style]="{ width: '440px' }"
+  [draggable]="false"
+  [resizable]="false"
+  appendTo="body"
+>
+  <div class="flex flex-col gap-3 pt-2">
+    <p class="text-sm text-gray-600">
+      Pay <span class="font-medium">{{ currencyService.symbol() }} {{ payingExpense()?.amount }}</span>
+      @if ((payingExpense()?.charges ?? 0) > 0) {
+        + charges <span class="font-medium">{{ currencyService.symbol() }} {{ payingExpense()?.charges }}</span>
+      }?
+    </p>
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700">Charges (adjustable at payment)</label>
+      <p-inputNumber [(ngModel)]="payCharges" [min]="0" [max]="999999" mode="decimal"
+        [maxFractionDigits]="2" styleClass="w-full" inputStyleClass="w-full" />
+    </div>
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700">Receipt</label>
+      <input type="file" class="w-full" accept=".heic,.heif,.pdf,.png,.jpg,.jpeg,.webp,.bmp,.gif" (change)="onPayReceiptSelected($event)" />
+      @if (payReceiptFile()) {
+        <div class="mt-1 flex items-center justify-between text-xs text-slate-500">
+          <span class="truncate">{{ payReceiptFile()!.name }}</span>
+          <button type="button" class="text-slate-500 underline" (click)="payReceiptFile.set(null)">Remove</button>
+        </div>
+      }
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button label="Cancel" severity="secondary" (onClick)="showPayDialog.set(false)" />
+    <p-button label="Pay" [disabled]="payingUpload()" [loading]="payingUpload()" (onClick)="submitPayment()" />
   </ng-template>
 </p-dialog>
 

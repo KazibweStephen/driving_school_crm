@@ -215,6 +215,10 @@ class Expense(Base):
         ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True
     )
     amount: Mapped[float] = mapped_column(nullable=False)
+    # Additional monies (e.g. bank charges) recorded at submission.
+    charges: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, server_default="0.00")
+    # Final charges actually paid (may be adjusted at the point of paying).
+    paid_charges: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     account: Mapped[str | None] = mapped_column(String(20), nullable=True)

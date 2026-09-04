@@ -39,6 +39,12 @@ async def create_consultation(
 ) -> Consultation:
     from fastapi import HTTPException
 
+    if branch_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="A branch is required. Please select a branch before adding a client.",
+        )
+
     # Serialize same-phone creations so a double-submit can't race past the
     # duplicate check (xact-scoped lock, auto-released on commit/rollback).
     await db.execute(func.pg_advisory_xact_lock(func.hashtext(phone)))

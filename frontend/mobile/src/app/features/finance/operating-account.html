@@ -148,6 +148,18 @@
           <label class="mb-1 block text-xs font-medium text-slate-600">Reference (optional)</label>
           <input type="text" class="w-full rounded-lg border border-slate-300 p-2 text-sm" [(ngModel)]="record.reference" />
         </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Date</label>
+          <input type="date" class="w-full rounded-lg border border-slate-300 p-2 text-sm" [(ngModel)]="record.entry_date" data-testid="operating-record-date" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Funded by</label>
+          <input type="text" class="w-full rounded-lg border border-slate-300 p-2 text-sm" [(ngModel)]="record.funded_by" placeholder="e.g. Owner / source" />
+        </div>
+        <label class="flex items-center gap-2 rounded-lg border border-slate-300 p-2 text-sm text-slate-700">
+          <input type="checkbox" class="h-4 w-4" [(ngModel)]="record.repay_from_profit" />
+          Repay from future profit
+        </label>
         <div class="flex gap-2 pt-1">
           <button type="button" class="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-medium text-slate-600" (click)="showRecord = false">Cancel</button>
           <button type="button" class="flex-1 rounded-lg bg-slate-900 p-2 text-sm font-medium text-white" (click)="saveRecord()" data-testid="operating-record-save">Save</button>

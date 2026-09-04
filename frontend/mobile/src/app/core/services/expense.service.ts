@@ -8,6 +8,8 @@ export interface Expense {
   branch_id: string;
   branch_name?: string | null;
   amount: number;
+  charges: number;
+  paid_charges?: number | null;
   description: string | null;
   category: string | null;
   mileage: number | null;
@@ -37,6 +39,7 @@ export interface ExpenseListResponse {
 export interface ExpenseCreatePayload {
   branch_id: string;
   amount: number;
+  charges?: number;
   description?: string;
   category?: string;
   mileage?: number;
@@ -122,8 +125,8 @@ export class ExpenseService {
     return this.http.post<Expense>(`/api/v1/finance/expenses/${id}/reject`, { rejection_reason });
   }
 
-  markPaid(id: string) {
-    return this.http.post<Expense>(`/api/v1/finance/expenses/${id}/mark-paid`, {});
+  markPaid(id: string, body?: { charges?: number; receipt_url?: string }) {
+    return this.http.post<Expense>(`/api/v1/finance/expenses/${id}/mark-paid`, body ?? {});
   }
 
   deleteExpense(id: string) {

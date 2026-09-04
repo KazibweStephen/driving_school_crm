@@ -41,7 +41,7 @@ export class OperatingAccount implements OnInit {
     { label: 'Operating Expense', value: 'operating_expense' },
   ];
 
-  record = { entry_type: 'equity', amount: null as number | null, description: '', reference: '', entry_date: todayISO() };
+  record = { entry_type: 'equity', amount: null as number | null, description: '', reference: '', entry_date: todayISO(), funded_by: '', repay_from_profit: false as boolean };
   fund = { to_branch_id: null as string | null, pool: 'petty_cash', amount: null as number | null, description: '' };
   repay = { loan_entry_id: null as string | null, amount: null as number | null, description: '' };
 
@@ -119,7 +119,7 @@ export class OperatingAccount implements OnInit {
   }
 
   openRecord() {
-    this.record = { entry_type: 'equity', amount: null, description: '', reference: '', entry_date: todayISO() };
+    this.record = { entry_type: 'equity', amount: null, description: '', reference: '', entry_date: todayISO(), funded_by: '', repay_from_profit: false };
     this.showRecord = true;
   }
 
@@ -132,6 +132,8 @@ export class OperatingAccount implements OnInit {
         description: this.record.description,
         reference: this.record.reference || null,
         entry_date: this.record.entry_date || null,
+        funded_by: this.record.funded_by || null,
+        repay_from_profit: this.record.repay_from_profit,
       }).toPromise();
       this.showRecord = false;
       await this.load();

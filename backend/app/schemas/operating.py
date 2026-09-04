@@ -13,6 +13,8 @@ class OperatingEntryCreate(BaseModel):
     description: str = Field(..., min_length=3)
     reference: str | None = None
     entry_date: date | None = None
+    funded_by: str | None = None
+    repay_from_profit: bool = False
 
     class Config:
         use_enum_values = True
@@ -31,6 +33,8 @@ class OperatingEntryRead(BaseModel):
     loan_entry_id: uuid.UUID | None
     transfer_id: uuid.UUID | None
     target_pool: str | None
+    funded_by: str | None
+    repay_from_profit: bool
     created_by: str | None
     created_at: datetime | None
 

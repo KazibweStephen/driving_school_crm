@@ -25,6 +25,8 @@ export interface OperatingEntry {
   loan_entry_id: string | null;
   transfer_id: string | null;
   target_pool: string | null;
+  funded_by: string | null;
+  repay_from_profit: boolean;
   created_by: string | null;
   created_at: string | null;
 }
@@ -35,6 +37,8 @@ export interface OperatingEntryCreate {
   description: string;
   reference?: string | null;
   entry_date?: string | null;
+  funded_by?: string | null;
+  repay_from_profit?: boolean;
 }
 
 export interface OperatingFundBranch {

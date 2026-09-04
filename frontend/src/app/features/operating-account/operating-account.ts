@@ -7,6 +7,7 @@ import { DialogModule } from 'primeng/dialog';
 import { SelectModule } from 'primeng/select';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
+import { CheckboxModule } from 'primeng/checkbox';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { DatePickerModule } from 'primeng/datepicker';
@@ -31,7 +32,7 @@ interface PoolOption {
   selector: 'app-operating-account',
   imports: [
     CommonModule, FormsModule, ButtonModule, CardModule, DialogModule, SelectModule,
-    InputNumberModule, InputTextModule, TableModule, ToastModule, DatePickerModule,
+    InputNumberModule, InputTextModule, CheckboxModule, TableModule, ToastModule, DatePickerModule,
   ],
   providers: [MessageService],
   templateUrl: './operating-account.html',
@@ -52,7 +53,7 @@ export class OperatingAccountCmp implements OnInit {
     { label: 'Client Accounts', value: 'client_accounts' },
   ];
 
-  record = { entry_type: 'equity', amount: null as number | null, description: '', reference: '', entryDate: null as Date | null };
+  record = { entry_type: 'equity', amount: null as number | null, description: '', reference: '', entryDate: null as Date | null, fundedBy: '', repayFromProfit: false as boolean };
   fund = { to_branch_id: null as string | null, pool: 'petty_cash', amount: null as number | null, description: '' };
   repay = { loan_entry_id: null as string | null, amount: null as number | null, description: '' };
 
@@ -119,7 +120,7 @@ export class OperatingAccountCmp implements OnInit {
   }
 
   openRecord() {
-    this.record = { entry_type: 'equity', amount: null, description: '', reference: '', entryDate: null };
+    this.record = { entry_type: 'equity', amount: null, description: '', reference: '', entryDate: new Date(), fundedBy: '', repayFromProfit: false };
     this.showRecord = true;
   }
 
@@ -153,6 +154,8 @@ export class OperatingAccountCmp implements OnInit {
         description: this.record.description,
         reference: this.record.reference || null,
         entry_date: this.record.entryDate ? this.record.entryDate.toISOString().slice(0, 10) : null,
+        funded_by: this.record.fundedBy || null,
+        repay_from_profit: this.record.repayFromProfit,
       }).toPromise();
       this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Entry recorded' });
       this.showRecord = false;

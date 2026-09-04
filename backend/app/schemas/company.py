@@ -138,6 +138,7 @@ class VehicleBranchAssignmentRead(BaseModel):
 class ExpenseCreate(BaseModel):
     branch_id: uuid.UUID
     amount: float
+    charges: float = 0.0
     description: str | None = None
     category: str | None = None
     consultation_id: uuid.UUID | None = None
@@ -159,12 +160,21 @@ class ExpenseUpdate(BaseModel):
     receipt_url: str | None = None
     vehicle_id: uuid.UUID | None = None
     consultation_id: uuid.UUID | None = None
+    charges: float | None = None
+    paid_charges: float | None = None
+
+
+class MarkExpensePaid(BaseModel):
+    charges: float | None = None
+    receipt_url: str | None = None
 
 
 class ExpenseRead(BaseModel):
     id: uuid.UUID
     branch_id: uuid.UUID
     amount: float
+    charges: float = 0.0
+    paid_charges: float | None = None
     description: str | None = None
     category: str | None = None
     account: str | None = None

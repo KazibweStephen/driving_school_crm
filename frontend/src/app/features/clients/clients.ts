@@ -324,6 +324,12 @@ export class Clients implements OnInit, OnDestroy {
     });
   }
 
+  private defaultBranchId(): string | null {
+    const companyId = this.authService.currentUserCompanyId();
+    const opts = companyId ? this.branches().filter(b => b.company_id === companyId) : this.branches();
+    return opts[0]?.id || null;
+  }
+
   ngOnDestroy() {
     this.searchSub.unsubscribe();
   }
@@ -431,6 +437,7 @@ export class Clients implements OnInit, OnDestroy {
       interest_level: '',
       start_date: null,
       document_date: new Date(),
+      branch_id: this.defaultBranchId(),
     };
     this.selectedProduct.set(null);
     this.selectedPackageId.set(null);
@@ -664,6 +671,10 @@ export class Clients implements OnInit, OnDestroy {
     if (this.createStep() === 1) {
       if (!this.form.phone || !this.form.first_name) {
         this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'Phone and First Name are required' });
+        return;
+      }
+      if (!this.form.branch_id) {
+        this.messageService.add({ severity: 'error', summary: 'Validation Error', detail: 'A branch is required. Select a branch for this client.' });
         return;
       }
       this.createStep.set(2);

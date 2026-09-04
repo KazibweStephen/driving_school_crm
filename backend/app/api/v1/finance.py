@@ -31,6 +31,7 @@ from app.schemas.company import (
     ExpenseRead,
     ExpenseUpdate,
     HoFundingCreate,
+    MarkExpensePaid,
 )
 from app.services import finance as finance_service
 from app.services.permission import has_permission
@@ -223,6 +224,7 @@ async def create_expense(
         db,
         branch_id=data.branch_id,
         amount=data.amount,
+        charges=data.charges or 0.0,
         description=data.description,
         category=data.category,
         consultation_id=data.consultation_id,
@@ -372,6 +374,7 @@ async def reject_expense(
 @router.post("/expenses/{expense_id}/mark-paid", response_model=ExpenseRead)
 async def mark_expense_paid(
     expense_id: uuid.UUID,
+    data: MarkExpensePaid | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("expenses.pay")),
 ):
@@ -383,9 +386,13 @@ async def mark_expense_paid(
     if expense.status != ExpenseStatus.APPROVED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only approved expenses can be marked as paid")
 
+    charges = float(data.charges) if data and data.charges is not None else float(expense.charges or 0.0)
+    if charges < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Charges cannot be negative")
+
     expense_pool = expense.account or "petty_cash"
     available = await finance_service.pool_available(db, expense.branch_id, expense_pool)
-    if float(expense.amount) > available:
+    if float(expense.amount) + charges > available:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Expense exceeds available {expense_pool.replace('_', ' ')} cash in this branch. Available: {available}.",
@@ -394,6 +401,9 @@ async def mark_expense_paid(
     expense.status = ExpenseStatus.PAID
     expense.paid_by = current_user.phone
     expense.paid_at = datetime.now()
+    expense.paid_charges = charges
+    if data and data.receipt_url is not None:
+        expense.receipt_url = data.receipt_url
     await db.flush()
     await db.refresh(expense)
     return _expense_read(expense)

@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -934,7 +934,9 @@ async def get_weekly_schedule(
         )
     )
     if company_id is not None:
-        query = query.join(Branch, Consultation.branch_id == Branch.id).where(Branch.company_id == company_id)
+        query = query.outerjoin(Branch, Consultation.branch_id == Branch.id).where(
+            or_(Consultation.branch_id.is_(None), Branch.company_id == company_id)
+        )
     query = query.options(
         selectinload(ClientLesson.plan)
         .selectinload(ClientLessonPlan.cart_item)

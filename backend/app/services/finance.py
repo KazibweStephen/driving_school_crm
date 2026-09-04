@@ -114,6 +114,7 @@ async def create_expense(
     db: AsyncSession,
     branch_id: uuid.UUID,
     amount: float,
+    charges: float = 0.0,
     description: str | None = None,
     category: str | None = None,
     consultation_id: uuid.UUID | None = None,
@@ -163,6 +164,7 @@ async def create_expense(
     expense = Expense(
         branch_id=branch_id,
         amount=amount,
+        charges=charges or 0.0,
         description=description,
         category=category,
         account=resolved_account,
@@ -209,6 +211,8 @@ async def update_expense(
     rejection_reason: str | None = None,
     receipt_url: str | None = None,
     consultation_id: uuid.UUID | None = None,
+    charges: float | None = None,
+    paid_charges: float | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> Expense | None:
@@ -241,6 +245,10 @@ async def update_expense(
         expense.receipt_url = receipt_url
     if consultation_id is not None:
         expense.consultation_id = consultation_id
+    if charges is not None:
+        expense.charges = charges
+    if paid_charges is not None:
+        expense.paid_charges = paid_charges
 
     await db.flush()
     await db.refresh(expense)
@@ -740,7 +748,7 @@ async def pool_available(
         received = 0.0
 
     expenses = await _one(
-        select(func.coalesce(func.sum(Expense.amount), 0))
+        select(func.coalesce(func.sum(Expense.amount + func.coalesce(Expense.paid_charges, Expense.charges, 0)), 0))
         .where(
             Expense.branch_id == branch_id,
             Expense.status == ExpenseStatus.PAID,
@@ -1334,7 +1342,7 @@ async def get_finance_summary(
     # Expenses by status
     exp_query = select(
         Expense.status,
-        func.coalesce(func.sum(Expense.amount), 0),
+        func.coalesce(func.sum(Expense.amount + func.coalesce(Expense.paid_charges, Expense.charges, 0)), 0),
         func.count(Expense.id),
     )
     if branch_id:
@@ -2011,7 +2019,7 @@ async def get_cash_position(
         exp_rows = await db.execute(
             select(
                 Expense.account,
-                func.coalesce(func.sum(Expense.amount), 0),
+                func.coalesce(func.sum(Expense.amount + func.coalesce(Expense.paid_charges, Expense.charges, 0)), 0),
             )
             .where(Expense.branch_id == bid, Expense.status == ExpenseStatus.PAID)
             .group_by(Expense.account)
@@ -2111,7 +2119,7 @@ async def get_profit_loss(
 
     expenses_q = select(
         Expense.branch_id,
-        func.coalesce(func.sum(Expense.amount), 0),
+        func.coalesce(func.sum(Expense.amount + func.coalesce(Expense.paid_charges, Expense.charges, 0)), 0),
     ).where(Expense.status == ExpenseStatus.PAID)
     if start_dt:
         expenses_q = expenses_q.where(Expense.expense_date >= start_dt)

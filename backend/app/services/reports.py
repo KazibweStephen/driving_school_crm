@@ -40,7 +40,7 @@ async def get_dashboard_summary(
         Commission.status == CommissionStatus.PENDING
     )
 
-    month_expenses = select(func.coalesce(func.sum(Expense.amount), 0)).where(
+    month_expenses = select(func.coalesce(func.sum(Expense.amount + func.coalesce(Expense.paid_charges, Expense.charges, 0)), 0)).where(
         Expense.expense_date >= month_start,
         Expense.status == ExpenseStatus.PAID,
     )

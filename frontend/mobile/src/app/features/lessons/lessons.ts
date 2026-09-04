@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { AuthService } from '../../core/auth/auth.service';
@@ -21,10 +21,14 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   imports: [ButtonModule, LoadingOverlay, PageHeader],
   templateUrl: './lessons.html',
 })
-export class Lessons {
+export class Lessons implements OnInit {
   private scheduleService = inject(ScheduleService);
   private lessonService = inject(LessonService);
   private messageService = inject(MessageService);
+
+  ngOnInit() {
+    this.load();
+  }
 
   step = signal<Step>('week');
   loading = signal(false);

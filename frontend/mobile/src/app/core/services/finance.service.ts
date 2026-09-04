@@ -102,6 +102,8 @@ export interface OperatingEntry {
   loan_entry_id: string | null;
   transfer_id: string | null;
   target_pool: string | null;
+  funded_by: string | null;
+  repay_from_profit: boolean;
   created_by: string | null;
   created_at: string | null;
 }
@@ -222,7 +224,7 @@ export class FinanceService {
     return this.http.get<OperatingEntry[]>('/api/v1/operating/entries', { params: { limit: String(limit) } });
   }
 
-  createOperatingEntry(data: { entry_type: string; amount: number; description: string; reference?: string | null; entry_date?: string | null }): Observable<OperatingEntry> {
+  createOperatingEntry(data: { entry_type: string; amount: number; description: string; reference?: string | null; entry_date?: string | null; funded_by?: string | null; repay_from_profit?: boolean }): Observable<OperatingEntry> {
     return this.http.post<OperatingEntry>('/api/v1/operating/entries', data);
   }
 

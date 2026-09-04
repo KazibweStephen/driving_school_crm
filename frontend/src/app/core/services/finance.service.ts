@@ -7,6 +7,8 @@ export interface Expense {
   branch_id: string;
   branch_name?: string;
   amount: number;
+  charges: number;
+  paid_charges?: number | null;
   description?: string;
   category?: string;
   mileage?: number;
@@ -28,6 +30,7 @@ export interface Expense {
 export interface ExpenseCreate {
   branch_id: string;
   amount: number;
+  charges?: number;
   description?: string;
   category?: string;
   mileage?: number;
@@ -282,8 +285,8 @@ export class FinanceService {
     return this.http.post<Expense>(`${this.base}/expenses/${id}/reject`, { rejection_reason: reason });
   }
 
-  markExpensePaid(id: string): Observable<Expense> {
-    return this.http.post<Expense>(`${this.base}/expenses/${id}/mark-paid`, {});
+  markExpensePaid(id: string, body?: { charges?: number; receipt_url?: string }): Observable<Expense> {
+    return this.http.post<Expense>(`${this.base}/expenses/${id}/mark-paid`, body ?? {});
   }
 
   deleteExpense(id: string): Observable<void> {

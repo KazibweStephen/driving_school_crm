@@ -53,6 +53,11 @@ export class ExpensesCmp implements OnInit {
   showRejectDialog = signal(false);
   rejectingExpense = signal<Expense | null>(null);
   rejectReason = signal('');
+  showPayDialog = signal(false);
+  payingExpense = signal<Expense | null>(null);
+  payCharges = signal(0);
+  payReceiptFile = signal<File | null>(null);
+  payingUpload = signal(false);
 
   categories = signal<ExpenseCategory[]>([]);
   categoryOptions = computed(() => {
@@ -147,6 +152,7 @@ export class ExpensesCmp implements OnInit {
   form = {
     branch_id: '',
     amount: 0,
+    charges: 0,
     description: '',
     category: '',
     otherDetail: '',
@@ -229,6 +235,7 @@ export class ExpensesCmp implements OnInit {
     this.form = {
       branch_id: '',
       amount: 0,
+      charges: 0,
       description: '',
       category: '',
       otherDetail: '',
@@ -284,6 +291,7 @@ export class ExpensesCmp implements OnInit {
       const payload: ExpenseCreate = {
         branch_id: f.branch_id,
         amount: f.amount,
+        charges: f.charges || 0,
         description: f.description,
         category,
         mileage: f.mileage ?? undefined,
@@ -364,15 +372,47 @@ export class ExpensesCmp implements OnInit {
     }
   }
 
-  async markPaid(id: string) {
+  openPay(e: Expense) {
+    this.payingExpense.set(e);
+    this.payCharges.set(e.charges ?? 0);
+    this.payReceiptFile.set(null);
+    this.showPayDialog.set(true);
+  }
+
+  async onPayReceiptSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] || null;
+    this.payReceiptFile.set(file);
+    input.value = '';
+  }
+
+  async submitPayment() {
+    const e = this.payingExpense();
+    if (!e) return;
+    this.payingUpload.set(true);
     try {
-      const updated = await this.financeService.markExpensePaid(id).toPromise();
+      let receipt_url: string | undefined;
+      if (this.payReceiptFile()) {
+        const uploadRes = await this.financeService.uploadReceipt(this.payReceiptFile()!).toPromise();
+        receipt_url = uploadRes?.url;
+      }
+      const updated = await this.financeService.markExpensePaid(e.id, {
+        charges: this.payCharges() || 0,
+        receipt_url,
+      }).toPromise();
       if (updated) {
-        this.expenses.update(list => list.map(x => x.id === id ? updated : x));
+        this.expenses.update(list => list.map(x => x.id === e.id ? updated : x));
+        this.showPayDialog.set(false);
         this.messageService.add({ severity: 'success', summary: 'Paid', detail: 'Expense marked as paid' });
       }
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to mark expense as paid' });
+    } catch (err: any) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: err?.error?.detail || 'Failed to mark expense as paid',
+      });
+    } finally {
+      this.payingUpload.set(false);
     }
   }
 

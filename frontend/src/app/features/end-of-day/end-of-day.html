@@ -1,0 +1,150 @@
+<p-toast></p-toast>
+
+<div class="p-4 sm:p-6">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-gray-900">End of Day</h1>
+    <div class="flex flex-wrap items-center gap-2">
+      <p-select [options]="branches" optionLabel="name" optionValue="id" [(ngModel)]="branchId" placeholder="Select branch"
+        appendTo="body" (onChange)="onBranchChange()" styleClass="w-56" />
+      <p-datepicker [(ngModel)]="reportDate" dateFormat="dd/mm/yy" [showIcon]="true" appendTo="body" (onSelect)="onDateChange()"
+        styleClass="w-52" />
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="text-center text-gray-500 py-8">Computing the day's cash figures...</div>
+  } @else {
+    @if (!branchId) {
+      <div class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+        Select a branch to load its end-of-day report. No branches are assigned to your account.
+      </div>
+    } @else {
+      @let s = summary();
+      @if (!s) {
+        <div class="text-center text-gray-500 py-8">No data for this date</div>
+      } @else {
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div class="rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-blue-500">Cash From New Sales</div>
+            <div class="mt-1 text-xl font-bold text-blue-800">{{ currencyService.symbol() }} {{ formatAmount(s.cash_from_new_sales) }}</div>
+          </div>
+          <div class="rounded-xl border border-green-100 bg-green-50 p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-green-500">Cash From Collections</div>
+            <div class="mt-1 text-xl font-bold text-green-800">{{ currencyService.symbol() }} {{ formatAmount(s.cash_from_collections) }}</div>
+          </div>
+          <div class="rounded-xl border border-red-100 bg-red-50 p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-red-500">Expenses Paid</div>
+            <div class="mt-1 text-xl font-bold text-red-800">-{{ currencyService.symbol() }} {{ formatAmount(s.cash_expenses) }}</div>
+          </div>
+          <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Opening Cash</div>
+            <div class="mt-1 text-xl font-bold text-gray-800">{{ currencyService.symbol() }} {{ formatAmount(s.opening_cash) }}</div>
+          </div>
+          <div class="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-indigo-500">Cash In</div>
+            <div class="mt-1 text-xl font-bold text-indigo-800">{{ currencyService.symbol() }} {{ formatAmount(s.cash_in) }}</div>
+          </div>
+          <div class="rounded-xl border border-orange-100 bg-orange-50 p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-orange-500">Cash Out</div>
+            <div class="mt-1 text-xl font-bold text-orange-800">-{{ currencyService.symbol() }} {{ formatAmount(s.cash_out) }}</div>
+          </div>
+          <div class="rounded-xl border border-gray-100 bg-white p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Net Cash</div>
+            <div class="mt-1 text-xl font-bold text-gray-900">{{ currencyService.symbol() }} {{ formatAmount(s.net_cash) }}</div>
+          </div>
+          <div class="rounded-xl border border-purple-100 bg-purple-50 p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-purple-500">Expected Cash At Hand</div>
+            <div class="mt-1 text-xl font-bold text-purple-800">{{ currencyService.symbol() }} {{ formatAmount(s.expected_cash_at_hand) }}</div>
+          </div>
+          <div class="rounded-xl border border-gray-100 bg-white p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Consultations (system)</div>
+            <div class="mt-1 text-xl font-bold text-gray-900">{{ s.system_consultations_count }}</div>
+          </div>
+          <div class="rounded-xl border border-gray-100 bg-white p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">New Clients (system)</div>
+            <div class="mt-1 text-xl font-bold text-gray-900">{{ s.system_new_clients_count }}</div>
+          </div>
+        </div>
+
+        <p-card class="mt-5">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-lg font-semibold text-gray-900">Office Admin Entry</h2>
+            @let rep = savedReport();
+            @if (rep) {
+              <p-tag [value]="rep.status === 'matched' ? 'MATCHED' : 'DISCREPANCY'" [severity]="rep.status === 'matched' ? 'success' : 'danger'" />
+            }
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">
+                Cash At Hand <span class="text-red-500">*</span>
+              </label>
+              <p-inputnumber [(ngModel)]="cashAtHand" mode="currency" currency="UGX" locale="en-US" inputId="eod-cash"
+                [min]="0" placeholder="Physical cash counted" styleClass="w-full" (onInput)="onCashAtHandChange()" />
+              <div class="mt-1 text-xs text-gray-500">
+                @let v = liveVariation();
+                @if (v !== null) {
+                  Expected {{ currencyService.symbol() }} {{ formatAmount(summary()?.expected_cash_at_hand) }}
+                  · Variation
+                  <span [class]="liveMatched() ? 'font-semibold text-green-600' : 'font-semibold text-red-600'">
+                    {{ formatAmount(v) }}
+                  </span>
+                }
+              </div>
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Number of Consultations</label>
+              <p-inputnumber [(ngModel)]="consultationsCount" [min]="0" inputId="eod-cons" styleClass="w-full" />
+              @if (s.system_consultations_count > 0) {
+                <div class="mt-1 text-xs text-gray-500">System count: {{ s.system_consultations_count }}</div>
+              }
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Number of New Clients</label>
+              <p-inputnumber [(ngModel)]="newClientsCount" [min]="0" inputId="eod-clients" styleClass="w-full" />
+              @if (s.system_new_clients_count > 0) {
+                <div class="mt-1 text-xs text-gray-500">System count: {{ s.system_new_clients_count }}</div>
+              }
+            </div>
+            <div class="sm:col-span-2 lg:col-span-3">
+              <label class="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+              <textarea pTextarea [(ngModel)]="notes" rows="2" placeholder="Any notes about the day (optional)"
+                class="w-full"></textarea>
+            </div>
+          </div>
+
+          <div class="mt-4 flex items-center gap-3">
+            <p-button label="Save Report" icon="pi pi-check" [loading]="saving()" [disabled]="!formValid()"
+              (onClick)="save()" />
+            @if (savedReport()) {
+              <span class="hidden text-sm text-gray-500 sm:inline" id="eod-flag-message">
+                Saved at {{ savedReport()?.updated_at ? (savedReport()!.updated_at!.slice(0, 19).replace('T', ' ')) : '' }} ·
+                Variation {{ formatAmount(savedReport()?.variation) }}
+              </span>
+            }
+          </div>
+
+          @if (savedReport(); as rep) {
+            <div [class]="'mt-4 rounded-lg border p-4 text-sm ' +
+              (rep.status === 'matched' ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800')">
+              <div class="font-semibold">
+                {{ rep.status === 'matched' ? 'Cash reconciles — no variation.' : 'VARIATION DETECTED — cash at hand does not match the expected figure.' }}
+              </div>
+              <div class="mt-1 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                <div>Opening: {{ currencyService.symbol() }} {{ formatAmount(rep.opening_cash) }}</div>
+                <div>New Sales: {{ currencyService.symbol() }} {{ formatAmount(rep.cash_from_new_sales) }}</div>
+                <div>Collections: {{ currencyService.symbol() }} {{ formatAmount(rep.cash_from_collections) }}</div>
+                <div>Expenses: -{{ currencyService.symbol() }} {{ formatAmount(rep.cash_expenses) }}</div>
+                <div>Expected: {{ currencyService.symbol() }} {{ formatAmount(rep.expected_cash_at_hand) }}</div>
+                <div>Cash At Hand: {{ currencyService.symbol() }} {{ formatAmount(rep.cash_at_hand) }}</div>
+                <div class="font-bold">Variation: {{ formatAmount(rep.variation) }}</div>
+                <div>Consultations: {{ rep.consultations_count }} · New Clients: {{ rep.new_clients_count }}</div>
+              </div>
+            </div>
+          }
+        </p-card>
+      }
+    }
+  }
+</div>

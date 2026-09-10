@@ -33,6 +33,8 @@ from app.schemas.company import (
     HoFundingCreate,
     MarkExpensePaid,
 )
+from app.schemas.end_of_day import EndOfDayReportCreate
+from app.services import end_of_day as end_of_day_service
 from app.services import finance as finance_service
 from app.services.permission import has_permission
 from app.utils.tenant import resolve_assigned_branch_ids, resolve_branch_ids
@@ -1023,3 +1025,83 @@ async def get_profit_loss(
         db, branch_ids=resolved_branch_ids, from_date=from_date, to_date=to_date,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
+
+
+# ── End of Day ───────────────────────────────────────────────────────────────
+
+
+@router.get("/end-of-day", response_model=dict)
+async def get_end_of_day(
+    report_date: date | None = Query(None),
+    branch_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("finance.end_of_day")),
+):
+    from app.models.company import Branch
+    from app.schemas.end_of_day import EndOfDayReportRead, EndOfDayRead
+
+    day = report_date or date.today()
+    resolved_branch_ids = await resolve_assigned_branch_ids(
+        db, current_user, [branch_id] if branch_id else None
+    )
+    if not resolved_branch_ids:
+        raise HTTPException(status_code=400, detail="Select a branch")
+    bid = resolved_branch_ids[0]
+
+    summary = await end_of_day_service.compute_summary(db, bid, day)
+    report = await end_of_day_service.get_saved_report(db, bid, day)
+    branch_name = await end_of_day_service.get_branch_name(db, bid)
+
+    report_read = None
+    if report:
+        report_read = EndOfDayReportRead.model_validate(report).model_copy(
+            update={"branch_name": branch_name}
+        )
+    return EndOfDayRead(
+        branch_id=bid,
+        branch_name=branch_name,
+        report_date=day,
+        summary=summary,
+        report=report_read,
+    ).model_dump()
+
+
+@router.post("/end-of-day", response_model=dict, status_code=status.HTTP_200_OK)
+async def save_end_of_day(
+    body: EndOfDayReportCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("finance.end_of_day")),
+):
+    from app.models.company import Branch
+    from app.schemas.end_of_day import EndOfDayReportRead
+
+    resolved_branch_ids = await resolve_assigned_branch_ids(
+        db, current_user, [body.branch_id]
+    )
+    if body.branch_id not in resolved_branch_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No branch access")
+
+    company_id = current_user.company_id
+    if company_id is None:
+        result = await db.execute(select(Branch.company_id).where(Branch.id == body.branch_id))
+        company_id = result.scalar_one_or_none()
+    if company_id is None:
+        raise HTTPException(status_code=400, detail="Branch not found")
+
+    report = await end_of_day_service.upsert_report(
+        db,
+        company_id=company_id,
+        branch_id=body.branch_id,
+        report_date=body.report_date,
+        cash_at_hand=Decimal(str(body.cash_at_hand)),
+        consultations_count=body.consultations_count,
+        new_clients_count=body.new_clients_count,
+        notes=body.notes,
+        created_by_phone=current_user.phone,
+    )
+    await db.commit()
+    await db.refresh(report)
+    branch_name = await end_of_day_service.get_branch_name(db, body.branch_id)
+    return EndOfDayReportRead.model_validate(report).model_copy(
+        update={"branch_name": branch_name}
+    ).model_dump()

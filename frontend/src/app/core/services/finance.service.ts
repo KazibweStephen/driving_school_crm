@@ -237,6 +237,51 @@ export interface ExpenseCategoryListResponse {
   total: number;
 }
 
+export interface EndOfDaySummary {
+  opening_cash: number;
+  cash_from_new_sales: number;
+  cash_from_collections: number;
+  cash_expenses: number;
+  cash_in: number;
+  cash_out: number;
+  net_cash: number;
+  expected_cash_at_hand: number;
+  system_consultations_count: number;
+  system_new_clients_count: number;
+}
+
+export interface EndOfDayReport {
+  id: string;
+  branch_id: string;
+  branch_name?: string;
+  report_date: string;
+  cash_at_hand: number;
+  consultations_count: number;
+  new_clients_count: number;
+  notes?: string;
+  opening_cash: number;
+  cash_from_new_sales: number;
+  cash_from_collections: number;
+  cash_expenses: number;
+  cash_in: number;
+  cash_out: number;
+  net_cash: number;
+  expected_cash_at_hand: number;
+  variation: number;
+  status: string;
+  created_by_phone?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface EndOfDayRead {
+  branch_id: string;
+  branch_name?: string;
+  report_date: string;
+  summary: EndOfDaySummary;
+  report: EndOfDayReport | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class FinanceService {
   private base = '/api/v1/finance';
@@ -399,5 +444,23 @@ export class FinanceService {
     if (params?.to_date) p = p.set('to_date', params.to_date);
     if (params?.branch_ids?.length) p = p.set('branch_ids', params.branch_ids.join(','));
     return this.http.get<ProfitLossResponse>(`${this.base}/profit-loss`, { params: p });
+  }
+
+  getEndOfDay(reportDate?: string, branchId?: string): Observable<EndOfDayRead> {
+    let p = new HttpParams();
+    if (reportDate) p = p.set('report_date', reportDate);
+    if (branchId) p = p.set('branch_id', branchId);
+    return this.http.get<EndOfDayRead>(`${this.base}/end-of-day`, { params: p });
+  }
+
+  saveEndOfDay(data: {
+    branch_id: string;
+    report_date: string;
+    cash_at_hand: number;
+    consultations_count: number;
+    new_clients_count: number;
+    notes?: string;
+  }): Observable<EndOfDayReport> {
+    return this.http.post<EndOfDayReport>(`${this.base}/end-of-day`, data);
   }
 }

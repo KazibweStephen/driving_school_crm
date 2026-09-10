@@ -112,6 +112,12 @@ export const routes: Routes = [
           import('./features/profit-loss/profit-loss').then((c) => c.ProfitLossCmp),
       },
       {
+        path: 'end-of-day',
+        data: { permission: 'finance.end_of_day' },
+        loadComponent: () =>
+          import('./features/end-of-day/end-of-day').then((c) => c.EndOfDayCmp),
+      },
+      {
         path: 'operating-account',
         data: { permission: 'finance.operating' },
         loadComponent: () =>

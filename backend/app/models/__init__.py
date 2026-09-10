@@ -70,6 +70,7 @@ from app.models.permit import PermitProgress
 from app.models.product import Package, PackageExpectedExpense, Product
 from app.models.commission import Commission, CommissionRate, CommissionStatus, CommissionContest, ContestStatus
 from app.models.discount import CartItemDiscount, Discount, DiscountAppliesTo, DiscountStatus, DiscountType
+from app.models.end_of_day import EndOfDayReport
 from app.models.lead import Lead, LeadStatus
 from app.models.fuel import FuelRate, FuelRefueling, PackageFuelRate
 from app.models.operating import (
@@ -118,4 +119,5 @@ __all__ = [
     "Discount", "CartItemDiscount", "DiscountStatus", "DiscountType", "DiscountAppliesTo",
     "PackageExpectedExpense",
     "ExpectedExpenseItem", "PackageExpenseLink",
+    "EndOfDayReport",
 ]

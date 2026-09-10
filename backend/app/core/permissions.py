@@ -76,6 +76,7 @@ PERMISSION_GROUPS: list[PermissionGroup] = [
             "finance.fund",
             "finance.operating",
             "finance.capital",
+            "finance.end_of_day",
         ],
     ),
     PermissionGroup(
@@ -214,7 +215,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.OFFICE_ADMIN: [
         "dashboard.view",
         "reports.view",
-        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating", "finance.capital",
+        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating", "finance.capital", "finance.end_of_day",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
@@ -245,7 +246,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.BRANCH_SUPERVISOR: [
         "dashboard.view",
         "reports.view",
-        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating",
+        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating", "finance.end_of_day",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
@@ -276,7 +277,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.MANAGER: [
         "dashboard.view",
         "reports.view",
-        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating", "finance.capital",
+        "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating", "finance.capital", "finance.end_of_day",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",
@@ -307,7 +308,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.SUPERVISOR: [
         "dashboard.view",
         "reports.view",
-        "finance.view",
+        "finance.view", "finance.end_of_day",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
         "transfers.view", "transfers.create", "transfers.receive", "transfers.cancel",

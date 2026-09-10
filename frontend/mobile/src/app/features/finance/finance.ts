@@ -26,6 +26,7 @@ export class Finance {
       { label: 'Branch Transfers', icon: 'pi-arrow-right-arrow-left', route: '/finance/transfers', color: 'bg-blue-600 text-white', permission: 'transfers.view', testId: 'finance-branch-transfers' },
       { label: 'Profit & Loss', icon: 'pi-chart-line', route: '/finance/profit-loss', color: 'bg-green-600 text-white', permission: 'finance.pnl', testId: 'finance-profit-loss' },
       { label: 'Operating Account', icon: 'pi-building', route: '/finance/operating-account', color: 'bg-purple-600 text-white', permission: 'finance.operating', testId: 'finance-operating-account' },
+      { label: 'End of Day', icon: 'pi-sun', route: '/finance/end-of-day', color: 'bg-amber-600 text-white', permission: 'finance.end_of_day', testId: 'finance-end-of-day' },
     ];
     return all.filter((t) => perms.includes(t.permission));
   });

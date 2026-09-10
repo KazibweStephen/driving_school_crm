@@ -1,0 +1,198 @@
+<app-page-header title="End of Day" />
+
+<div class="space-y-4">
+  <div class="flex items-center gap-2">
+    @if (branches().length > 0) {
+      <p-select
+        [options]="branches()"
+        optionLabel="name"
+        optionValue="id"
+        [ngModel]="branchId()"
+        (ngModelChange)="onBranchChange($event)"
+        placeholder="Branch"
+        appendTo="body"
+        class="w-full"
+        data-testid="eod-branch"
+      />
+      <p-datepicker
+        [ngModel]="reportDateObject()"
+        (onSelect)="onDateChange($event)"
+        dateFormat="dd/mm/yy"
+        [showIcon]="true"
+        appendTo="body"
+        data-testid="eod-date"
+      />
+    }
+  </div>
+
+  @if (loading()) {
+    <app-loading-overlay [visible]="true" message="Computing the day's figures..." />
+  } @else {
+    @if (!branchId()) {
+      <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+        Select a branch to load its end-of-day report. No branches are assigned to your account.
+      </div>
+    } @else {
+      @let s = summary();
+      @if (s) {
+        <div class="grid grid-cols-2 gap-2">
+          <div class="rounded-xl border border-blue-100 bg-blue-50 p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-blue-500">New Sales</div>
+            <div class="mt-0.5 text-base font-bold text-blue-800">{{ money(s.cash_from_new_sales) }}</div>
+          </div>
+          <div class="rounded-xl border border-green-100 bg-green-50 p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-green-500">Collections</div>
+            <div class="mt-0.5 text-base font-bold text-green-800">{{ money(s.cash_from_collections) }}</div>
+          </div>
+          <div class="rounded-xl border border-red-100 bg-red-50 p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-red-500">Expenses</div>
+            <div class="mt-0.5 text-base font-bold text-red-800">-{{ money(s.cash_expenses) }}</div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Opening</div>
+            <div class="mt-0.5 text-base font-bold text-slate-800">{{ money(s.opening_cash) }}</div>
+          </div>
+          <div class="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-indigo-500">Cash In</div>
+            <div class="mt-0.5 text-base font-bold text-indigo-800">{{ money(s.cash_in) }}</div>
+          </div>
+          <div class="rounded-xl border border-orange-100 bg-orange-50 p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-orange-500">Cash Out</div>
+            <div class="mt-0.5 text-base font-bold text-orange-800">-{{ money(s.cash_out) }}</div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-white p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Net Cash</div>
+            <div class="mt-0.5 text-base font-bold text-slate-900">{{ money(s.net_cash) }}</div>
+          </div>
+          <div class="rounded-xl border border-purple-100 bg-purple-50 p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-purple-500">Expected Cash</div>
+            <div class="mt-0.5 text-base font-bold text-purple-800">{{ money(s.expected_cash_at_hand) }}</div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-white p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Consultations</div>
+            <div class="mt-0.5 text-base font-bold text-slate-900">{{ s.system_consultations_count }}</div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-white p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">New Clients</div>
+            <div class="mt-0.5 text-base font-bold text-slate-900">{{ s.system_new_clients_count }}</div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-4">
+          <div class="mb-3 flex items-center justify-between">
+            <div class="text-sm font-semibold text-slate-900">Office Admin Entry</div>
+            @if (savedReport()) {
+              <span
+                class="rounded-full px-2 py-0.5 text-xs font-semibold capitalize"
+                [class]="savedReport()?.status === 'matched' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+              >
+                {{ savedReport()?.status }}
+              </span>
+            }
+          </div>
+
+          <div class="space-y-3">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-slate-700">
+                Cash At Hand <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                [ngModel]="cashAtHand()"
+                (ngModelChange)="cashAtHand.set($event ?? null)"
+                placeholder="Physical cash counted"
+                data-testid="eod-cash"
+              />
+              @let v = liveVariation();
+              @if (v !== null) {
+                <p class="mt-1 text-xs">
+                  Expected {{ money(summary()?.expected_cash_at_hand) }} · Variation
+                  <span [class]="liveMatched() ? 'font-semibold text-green-600' : 'font-semibold text-red-600'">
+                    {{ money(v) }}
+                  </span>
+                </p>
+              }
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-slate-700">Number of Consultations</label>
+              <input
+                type="number"
+                min="0"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                [ngModel]="consultationsCount()"
+                (ngModelChange)="consultationsCount.set($event ?? 0)"
+                data-testid="eod-consultations"
+              />
+              @if ((summary()?.system_consultations_count ?? 0) > 0) {
+                <p class="mt-1 text-xs text-slate-400">System count: {{ summary()?.system_consultations_count }}</p>
+              }
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-slate-700">Number of New Clients</label>
+              <input
+                type="number"
+                min="0"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                [ngModel]="newClientsCount()"
+                (ngModelChange)="newClientsCount.set($event ?? 0)"
+                data-testid="eod-new-clients"
+              />
+              @if ((summary()?.system_new_clients_count ?? 0) > 0) {
+                <p class="mt-1 text-xs text-slate-400">System count: {{ summary()?.system_new_clients_count }}</p>
+              }
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-slate-700">Notes</label>
+              <textarea
+                rows="2"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                [ngModel]="notes()"
+                (ngModelChange)="notes.set($event)"
+                placeholder="Any notes about the day (optional)"
+                data-testid="eod-notes"
+              ></textarea>
+            </div>
+          </div>
+
+          <p-button
+            label="Save Report"
+            icon="pi pi-check"
+            [loading]="saving()"
+            [disabled]="!formValid()"
+            styleClass="mt-4 w-full justify-center"
+            (onClick)="save()"
+            data-testid="eod-save"
+          />
+        </div>
+
+        @if (savedReport(); as rep) {
+          <div
+            class="rounded-xl border p-4 text-sm"
+            [class]="rep.status === 'matched' ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800'"
+            data-testid="eod-banner"
+          >
+            <div class="font-semibold">
+              {{ rep.status === 'matched' ? 'Cash reconciles — no variation.' : 'VARIATION DETECTED — cash at hand does not match the expected figure.' }}
+            </div>
+            <div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+              <span>Opening: {{ money(rep.opening_cash) }}</span>
+              <span>New Sales: {{ money(rep.cash_from_new_sales) }}</span>
+              <span>Collections: {{ money(rep.cash_from_collections) }}</span>
+              <span>Expenses: -{{ money(rep.cash_expenses) }}</span>
+              <span>Expected: {{ money(rep.expected_cash_at_hand) }}</span>
+              <span>Cash At Hand: {{ money(rep.cash_at_hand) }}</span>
+              <span class="font-bold">Variation: {{ money(rep.variation) }}</span>
+              <span>Consultations: {{ rep.consultations_count }} · New Clients: {{ rep.new_clients_count }}</span>
+            </div>
+          </div>
+        }
+      } @else {
+        <div class="text-center text-sm text-slate-500 py-6">No data for this date</div>
+      }
+    }
+  }
+
+  <app-loading-overlay [visible]="saving()" message="Saving report..." />
+</div>

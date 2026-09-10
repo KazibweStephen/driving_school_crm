@@ -146,6 +146,51 @@ export interface OperatingOwedSummary {
   accounts: OperatingOwedAccount[];
 }
 
+export interface EndOfDaySummary {
+  opening_cash: number;
+  cash_from_new_sales: number;
+  cash_from_collections: number;
+  cash_expenses: number;
+  cash_in: number;
+  cash_out: number;
+  net_cash: number;
+  expected_cash_at_hand: number;
+  system_consultations_count: number;
+  system_new_clients_count: number;
+}
+
+export interface EndOfDayReport {
+  id: string;
+  branch_id: string;
+  branch_name?: string;
+  report_date: string;
+  cash_at_hand: number;
+  consultations_count: number;
+  new_clients_count: number;
+  notes?: string;
+  opening_cash: number;
+  cash_from_new_sales: number;
+  cash_from_collections: number;
+  cash_expenses: number;
+  cash_in: number;
+  cash_out: number;
+  net_cash: number;
+  expected_cash_at_hand: number;
+  variation: number;
+  status: 'matched' | 'discrepancy';
+  created_by_phone?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface EndOfDayRead {
+  branch_id: string;
+  branch_name?: string;
+  report_date: string;
+  summary: EndOfDaySummary;
+  report: EndOfDayReport | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class FinanceService {
   private base = '/api/v1/finance';
@@ -254,5 +299,21 @@ export class FinanceService {
 
   reconcileBack(items: { post_id: string; amount: number }[]): Observable<any[]> {
     return this.http.post<any[]>('/api/v1/operating/reconcile-back', { items });
+  }
+
+  getEndOfDay(reportDate: string, branchId: string): Observable<EndOfDayRead> {
+    const params = new HttpParams().set('branch_id', branchId).set('report_date', reportDate);
+    return this.http.get<EndOfDayRead>(`${this.base}/end-of-day`, { params });
+  }
+
+  saveEndOfDay(data: {
+    branch_id: string;
+    report_date: string;
+    cash_at_hand: number;
+    consultations_count?: number;
+    new_clients_count?: number;
+    notes?: string;
+  }): Observable<EndOfDayReport> {
+    return this.http.post<EndOfDayReport>(`${this.base}/end-of-day`, data);
   }
 }

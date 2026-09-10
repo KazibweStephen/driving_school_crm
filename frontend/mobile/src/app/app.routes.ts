@@ -76,6 +76,10 @@ export const routes: Routes = [
             path: 'operating-account',
             loadComponent: () => import('./features/finance/operating-account').then((m) => m.OperatingAccount),
           },
+          {
+            path: 'end-of-day',
+            loadComponent: () => import('./features/finance/end-of-day').then((m) => m.EndOfDay),
+          },
         ],
       },
     ],

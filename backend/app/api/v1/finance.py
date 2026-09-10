@@ -1050,6 +1050,13 @@ async def get_end_of_day(
 
     summary = await end_of_day_service.compute_summary(db, bid, day)
     report = await end_of_day_service.get_saved_report(db, bid, day)
+    if report is not None:
+        # Re-verify against the live system figures: correcting records added
+        # since the last save (sales/collections/expenses) are reflected, and a
+        # draft whose entered figures now reconcile flips to matched.
+        await end_of_day_service.reverify_report(db, bid, day)
+        await db.commit()
+        report = await end_of_day_service.get_saved_report(db, bid, day)
     branch_name = await end_of_day_service.get_branch_name(db, bid)
 
     report_read = None

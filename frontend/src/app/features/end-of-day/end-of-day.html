@@ -71,7 +71,7 @@
             <h2 class="text-lg font-semibold text-gray-900">Office Admin Entry</h2>
             @let rep = savedReport();
             @if (rep) {
-              <p-tag [value]="rep.status === 'matched' ? 'MATCHED' : 'DISCREPANCY'" [severity]="rep.status === 'matched' ? 'success' : 'danger'" />
+              <p-tag [value]="rep.status === 'matched' ? 'MATCHED' : 'DRAFT'" [severity]="rep.status === 'matched' ? 'success' : 'warn'" />
             }
           </div>
 
@@ -148,13 +148,22 @@
 
           @if (savedReport(); as rep) {
             <div [class]="'mt-4 rounded-lg border p-4 text-sm ' +
-              (rep.status === 'matched' ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800')">
+              (rep.status === 'matched'
+                ? 'border-green-300 bg-green-50 text-green-800'
+                : 'border-amber-300 bg-amber-50 text-amber-900')">
               <div class="font-semibold">
-                {{ rep.status === 'matched' ? 'Cash reconciles — no variation.' : 'VARIATION DETECTED — an entered figure does not match the system.' }}
+                @if (rep.status === 'matched') {
+                  Cash reconciles — no variation.
+                } @else {
+                  SAVED AS DRAFT — variations remain.
+                }
               </div>
-              @if (rep.status === 'discrepancy') {
-                <div class="mt-1 text-xs">
-                  Reconcile: correct the figures below (or record the missing expenses in the system) and save again.
+              @if (rep.status !== 'matched') {
+                <div class="mt-1">
+                  <p class="text-xs">
+                    Re-verifies automatically once the correcting records are added (sales, collections,
+                    missing expenses), or adjust the figures below and save again.
+                  </p>
                 </div>
               }
               <div class="mt-1 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2 lg:grid-cols-4">

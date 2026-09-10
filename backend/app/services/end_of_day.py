@@ -227,11 +227,56 @@ async def upsert_report(
     report.expected_cash_at_hand = expected
     report.variation = variation
     report.expense_variation = expense_variation
+    # Saving with unmatched figures is allowed: the report is stored as a DRAFT
+    # with the variations still highlighted so the admin can correct the figures
+    # later, or add the missing records so the report re-verifies to matched.
     report.status = (
         "matched"
         if variation == 0 and expense_variation == 0
-        else "discrepancy"
+        else "draft"
     )
+
+    await db.flush()
+    await db.refresh(report)
+    return report
+
+
+async def reverify_report(
+    db: AsyncSession,
+    branch_id: uuid.UUID,
+    report_date: date,
+) -> EndOfDayReport | None:
+    """Re-run the system summary against the report's saved entered values.
+
+    Called whenever the report is loaded, so correcting records added to the
+    system (sales, collections, expenses) are picked up automatically: the
+    derived system fields are refreshed and a draft whose entered figures now
+    reconcile flips to ``matched`` (and a previously matched report that no
+    longer reconciles is pushed back to ``draft``).
+    """
+    report = await get_saved_report(db, branch_id, report_date)
+    if report is None:
+        return None
+    summary = await compute_summary(db, branch_id, report_date)
+    system_expenses = Decimal(str(summary.cash_expenses))
+    expected = Decimal(str(summary.expected_cash_at_hand))
+    variation = report.cash_at_hand - expected
+    expense_variation = report.total_expenses - system_expenses
+
+    report.opening_cash = Decimal(str(summary.opening_cash))
+    report.cash_from_new_sales = Decimal(str(summary.cash_from_new_sales))
+    report.cash_from_collections = Decimal(str(summary.cash_from_collections))
+    report.cash_expenses = system_expenses
+    report.cash_in = Decimal(str(summary.cash_in))
+    report.cash_out = Decimal(str(summary.cash_out))
+    report.net_cash = Decimal(str(summary.net_cash))
+    report.expected_cash_at_hand = expected
+    report.variation = variation
+    report.expense_variation = expense_variation
+    if variation == 0 and expense_variation == 0:
+        report.status = "matched"
+    elif report.status == "matched":
+        report.status = "draft"
 
     await db.flush()
     await db.refresh(report)

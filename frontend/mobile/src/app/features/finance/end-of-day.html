@@ -83,10 +83,10 @@
             <div class="text-sm font-semibold text-slate-900">Office Admin Entry</div>
             @if (savedReport()) {
               <span
-                class="rounded-full px-2 py-0.5 text-xs font-semibold capitalize"
-                [class]="savedReport()?.status === 'matched' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+                class="rounded-full px-2 py-0.5 text-xs font-semibold"
+                [class]="savedReport()?.status === 'matched' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'"
               >
-                {{ savedReport()?.status }}
+                {{ savedReport()?.status === 'matched' ? 'matched' : 'draft' }}
               </span>
             }
           </div>
@@ -199,16 +199,17 @@
         @if (savedReport(); as rep) {
           <div
             class="rounded-xl border p-4 text-sm"
-            [class]="rep.status === 'matched' ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800'"
+            [class]="rep.status === 'matched' ? 'border-green-300 bg-green-50 text-green-800' : 'border-amber-300 bg-amber-50 text-amber-900'"
             data-testid="eod-banner"
           >
             <div class="font-semibold">
-              {{ rep.status === 'matched' ? 'Cash reconciles — no variation.' : 'VARIATION DETECTED — an entered figure does not match the system.' }}
+              {{ rep.status === 'matched' ? 'Cash reconciles — no variation.' : 'SAVED AS DRAFT — variations remain.' }}
             </div>
-            @if (rep.status === 'discrepancy') {
-              <div class="mt-1 text-xs">
-                Reconcile: correct the figures below (or record the missing expenses in the system) and save again.
-              </div>
+            @if (rep.status !== 'matched') {
+              <p class="mt-1 text-xs">
+                Re-verifies automatically once the correcting records are added (sales, collections,
+                missing expenses), or adjust the figures below and save again.
+              </p>
             }
             <div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
               <span>Opening: {{ money(rep.opening_cash) }}</span>

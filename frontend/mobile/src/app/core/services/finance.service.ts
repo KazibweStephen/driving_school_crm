@@ -180,7 +180,7 @@ export interface EndOfDayReport {
   total_expenses: number;
   expense_variation: number;
   reasons: string[];
-  status: 'matched' | 'discrepancy';
+  status: 'matched' | 'draft' | 'discrepancy';
   created_by_phone?: string;
   created_at?: string;
   updated_at?: string;

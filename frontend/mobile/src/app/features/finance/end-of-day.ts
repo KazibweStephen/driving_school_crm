@@ -173,10 +173,11 @@ export class EndOfDay {
             detail: `Cash reconciles: variation ${this.money(report.variation)}`,
           });
         } else {
+          const reasons = (report.reasons || []).join(', ');
           this.messageService.add({
-            severity: 'error',
-            summary: 'Discrepancy',
-            detail: `Cash variation ${this.money(report.variation)} · Expense variation ${this.money(report.expense_variation)}`,
+            severity: 'warn',
+            summary: 'Saved as draft',
+            detail: `Variations on ${reasons || 'cash'} — Cash variation ${this.money(report.variation)} · Expense variation ${this.money(report.expense_variation)}`,
           });
         }
       },

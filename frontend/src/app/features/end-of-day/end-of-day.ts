@@ -181,7 +181,8 @@ export class EndOfDayCmp implements OnInit {
       if (report.status === 'matched') {
         this.messageService.add({ severity: 'success', summary: 'Matched', detail: `Cash reconciles: variation ${this.formatAmount(report.variation)}` });
       } else {
-        this.messageService.add({ severity: 'error', summary: 'Discrepancy', detail: `Cash variation ${this.formatAmount(report.variation)} · Expense variation ${this.formatAmount(report.expense_variation)}` });
+        const reasons = (report.reasons || []).join(', ');
+        this.messageService.add({ severity: 'warn', summary: 'Saved as draft', detail: `Variations on ${reasons || 'cash'} — Cash variation ${this.formatAmount(report.variation)} · Expense variation ${this.formatAmount(report.expense_variation)}` });
       }
       }
     } catch (e: any) {

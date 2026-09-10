@@ -163,9 +163,10 @@ test.describe('End of Day Report', () => {
     await expect(page.getByText(/NO — expense variation/).first()).toBeVisible({ timeout: 5000 });
 
     await page.getByRole('button', { name: 'Save Report' }).click();
-    await expect(page.getByText(/VARIATION DETECTED/).first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText(/DISCREPANCY/).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/SAVED AS DRAFT/).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('DRAFT').first()).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(/Expense variation/).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Cash variation/).first()).toBeVisible({ timeout: 5000 });
 
     await reconcileUntilMatched(
       page,
@@ -211,9 +212,10 @@ test.describe('End of Day Report', () => {
     await expect(page.getByText(/NO — expense variation/).first()).toBeVisible({ timeout: 5000 });
 
     await page.getByTestId('eod-save').click();
-    await expect(page.getByText(/VARIATION DETECTED/).first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText(/discrepancy/i).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/SAVED AS DRAFT/).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/draft/).first()).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(/Expense variation/).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Cash variation/).first()).toBeVisible({ timeout: 5000 });
 
     await reconcileUntilMatched(
       page,

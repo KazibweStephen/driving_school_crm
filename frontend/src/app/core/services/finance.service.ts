@@ -268,6 +268,9 @@ export interface EndOfDayReport {
   net_cash: number;
   expected_cash_at_hand: number;
   variation: number;
+  total_expenses: number;
+  expense_variation: number;
+  reasons: string[];
   status: string;
   created_by_phone?: string;
   created_at?: string;
@@ -453,12 +456,13 @@ export class FinanceService {
     return this.http.get<EndOfDayRead>(`${this.base}/end-of-day`, { params: p });
   }
 
-  saveEndOfDay(data: {
+saveEndOfDay(data: {
     branch_id: string;
     report_date: string;
     cash_at_hand: number;
-    consultations_count: number;
-    new_clients_count: number;
+    total_expenses?: number;
+    consultations_count?: number;
+    new_clients_count?: number;
     notes?: string;
   }): Observable<EndOfDayReport> {
     return this.http.post<EndOfDayReport>(`${this.base}/end-of-day`, data);

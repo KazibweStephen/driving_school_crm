@@ -37,6 +37,7 @@ export class EndOfDayCmp implements OnInit {
   summary = signal<EndOfDaySummary | null>(null);
 
   cashAtHand: number | null = null;
+  totalExpenses: number | null = null;
   consultationsCount: number | null = null;
   newClientsCount: number | null = null;
   notes = '';
@@ -72,6 +73,7 @@ export class EndOfDayCmp implements OnInit {
 
   private resetForm() {
     this.cashAtHand = null;
+    this.totalExpenses = null;
     this.consultationsCount = null;
     this.newClientsCount = null;
     this.notes = '';
@@ -81,6 +83,14 @@ export class EndOfDayCmp implements OnInit {
   onCashAtHandChange() {
     // Live flagging while the admin types the physical cash count.
     const v = this.liveVariation();
+    if (v !== null) {
+      this.messageService.clear();
+    }
+  }
+
+  onExpenseChange() {
+    // Live correlation while the admin types the total-expenses figure.
+    const v = this.expenseLiveVariation();
     if (v !== null) {
       this.messageService.clear();
     }
@@ -98,10 +108,12 @@ export class EndOfDayCmp implements OnInit {
       this.savedReport.set(rep);
       if (rep) {
         this.cashAtHand = Number(rep.cash_at_hand);
+        this.totalExpenses = Number(rep.total_expenses);
         this.consultationsCount = rep.consultations_count;
         this.newClientsCount = rep.new_clients_count;
         this.notes = rep.notes || '';
       } else if (res?.summary) {
+        this.totalExpenses = Number(res.summary.cash_expenses);
         this.consultationsCount = res.summary.system_consultations_count;
         this.newClientsCount = res.summary.system_new_clients_count;
       }
@@ -131,14 +143,26 @@ export class EndOfDayCmp implements OnInit {
     return v !== null && Math.abs(v) < 0.005;
   }
 
+  expenseLiveVariation(): number | null {
+    const system = this.summary()?.cash_expenses ?? 0;
+    if (this.totalExpenses === null || this.totalExpenses === undefined || isNaN(Number(this.totalExpenses))) return null;
+    return Number(this.totalExpenses) - system;
+  }
+
+  expenseLiveMatched(): boolean {
+    const v = this.expenseLiveVariation();
+    return v !== null && Math.abs(v) < 0.005;
+  }
+
   formValid(): boolean {
     return !!this.branchId &&
-      this.cashAtHand !== null && !isNaN(Number(this.cashAtHand)) && Number(this.cashAtHand) >= 0;
+      this.cashAtHand !== null && !isNaN(Number(this.cashAtHand)) && Number(this.cashAtHand) >= 0 &&
+      this.totalExpenses !== null && !isNaN(Number(this.totalExpenses)) && Number(this.totalExpenses) >= 0;
   }
 
   async save() {
     if (!this.formValid()) {
-      this.messageService.add({ severity: 'warn', summary: 'Incomplete', detail: 'Enter the cash at hand' });
+      this.messageService.add({ severity: 'warn', summary: 'Incomplete', detail: 'Enter the cash at hand and total expenses' });
       return;
     }
     this.saving.set(true);
@@ -147,6 +171,7 @@ export class EndOfDayCmp implements OnInit {
         branch_id: this.branchId,
         report_date: this.isoDate(this.reportDate),
         cash_at_hand: Number(this.cashAtHand),
+        total_expenses: Number(this.totalExpenses),
         consultations_count: Number(this.consultationsCount || 0),
         new_clients_count: Number(this.newClientsCount || 0),
         notes: this.notes || undefined,
@@ -156,7 +181,7 @@ export class EndOfDayCmp implements OnInit {
       if (report.status === 'matched') {
         this.messageService.add({ severity: 'success', summary: 'Matched', detail: `Cash reconciles: variation ${this.formatAmount(report.variation)}` });
       } else {
-        this.messageService.add({ severity: 'error', summary: 'Discrepancy', detail: `Variation ${this.formatAmount(report.variation)} — cash at hand does not match the expected figure` });
+        this.messageService.add({ severity: 'error', summary: 'Discrepancy', detail: `Cash variation ${this.formatAmount(report.variation)} · Expense variation ${this.formatAmount(report.expense_variation)}` });
       }
       }
     } catch (e: any) {

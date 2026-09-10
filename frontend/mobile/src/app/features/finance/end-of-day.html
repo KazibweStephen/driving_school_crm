@@ -116,6 +116,35 @@
               }
             </div>
             <div>
+              <label class="mb-1 block text-sm font-medium text-slate-700">
+                Total Expenses <span class="text-red-500">*</span>
+                @if ((summary()?.cash_expenses ?? 0) > 0) {
+                  <span class="text-xs font-normal text-slate-400">system logged {{ money(summary()?.cash_expenses) }}</span>
+                }
+              </label>
+              <input
+                type="number"
+                min="0"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                [ngModel]="totalExpenses()"
+                (ngModelChange)="totalExpenses.set($event ?? null)"
+                placeholder="Expenses paid out today"
+                data-testid="eod-expenses"
+              />
+              @let ev = expenseLiveVariation();
+              @if (ev !== null) {
+                <p class="mt-1 text-xs">
+                  Correlates with logged:
+                  <span [class]="expenseLiveMatched() ? 'font-semibold text-green-600' : 'font-semibold text-red-600'">
+                    {{ expenseLiveMatched() ? 'yes' : 'NO — expense variation ' + money(ev) }}
+                  </span>
+                </p>
+                @if (!expenseLiveMatched()) {
+                  <p class="mt-0.5 text-xs text-red-600">Record missing expenses in the system, or correct this figure, then save again.</p>
+                }
+              }
+            </div>
+            <div>
               <label class="mb-1 block text-sm font-medium text-slate-700">Number of Consultations</label>
               <input
                 type="number"
@@ -174,16 +203,22 @@
             data-testid="eod-banner"
           >
             <div class="font-semibold">
-              {{ rep.status === 'matched' ? 'Cash reconciles — no variation.' : 'VARIATION DETECTED — cash at hand does not match the expected figure.' }}
+              {{ rep.status === 'matched' ? 'Cash reconciles — no variation.' : 'VARIATION DETECTED — an entered figure does not match the system.' }}
             </div>
+            @if (rep.status === 'discrepancy') {
+              <div class="mt-1 text-xs">
+                Reconcile: correct the figures below (or record the missing expenses in the system) and save again.
+              </div>
+            }
             <div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
               <span>Opening: {{ money(rep.opening_cash) }}</span>
               <span>New Sales: {{ money(rep.cash_from_new_sales) }}</span>
               <span>Collections: {{ money(rep.cash_from_collections) }}</span>
-              <span>Expenses: -{{ money(rep.cash_expenses) }}</span>
+              <span [class.font-bold]="rep.reasons?.includes('expenses')" [class.text-red-700]="rep.reasons?.includes('expenses')">Expenses entered: {{ money(rep.total_expenses) }} · logged {{ money(rep.cash_expenses) }}</span>
               <span>Expected: {{ money(rep.expected_cash_at_hand) }}</span>
               <span>Cash At Hand: {{ money(rep.cash_at_hand) }}</span>
-              <span class="font-bold">Variation: {{ money(rep.variation) }}</span>
+              <span [class.font-bold]="rep.reasons?.includes('cash')" [class.text-red-700]="rep.reasons?.includes('cash')">Cash variation: {{ money(rep.variation) }}</span>
+              <span [class.font-bold]="rep.reasons?.includes('expenses')" [class.text-red-700]="rep.reasons?.includes('expenses')">Expense variation: {{ money(rep.expense_variation) }}</span>
               <span>Consultations: {{ rep.consultations_count }} · New Clients: {{ rep.new_clients_count }}</span>
             </div>
           </div>

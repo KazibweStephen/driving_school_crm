@@ -94,6 +94,27 @@
               </div>
             </div>
             <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">
+                Total Expenses <span class="text-red-500">*</span>
+                @if ((summary()?.cash_expenses ?? 0) > 0) {
+                  <span class="text-xs font-normal text-gray-400">system logged {{ formatAmount(summary()?.cash_expenses) }}</span>
+                }
+              </label>
+              <p-inputnumber [(ngModel)]="totalExpenses" mode="currency" currency="UGX" locale="en-US" inputId="eod-expenses"
+                [min]="0" placeholder="Expenses paid out today" styleClass="w-full" (onInput)="onExpenseChange()" />
+              <div class="mt-1 text-xs text-gray-500">
+                @let ev = expenseLiveVariation();
+                @if (ev !== null) {
+                  Correlates with logged: <span [class]="expenseLiveMatched() ? 'font-semibold text-green-600' : 'font-semibold text-red-600'">
+                    {{ expenseLiveMatched() ? 'yes' : 'NO — expense variation ' + formatAmount(ev) }}
+                  </span>
+                  @if (!expenseLiveMatched()) {
+                    <div class="mt-0.5 text-red-600">Record missing expenses in the system, or correct this figure, then save again.</div>
+                  }
+                }
+              </div>
+            </div>
+            <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">Number of Consultations</label>
               <p-inputnumber [(ngModel)]="consultationsCount" [min]="0" inputId="eod-cons" styleClass="w-full" />
               @if (s.system_consultations_count > 0) {
@@ -129,16 +150,22 @@
             <div [class]="'mt-4 rounded-lg border p-4 text-sm ' +
               (rep.status === 'matched' ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800')">
               <div class="font-semibold">
-                {{ rep.status === 'matched' ? 'Cash reconciles — no variation.' : 'VARIATION DETECTED — cash at hand does not match the expected figure.' }}
+                {{ rep.status === 'matched' ? 'Cash reconciles — no variation.' : 'VARIATION DETECTED — an entered figure does not match the system.' }}
               </div>
+              @if (rep.status === 'discrepancy') {
+                <div class="mt-1 text-xs">
+                  Reconcile: correct the figures below (or record the missing expenses in the system) and save again.
+                </div>
+              }
               <div class="mt-1 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2 lg:grid-cols-4">
                 <div>Opening: {{ currencyService.symbol() }} {{ formatAmount(rep.opening_cash) }}</div>
                 <div>New Sales: {{ currencyService.symbol() }} {{ formatAmount(rep.cash_from_new_sales) }}</div>
                 <div>Collections: {{ currencyService.symbol() }} {{ formatAmount(rep.cash_from_collections) }}</div>
-                <div>Expenses: -{{ currencyService.symbol() }} {{ formatAmount(rep.cash_expenses) }}</div>
+                <div class="font-bold" [class.text-red-700]="rep.reasons?.includes('expenses')">Expenses entered: {{ currencyService.symbol() }} {{ formatAmount(rep.total_expenses) }} · logged {{ currencyService.symbol() }} {{ formatAmount(rep.cash_expenses) }}</div>
                 <div>Expected: {{ currencyService.symbol() }} {{ formatAmount(rep.expected_cash_at_hand) }}</div>
                 <div>Cash At Hand: {{ currencyService.symbol() }} {{ formatAmount(rep.cash_at_hand) }}</div>
-                <div class="font-bold">Variation: {{ formatAmount(rep.variation) }}</div>
+                <div class="font-bold" [class.text-red-700]="rep.reasons?.includes('cash')">Cash variation: {{ formatAmount(rep.variation) }}</div>
+                <div class="font-bold" [class.text-red-700]="rep.reasons?.includes('expenses')">Expense variation: {{ formatAmount(rep.expense_variation) }}</div>
                 <div>Consultations: {{ rep.consultations_count }} · New Clients: {{ rep.new_clients_count }}</div>
               </div>
             </div>

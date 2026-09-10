@@ -190,10 +190,17 @@ async def upsert_report(
     new_clients_count: int,
     notes: str | None,
     created_by_phone: str | None,
+    total_expenses: Decimal | None = None,
 ) -> EndOfDayReport:
     summary = await compute_summary(db, branch_id, report_date)
+    system_expenses = Decimal(str(summary.cash_expenses))
     expected = Decimal(str(summary.expected_cash_at_hand))
     variation = cash_at_hand - expected
+    # Entered total expenses defaults to the system's paid-expense figure so a
+    # fresh entry reconciles on expenses; a different figure is a discrepancy
+    # that must be explained (missing expense records) or corrected.
+    entered_expenses = total_expenses if total_expenses is not None else system_expenses
+    expense_variation = entered_expenses - system_expenses
 
     report = await get_saved_report(db, branch_id, report_date)
     if report is None:
@@ -206,19 +213,25 @@ async def upsert_report(
         db.add(report)
 
     report.cash_at_hand = cash_at_hand
+    report.total_expenses = entered_expenses
     report.consultations_count = consultations_count
     report.new_clients_count = new_clients_count
     report.notes = notes
     report.opening_cash = Decimal(str(summary.opening_cash))
     report.cash_from_new_sales = Decimal(str(summary.cash_from_new_sales))
     report.cash_from_collections = Decimal(str(summary.cash_from_collections))
-    report.cash_expenses = Decimal(str(summary.cash_expenses))
+    report.cash_expenses = system_expenses
     report.cash_in = Decimal(str(summary.cash_in))
     report.cash_out = Decimal(str(summary.cash_out))
     report.net_cash = Decimal(str(summary.net_cash))
     report.expected_cash_at_hand = expected
     report.variation = variation
-    report.status = "matched" if variation == 0 else "discrepancy"
+    report.expense_variation = expense_variation
+    report.status = (
+        "matched"
+        if variation == 0 and expense_variation == 0
+        else "discrepancy"
+    )
 
     await db.flush()
     await db.refresh(report)

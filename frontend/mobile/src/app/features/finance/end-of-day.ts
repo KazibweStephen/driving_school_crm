@@ -47,6 +47,7 @@ export class EndOfDay {
   savedReport = signal<EndOfDayReport | null>(null);
 
   cashAtHand = signal<number | null>(null);
+  totalExpenses = signal<number | null>(null);
   consultationsCount = signal<number>(0);
   newClientsCount = signal<number>(0);
   notes = signal('');
@@ -91,11 +92,13 @@ export class EndOfDay {
         this.savedReport.set(rep);
         if (rep) {
           this.cashAtHand.set(Number(rep.cash_at_hand));
+          this.totalExpenses.set(Number(rep.total_expenses));
           this.consultationsCount.set(rep.consultations_count);
           this.newClientsCount.set(rep.new_clients_count);
           this.notes.set(rep.notes || '');
         } else if (res.summary) {
           this.cashAtHand.set(null);
+          this.totalExpenses.set(Number(res.summary.cash_expenses));
           this.consultationsCount.set(res.summary.system_consultations_count);
           this.newClientsCount.set(res.summary.system_new_clients_count);
           this.notes.set('');
@@ -121,18 +124,33 @@ export class EndOfDay {
     return v !== null && Math.abs(v) < 0.005;
   }
 
+  expenseLiveVariation(): number | null {
+    const system = this.summary()?.cash_expenses ?? 0;
+    const te = this.totalExpenses();
+    if (te === null || te === undefined || isNaN(Number(te))) return null;
+    return Number(te) - system;
+  }
+
+  expenseLiveMatched(): boolean {
+    const v = this.expenseLiveVariation();
+    return v !== null && Math.abs(v) < 0.005;
+  }
+
   formValid(): boolean {
     return (
       !!this.branchId() &&
       this.cashAtHand() !== null &&
       !isNaN(Number(this.cashAtHand())) &&
-      Number(this.cashAtHand()) >= 0
+      Number(this.cashAtHand()) >= 0 &&
+      this.totalExpenses() !== null &&
+      !isNaN(Number(this.totalExpenses())) &&
+      Number(this.totalExpenses()) >= 0
     );
   }
 
   save() {
     if (!this.formValid()) {
-      this.messageService.add({ severity: 'warn', summary: 'Incomplete', detail: 'Enter the cash at hand' });
+      this.messageService.add({ severity: 'warn', summary: 'Incomplete', detail: 'Enter the cash at hand and total expenses' });
       return;
     }
     this.saving.set(true);
@@ -140,6 +158,7 @@ export class EndOfDay {
       branch_id: this.branchId(),
       report_date: this.reportDate(),
       cash_at_hand: Number(this.cashAtHand()),
+      total_expenses: Number(this.totalExpenses()),
       consultations_count: Number(this.consultationsCount() || 0),
       new_clients_count: Number(this.newClientsCount() || 0),
       notes: this.notes() || undefined,
@@ -157,7 +176,7 @@ export class EndOfDay {
           this.messageService.add({
             severity: 'error',
             summary: 'Discrepancy',
-            detail: `Variation ${this.money(report.variation)} — cash at hand does not match the expected figure`,
+            detail: `Cash variation ${this.money(report.variation)} · Expense variation ${this.money(report.expense_variation)}`,
           });
         }
       },

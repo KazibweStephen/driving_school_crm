@@ -1098,6 +1098,11 @@ async def save_end_of_day(
         new_clients_count=body.new_clients_count,
         notes=body.notes,
         created_by_phone=current_user.phone,
+        total_expenses=(
+            Decimal(str(body.total_expenses))
+            if body.total_expenses is not None
+            else None
+        ),
     )
     await db.commit()
     await db.refresh(report)

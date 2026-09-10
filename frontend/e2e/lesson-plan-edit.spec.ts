@@ -28,11 +28,16 @@ test.describe('Lesson Plan Quick Generate & Display', () => {
     // 2. Create consultation with payment
     const consultId = await page.evaluate(async ({ tok, r }) => {
       const phone = `25670${Date.now().toString().slice(-6)}`;
+      const bres = await fetch('/api/v1/companies/my-branches', {
+        headers: { 'Authorization': `Bearer ${tok}` },
+      });
+      const branch = (await bres.json())[0];
       const res = await fetch('/api/v1/consultations/full', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tok}` },
         body: JSON.stringify({
           phone, first_name: 'Test', last_name: 'Lesson', location: 'Kampala',
+          branch_id: branch.id,
           items: [{ product_id: r.productId, package_id: r.packageId, allocation: 500000 }],
           payment: { receipt_number: `R-${Date.now()}` },
         }),

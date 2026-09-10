@@ -177,6 +177,9 @@ export interface EndOfDayReport {
   net_cash: number;
   expected_cash_at_hand: number;
   variation: number;
+  total_expenses: number;
+  expense_variation: number;
+  reasons: string[];
   status: 'matched' | 'discrepancy';
   created_by_phone?: string;
   created_at?: string;
@@ -310,6 +313,7 @@ export class FinanceService {
     branch_id: string;
     report_date: string;
     cash_at_hand: number;
+    total_expenses?: number;
     consultations_count?: number;
     new_clients_count?: number;
     notes?: string;

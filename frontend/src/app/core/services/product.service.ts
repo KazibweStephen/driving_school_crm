@@ -48,6 +48,8 @@ export interface Package {
     category: string;
     amount: string;
   }[];
+  expected_expense?: number | null;
+  expected_profit?: number | null;
 }
 
 export interface PackageExpectedExpenseInput {

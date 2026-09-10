@@ -108,6 +108,8 @@ class PackageRead(BaseModel):
         default=None, validation_alias="commission_rates"
     )
     expected_expenses: list[PackageExpectedExpenseRead] = Field(default_factory=list)
+    expected_expense: float | None = None
+    expected_profit: float | None = None
 
     model_config = {"from_attributes": True}
 

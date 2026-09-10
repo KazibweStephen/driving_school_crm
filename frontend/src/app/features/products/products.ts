@@ -151,6 +151,11 @@ export class Products implements OnInit {
 
   isAdmin = false;
 
+  canViewExpectedMetrics(): boolean {
+    const role = this.authService.currentUserRole();
+    return role === 'super_user' || role === 'company_super_user' || role === 'manager';
+  }
+
   ngOnInit() {
     this.loadProducts();
   }

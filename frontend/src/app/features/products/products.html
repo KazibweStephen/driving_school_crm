@@ -132,6 +132,9 @@
                     <th>Duration</th>
                     <th>Status</th>
                     <th>Commission</th>
+                    @if (canViewExpectedMetrics()) {
+                      <th>Expected</th>
+                    }
                     <th>Actions</th>
                   </tr>
                 </ng-template>
@@ -153,6 +156,17 @@
                         <span class="text-gray-400">—</span>
                       }
                     </td>
+                    @if (canViewExpectedMetrics()) {
+                      <td class="text-sm">
+                        @if (pkg.expected_expense != null) {
+                          <span class="text-red-600">Exp: {{ pkg.expected_expense | number:'1.0-0' }}</span>
+                          <span class="text-gray-400">·</span>
+                          <span class="text-green-700">Pft: {{ pkg.expected_profit | number:'1.0-0' }}</span>
+                        } @else {
+                          <span class="text-gray-400">—</span>
+                        }
+                      </td>
+                    }
                     <td>
                       <div class="flex items-center gap-1">
                         @if (isAdmin) {
@@ -260,6 +274,12 @@
                       <p class="mt-1 text-xs text-gray-600">
                         Commission: <span class="font-medium">{{ pkg.commission_rate.total_amount | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
                         ({{ pkg.commission_rate.converter_pct }}/{{ pkg.commission_rate.primary_recommender_pct }}/{{ pkg.commission_rate.secondary_recommender_pct }}%)
+                      </p>
+                    }
+                    @if (canViewExpectedMetrics() && pkg.expected_expense != null) {
+                      <p class="mt-1 text-xs text-gray-600">
+                        Expected: <span class="font-medium text-red-600">{{ pkg.expected_expense | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
+                        · Profit: <span class="font-medium text-green-700">{{ pkg.expected_profit | number:'1.0-0' }} {{ currencyService.symbol() }}</span>
                       </p>
                     }
                   </div>

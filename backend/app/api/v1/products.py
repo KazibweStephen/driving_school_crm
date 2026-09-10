@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_permission
 from app.core.database import get_db
 from app.models.product import EntityStatus
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.product import (
     PackageExpectedExpenseInput,
     PackageExpectedExpenseRead,
@@ -13,10 +13,34 @@ from app.schemas.product import (
     ProductRead,
     ProductUpdate,
 )
+from app.services import expected_expense as expected_expense_service
 from app.services import product as product_service
 from app.utils.tenant import resolve_company_id
 
 router = APIRouter(prefix="/products", tags=["products"])
+
+
+def _can_view_expected_metrics(user: User) -> bool:
+    return user.role in {
+        UserRole.SUPER_USER,
+        UserRole.COMPANY_SUPER_USER,
+        UserRole.MANAGER,
+    }
+
+
+async def _enrich_expected_metrics(db: AsyncSession, products: list, authorized: bool) -> None:
+    """Attach per-package expected expense total + expected profit (role-gated)."""
+    if not authorized:
+        return
+    for product in products:
+        for pkg in product.packages:
+            data = await expected_expense_service.get_package_links(
+                db, pkg.id, product.company_id
+            )
+            expense = float(data.get("total") or 0)
+            profit = float(pkg.price) - expense
+            pkg.expected_expense = expense
+            pkg.expected_profit = profit
 
 
 @router.post("/", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
@@ -54,6 +78,7 @@ async def list_products(
         page_size=page_size,
         company_id=current_user.company_id,
     )
+    await _enrich_expected_metrics(db, products, _can_view_expected_metrics(current_user))
     return ProductListResponse(
         products=[ProductRead.model_validate(p) for p in products],
         total=total,
@@ -83,6 +108,7 @@ async def get_product(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found",
         )
+    await _enrich_expected_metrics(db, [product], _can_view_expected_metrics(current_user))
     return ProductRead.model_validate(product)
 
 

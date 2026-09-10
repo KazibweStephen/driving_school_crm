@@ -343,6 +343,9 @@
                     <i class="pi {{ lessonsCollapsed(pi) ? 'pi-chevron-right' : 'pi-chevron-down' }} text-gray-500"></i>
                   </button>
                   <span class="text-xs font-semibold text-gray-700">Package {{ pi + 1 }} — {{ productName(pkg.product_id) }}</span>
+                  @if (!packageNeedsLessons(pkg)) {
+                    <span class="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">Optional</span>
+                  }
                 </div>
                 <div class="flex items-center gap-2">
                   <button type="button" class="text-xs font-medium text-indigo-600" (click)="openQuickGen(pi)">Quick gen</button>
@@ -572,6 +575,17 @@
             <p-inputNumber [ngModel]="quickGenTheoryCovered()" (ngModelChange)="quickGenTheoryCovered.set($event)" [min]="0" class="w-full" placeholder="Already covered" />
           </label>
         </div>
+        <label class="block text-xs text-gray-600">
+          Lesson plan template
+          <p-select
+            [options]="templateOptions()"
+            [ngModel]="quickGenTemplateId()"
+            (ngModelChange)="quickGenTemplateId.set($event)"
+            appendTo="body"
+            class="w-full"
+            placeholder="Optional"
+          />
+        </label>
         <label class="block text-xs text-gray-600">
           Instructor
           <p-select [options]="instructorOptions()" [ngModel]="quickGenInstructorId()" (ngModelChange)="quickGenInstructorId.set($event)" appendTo="body" class="w-full" />

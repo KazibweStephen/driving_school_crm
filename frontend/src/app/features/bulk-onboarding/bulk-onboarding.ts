@@ -714,6 +714,11 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     };
   }
 
+  packageNeedsLessons(pkg: PackageDraft): boolean {
+    const info = this.packageTrainingInfo(pkg.product_id, pkg.package_id);
+    return (info.days ?? 0) > 0 || (info.hours ?? 0) > 0;
+  }
+
   clientInitials(c: ClientDraft): string {
     const parts = [c.first_name, c.last_name].filter(Boolean);
     return parts.length ? parts.map(n => n[0].toUpperCase()).slice(0, 2).join('') : '?';
@@ -738,8 +743,11 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   }
 
   clientLessonsComplete(c: ClientDraft): boolean {
-    return c.packages.length > 0 && c.packages.some(pkg =>
-      pkg.lessons.length > 0 && pkg.lessons.every(l => !!l.date && !!l.duration_minutes && l.duration_minutes > 0)
+    if (c.packages.length === 0) return false;
+    const needsLessons = c.packages.some(pkg => this.packageNeedsLessons(pkg));
+    if (!needsLessons) return true;
+    return c.packages.some(pkg =>
+      this.packageNeedsLessons(pkg) && pkg.lessons.length > 0 && pkg.lessons.every(l => !!l.date && !!l.duration_minutes && l.duration_minutes > 0)
     );
   }
 

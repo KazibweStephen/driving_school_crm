@@ -357,6 +357,9 @@
                 @if (pkg.package_id && packageNameById(pkg.product_id, pkg.package_id)) {
                   <span class="text-gray-400 font-normal">· {{ packageNameById(pkg.product_id, pkg.package_id) }}</span>
                 }
+                @if (!packageNeedsLessons(pkg)) {
+                  <span class="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700 align-middle">Optional</span>
+                }
               </span>
               <div class="flex gap-2 flex-wrap justify-end">
                 @if (pkg.lessons.length > 0) {

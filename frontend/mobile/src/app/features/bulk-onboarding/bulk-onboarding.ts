@@ -11,7 +11,7 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { StepsModule } from 'primeng/steps';
 import { DialogModule } from 'primeng/dialog';
 import { AuthService } from '../../core/auth/auth.service';
-import { CatalogService, Product, Branch } from '../../core/services/catalog.service';
+import { CatalogService, Product, Branch, LessonPlanTemplate } from '../../core/services/catalog.service';
 import { ConsultationService, BulkOnboardingRequest } from '../../core/services/consultation.service';
 import { DiscountService, Discount } from '../../core/services/discount.service';
 import { MessageService } from 'primeng/api';
@@ -39,6 +39,7 @@ interface PackageDraft {
   product_id: string;
   package_id: string;
   transmission_type: string;
+  lesson_plan_template_id: string;
   discount_id: string;
   installments: InstallmentDraft[];
   lessons: LessonDraft[];
@@ -87,6 +88,7 @@ export class BulkOnboarding implements OnInit {
 
   clients = signal<ClientDraft[]>([]);
   products = signal<Product[]>([]);
+  templates = signal<LessonPlanTemplate[]>([]);
   vehicles = signal<{ id: string; name: string; plate_number: string; transmission: string }[]>([]);
   instructors = signal<{ phone: string; name: string }[]>([]);
   users = signal<{ phone: string; name: string }[]>([]);
@@ -116,6 +118,7 @@ export class BulkOnboarding implements OnInit {
   quickGenTheoryCovered = signal<number>(0);
   quickGenInstructorId = signal('');
   quickGenVehicleId = signal('');
+  quickGenTemplateId = signal('');
   quickGenPreview = signal<LessonDraft[]>([]);
   quickGenBusy = signal(false);
   validatingStep = signal(false);
@@ -246,6 +249,23 @@ export class BulkOnboarding implements OnInit {
       .map((v) => ({ label: `${v.name} (${v.plate_number})`, value: v.id }));
   }
 
+  templateOptions() {
+    const trans = this.quickGenTransmission();
+    return this.templates()
+      .filter((t) => trans === 'both' || !t.transmission_type || t.transmission_type === 'both' || t.transmission_type === trans)
+      .map((t) => ({ label: t.name, value: t.id }));
+  }
+
+  onQuickGenTransmissionChange(transmission: string) {
+    const tplId = this.quickGenTemplateId();
+    if (tplId) {
+      const tpl = this.templates().find((t) => t.id === tplId);
+      if (tpl && tpl.transmission_type && tpl.transmission_type !== 'both' && tpl.transmission_type !== transmission) {
+        this.quickGenTemplateId.set('');
+      }
+    }
+  }
+
   wizardItems = computed(() => {
     const infoIncomplete = !this.infoValid();
     const phoneDuplicate = this.wizardPhoneWarning().length > 0;
@@ -296,6 +316,12 @@ export class BulkOnboarding implements OnInit {
     try {
       const res = await this.catalog.listVehicles().toPromise();
       if (res) this.vehicles.set(res);
+    } catch {
+      /* ignore */
+    }
+    try {
+      const res = await this.catalog.listTemplates().toPromise();
+      if (res) this.templates.set(res);
     } catch {
       /* ignore */
     }
@@ -357,6 +383,7 @@ export class BulkOnboarding implements OnInit {
         product_id: p.product_id || '',
         package_id: p.package_id || '',
         transmission_type: p.transmission_type || 'manual',
+        lesson_plan_template_id: p.lesson_plan_template_id || '',
         discount_id: p.discount_id || '',
         installments: (p.installments || []).map((i: any) => ({
           receipt_number: i.receipt_number || '',
@@ -411,6 +438,7 @@ export class BulkOnboarding implements OnInit {
         product_id: p.product_id,
         package_id: p.package_id,
         transmission_type: p.transmission_type,
+        lesson_plan_template_id: p.lesson_plan_template_id,
         discount_id: p.discount_id,
         installments: p.installments.map((i) => ({
           receipt_number: i.receipt_number,
@@ -516,11 +544,28 @@ export class BulkOnboarding implements OnInit {
     );
   }
 
+  packageTrainingInfo(productId: string, packageId: string): { days: number | null; hours: number | null } {
+    const p = this.productById().get(productId);
+    const pkg = p?.packages?.find((pkg) => pkg.id === packageId);
+    return {
+      days: pkg?.driving_training_duration_days ?? null,
+      hours: pkg?.theory_training_hours ?? null,
+    };
+  }
+
+  packageNeedsLessons(pkg: PackageDraft): boolean {
+    const info = this.packageTrainingInfo(pkg.product_id, pkg.package_id);
+    return (info.days ?? 0) > 0 || (info.hours ?? 0) > 0;
+  }
+
   lessonsValid(): boolean {
     const c = this.wizardClient();
     if (!c || c.packages.length === 0) return false;
+    const needsLessons = c.packages.some((p) => this.packageNeedsLessons(p));
+    if (!needsLessons) return true;
     return c.packages.some(
       (p) =>
+        this.packageNeedsLessons(p) &&
         p.lessons.length > 0 &&
         p.lessons.every((l) => !!l.date && !!l.duration_minutes && l.duration_minutes > 0),
     );
@@ -562,6 +607,7 @@ export class BulkOnboarding implements OnInit {
     } else if (step === 2) {
       if (!c) return errs;
       c.packages.forEach((p) => {
+        if (!this.packageNeedsLessons(p)) return;
         p.lessons.forEach((l) => {
           if (!l.date) errs.push('Lesson date is required');
           if (!l.duration_minutes || l.duration_minutes <= 0) errs.push('Lesson duration is required');
@@ -786,7 +832,7 @@ export class BulkOnboarding implements OnInit {
     this.updateWizard({
       packages: [
         ...c.packages,
-        { product_id: '', package_id: '', transmission_type: 'manual', discount_id: '', installments: [], lessons: [] },
+        { product_id: '', package_id: '', transmission_type: 'manual', lesson_plan_template_id: '', discount_id: '', installments: [], lessons: [] },
       ],
     });
   }
@@ -816,6 +862,12 @@ export class BulkOnboarding implements OnInit {
     pkgs[pkgIndex] = { ...prev, ...patch };
     if ('package_id' in patch && patch.package_id !== prev.package_id) {
       pkgs[pkgIndex] = { ...pkgs[pkgIndex], discount_id: '' };
+    }
+    if ('transmission_type' in patch && patch.transmission_type !== prev.transmission_type && pkgs[pkgIndex].lesson_plan_template_id) {
+      const tpl = this.templates().find((t) => t.id === pkgs[pkgIndex].lesson_plan_template_id);
+      if (tpl && tpl.transmission_type && tpl.transmission_type !== 'both' && tpl.transmission_type !== patch.transmission_type) {
+        pkgs[pkgIndex] = { ...pkgs[pkgIndex], lesson_plan_template_id: '' };
+      }
     }
     this.updateWizard({ packages: pkgs });
     if ('package_id' in patch) {
@@ -944,12 +996,14 @@ export class BulkOnboarding implements OnInit {
     this.quickGenStartDate.set(start);
     this.quickGenEndDate.set(new Date(start));
     const config = this.quickGenPackageConfig();
+    const pkg = this.wizardClient()?.packages[pkgIndex];
     this.quickGenPlannedPractical.set(config.practicalDays ?? 0);
     this.quickGenPlannedTheory.set(config.theoryLessons ?? 0);
     this.quickGenPracticalCovered.set(0);
     this.quickGenTheoryCovered.set(0);
     this.quickGenInstructorId.set('');
     this.quickGenVehicleId.set('');
+    this.quickGenTemplateId.set(pkg?.lesson_plan_template_id || '');
     this.quickGenPreview.set([]);
     this.quickGenOpen.set(true);
   }
@@ -1097,7 +1151,7 @@ export class BulkOnboarding implements OnInit {
     const merged = [...existing, ...toAdd].sort(
       (a, b) => (a.date?.getTime() ?? 0) - (b.date?.getTime() ?? 0),
     );
-    pkgs[pi] = { ...pkgs[pi], lessons: merged };
+    pkgs[pi] = { ...pkgs[pi], lessons: merged, lesson_plan_template_id: this.quickGenTemplateId() };
     this.updateWizard({ packages: pkgs });
     this.quickGenOpen.set(false);
     this.quickGenPreview.set([]);
@@ -1202,6 +1256,7 @@ export class BulkOnboarding implements OnInit {
           product_id: p.product_id,
           package_id: p.package_id || undefined,
           transmission_type: p.transmission_type || 'manual',
+          lesson_plan_template_id: p.lesson_plan_template_id || undefined,
           discount_id: p.discount_id || undefined,
           installments: p.installments.map((i) => ({
             receipt_number: i.receipt_number,

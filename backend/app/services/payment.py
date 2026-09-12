@@ -872,7 +872,8 @@ async def cancel_payment(
 
         for cart_item in affected_cart_items:
             all_payments_result = await db.execute(
-                select(Payment).where(
+                select(Payment)
+                .where(
                     Payment.consultation_id == payment.consultation_id,
                     Payment.product_id == cart_item.product_id,
                     (
@@ -881,6 +882,7 @@ async def cancel_payment(
                         else Payment.package_id.is_(None)
                     ),
                 )
+                .options(selectinload(Payment.installments))
             )
             all_payments = list(all_payments_result.scalars().all())
             remaining_payments = [p for p in all_payments if p.cancelled_at is None]

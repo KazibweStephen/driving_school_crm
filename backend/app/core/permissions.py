@@ -175,7 +175,7 @@ PERMISSION_GROUPS: list[PermissionGroup] = [
         "Discounts",
         ["discounts.manage", "discounts.view", "discounts.create", "discounts.edit", "discounts.approve", "discounts.reject", "discounts.apply"],
     ),
-    PermissionGroup("bulk_onboarding", "Bulk Onboarding", ["bulk_onboarding.manage"]),
+    PermissionGroup("bulk_onboarding", "Bulk Onboarding", ["bulk_onboarding.manage", "bulk_onboarding.edit"]),
     PermissionGroup("sms", "SMS", ["sms.manage", "sms.view", "sms.send"]),
     PermissionGroup("permissions", "Roles & Permissions", ["permissions.manage"]),
 ]

@@ -66,6 +66,75 @@
   }
 </div>
 
+<!-- Saved Clients / Corrections -->
+@if (savedSectionVisible) {
+  <div class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mb-6 shadow-sm">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-base font-semibold text-gray-800 flex items-center gap-2">
+          <i class="pi pi-history"></i> Saved Clients
+        </h2>
+        <p class="text-xs text-gray-500 mt-0.5">Correct document dates, payments or lessons after onboarding</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <p-datepicker [ngModel]="savedFromModel()" (ngModelChange)="savedFromModel.set($event)"
+          dateFormat="yy-mm-dd" appendTo="body" styleClass="!w-36" placeholder="From" />
+        <p-datepicker [ngModel]="savedToModel()" (ngModelChange)="savedToModel.set($event)"
+          dateFormat="yy-mm-dd" appendTo="body" styleClass="!w-36" placeholder="To" />
+        <input pInputText [(ngModel)]="savedSearch" placeholder="Search phone/name" class="!w-44"
+          (keyup.enter)="loadSavedClients()" />
+        <p-button label="Load" icon="pi pi-search" size="small" [loading]="savedLoading()"
+          (click)="loadSavedClients()" />
+      </div>
+    </div>
+    <p class="text-xs text-amber-600 mb-2">
+      Clients appear here after their consultation is converted to paid (bulk onboarding or single onboarding).
+    </p>
+
+    @if (!canEditOnboarded) {
+      <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 mb-3">
+        <i class="pi pi-info-circle mr-1"></i>
+        Editing is disabled for your account. Ask an admin to enable "Can Edit Onboarded Clients" in Users.
+      </div>
+    }
+
+    @if (savedLoading()) {
+      <div class="flex items-center gap-2 text-sm text-gray-500 py-4">
+        <i class="pi pi-spinner pi-spin"></i> Loading...
+      </div>
+    } @else if (savedClients().length === 0) {
+      <div class="text-sm text-gray-400 py-4 text-center border border-dashed border-gray-200 rounded-lg">
+        No onboarded clients found for the selected filters.
+      </div>
+    } @else {
+      <div class="mb-2 text-xs text-gray-500">{{ savedTotal() }} client(s)</div>
+      <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
+        @for (c of savedClients(); track c.id) {
+          <div class="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50">
+            <span class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 text-xs font-semibold">
+              {{ clientDisplayName(c).charAt(0).toUpperCase() }}
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium text-gray-800 truncate">{{ clientDisplayName(c) }}</div>
+              <div class="text-xs text-gray-500">
+                {{ c.phone }} · {{ c.document_date || 'no date' }} · {{ c.packages.length }} package(s) ·
+                {{ c.packages.reduce((s, p) => s + p.payments.length, 0) }} payment(s)
+              </div>
+            </div>
+            <div class="text-xs text-gray-400 flex flex-wrap gap-1">
+              @for (p of c.packages; track p.cart_item_id) {
+                <span class="px-1.5 py-0.5 rounded bg-gray-100">{{ p.status }}</span>
+              }
+            </div>
+            <p-button label="Edit" icon="pi pi-pencil" size="small" severity="secondary"
+              [disabled]="!canEditOnboarded" (click)="openEditClient(c)" />
+          </div>
+        }
+      </div>
+    }
+  </div>
+}
+
 <!-- Validation Banner -->
 @if (hasReceiptWarnings() || hasPhoneWarnings() || hasDateErrors()) {
   <div class="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 flex items-start gap-3 text-sm">
@@ -853,6 +922,160 @@
       <p-button label="Add Selected" [disabled]="pickerBusy() || templatePickerSelectedIds().length === 0"
         [loading]="pickerBusy()"
         (click)="confirmTemplatePicker()" />
+    </div>
+  </ng-template>
+</p-dialog>
+
+<!-- Edit Onboarded Client Dialog -->
+<p-dialog [(visible)]="showEditDialog" header="Edit Onboarded Client" [modal]="true"
+  [style]="{ width: '94vw', maxWidth: '720px' }">
+  @if (editingClient(); as c) {
+    <div class="space-y-4">
+      <div class="text-sm text-gray-600 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span class="font-medium text-gray-800">{{ clientDisplayName(c) }}</span>
+        <span>{{ c.phone }}</span>
+        <span class="text-xs text-gray-400">{{ c.branch_name || '—' }}</span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-gray-600 w-32 shrink-0">Document Date</label>
+        <p-datepicker [ngModel]="editDocDate()" (ngModelChange)="onEditDocDateChange($event)"
+          dateFormat="yy-mm-dd" appendTo="body" styleClass="!w-40"
+          [maxDate]="today" />
+      </div>
+
+      @for (pkg of c.packages; track pkg.cart_item_id; let pkgIdx = $index) {
+        <div class="border border-gray-200 rounded-xl p-3 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="text-sm font-semibold text-gray-800">
+              {{ pkg.product_id }}
+              @if (pkg.package_id) { <span class="text-gray-400">· pkg</span> }
+            </div>
+            <div class="flex items-center gap-2">
+              @if (regenPlans()[pkgIdx]) {
+                <span class="text-[11px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 font-medium">plan will be regenerated</span>
+              }
+              <p-button label="Regenerate Plan" icon="pi pi-refresh" size="small" severity="secondary"
+                (click)="openRegen(pkgIdx)" />
+            </div>
+          </div>
+          <p class="text-xs text-gray-500 flex flex-wrap gap-x-3">
+            <span>Status: {{ pkg.status }}</span>
+            <span>Total: {{ pkg.total_amount }}</span>
+            <span>Paid: {{ pkg.total_paid }}</span>
+            <span>Balance: {{ pkg.balance }}</span>
+          </p>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-medium text-gray-500">Payments</span>
+              <p-button label="Add Payment" icon="pi pi-plus" size="small" text (click)="addPayment(pkg)" />
+            </div>
+            @if (pkg.payments.length === 0) {
+              <div class="text-xs text-gray-400 border border-dashed border-gray-200 rounded px-2 py-2 text-center">
+                No active payments.
+              </div>
+            }
+            <div class="space-y-2">
+              @for (pay of pkg.payments; track $index) {
+                <div class="flex flex-wrap items-center gap-2 bg-gray-50 rounded-lg px-2 py-1.5"
+                  [ngClass]="{ 'opacity-40': isPayRemoved(pay) }">
+                  <input pInputText type="number" [(ngModel)]="pay.amount" placeholder="Amount"
+                    class="!w-24" />
+                  <p-datepicker [ngModel]="pay.docDateObj" (ngModelChange)="onPayDocDateChange(pay, $event)"
+                    dateFormat="yy-mm-dd" appendTo="body" styleClass="!w-32" placeholder="Date"
+                    [maxDate]="today" />
+                  <input pInputText [(ngModel)]="pay.receipt_number" placeholder="Receipt"
+                    class="!w-32" />
+                  <p-select [options]="userOptions()" [(ngModel)]="pay.received_by_phone"
+                    placeholder="Received by" appendTo="body" styleClass="!w-36" filter="true" filterBy="label"
+                    optionLabel="label" optionValue="value" />
+                  @if (isPayRemoved(pay)) {
+                    <span class="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-medium">will be removed</span>
+                  } @else {
+                    <p-button icon="pi pi-trash" severity="danger" size="small" text
+                      (click)="removePayment(pkg, $index)" />
+                  }
+                </div>
+              }
+            </div>
+          </div>
+
+          @if (pkg.plan) {
+            <div>
+              <div class="text-xs font-medium text-gray-500 mb-1">Lessons ({{ pkg.plan.lessons.length }})</div>
+              @if (pkg.plan.lessons.length === 0) {
+                <div class="text-xs text-gray-400 border border-dashed border-gray-200 rounded px-2 py-2 text-center">
+                  No lessons. Use "Regenerate Plan" to create them.
+                </div>
+              }
+              <div class="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                @for (l of pkg.plan.lessons; track l.id) {
+                  <div class="flex flex-wrap items-center gap-2 bg-gray-50 rounded-lg px-2 py-1.5">
+                    <span class="text-xs text-gray-500 w-5">{{ l.day_number }}</span>
+                    <span class="text-xs text-gray-700 min-w-28 flex-1 truncate" [title]="l.title">
+                      {{ l.title || (l.lesson_type === 'theory' ? 'Theory' : 'Practical') }}
+                    </span>
+                    <p-datepicker [ngModel]="l.dateObj" (ngModelChange)="onLessonDateChange(l, $event)"
+                      dateFormat="yy-mm-dd" appendTo="body" styleClass="!w-32" placeholder="Date"
+                      [maxDate]="today" />
+                    <p-select [options]="lessonStatusOptions()" [(ngModel)]="l.status"
+                      placeholder="Status" appendTo="body" styleClass="!w-32"
+                      optionLabel="label" optionValue="value" />
+                    <input pInputText type="number" [(ngModel)]="l.duration_minutes" placeholder="Min"
+                      class="!w-16" />
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+  <ng-template pTemplate="footer">
+    <div class="flex gap-2 justify-end">
+      <p-button label="Cancel" severity="secondary" [disabled]="editBusy()" (click)="closeEditDialog()" />
+      <p-button label="Save Corrections" [loading]="editBusy()" [disabled]="!canEditOnboarded"
+        (click)="saveCorrections()" />
+    </div>
+  </ng-template>
+</p-dialog>
+
+<!-- Regenerate Plan Dialog -->
+<p-dialog [(visible)]="showRegenDialog" header="Regenerate Lesson Plan" [modal]="true"
+  [style]="{ width: '92vw', maxWidth: '480px' }">
+  <div class="grid grid-cols-2 gap-3">
+    <div class="col-span-2">
+      <label class="block text-xs text-gray-500 mb-0.5">Start Date</label>
+      <p-datepicker [ngModel]="regenForm().startDate" (ngModelChange)="regenForm.update(f => ({ ...f, startDate: $event }))"
+        dateFormat="yy-mm-dd" appendTo="body" class="w-full" [maxDate]="today" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-0.5">Transmission</label>
+      <p-select [options]="[{ label: 'Manual', value: 'manual' }, { label: 'Automatic', value: 'automatic' }, { label: 'Both', value: 'both' }]"
+        [ngModel]="regenForm().transmission" appendTo="body" class="w-full"
+        (ngModelChange)="regenForm.update(f => ({ ...f, transmission: $event }))" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-0.5">Practical Days</label>
+      <p-inputNumber [ngModel]="regenForm().practicalDays" class="w-full" inputId="regen_practical"
+        (ngModelChange)="regenForm.update(f => ({ ...f, practicalDays: $event }))" />
+    </div>
+    <div class="col-span-2">
+      <label class="block text-xs text-gray-500 mb-0.5">Theory Lessons</label>
+      <p-inputNumber [ngModel]="regenForm().theoryLessons" class="w-full" inputId="regen_theory"
+        (ngModelChange)="regenForm.update(f => ({ ...f, theoryLessons: $event }))" />
+    </div>
+  </div>
+  <p class="text-xs text-gray-400 mt-3">
+    Practical lessons are scheduled on weekdays (Mon–Fri), theory on Saturdays. Saving applies the new plan and
+    replaces all existing lessons + training sessions for this package.
+  </p>
+  <ng-template pTemplate="footer">
+    <div class="flex gap-2 justify-end">
+      <p-button label="Cancel" severity="secondary" [disabled]="regenBusy()" (click)="showRegenDialog.set(false)" />
+      <p-button label="Confirm" [loading]="regenBusy()" (click)="confirmRegen()" />
     </div>
   </ng-template>
 </p-dialog>

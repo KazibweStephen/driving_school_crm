@@ -46,6 +46,7 @@ async def create_user(
         is_company_admin=data.is_company_admin,
         company_id=data.company_id or current_user.company_id,
         can_backdate=data.can_backdate,
+        can_edit_onboarded_clients=data.can_edit_onboarded_clients,
     )
     await user_service.sync_user_branches(
         db, data.phone, data.branch_ids,
@@ -143,6 +144,7 @@ async def update_user(
         is_company_admin=data.is_company_admin,
         company_id=data.company_id,
         can_backdate=data.can_backdate,
+        can_edit_onboarded_clients=data.can_edit_onboarded_clients,
     )
     target_company_id = data.company_id or user.company_id
     await user_service.sync_user_branches(

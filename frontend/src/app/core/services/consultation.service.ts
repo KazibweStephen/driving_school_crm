@@ -249,4 +249,26 @@ export class ConsultationService {
       receipt_numbers: receiptNumbers,
     });
   }
+
+  listOnboardedClients(params: {
+    branch_id: string;
+    from_date?: string;
+    to_date?: string;
+    search?: string;
+    page?: number;
+    page_size?: number;
+  }) {
+    let httpParams = new HttpParams();
+    if (params.branch_id) httpParams = httpParams.set('branch_id', params.branch_id);
+    if (params.from_date) httpParams = httpParams.set('from_date', params.from_date);
+    if (params.to_date) httpParams = httpParams.set('to_date', params.to_date);
+    if (params.search) httpParams = httpParams.set('search', params.search);
+    if (params.page) httpParams = httpParams.set('page', params.page);
+    if (params.page_size) httpParams = httpParams.set('page_size', params.page_size);
+    return this.http.get<any>('/api/v1/bulk-onboarding/clients', { params: httpParams });
+  }
+
+  correctOnboardedClient(consultationId: string, data: any) {
+    return this.http.patch<any>(`/api/v1/bulk-onboarding/clients/${consultationId}`, data);
+  }
 }

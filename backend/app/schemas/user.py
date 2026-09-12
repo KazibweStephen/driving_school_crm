@@ -15,6 +15,7 @@ class UserCreate(BaseModel):
     company_id: uuid.UUID | None = None
     is_company_admin: bool = False
     can_backdate: bool = False
+    can_edit_onboarded_clients: bool = False
     branch_ids: list[uuid.UUID] | None = None
 
 
@@ -27,6 +28,7 @@ class UserRead(BaseModel):
     status: UserStatus
     is_company_admin: bool
     can_backdate: bool
+    can_edit_onboarded_clients: bool
     company_id: uuid.UUID | None = None
     created_by_phone: str | None
     created_at: datetime
@@ -46,6 +48,7 @@ class UserUpdate(BaseModel):
     company_id: uuid.UUID | None = None
     is_company_admin: bool | None = None
     can_backdate: bool | None = None
+    can_edit_onboarded_clients: bool | None = None
     branch_ids: list[uuid.UUID] | None = None
 
 

@@ -252,4 +252,39 @@ test.describe('Bulk Onboarding Corrections', () => {
     await expect(page.getByText('Bulk Client Onboarding').first()).toBeVisible();
     await setFlag(request, SUPER_PHONE, false);
   });
+
+  test('blocks creating a duplicate phone and offers edit-existing instead', async ({ page, request }) => {
+    await setFlag(request, SUPER_PHONE, true);
+    await resetFixture(request);
+    await loginSuperAdmin(page, 'Default Company');
+    await page.goto('/bulk-onboarding');
+    await page.waitForTimeout(300);
+
+    // Choose branch
+    const branchSelect = page.locator('p-select').filter({ hasText: 'Select branch' }).first();
+    await branchSelect.click();
+    await page.getByRole('option', { name: /Head Office/ }).first().click();
+    await page.getByRole('button', { name: 'Load' }).click();
+    await expect(page.getByText(/client\(s\)/)).toBeVisible({ timeout: 20000 });
+
+    // Add a client and type an existing phone
+    await page.getByRole('button', { name: 'Add Client' }).click();
+    await page.waitForTimeout(300);
+    const phoneInput = page.getByPlaceholder('Phone number').first();
+    await phoneInput.fill(SEARCH_PHONE);
+
+    // Warning should appear and the card is not submittable while in add mode
+    await expect(page.getByText('Client exists:').first()).toBeVisible({ timeout: 10000 });
+
+    // Click edit-existing instead of continuing
+    await page.getByRole('button', { name: 'Edit existing client instead' }).click();
+    await expect(page.getByText('✎ Editing saved client')).toBeVisible({ timeout: 10000 });
+
+    // Still only one consultation exists for the phone (no duplicate was created)
+    const client = await firstOnboardedClient(request, SEARCH_PHONE);
+    expect(client).not.toBeNull();
+    expect(client.packages?.[0]?.payments?.length).toBeGreaterThanOrEqual(1);
+
+    await setFlag(request, SUPER_PHONE, false);
+  });
 });

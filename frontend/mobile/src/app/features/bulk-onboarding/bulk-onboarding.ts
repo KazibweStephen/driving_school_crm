@@ -897,6 +897,14 @@ export class BulkOnboarding implements OnInit {
       this.msg.add({ severity: 'warn', summary: 'Add at least one payment before saving' });
       return;
     }
+    if (!this.editingConsultationId() && this.wizardPhoneWarning()) {
+      this.msg.add({
+        severity: 'warn',
+        summary: 'Phone already exists',
+        detail: 'Edit the existing client instead of adding a duplicate.',
+      });
+      return;
+    }
     if (this.editingConsultationId()) {
       this.submitCorrection(c);
       return;
@@ -1620,6 +1628,32 @@ export class BulkOnboarding implements OnInit {
           error: () => {},
         });
       }
+    }
+  }
+
+  async editExistingByPhone() {
+    const c = this.wizardClient();
+    if (!c?.phone || !this.branchId()) return;
+    this.wizardBusy.set(true);
+    try {
+      const res = await firstValueFrom(
+        this.consultationService.listOnboardedClients({
+          branch_id: this.branchId(),
+          from_date: '2020-01-01',
+          search: c.phone,
+          page_size: 10,
+        }),
+      );
+      const match = (res?.clients || []).find((x: any) => x.phone === c.phone);
+      if (match) {
+        this.openEditClient(match);
+      } else {
+        this.msg.add({ severity: 'warn', summary: 'Saved client not found', detail: 'Open it from the Saved Clients list instead.' });
+      }
+    } catch {
+      this.msg.add({ severity: 'error', summary: 'Could not load the saved client' });
+    } finally {
+      this.wizardBusy.set(false);
     }
   }
 

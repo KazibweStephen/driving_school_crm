@@ -235,6 +235,8 @@
               <i class="pi pi-exclamation-triangle"></i>
               {{ phoneWarnings()[ci] }}
             </div>
+            <p-button label="Edit existing client instead" size="small" severity="secondary"
+              icon="pi pi-pencil" (click)="editExistingByPhone(ci)" class="mt-1" />
           }
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">

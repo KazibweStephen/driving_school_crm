@@ -931,6 +931,30 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     });
   }
 
+  editExistingByPhone(clientIndex: number) {
+    const phone = this.clients()[clientIndex]?.phone;
+    if (!phone || !this.branchId()) return;
+    this.consultationService
+      .listOnboardedClients({
+        branch_id: this.branchId(),
+        from_date: '2020-01-01',
+        search: phone,
+        page_size: 10,
+      })
+      .subscribe({
+        next: (res) => {
+          const match = (res.clients || []).find((c: any) => c.phone === phone);
+          if (!match) {
+            this.msg.add({ severity: 'warn', summary: 'Saved client not found', detail: 'Open it from the Saved Clients list instead.' });
+            return;
+          }
+          this.removeClient(clientIndex);
+          this.openEditClient(match);
+        },
+        error: () => this.msg.add({ severity: 'error', summary: 'Could not load the saved client' }),
+      });
+  }
+
   addPackage(clientIndex: number) {
     this.clients.update(clients => {
       const updated = [...clients];

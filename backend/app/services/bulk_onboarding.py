@@ -73,6 +73,28 @@ async def bulk_onboard_clients(
                 detail="Branch does not belong to the user's company",
             )
 
+        existing_consultation = await db.scalar(
+            select(Consultation.id)
+            .where(
+                Consultation.phone == client_data.phone,
+                or_(
+                    Consultation.branch_id.is_(None),
+                    Consultation.branch_id.in_(
+                        select(Branch.id).where(Branch.company_id == branch.company_id)
+                    ),
+                ),
+            )
+            .limit(1)
+        )
+        if existing_consultation:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Phone {client_data.phone} already exists as a client. "
+                    "Edit the existing client under Saved Clients instead of adding a new one."
+                ),
+            )
+
         consultation = Consultation(
             phone=client_data.phone,
             first_name=client_data.first_name,

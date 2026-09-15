@@ -218,6 +218,9 @@
           </div>
           @if (wizardPhoneWarning()) {
             <p class="text-xs text-amber-600">{{ wizardPhoneWarning() }}</p>
+            @if (!editingConsultationId()) {
+              <p-button label="Edit existing client instead" size="small" severity="secondary" icon="pi pi-pencil" [loading]="wizardBusy()" (click)="editExistingByPhone()" class="mt-1" data-testid="bo-edit-existing" />
+            }
           }
           <div>
             <label class="block text-xs text-gray-600">Document date</label>

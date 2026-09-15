@@ -10,6 +10,7 @@ export interface User {
   status: string;
   is_company_admin: boolean;
   can_backdate: boolean;
+  can_edit_onboarded_clients: boolean;
   company_id: string | null;
   created_by_phone: string | null;
   created_at: string;
@@ -27,6 +28,7 @@ export interface UserCreate {
   company_id?: string | null;
   is_company_admin?: boolean;
   can_backdate?: boolean;
+  can_edit_onboarded_clients?: boolean;
   branch_ids?: string[];
 }
 
@@ -39,6 +41,7 @@ export interface UserUpdate {
   company_id?: string | null;
   is_company_admin?: boolean;
   can_backdate?: boolean;
+  can_edit_onboarded_clients?: boolean;
   branch_ids?: string[];
 }
 

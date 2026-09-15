@@ -80,6 +80,7 @@ async def create_user(
     is_company_admin: bool = False,
     company_id: uuid.UUID | None = None,
     can_backdate: bool = False,
+    can_edit_onboarded_clients: bool = False,
 ) -> tuple[User, str]:
     initial_pin = generate_initial_pin()
     if first_name is not None or last_name is not None:
@@ -102,6 +103,7 @@ async def create_user(
         is_company_admin=is_company_admin,
         company_id=company_id,
         can_backdate=can_backdate,
+        can_edit_onboarded_clients=can_edit_onboarded_clients,
     )
     db.add(user)
     await db.flush()
@@ -185,6 +187,7 @@ async def update_user(
     is_company_admin: bool | None = None,
     company_id: uuid.UUID | None = None,
     can_backdate: bool | None = None,
+    can_edit_onboarded_clients: bool | None = None,
 ) -> User:
     if first_name is not None or last_name is not None:
         first = first_name if first_name is not None else user.first_name
@@ -207,6 +210,8 @@ async def update_user(
         user.company_id = company_id
     if can_backdate is not None:
         user.can_backdate = can_backdate
+    if can_edit_onboarded_clients is not None:
+        user.can_edit_onboarded_clients = can_edit_onboarded_clients
     await db.flush()
     await db.refresh(user)
     return user

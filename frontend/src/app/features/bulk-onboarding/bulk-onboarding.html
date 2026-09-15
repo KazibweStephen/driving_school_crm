@@ -66,6 +66,75 @@
   }
 </div>
 
+<!-- Saved Clients / Corrections -->
+@if (savedSectionVisible) {
+  <div class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mb-6 shadow-sm">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-base font-semibold text-gray-800 flex items-center gap-2">
+          <i class="pi pi-history"></i> Saved Clients
+        </h2>
+        <p class="text-xs text-gray-500 mt-0.5">Correct document dates, payments or lessons after onboarding</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <p-datepicker [ngModel]="savedFromModel()" (ngModelChange)="savedFromModel.set($event)"
+          dateFormat="yy-mm-dd" appendTo="body" styleClass="!w-36" placeholder="From" />
+        <p-datepicker [ngModel]="savedToModel()" (ngModelChange)="savedToModel.set($event)"
+          dateFormat="yy-mm-dd" appendTo="body" styleClass="!w-36" placeholder="To" />
+        <input pInputText [(ngModel)]="savedSearch" placeholder="Search phone/name" class="!w-44"
+          (keyup.enter)="loadSavedClients()" />
+        <p-button label="Load" icon="pi pi-search" size="small" [loading]="savedLoading()"
+          (click)="loadSavedClients()" />
+      </div>
+    </div>
+    <p class="text-xs text-amber-600 mb-2">
+      Clients appear here after their consultation is converted to paid (bulk onboarding or single onboarding).
+    </p>
+
+    @if (!canEditOnboarded) {
+      <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 mb-3">
+        <i class="pi pi-info-circle mr-1"></i>
+        Editing is disabled for your account. Ask an admin to enable "Can Edit Onboarded Clients" in Users.
+      </div>
+    }
+
+    @if (savedLoading()) {
+      <div class="flex items-center gap-2 text-sm text-gray-500 py-4">
+        <i class="pi pi-spinner pi-spin"></i> Loading...
+      </div>
+    } @else if (savedClients().length === 0) {
+      <div class="text-sm text-gray-400 py-4 text-center border border-dashed border-gray-200 rounded-lg">
+        No onboarded clients found for the selected filters.
+      </div>
+    } @else {
+      <div class="mb-2 text-xs text-gray-500">{{ savedTotal() }} client(s)</div>
+      <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
+        @for (c of savedClients(); track c.id) {
+          <div class="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50">
+            <span class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 text-xs font-semibold">
+              {{ clientDisplayName(c).charAt(0).toUpperCase() }}
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium text-gray-800 truncate">{{ clientDisplayName(c) }}</div>
+              <div class="text-xs text-gray-500">
+                {{ c.phone }} · {{ c.document_date || 'no date' }} · {{ c.packages.length }} package(s) ·
+                {{ c.packages.reduce((s, p) => s + p.payments.length, 0) }} payment(s)
+              </div>
+            </div>
+            <div class="text-xs text-gray-400 flex flex-wrap gap-1">
+              @for (p of c.packages; track p.cart_item_id) {
+                <span class="px-1.5 py-0.5 rounded bg-gray-100">{{ p.status }}</span>
+              }
+            </div>
+            <p-button label="Edit" icon="pi pi-pencil" size="small" severity="secondary"
+              [disabled]="!canEditOnboarded" (click)="openEditClient(c)" />
+          </div>
+        }
+      </div>
+    }
+  </div>
+}
+
 <!-- Validation Banner -->
 @if (hasReceiptWarnings() || hasPhoneWarnings() || hasDateErrors()) {
   <div class="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 flex items-start gap-3 text-sm">
@@ -95,7 +164,7 @@
 
 <!-- Client Cards with Step Navigation -->
 @for (client of clients(); track $index; let ci = $index) {
-  <div class="border border-gray-200 rounded-xl mb-6 bg-white shadow-sm overflow-hidden">
+  <div [id]="'wizard-client-' + ci" class="border border-gray-200 rounded-xl mb-6 bg-white shadow-sm overflow-hidden">
     <!-- Client Header -->
     <div class="flex items-center gap-3 bg-gray-50 px-4 py-3 border-b">
       <span class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
@@ -103,18 +172,30 @@
       </span>
       <div class="min-w-0 flex-1">
         <h3 class="font-semibold text-gray-800 truncate">
-          {{ client.first_name ? client.first_name + (client.last_name ? ' ' + client.last_name : '') : 'Client ' + (ci + 1) }}
+          @if (client.consultation_id) {
+            <span class="text-violet-700">✎ Editing saved client</span>
+          } @else if (client.first_name) {
+            {{ client.first_name + (client.last_name ? ' ' + client.last_name : '') }}
+          } @else {
+            Client {{ ci + 1 }}
+          }
         </h3>
         <p class="text-xs text-gray-500 truncate">
           {{ client.phone || 'No phone' }}{{ client.location ? ' · ' + client.location : '' }}
         </p>
       </div>
-      @if (clientInfoComplete(client) && clientPaymentsComplete(client)) {
+      @if (client.consultation_id) {
+        <span class="hidden sm:inline-flex items-center gap-1 text-xs text-violet-600 font-medium">
+          <i class="pi pi-pencil"></i> Saved client
+        </span>
+      } @else if (clientInfoComplete(client) && clientPaymentsComplete(client)) {
         <span class="hidden sm:inline-flex items-center gap-1 text-xs text-green-600 font-medium">
           <i class="pi pi-check-circle"></i> Ready
         </span>
       }
-      <p-button icon="pi pi-trash" severity="danger" size="small" [text]="true" (click)="removeClient(ci)" />
+      <p-button icon="pi pi-trash" severity="danger" size="small" [text]="true"
+        [title]="client.consultation_id ? 'Discard edits (saved client is untouched)' : 'Remove'"
+        (click)="removeClient(ci)" />
     </div>
 
     <!-- Step Navigation Bar -->
@@ -154,6 +235,8 @@
               <i class="pi pi-exclamation-triangle"></i>
               {{ phoneWarnings()[ci] }}
             </div>
+            <p-button label="Edit existing client instead" size="small" severity="secondary"
+              icon="pi pi-pencil" (click)="editExistingByPhone(ci)" class="mt-1" />
           }
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -534,6 +617,14 @@
                 </table>
               </div>
 
+              @if (pkg.discount_id && discountApplied(pkg) > 0) {
+                <div class="mt-3 px-3 py-2 rounded-lg bg-green-50 border border-green-200 flex items-center gap-2 text-sm">
+                  <i class="pi pi-tag text-green-600"></i>
+                  <span class="text-green-700 font-medium">Discount applied: −{{ discountApplied(pkg) | number }} UGX</span>
+                  <span class="text-green-600 text-xs">({{ discountNameById(pkg.discount_id) || pkg.discount_id }})</span>
+                </div>
+              }
+
               <div class="text-xs font-medium text-gray-500 mt-4 mb-2 flex items-center gap-1.5">
                 <i class="pi pi-book text-gray-400"></i> Lessons
               </div>
@@ -862,7 +953,11 @@
   [closable]="false" [style]="{ width: '90vw', maxWidth: '400px' }">
   <div class="text-center p-4">
     <i class="pi pi-check-circle text-green-500 text-5xl mb-4"></i>
-    <p class="text-lg font-medium mb-2">Successfully onboarded {{ successResult()?.created }} client(s)</p>
+    @if (successResult()?.created) {
+      <p class="text-lg font-medium mb-2">Successfully onboarded {{ successResult()?.created }} client(s)</p>
+    } @else {
+      <p class="text-lg font-medium mb-2">Corrections saved</p>
+    }
   </div>
   <ng-template pTemplate="footer">
     <div class="flex flex-col sm:flex-row justify-center gap-3">

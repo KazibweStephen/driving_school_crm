@@ -23,6 +23,7 @@ export class AuthService {
   currentUserRole = signal<string | null>(null);
   currentUserCompanyId = signal<string | null>(null);
   currentUserCanBackdate = signal(false);
+  currentUserCanEditOnboardedClients = signal(false);
   permissions = signal<string[]>([]);
   currencyCode = signal('UGX');
   isAuthenticated = signal(false);
@@ -45,6 +46,7 @@ export class AuthService {
       this.currentUserRole.set(this.decodeRoleFromToken(token));
       this.currentUserCompanyId.set(this.decodeCompanyId(token));
       this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
+      this.currentUserCanEditOnboardedClients.set(this.decodeCanEditOnboardedClients(token));
       this.permissions.set(this.decodePermissions(token));
       this.currencyCode.set(this.decodeCurrency(token));
       this.startSessionTimer();
@@ -76,6 +78,7 @@ export class AuthService {
     this.currentUserRole.set(this.decodeRoleFromToken(token));
     this.currentUserCompanyId.set(this.decodeCompanyId(token));
     this.currentUserCanBackdate.set(this.decodeCanBackdate(token));
+    this.currentUserCanEditOnboardedClients.set(this.decodeCanEditOnboardedClients(token));
     this.permissions.set(this.decodePermissions(token));
     this.currencyCode.set(this.decodeCurrency(token));
     this.startSessionTimer();
@@ -210,6 +213,11 @@ export class AuthService {
   private decodeCanBackdate(token: string): boolean {
     const payload = this.decodeToken(token);
     return (payload?.['can_backdate'] as boolean) || false;
+  }
+
+  private decodeCanEditOnboardedClients(token: string): boolean {
+    const payload = this.decodeToken(token);
+    return (payload?.['can_edit_onboarded_clients'] as boolean) || false;
   }
 
   private decodeCurrency(token: string): string {

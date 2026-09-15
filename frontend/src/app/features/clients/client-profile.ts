@@ -354,6 +354,7 @@ export class ClientProfile implements OnInit {
           status: 'active',
           is_company_admin: false,
           can_backdate: false,
+          can_edit_onboarded_clients: false,
           company_id: null,
           created_by_phone: null,
           created_at: '',

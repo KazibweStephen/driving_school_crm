@@ -23,6 +23,7 @@ export class AuthService {
   currentUserRole = signal<string | null>(null);
   currentUserCompanyId = signal<string | null>(null);
   currentUserCanBackdate = signal(false);
+  currentUserCanEditOnboardedClients = signal(false);
   permissions = signal<string[]>([]);
   currencyCode = signal('UGX');
   isAuthenticated = signal(false);
@@ -81,6 +82,7 @@ export class AuthService {
     this.currentUserRole.set(null);
     this.currentUserCompanyId.set(null);
     this.currentUserCanBackdate.set(false);
+    this.currentUserCanEditOnboardedClients.set(false);
     this.permissions.set([]);
     this.router.navigate(['/login']);
   }
@@ -122,6 +124,7 @@ export class AuthService {
     this.currentUserRole.set(this.decodeString(token, 'role'));
     this.currentUserCompanyId.set(this.decodeString(token, 'company_id'));
     this.currentUserCanBackdate.set(!!this.decodeBoolean(token, 'can_backdate'));
+    this.currentUserCanEditOnboardedClients.set(!!this.decodeBoolean(token, 'can_edit_onboarded_clients'));
     this.currencyCode.set(this.decodeString(token, 'currency') || 'UGX');
     const perms = this.decodePayload(token)?.['permissions'];
     this.permissions.set(Array.isArray(perms) ? (perms as string[]) : []);

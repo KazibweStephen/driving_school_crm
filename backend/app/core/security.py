@@ -24,6 +24,7 @@ def create_access_token(
     phone: str,
     role: str | None = None,
     can_backdate: bool = False,
+    can_edit_onboarded_clients: bool = False,
     company_id: str | None = None,
     currency: str | None = None,
     permissions: list[str] | None = None,
@@ -37,6 +38,7 @@ def create_access_token(
         "exp": expire,
         "type": "access",
         "can_backdate": can_backdate,
+        "can_edit_onboarded_clients": can_edit_onboarded_clients,
     }
     if role:
         payload["role"] = role

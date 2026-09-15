@@ -64,8 +64,8 @@ export class Users implements OnInit {
   companies = signal<Company[]>([]);
   branches = signal<Branch[]>([]);
   allBranches = signal<Branch[]>([]);
-  newUser: { phone: string; first_name: string; last_name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; branch_ids: string[] } = { phone: '', first_name: '', last_name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
-  editData: { first_name: string; last_name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; branch_ids: string[] } = { first_name: '', last_name: '', role: '', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
+  newUser: { phone: string; first_name: string; last_name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; can_edit_onboarded_clients: boolean; branch_ids: string[] } = { phone: '', first_name: '', last_name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false, can_edit_onboarded_clients: false, branch_ids: [] };
+  editData: { first_name: string; last_name: string; role: string; company_id: string | null; is_company_admin: boolean; can_backdate: boolean; can_edit_onboarded_clients: boolean; branch_ids: string[] } = { first_name: '', last_name: '', role: '', company_id: null, is_company_admin: false, can_backdate: false, can_edit_onboarded_clients: false, branch_ids: [] };
   transferData: { target_company_id: string | null; target_branch_ids: string[]; reason: string } = { target_company_id: null, target_branch_ids: [], reason: '' };
   get isSuperUser(): boolean {
     return this.auth.currentUserRole() === 'super_user';
@@ -246,11 +246,12 @@ export class Users implements OnInit {
           company_id: this.newUser.company_id,
           is_company_admin: this.newUser.is_company_admin,
           can_backdate: this.newUser.can_backdate,
+          can_edit_onboarded_clients: this.newUser.can_edit_onboarded_clients,
           branch_ids: this.newUser.branch_ids,
         })
         .toPromise();
       this.showCreateDialog.set(false);
-      this.newUser = { phone: '', first_name: '', last_name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false, branch_ids: [] };
+      this.newUser = { phone: '', first_name: '', last_name: '', role: 'office_admin', company_id: null, is_company_admin: false, can_backdate: false, can_edit_onboarded_clients: false, branch_ids: [] };
       await this.loadUsers();
       this.messageService.add({
         severity: 'success',
@@ -274,7 +275,7 @@ export class Users implements OnInit {
 
   openEdit(user: User) {
     this.editingUser.set(user);
-    this.editData = { first_name: user.first_name, last_name: user.last_name, role: user.role, company_id: user.company_id, is_company_admin: user.is_company_admin, can_backdate: user.can_backdate, branch_ids: user.branch_ids || [] };
+    this.editData = { first_name: user.first_name, last_name: user.last_name, role: user.role, company_id: user.company_id, is_company_admin: user.is_company_admin, can_backdate: user.can_backdate, can_edit_onboarded_clients: user.can_edit_onboarded_clients, branch_ids: user.branch_ids || [] };
     this.showEditDialog.set(true);
   }
 
@@ -292,6 +293,7 @@ export class Users implements OnInit {
           company_id: this.editData.company_id,
           is_company_admin: this.editData.is_company_admin,
           can_backdate: this.editData.can_backdate,
+          can_edit_onboarded_clients: this.editData.can_edit_onboarded_clients,
           branch_ids: this.editData.branch_ids,
         })
         .toPromise();

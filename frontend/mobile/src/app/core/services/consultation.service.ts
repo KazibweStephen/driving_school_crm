@@ -201,6 +201,28 @@ export class ConsultationService {
     });
   }
 
+  listOnboardedClients(params: {
+    branch_id: string;
+    from_date?: string;
+    to_date?: string;
+    search?: string;
+    page?: number;
+    page_size?: number;
+  }) {
+    let hp = new HttpParams();
+    if (params.branch_id) hp = hp.set('branch_id', params.branch_id);
+    if (params.from_date) hp = hp.set('from_date', params.from_date);
+    if (params.to_date) hp = hp.set('to_date', params.to_date);
+    if (params.search) hp = hp.set('search', params.search);
+    if (params.page) hp = hp.set('page', params.page);
+    if (params.page_size) hp = hp.set('page_size', params.page_size);
+    return this.http.get<any>('/api/v1/bulk-onboarding/clients', { params: hp });
+  }
+
+  correctOnboardedClient(consultationId: string, data: any) {
+    return this.http.patch<any>(`/api/v1/bulk-onboarding/clients/${consultationId}`, data);
+  }
+
   clientSearch(search: string) {
     const params = new HttpParams().set('search', search);
     return this.http.get<ClientInfo[]>('/api/v1/consultations/client-search', { params });

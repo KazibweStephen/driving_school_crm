@@ -53,6 +53,10 @@ export class DiscountService {
 
   constructor(private http: HttpClient) {}
 
+  get(id: string): Observable<Discount> {
+    return this.http.get<Discount>(`${this.base}/${id}`);
+  }
+
   apply(discountId: string, cartItemId: string): Observable<CartItemDiscount> {
     return this.http.post<CartItemDiscount>(`${this.base}/apply`, {
       discount_id: discountId,

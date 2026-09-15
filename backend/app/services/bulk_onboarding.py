@@ -670,6 +670,80 @@ async def _receipt_collision(
         )
 
 
+async def _apply_discount_corrections(
+    db: AsyncSession,
+    consultation: Consultation,
+    user,
+    discounts_data,
+) -> int:
+    from app.services.discount import _discount_applies_to_cart_item, _get_cart_item_package_price, compute_discount_amount
+
+    company_id = None
+    if consultation.branch_id:
+        branch = await db.get(Branch, consultation.branch_id)
+        if branch is not None:
+            company_id = branch.company_id
+    if company_id is None:
+        company_id = getattr(user, "company_id", None)
+
+    changed = 0
+    for disc in discounts_data:
+        cart_item = await db.get(CartItem, disc.cart_item_id)
+        if cart_item is None or cart_item.consultation_id != consultation.id:
+            raise HTTPException(status_code=400, detail="Cart item not found for this consultation")
+
+        link_result = await db.execute(
+            select(CartItemDiscount)
+            .where(CartItemDiscount.cart_item_id == cart_item.id)
+            .options(selectinload(CartItemDiscount.discount))
+        )
+        existing = list(link_result.scalars().all())
+        for link in existing:
+            if link.discount and link.discount.used_count > 0:
+                link.discount.used_count -= 1
+            await db.delete(link)
+
+        if disc.discount_id is not None:
+            discount = await db.get(Discount, disc.discount_id)
+            if discount is None:
+                raise HTTPException(status_code=400, detail="Discount not found")
+            if company_id is not None and discount.company_id != company_id:
+                raise HTTPException(status_code=400, detail="Discount does not belong to this company")
+            if discount.status not in (DiscountStatus.APPROVED, DiscountStatus.PENDING):
+                raise HTTPException(status_code=400, detail="Discount must be approved or pending to be applied")
+            if not discount.is_active:
+                raise HTTPException(status_code=400, detail="Discount is not active")
+            today = date.today()
+            if discount.start_date > today:
+                raise HTTPException(status_code=400, detail="Discount has not started yet")
+            if discount.end_date is not None and discount.end_date < today:
+                raise HTTPException(status_code=400, detail="Discount has expired")
+            if discount.max_uses is not None and discount.used_count >= discount.max_uses:
+                raise HTTPException(status_code=400, detail="Discount usage limit reached")
+            if not await _discount_applies_to_cart_item(db, discount, cart_item):
+                raise HTTPException(status_code=400, detail="Discount does not apply to this cart item")
+            try:
+                package_price = await _get_cart_item_package_price(db, cart_item)
+            except ValueError:
+                package_price = 0.0
+            applied_amount = compute_discount_amount(discount, package_price)
+            db.add(
+                CartItemDiscount(
+                    cart_item_id=cart_item.id,
+                    discount_id=discount.id,
+                    applied_amount=applied_amount,
+                    applied_by=user.phone,
+                )
+            )
+            discount.used_count += 1
+
+        await _recompute_cart_item(db, consultation, cart_item)
+        changed += 1
+        await db.flush()
+
+    return changed
+
+
 async def _recompute_cart_item(
     db: AsyncSession, consultation: Consultation, cart_item: CartItem
 ) -> None:
@@ -857,7 +931,7 @@ async def _apply_payment_edits(
         )
         payments_removed += 1
 
-    if data.document_date is not None or data.payments or data.remove_payment_ids:
+    if data.document_date is not None or data.payments or data.remove_payment_ids or data.discounts:
         await _update_consultation_status(db, consultation.id, allow_downgrade=True)
         await db.refresh(consultation)
 
@@ -968,8 +1042,24 @@ async def apply_bulk_onboarding_corrections(
 
     _reject_future(data.document_date, "Document date")
 
+    fields_updated = 0
+    for field in ("phone", "first_name", "middle_name", "last_name", "location"):
+        value = getattr(data, field)
+        if value is None:
+            continue
+        cleaned = value.strip()
+        if field in ("middle_name", "last_name", "location"):
+            setattr(consultation, field, cleaned or None)
+        elif cleaned:
+            setattr(consultation, field, cleaned)
+        fields_updated += 1
+
     if data.document_date is not None:
         consultation.document_date = data.document_date
+
+    discounts_updated = 0
+    if data.discounts:
+        discounts_updated = await _apply_discount_corrections(db, consultation, user, data.discounts)
 
     payment_result = await _apply_payment_edits(db, consultation, user, data)
 
@@ -1013,9 +1103,11 @@ async def apply_bulk_onboarding_corrections(
     return {
         "consultation_id": consultation.id,
         "document_date": consultation.document_date,
+        "fields_updated": fields_updated,
         "payments_updated": payment_result["payments_updated"],
         "payments_created": payment_result["payments_created"],
         "payments_removed": payment_result["payments_removed"],
+        "discounts_updated": discounts_updated,
         "lessons_updated": lessons_updated,
         "plans_regenerated": plans_regenerated,
     }

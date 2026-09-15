@@ -25,6 +25,7 @@ import { LessonPlanService, LessonPlanTemplate, LessonTemplateItem } from '../..
 import { DiscountService, Discount } from '../../core/services/discount.service';
 
 interface LessonDraft {
+  id?: string | null;
   date: Date | null;
   duration_minutes: number | null;
   lesson_type: string;
@@ -39,6 +40,7 @@ interface LessonDraft {
 }
 
 interface InstallmentDraft {
+  id?: string | null;
   receipt_number: string;
   document_date: Date | null;
   amount: number | null;
@@ -46,6 +48,10 @@ interface InstallmentDraft {
 }
 
 interface PackageDraft {
+  cart_item_id?: string | null;
+  plan_id?: string | null;
+  regenerate?: boolean;
+  regenerateStartDate?: Date | null;
   product_id: string;
   package_id: string;
   installments: InstallmentDraft[];
@@ -80,6 +86,7 @@ interface QuickGenLesson {
 }
 
 interface ClientDraft {
+  consultation_id?: string | null;
   phone: string;
   first_name: string;
   middle_name: string;
@@ -222,20 +229,8 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   savedFromModel = signal<Date | null>(null);
   savedToModel = signal<Date | null>(null);
   savedSearch = signal('');
-  showEditDialog = signal(false);
-  editDocSignal = signal<Date | null>(null);
-  editingClient = signal<OnboardedClient | null>(null);
-  editBusy = signal(false);
-  removedPaymentIds = signal<string[]>([]);
-  showRegenDialog = signal(false);
-  regenPkgIdx = signal(0);
-  regenBusy = signal(false);
-  regenForm = signal({
-    startDate: null as Date | null,
-    transmission: 'manual',
-    practicalDays: null as number | null,
-    theoryLessons: null as number | null,
-  });
+  savedOriginals = new Map<string, OnboardedClient>();
+  appliedDiscountsByCartItem = new Map<string, number>();
 
   totalClients = computed(() => this.clients().length);
   totalPackages = computed(() =>
@@ -278,6 +273,16 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     if (phone && !options.some(o => o.value === phone)) {
       options.unshift({ label: name || phone, value: phone });
     }
+    for (const c of this.clients()) {
+      for (const pkg of c.packages) {
+        for (const inst of pkg.installments) {
+          if (inst.received_by_phone && !options.some(o => o.value === inst.received_by_phone)) {
+            const uu = this.users().find(u => u.phone === inst.received_by_phone);
+            options.push({ label: uu?.name || inst.received_by_phone, value: inst.received_by_phone });
+          }
+        }
+      }
+    }
     return options;
   });
 
@@ -317,22 +322,6 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
 
   get canEditOnboarded(): boolean {
     return this.auth.currentUserCanEditOnboardedClients();
-  }
-
-  get today(): Date {
-    return new Date();
-  }
-
-  lessonStatusOptions() {
-    return [
-      { label: 'Pending', value: 'pending' },
-      { label: 'Unlocked', value: 'unlocked' },
-      { label: 'In Progress', value: 'in_progress' },
-      { label: 'Completed', value: 'completed' },
-      { label: 'Partially Completed', value: 'partially_completed' },
-      { label: 'Cancelled', value: 'cancelled' },
-      { label: 'Skipped', value: 'skipped' },
-    ];
   }
 
   constructor(
@@ -586,7 +575,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   }
 
   hasPhoneWarnings(): boolean {
-    return Object.keys(this.phoneWarnings()).length > 0;
+    return Object.values(this.phoneWarnings()).some((w) => !!w);
   }
 
   restoreDraft() {
@@ -595,7 +584,13 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
       try {
         const draft = JSON.parse(raw);
         this.draftSavedAt.set(draft.saved_at || '');
-        const restored = draft.clients.map((c: any) => this.restoreClientDraft(c));
+        const restored = draft.clients.map((c: any) => {
+          const d = this.restoreClientDraft(c);
+          if (c.consultation_id && c.original) {
+            this.savedOriginals.set(c.consultation_id, c.original);
+          }
+          return d;
+        });
         this.clients.set(restored);
         this.draftRestored.set(true);
         const stepIdx: Record<number, number> = {};
@@ -611,6 +606,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   private restoreClientDraft(c: any): ClientDraft {
     const currentPhone = this.auth.currentUser() || '';
     return {
+      consultation_id: c.consultation_id || null,
       phone: c.phone || '',
       first_name: c.first_name || '',
       middle_name: c.middle_name || '',
@@ -622,15 +618,21 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
       primary_recommender_id: c.primary_recommender_id || currentPhone,
       secondary_recommender_id: c.secondary_recommender_id || currentPhone,
       packages: (c.packages || []).map((p: any) => ({
+        cart_item_id: p.cart_item_id || null,
+        plan_id: p.plan_id || null,
+        regenerate: !!p.regenerate,
+        regenerateStartDate: p.regenerateStartDate ? new Date(p.regenerateStartDate) : null,
         product_id: p.product_id || '',
         package_id: p.package_id || '',
         installments: (p.installments || []).map((i: any) => ({
+          id: i.id || null,
           receipt_number: i.receipt_number || '',
           document_date: i.document_date ? new Date(i.document_date) : null,
           amount: i.amount || null,
           received_by_phone: i.received_by_phone || '',
         })),
         lessons: (p.lessons || []).map((l: any) => ({
+          id: l.id || null,
           date: l.date ? new Date(l.date) : null,
           duration_minutes: l.duration_minutes || null,
           lesson_type: l.lesson_type || 'practical',
@@ -663,6 +665,8 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     return {
       saved_at: new Date().toISOString(),
       clients: this.clients().map(c => ({
+        consultation_id: c.consultation_id || null,
+        original: c.consultation_id ? (this.savedOriginals.get(c.consultation_id) || null) : null,
         phone: c.phone,
         first_name: c.first_name,
         middle_name: c.middle_name,
@@ -674,15 +678,21 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
         primary_recommender_id: c.primary_recommender_id,
         secondary_recommender_id: c.secondary_recommender_id,
         packages: c.packages.map(p => ({
+          cart_item_id: p.cart_item_id || null,
+          plan_id: p.plan_id || null,
+          regenerate: !!p.regenerate,
+          regenerateStartDate: p.regenerateStartDate ? p.regenerateStartDate.toISOString().split('T')[0] : null,
           product_id: p.product_id,
           package_id: p.package_id,
           installments: p.installments.map(i => ({
+            id: i.id || null,
             receipt_number: i.receipt_number,
             document_date: i.document_date?.toISOString()?.split('T')[0] || null,
             amount: i.amount,
             received_by_phone: i.received_by_phone,
           })),
           lessons: p.lessons.map(l => ({
+            id: l.id || null,
             date: l.date?.toISOString()?.split('T')[0] || null,
             duration_minutes: l.duration_minutes,
             lesson_type: l.lesson_type,
@@ -906,6 +916,8 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   }
 
   removeClient(index: number) {
+    const c = this.clients()[index];
+    if (c?.consultation_id) this.savedOriginals.delete(c.consultation_id);
     this.clients.update(clients => clients.filter((_, i) => i !== index));
     this.clientStepIndex.update(s => {
       const n: Record<number, number> = {};
@@ -944,6 +956,10 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
       const amount = d.discount_type === 'fixed' ? `${d.discount_value.toLocaleString()} UGX` : `${d.discount_value}%`;
       result.push({ label: `${d.name} (${d.code}) — ${amount}`, value: d.id });
     }
+    if (pkg.discount_id && !result.some(o => o.value === pkg.discount_id)) {
+      const applied = this.discountApplied(pkg);
+      result.push({ label: `Applied discount (−${applied.toLocaleString()} UGX)`, value: pkg.discount_id });
+    }
     return result;
   }
 
@@ -952,7 +968,13 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     const key = this.discountKey(pkg.product_id, pkg.package_id);
     this.discountService.getApplicableDiscountsForProduct(pkg.product_id, pkg.package_id || null).subscribe({
       next: (discounts) => {
-        this.discountsForProduct.update(m => ({ ...m, [key]: discounts || [] }));
+        this.discountsForProduct.update(m => {
+          const list = [...(m[key] || [])];
+          for (const d of discounts || []) {
+            if (!list.some(x => x.id === d.id)) list.push(d);
+          }
+          return { ...m, [key]: list };
+        });
       },
     });
   }
@@ -983,10 +1005,13 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     if (!pkg.discount_id) return 0;
     const key = this.discountKey(pkg.product_id, pkg.package_id);
     const d = (this.discountsForProduct()[key] || []).find(x => x.id === pkg.discount_id);
-    if (!d) return 0;
     const price = this.packagePriceById(pkg.product_id, pkg.package_id);
-    if (d.discount_type === 'fixed') return Math.min(d.discount_value, price);
-    return Math.round((price * d.discount_value) / 100);
+    if (d) {
+      if (d.discount_type === 'fixed') return Math.min(d.discount_value, price);
+      return Math.round((price * d.discount_value) / 100);
+    }
+    if (pkg.cart_item_id) return this.appliedDiscountsByCartItem.get(pkg.cart_item_id) || 0;
+    return 0;
   }
 
   removePackage(clientIndex: number, pkgIndex: number) {
@@ -1419,11 +1444,14 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     this.clients.update(clients => {
       const updated = [...clients];
       const pkgs = [...updated[ci].packages];
+      const isEdit = !!updated[ci].consultation_id;
       pkgs[pi] = {
         ...pkgs[pi],
         lessons,
         transmission_type: form.transmission || 'manual',
         lesson_plan_template_id: form.lesson_plan_template_id || pkgs[pi].lesson_plan_template_id || null,
+        regenerate: isEdit && !!pkgs[pi].plan_id,
+        regenerateStartDate: isEdit && pkgs[pi].plan_id ? (form.startDate ? new Date(form.startDate) : null) : pkgs[pi].regenerateStartDate,
       };
       updated[ci] = { ...updated[ci], packages: pkgs };
       return updated;
@@ -1796,79 +1824,125 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   submit() {
     if (!this.canSubmit()) return;
 
+    const edits = this.clients().filter((c) => !!c.consultation_id && this.savedOriginals.has(c.consultation_id));
+    const adds = this.clients().filter((c) => !edits.includes(c));
+
     this.confirm.confirm({
-      message: `Onboard ${this.totalClients()} client(s) with ${this.totalPackages()} package(s), ${this.totalInstallments()} installment(s), and ${this.totalLessons()} lesson(s)?`,
-      header: 'Confirm Bulk Onboarding',
+      message: edits.length > 0 && adds.length > 0
+        ? `Onboard ${adds.length} new client(s) and apply corrections to ${edits.length} saved client(s)?`
+        : edits.length > 0
+          ? `Apply corrections to ${edits.length} saved client(s)?`
+          : `Onboard ${this.totalClients()} client(s) with ${this.totalPackages()} package(s), ${this.totalInstallments()} installment(s), and ${this.totalLessons()} lesson(s)?`,
+      header: edits.length > 0 && adds.length > 0 ? 'Confirm Onboarding & Corrections' : edits.length > 0 ? 'Confirm Corrections' : 'Confirm Bulk Onboarding',
       acceptLabel: 'Submit',
       accept: () => {
         this.submitting.set(true);
-
-        const payload: any = {
-          clients: this.clients().map(c => ({
-        phone: c.phone,
-        first_name: c.first_name,
-        middle_name: c.middle_name || undefined,
-        last_name: c.last_name || undefined,
-        location: c.location || undefined,
-        branch_id: this.branchId() || c.branch_id || undefined,
-        document_date: c.document_date?.toISOString()?.split('T')[0] || undefined,
-        converter_id: c.converter_id || undefined,
-        primary_recommender_id: c.primary_recommender_id || undefined,
-        secondary_recommender_id: c.secondary_recommender_id || undefined,
-        packages: c.packages.map(p => ({
-              product_id: p.product_id,
-              package_id: p.package_id || undefined,
-              transmission_type: p.transmission_type || 'manual',
-              lesson_plan_template_id: p.lesson_plan_template_id || undefined,
-              discount_id: p.discount_id || undefined,
-              installments: p.installments.map(i => ({
-                receipt_number: i.receipt_number,
-                document_date: i.document_date!.toISOString().split('T')[0],
-                amount: i.amount!,
-                received_by_phone: i.received_by_phone,
-              })),
-              lessons: p.lessons.filter(l => l.date && l.duration_minutes).map(l => ({
-                date: l.date!.toISOString().split('T')[0],
-                duration_minutes: l.duration_minutes!,
-                lesson_type: l.lesson_type,
-                instructor_id: l.instructor_id || undefined,
-                vehicle_id: l.vehicle_id || undefined,
-                notes: l.notes || undefined,
-                template_item_id: l.template_item_id || undefined,
-                title: l.title || undefined,
-                lesson_objectives: l.lesson_objectives?.length ? l.lesson_objectives : undefined,
-                practical_objectives: l.practical_objectives?.length ? l.practical_objectives : undefined,
-                status: l.status === 'scheduled' ? 'scheduled' : undefined,
-              })),
-            })),
-          })),
-        };
-
-        this.consultationService.bulkOnboard(payload).subscribe({
-          next: (res) => {
-            localStorage.removeItem(STORAGE_KEY);
-            this.submitting.set(false);
-            this.successResult.set({ created: res.created, ids: res.consultation_ids });
-            this.showSuccessDialog.set(true);
-            this.clients.set([]);
-            this.draftRestored.set(false);
-            this.msg.add({ severity: 'success', summary: `${res.created} client(s) onboarded successfully` });
-          },
-          error: (err) => {
-            this.submitting.set(false);
-            this.msg.add({
-              severity: 'error',
-              summary: 'Onboarding failed',
-              detail: err.error?.detail || 'An error occurred. Your draft has been preserved.',
-            });
-          },
-        });
+        if (adds.length > 0) {
+          const payload: any = { clients: adds.map(c => this.addPayloadClient(c)) };
+          this.consultationService.bulkOnboard(payload).subscribe({
+            next: (res) => this.runEdits(edits, res?.created ?? adds.length),
+            error: (err) => {
+              this.submitting.set(false);
+              this.msg.add({
+                severity: 'error',
+                summary: 'Onboarding failed',
+                detail: err.error?.detail || 'An error occurred. Your draft has been preserved.',
+              });
+            },
+          });
+        } else {
+          this.runEdits(edits, 0);
+        }
       },
     });
   }
 
-  editOriginal = signal<OnboardedClient | null>(null);
-  regenPlans = signal<Record<number, any>>({});
+  private addPayloadClient(c: ClientDraft): any {
+    return {
+      phone: c.phone,
+      first_name: c.first_name,
+      middle_name: c.middle_name || undefined,
+      last_name: c.last_name || undefined,
+      location: c.location || undefined,
+      branch_id: this.branchId() || c.branch_id || undefined,
+      document_date: c.document_date?.toISOString()?.split('T')[0] || undefined,
+      converter_id: c.converter_id || undefined,
+      primary_recommender_id: c.primary_recommender_id || undefined,
+      secondary_recommender_id: c.secondary_recommender_id || undefined,
+      packages: c.packages.map(p => ({
+        product_id: p.product_id,
+        package_id: p.package_id || undefined,
+        transmission_type: p.transmission_type || 'manual',
+        lesson_plan_template_id: p.lesson_plan_template_id || undefined,
+        discount_id: p.discount_id || undefined,
+        installments: p.installments.map(i => ({
+          receipt_number: i.receipt_number,
+          document_date: i.document_date!.toISOString().split('T')[0],
+          amount: i.amount!,
+          received_by_phone: i.received_by_phone,
+        })),
+        lessons: p.lessons.filter(l => l.date && l.duration_minutes).map(l => ({
+          date: l.date!.toISOString().split('T')[0],
+          duration_minutes: l.duration_minutes!,
+          lesson_type: l.lesson_type,
+          instructor_id: l.instructor_id || undefined,
+          vehicle_id: l.vehicle_id || undefined,
+          notes: l.notes || undefined,
+          template_item_id: l.template_item_id || undefined,
+          title: l.title || undefined,
+          lesson_objectives: l.lesson_objectives?.length ? l.lesson_objectives : undefined,
+          practical_objectives: l.practical_objectives?.length ? l.practical_objectives : undefined,
+          status: l.status === 'scheduled' ? 'scheduled' : undefined,
+        })),
+      })),
+    };
+  }
+
+  private runEdits(edits: ClientDraft[], created: number) {
+    if (edits.length === 0) {
+      this.finishSubmission(created, []);
+      return;
+    }
+    const runOne = (idx: number) => {
+      if (idx >= edits.length) {
+        this.finishSubmission(created, []);
+        return;
+      }
+      const c = edits[idx];
+      const payload = this.buildCorrectionPayload(c);
+      if (!payload) {
+        runOne(idx + 1);
+        return;
+      }
+      this.consultationService.correctOnboardedClient(c.consultation_id!, payload).subscribe({
+        next: () => runOne(idx + 1),
+        error: (err) => {
+          this.submitting.set(false);
+          this.msg.add({
+            severity: 'error',
+            summary: 'Failed to save corrections',
+            detail: err.error?.detail || 'An error occurred',
+          });
+        },
+      });
+    };
+    runOne(0);
+  }
+
+  private finishSubmission(created = 0, ids: string[] = []) {
+    localStorage.removeItem(STORAGE_KEY);
+    this.submitting.set(false);
+    this.successResult.set({ created, ids });
+    this.showSuccessDialog.set(true);
+    this.clients.set([]);
+    this.draftRestored.set(false);
+    this.savedOriginals.clear();
+    this.loadSavedClients();
+    this.msg.add({
+      severity: 'success',
+      summary: created > 0 ? `${created} client(s) onboarded` : 'Corrections saved',
+    });
+  }
 
   defaultSavedDates() {
     if (this.savedFromModel()) return;
@@ -1925,301 +1999,232 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     return this.startOfDay(new Date(iso + (iso.includes('T') ? '' : 'T00:00:00')));
   }
 
-  payDocDate(p: OnboardedPayment): Date | null {
-    return this.isoToDate(p.document_date);
-  }
-
-  onPayDocDateChange(p: OnboardedPayment, d: Date | null) {
-    p.docDateObj = d;
-    p.document_date = this.dateStr(d);
-  }
-
-  lessonDate(l: OnboardedLesson): Date | null {
-    return this.isoToDate(l.scheduled_date);
-  }
-
-  onLessonDateChange(l: OnboardedLesson, d: Date | null) {
-    l.dateObj = d;
-    l.scheduled_date = this.dateStr(d);
-  }
-
   private toMoney(v: any): number {
     const n = Number(v);
     return isFinite(n) ? n : 0;
   }
 
-  editDocDate(): Date | null {
-    return this.editDocSignal();
-  }
-
-  onEditDocDateChange(d: Date | null) {
-    this.editDocSignal.set(d);
-    const c = this.editingClient();
-    if (c) c.document_date = this.dateStr(d);
-  }
-
   openEditClient(c: OnboardedClient) {
-    const copy: OnboardedClient = JSON.parse(JSON.stringify(c));
-    copy.packages.forEach((pkg) => {
-      pkg.payments.forEach((p) => { p.docDateObj = this.isoToDate(p.document_date); });
-      if (pkg.plan) {
-        pkg.plan.lessons.forEach((l) => { l.dateObj = this.isoToDate(l.scheduled_date); });
-      }
+    const key = c.id;
+    this.savedOriginals.set(key, JSON.parse(JSON.stringify(c)));
+
+    const draft: ClientDraft = {
+      consultation_id: c.id,
+      phone: c.phone,
+      first_name: c.first_name,
+      middle_name: c.middle_name || '',
+      last_name: c.last_name || '',
+      location: c.location || '',
+      branch_id: c.branch_id || this.branchId(),
+      document_date: this.isoToDate(c.document_date || null),
+      converter_id: '',
+      primary_recommender_id: '',
+      secondary_recommender_id: '',
+      packages: c.packages.map((pkg) => ({
+        cart_item_id: pkg.cart_item_id,
+        plan_id: pkg.plan?.id || null,
+        regenerate: false,
+        regenerateStartDate: null,
+        product_id: pkg.product_id,
+        package_id: pkg.package_id || '',
+        transmission_type: pkg.plan?.transmission_type || 'manual',
+        lesson_plan_template_id: pkg.plan?.template_id || null,
+        discount_id: pkg.discount_id || '',
+        installments: pkg.payments.map((p) => ({
+          id: p.id,
+          receipt_number: p.receipt_number || '',
+          document_date: this.isoToDate(p.document_date || null),
+          amount: p.amount,
+          received_by_phone: p.received_by_phone || this.auth.currentUser() || '',
+        })),
+        lessons: pkg.plan ? pkg.plan.lessons.map((l) => ({
+          id: l.id,
+          date: this.isoToDate(l.scheduled_date || null),
+          duration_minutes: l.duration_minutes,
+          lesson_type: l.lesson_type === 'theory' ? 'theory' : 'practical',
+          instructor_id: l.instructor_id || '',
+          vehicle_id: l.vehicle_id || '',
+          notes: l.notes || '',
+          template_item_id: null,
+          title: l.title || '',
+          lesson_objectives: [],
+          practical_objectives: [],
+          status: (l.status === 'completed' ? 'completed' : 'scheduled') as 'completed' | 'scheduled',
+        })) : [],
+      })),
+    };
+
+    this.clients.update((cs) => {
+      const idx = cs.findIndex((x) => x.consultation_id === c.id);
+      const next = [...cs];
+      if (idx >= 0) next.splice(idx, 1, draft);
+      else next.push(draft);
+      return next;
     });
-    this.editOriginal.set(JSON.parse(JSON.stringify(c)));
-    this.editingClient.set(copy);
-    this.editDocSignal.set(this.isoToDate(c.document_date || null));
-    this.removedPaymentIds.set([]);
-    this.regenPlans.set({});
-    this.showEditDialog.set(true);
-  }
-
-  closeEditDialog() {
-    this.showEditDialog.set(false);
-    this.editingClient.set(null);
-    this.editOriginal.set(null);
-    this.editDocSignal.set(null);
-  }
-
-  addPayment(pkg: OnboardedPackage) {
-    pkg.payments.push({
-      id: '',
-      document_date: this.dateStr(new Date()),
-      receipt_number: '',
-      amount: 0,
-      balance: 0,
-      received_by_phone: this.auth.currentUser(),
+    const newIdx = this.clients().findIndex((x) => x.consultation_id === c.id);
+    this.clientStepIndex.update((s) => ({ ...s, [newIdx]: 0 }));
+    this.phoneWarnings.update((w) => ({ ...w, [newIdx]: '' }));
+    this.persistDraft();
+    setTimeout(() => {
+      document.getElementById('wizard-client-' + newIdx)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+    for (const pkg of draft.packages) {
+      this.loadDiscountsForPackage(pkg);
+      if (pkg.cart_item_id) {
+        const origPkg = c.packages.find((x) => x.cart_item_id === pkg.cart_item_id);
+        this.appliedDiscountsByCartItem.set(pkg.cart_item_id, Number(origPkg?.discount_amount) || 0);
+      }
+      if (pkg.discount_id) {
+        this.discountService.get(pkg.discount_id).subscribe({
+          next: (d) => {
+            const key = this.discountKey(pkg.product_id, pkg.package_id);
+            this.discountsForProduct.update((m) => {
+              const list = [...(m[key] || [])];
+              if (!list.some((x) => x.id === pkg.discount_id)) list.push(d);
+              return { ...m, [key]: list };
+            });
+          },
+          error: () => {},
+        });
+      }
+    }
+    this.msg.add({
+      severity: 'info',
+      summary: 'Client loaded for editing',
+      detail: 'Review the steps and submit corrections.',
     });
   }
 
-  removePayment(pkg: OnboardedPackage, idx: number) {
-    const pay = pkg.payments[idx];
-    if (!pay) return;
-    if (pay.id) {
-      this.removedPaymentIds.update((ids) => [...ids, pay.id]);
+  private buildCorrectionPayload(c: ClientDraft): any | null {
+    const orig = c.consultation_id ? this.savedOriginals.get(c.consultation_id) : undefined;
+    if (!orig) return null;
+
+    const payload: any = { payments: [], remove_payment_ids: [] };
+
+    if (c.document_date && this.dateStr(c.document_date) !== (orig.document_date || null)) {
+      payload.document_date = this.dateStr(c.document_date);
     }
-    pkg.payments.splice(idx, 1);
-  }
+    const infoChanged: any = {};
+    if ((c.phone || '') !== (orig.phone || '')) infoChanged.phone = c.phone;
+    if ((c.first_name || '') !== (orig.first_name || '')) infoChanged.first_name = c.first_name;
+    if ((c.middle_name || null) !== (orig.middle_name || null)) infoChanged.middle_name = c.middle_name || null;
+    if ((c.last_name || null) !== (orig.last_name || null)) infoChanged.last_name = c.last_name || null;
+    if ((c.location || null) !== (orig.location || null)) infoChanged.location = c.location || null;
+    Object.assign(payload, infoChanged);
 
-  isPayRemoved(pay: OnboardedPayment): boolean {
-    return pay.id !== '' && this.removedPaymentIds().includes(pay.id);
-  }
-
-  openRegen(pkgIdx: number) {
-    this.regenPkgIdx.set(pkgIdx);
-    const pkg = this.editingClient()?.packages[pkgIdx];
-    this.regenForm.set({
-      startDate: null,
-      transmission: pkg?.plan?.transmission_type || 'manual',
-      practicalDays: null,
-      theoryLessons: null,
-    });
-    this.showRegenDialog.set(true);
-  }
-
-  confirmRegen() {
-    const form = this.regenForm();
-    if (!form.startDate || (!form.practicalDays && !form.theoryLessons)) return;
-    this.regenBusy.set(true);
-    try {
-      const lessons = this.buildRegenLessons(form);
-      const pkg = this.editingClient()?.packages[this.regenPkgIdx()];
-      if (!pkg || !pkg.plan) {
-        this.msg.add({ severity: 'error', summary: 'No plan found for this package' });
-        return;
-      }
-      const plan = pkg.plan;
-      this.regenPlans.update((r) => ({
-        ...r,
-        [this.regenPkgIdx()]: {
-          plan_id: plan.id,
-          template_id: null,
-          transmission_type: form.transmission,
-          start_date: this.dateStr(form.startDate),
-          lessons,
-        },
-      }));
-      this.msg.add({
-        severity: 'success',
-        summary: `${form.practicalDays || 0} practical + ${form.theoryLessons || 0} theory planned. Save to apply.`,
-      });
-      this.showRegenDialog.set(false);
-    } finally {
-      this.regenBusy.set(false);
-    }
-  }
-
-  private buildRegenLessons(form: { startDate: Date | null; practicalDays: number | null; theoryLessons: number | null }) {
-    const lessons: any[] = [];
-    if (!form.startDate) return lessons;
-    let cursor = this.startOfDay(form.startDate);
-    const weekdays: Date[] = [];
-    const saturdays: Date[] = [];
-    let seen = 0;
-    while (weekdays.length < (form.practicalDays || 0) || saturdays.length < (form.theoryLessons || 0)) {
-      const day = cursor.getDay();
-      if (day !== 0 && day !== 6 && weekdays.length < (form.practicalDays || 0)) {
-        weekdays.push(new Date(cursor));
-      } else if (day === 6 && saturdays.length < (form.theoryLessons || 0)) {
-        saturdays.push(new Date(cursor));
-      }
-      cursor.setDate(cursor.getDate() + 1);
-      if (++seen > 2000) break;
-    }
-    let order = 0;
-    for (const d of weekdays) {
-      order += 1;
-      lessons.push({
-        day_number: order,
-        week_number: Math.ceil(order / 5),
-        order,
-        title: `Practical Session ${order}`,
-        lesson_objectives: [],
-        practical_objectives: [],
-        is_active: true,
-        is_theory: false,
-        is_locked: false,
-        enforce_prerequisites: true,
-        scheduled_date: this.dateStr(d),
-        duration_minutes: 30,
-        instructor_id: null,
-        vehicle_id: null,
-        template_item_id: null,
-        status: 'pending',
-      });
-    }
-    for (const d of saturdays) {
-      order += 1;
-      lessons.push({
-        day_number: order,
-        week_number: Math.ceil(order / 5),
-        order,
-        title: `Theory Session ${order}`,
-        lesson_objectives: [],
-        practical_objectives: [],
-        is_active: true,
-        is_theory: true,
-        is_locked: false,
-        enforce_prerequisites: true,
-        scheduled_date: this.dateStr(d),
-        duration_minutes: 120,
-        instructor_id: null,
-        vehicle_id: null,
-        template_item_id: null,
-        status: 'pending',
-      });
-    }
-    return lessons;
-  }
-
-  private lessonChanged(origL: OnboardedLesson | undefined, l: OnboardedLesson): boolean {
-    if (!origL) return true;
-    return (
-      (l.scheduled_date || null) !== (origL.scheduled_date || null) ||
-      this.toMoney(l.duration_minutes) !== this.toMoney(origL.duration_minutes) ||
-      (l.status || null) !== (origL.status || null) ||
-      (l.notes || null) !== (origL.notes || null)
-    );
-  }
-
-  saveCorrections() {
-    const c = this.editingClient();
-    if (!c) return;
-    const orig = this.editOriginal();
-
-    const payments: any[] = [];
-    const removePaymentIds: string[] = [];
+    const origPayments = orig.packages.flatMap((p) => p.payments);
+    const keptIds = new Set<string>();
     for (const pkg of c.packages) {
-      for (const pay of pkg.payments) {
-        const origPay = orig?.packages
-          .flatMap((p) => p.payments)
-          .find((x) => x.id === pay.id);
-        if (pay.id) {
-          if (this.removedPaymentIds().includes(pay.id)) continue;
+      for (const inst of pkg.installments) {
+        if (inst.id) {
+          keptIds.add(inst.id);
+          const origPay = origPayments.find((x) => x.id === inst.id);
           const changed =
             !origPay ||
-            (pay.document_date || null) !== (origPay.document_date || null) ||
-            this.toMoney(pay.amount) !== this.toMoney(origPay.amount) ||
-            (pay.receipt_number || null) !== (origPay.receipt_number || null) ||
-            (pay.received_by_phone || null) !== (origPay.received_by_phone || null);
+            this.dateStr(inst.document_date) !== (origPay.document_date || null) ||
+            this.toMoney(inst.amount) !== this.toMoney(origPay.amount) ||
+            (inst.receipt_number || null) !== (origPay.receipt_number || null) ||
+            (inst.received_by_phone || null) !== (origPay.received_by_phone || null);
           if (changed) {
-            payments.push({
-              id: pay.id,
-              document_date: pay.document_date || undefined,
-              amount: this.toMoney(pay.amount),
-              receipt_number: pay.receipt_number || undefined,
-              received_by_phone: pay.received_by_phone || undefined,
+            payload.payments.push({
+              id: inst.id,
+              document_date: this.dateStr(inst.document_date) || undefined,
+              amount: this.toMoney(inst.amount),
+              receipt_number: inst.receipt_number || undefined,
+              received_by_phone: inst.received_by_phone || undefined,
             });
           }
         } else {
-          payments.push({
+          payload.payments.push({
             product_id: pkg.product_id,
             package_id: pkg.package_id || undefined,
-            document_date: pay.document_date || undefined,
-            amount: this.toMoney(pay.amount),
-            receipt_number: pay.receipt_number || undefined,
-            received_by_phone: pay.received_by_phone || undefined,
+            document_date: this.dateStr(inst.document_date) || undefined,
+            amount: this.toMoney(inst.amount),
+            receipt_number: inst.receipt_number || undefined,
+            received_by_phone: inst.received_by_phone || undefined,
           });
         }
       }
     }
-    removePaymentIds.push(...this.removedPaymentIds());
+    for (const origPay of origPayments) {
+      if (origPay.id && !keptIds.has(origPay.id)) payload.remove_payment_ids.push(origPay.id);
+    }
 
     const plans: any[] = [];
-    c.packages.forEach((pkg, pkgIdx) => {
-      const origPkg = orig?.packages[pkgIdx];
-      if (!pkg.plan) return;
+    const regenEntries: any[] = [];
+    for (const pkg of c.packages) {
+      const origPkg = orig.packages.find((p) => p.cart_item_id === pkg.cart_item_id);
+      if (!pkg.plan_id || !origPkg?.plan) continue;
+
+      if (pkg.regenerate) {
+        regenEntries.push({
+          plan_id: pkg.plan_id,
+          template_id: pkg.lesson_plan_template_id || undefined,
+          transmission_type: pkg.transmission_type || 'manual',
+          start_date: this.dateStr(pkg.regenerateStartDate || null) || undefined,
+          lessons: pkg.lessons.filter((l) => l.date && l.duration_minutes).map((l) => ({
+            date: this.dateStr(l.date)!,
+            duration_minutes: l.duration_minutes!,
+            lesson_type: l.lesson_type,
+            instructor_id: l.instructor_id || undefined,
+            vehicle_id: l.vehicle_id || undefined,
+            notes: l.notes || undefined,
+            template_item_id: l.template_item_id || undefined,
+            title: l.title || undefined,
+            lesson_objectives: l.lesson_objectives?.length ? l.lesson_objectives : undefined,
+            practical_objectives: l.practical_objectives?.length ? l.practical_objectives : undefined,
+            status: l.status === 'scheduled' ? 'scheduled' : 'completed',
+          })),
+        });
+        continue;
+      }
+
       const lessonEdits: any[] = [];
-      for (const l of pkg.plan.lessons) {
-        const origL = origPkg?.plan?.lessons.find((x) => x.id === l.id);
-        if (this.lessonChanged(origL, l)) {
+      for (const l of pkg.lessons) {
+        if (!l.id) continue;
+        const origL = origPkg.plan.lessons.find((x) => x.id === l.id);
+        const status = l.status === 'completed' ? 'completed' : (origL?.status || l.status);
+        const changed =
+          !origL ||
+          this.dateStr(l.date) !== (origL.scheduled_date || null) ||
+          this.toMoney(l.duration_minutes) !== this.toMoney(origL.duration_minutes) ||
+          status !== (origL.status || null) ||
+          (l.notes || null) !== (origL.notes || null);
+        if (changed) {
           lessonEdits.push({
             id: l.id,
-            scheduled_date: l.scheduled_date || undefined,
-            status: l.status || undefined,
-            duration_minutes: l.duration_minutes || undefined,
+            scheduled_date: this.dateStr(l.date) || undefined,
+            status: status !== (origL?.status || null) ? status : undefined,
+            duration_minutes: this.toMoney(l.duration_minutes) || undefined,
           });
         }
       }
-      if (lessonEdits.length > 0) {
-        plans.push({ plan_id: pkg.plan.id, lessons: lessonEdits });
-      }
-    });
-
-    const payload: any = { payments, remove_payment_ids: removePaymentIds };
-    if (c.document_date) payload.document_date = this.dateStr(this.isoToDate(c.document_date));
+      if (lessonEdits.length > 0) plans.push({ plan_id: pkg.plan_id, lessons: lessonEdits });
+    }
     if (plans.length > 0) payload.plans = plans;
-    const regenEntries = Object.values(this.regenPlans());
     if (regenEntries.length > 0) payload.regenerate_plans = regenEntries;
 
-    if (
-      !payload.document_date &&
-      payments.length === 0 &&
-      removePaymentIds.length === 0 &&
-      !payload.plans &&
-      !payload.regenerate_plans
-    ) {
-      this.msg.add({ severity: 'info', summary: 'No changes to save' });
-      return;
+    const discounts: any[] = [];
+    for (const pkg of c.packages) {
+      const origPkg = orig.packages.find((x) => x.cart_item_id === pkg.cart_item_id);
+      if (!origPkg) continue;
+      const origDiscountId = origPkg.discount_id || '';
+      if ((pkg.discount_id || '') !== origDiscountId) {
+        discounts.push({ cart_item_id: pkg.cart_item_id, discount_id: pkg.discount_id || null });
+      }
     }
+    if (discounts.length > 0) payload.discounts = discounts;
 
-    this.editBusy.set(true);
-    this.consultationService.correctOnboardedClient(c.id, payload).subscribe({
-      next: (res: any) => {
-        this.editBusy.set(false);
-        this.msg.add({ severity: 'success', summary: 'Corrections saved' });
-        this.closeEditDialog();
-        this.loadSavedClients();
-      },
-      error: (err) => {
-        this.editBusy.set(false);
-        this.msg.add({
-          severity: 'error',
-          summary: 'Failed to save corrections',
-          detail: err.error?.detail || 'An error occurred',
-        });
-      },
-    });
+    const hasChanges =
+      !!payload.document_date ||
+      !!infoChanged.phone || !!infoChanged.first_name || infoChanged.middle_name !== undefined ||
+      infoChanged.last_name !== undefined || infoChanged.location !== undefined ||
+      payload.payments.length > 0 ||
+      payload.remove_payment_ids.length > 0 ||
+      !!payload.plans ||
+      !!payload.regenerate_plans ||
+      !!payload.discounts;
+    return hasChanges ? payload : null;
   }
 
   goToConsultations() {

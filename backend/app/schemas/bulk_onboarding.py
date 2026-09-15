@@ -170,19 +170,32 @@ class BulkPlanRegenerate(BaseModel):
     lessons: list[ClientLessonCreate] = []
 
 
+class BulkDiscountCorrection(BaseModel):
+    cart_item_id: uuid.UUID
+    discount_id: uuid.UUID | None = None
+
+
 class BulkOnboardingCorrection(BaseModel):
+    phone: str | None = None
+    first_name: str | None = None
+    middle_name: str | None = None
+    last_name: str | None = None
+    location: str | None = None
     document_date: date | None = None
     payments: list[BulkCorrectionPayment] = []
     remove_payment_ids: list[uuid.UUID] = []
     plans: list[BulkPlanEdit] = []
     regenerate_plans: list[BulkPlanRegenerate] = []
+    discounts: list[BulkDiscountCorrection] = []
 
 
 class BulkCorrectionResult(BaseModel):
     consultation_id: uuid.UUID
     document_date: date | None
+    fields_updated: int = 0
     payments_updated: int
     payments_created: int
     payments_removed: int
+    discounts_updated: int = 0
     lessons_updated: int
     plans_regenerated: int

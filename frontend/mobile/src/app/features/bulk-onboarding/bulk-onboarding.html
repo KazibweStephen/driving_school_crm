@@ -162,7 +162,11 @@
           <i class="pi pi-arrow-left"></i>
         </button>
         <h1 class="text-base font-bold text-gray-900">
-          {{ editIndex() >= 0 ? 'Edit Client' : 'Add Client' }}
+          @if (editingConsultationId()) {
+            Editing Saved Client
+          } @else {
+            {{ editIndex() >= 0 ? 'Edit Client' : 'Add Client' }}
+          }
         </h1>
         <span class="w-8"></span>
       </div>
@@ -562,9 +566,10 @@
           </div>
           <div class="flex gap-2">
             <p-button
-              label="{{ editIndex() >= 0 ? 'Save changes' : 'Add to list' }}"
-              icon="pi pi-plus"
+              label="{{ editingConsultationId() ? 'Save corrections' : (editIndex() >= 0 ? 'Save changes' : 'Add to list') }}"
+              icon="{{ editingConsultationId() ? 'pi pi-check' : 'pi pi-plus' }}"
               [disabled]="!infoValid() || !paymentsValid()"
+              [loading]="wizardBusy()"
               (click)="saveClientFromWizard()"
               styleClass="flex-1 justify-center"
               data-testid="bo-save-client"
@@ -682,136 +687,6 @@
     </div>
   </div>
 }
-
-<!-- Edit onboarded client dialog -->
-<p-dialog [(visible)]="showEditDialog" header="Edit Onboarded Client" [modal]="true"
-  [style]="{ width: '94vw', maxWidth: '640px' }">
-  @if (editingClient(); as c) {
-    <div class="space-y-3 text-sm">
-      <div class="text-gray-600">
-        <span class="font-medium text-gray-900">{{ savedClientName(c) }}</span> · {{ c.phone }}
-      </div>
-      <div>
-        <label class="mb-0.5 block text-xs text-gray-500">Document Date</label>
-        <p-datepicker [ngModel]="editDocDate()" (ngModelChange)="onEditDocDateChange($event)"
-          dateFormat="yy-mm-dd" appendTo="body" styleClass="w-full" [maxDate]="mobileToday" />
-      </div>
-
-      @for (pkg of c.packages; track pkg.cart_item_id; let pkgIdx = $index) {
-        <div class="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-gray-200 p-2">
-          <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold text-gray-800">{{ productName(pkg.product_id) || pkg.product_id }}</div>
-            <div class="flex items-center gap-1">
-              @if (regenPlans()[pkgIdx]) {
-                <span class="text-[11px] rounded bg-green-50 px-1.5 py-0.5 font-medium text-green-600">regenerating</span>
-              }
-              <p-button label="Regenerate" icon="pi pi-refresh" size="small" severity="secondary"
-                (click)="openRegen(pkgIdx)" />
-            </div>
-          </div>
-          <p class="text-[11px] text-gray-500">
-            {{ pkg.status }} · Paid {{ pkg.total_paid }} / {{ pkg.total_amount }} · Balance {{ pkg.balance }}
-          </p>
-
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-medium text-gray-500">Payments</span>
-              <p-button label="Add" icon="pi pi-plus" size="small" text (click)="addPayment(pkg)" />
-            </div>
-            @for (pay of pkg.payments; track $index) {
-              <div class="space-y-1.5 rounded-lg bg-gray-50 p-2"
-                [ngClass]="{ 'opacity-40': isPayRemoved(pay) }">
-                <div class="flex gap-1.5">
-                  <input pInputText type="number" [(ngModel)]="pay.amount" placeholder="Amount" class="w-24 text-sm" />
-                  <input pInputText [(ngModel)]="pay.receipt_number" placeholder="Receipt" class="min-w-0 flex-1 text-sm" />
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <p-datepicker [ngModel]="pay.docDateObj" (ngModelChange)="onPayDocDateChange(pay, $event)"
-                    dateFormat="yy-mm-dd" appendTo="body" styleClass="w-full text-xs" placeholder="Date"
-                    [maxDate]="mobileToday" />
-                  @if (isPayRemoved(pay)) {
-                    <span class="text-[11px] rounded bg-red-50 px-1.5 py-0.5 font-medium text-red-600">will be removed</span>
-                  } @else {
-                    <p-button icon="pi pi-trash" severity="danger" size="small" text (click)="removePayment(pkg, $index)" />
-                  }
-                </div>
-              </div>
-            }
-          </div>
-
-          @if (pkg.plan) {
-            <div>
-              <span class="text-xs font-medium text-gray-500">Lessons ({{ pkg.plan.lessons.length }})</span>
-              <div class="mt-1 space-y-1.5">
-                @for (l of pkg.plan.lessons; track l.id) {
-                  <div class="space-y-1.5 rounded-lg bg-gray-50 p-2">
-                    <div class="flex items-center gap-1.5">
-                      <span class="text-xs text-gray-500">{{ l.day_number }}</span>
-                      <span class="min-w-0 flex-1 truncate text-xs text-gray-700" [title]="l.title">{{ l.title }}</span>
-                      <input pInputText type="number" [(ngModel)]="l.duration_minutes" placeholder="Min" class="w-14 text-xs" />
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <p-datepicker [ngModel]="l.dateObj" (ngModelChange)="onLessonDateChange(l, $event)"
-                        dateFormat="yy-mm-dd" appendTo="body" styleClass="w-full text-xs" placeholder="Date"
-                        [maxDate]="mobileToday" />
-                      <p-select [options]="lessonStatusOptions()" [(ngModel)]="l.status"
-                        placeholder="Status" appendTo="body" styleClass="w-36 text-xs"
-                        optionLabel="label" optionValue="value" />
-                    </div>
-                  </div>
-                }
-              </div>
-            </div>
-          }
-        </div>
-      }
-    </div>
-  }
-  <ng-template pTemplate="footer">
-    <div class="flex justify-end gap-2">
-      <p-button label="Cancel" severity="secondary" [disabled]="editBusy()" (click)="closeEditDialog()" />
-      <p-button label="Save Corrections" [loading]="editBusy()" [disabled]="!canEditOnboarded"
-        (click)="saveCorrections()" />
-    </div>
-  </ng-template>
-</p-dialog>
-
-<!-- Regenerate plan dialog -->
-<p-dialog [(visible)]="showRegenDialog" header="Regenerate Lesson Plan" [modal]="true"
-  [style]="{ width: '94vw', maxWidth: '480px' }">
-  <div class="grid grid-cols-2 gap-3">
-    <div class="col-span-2">
-      <label class="mb-0.5 block text-xs text-gray-500">Start Date</label>
-      <p-datepicker [ngModel]="regenForm().startDate" (ngModelChange)="regenForm.update(f => ({ ...f, startDate: $event }))"
-        dateFormat="yy-mm-dd" appendTo="body" styleClass="w-full" [maxDate]="mobileToday" />
-    </div>
-    <div>
-      <label class="mb-0.5 block text-xs text-gray-500">Transmission</label>
-      <p-select [options]="[{ label: 'Manual', value: 'manual' }, { label: 'Automatic', value: 'automatic' }, { label: 'Both', value: 'both' }]"
-        [ngModel]="regenForm().transmission" appendTo="body" styleClass="w-full"
-        (ngModelChange)="regenForm.update(f => ({ ...f, transmission: $event }))" />
-    </div>
-    <div>
-      <label class="mb-0.5 block text-xs text-gray-500">Practical Days</label>
-      <p-inputNumber [ngModel]="regenForm().practicalDays" styleClass="w-full"
-        (ngModelChange)="regenForm.update(f => ({ ...f, practicalDays: $event }))" />
-    </div>
-    <div class="col-span-2">
-      <label class="mb-0.5 block text-xs text-gray-500">Theory Lessons</label>
-      <p-inputNumber [ngModel]="regenForm().theoryLessons" styleClass="w-full"
-        (ngModelChange)="regenForm.update(f => ({ ...f, theoryLessons: $event }))" />
-    </div>
-    <p class="col-span-2 text-[11px] text-gray-400">
-      Practical on weekdays (Mon–Fri), theory on Saturdays. Saving replaces all existing lessons.
-    </p>
-  </div>
-  <ng-template pTemplate="footer">
-    <div class="flex justify-end gap-2">
-      <p-button label="Cancel" severity="secondary" [disabled]="regenBusy()" (click)="showRegenDialog.set(false)" />
-      <p-button label="Confirm" [loading]="regenBusy()" (click)="confirmRegen()" />
-    </div>
-  </ng-template>
-</p-dialog>
 
 <!-- Success dialog -->
 @if (showSuccess()) {

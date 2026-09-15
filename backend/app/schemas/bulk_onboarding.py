@@ -173,6 +173,12 @@ class BulkDiscountCorrection(BaseModel):
     discount_id: uuid.UUID | None = None
 
 
+class BulkPackageCorrection(BaseModel):
+    cart_item_id: uuid.UUID
+    product_id: str | None = Field(default=None, min_length=1, max_length=36)
+    package_id: str | None = Field(default=None, max_length=36)
+
+
 class BulkOnboardingCorrection(BaseModel):
     phone: str | None = None
     first_name: str | None = None
@@ -180,6 +186,7 @@ class BulkOnboardingCorrection(BaseModel):
     last_name: str | None = None
     location: str | None = None
     document_date: date | None = None
+    packages: list[BulkPackageCorrection] = []
     payments: list[BulkCorrectionPayment] = []
     remove_payment_ids: list[uuid.UUID] = []
     plans: list[BulkPlanEdit] = []
@@ -191,6 +198,7 @@ class BulkCorrectionResult(BaseModel):
     consultation_id: uuid.UUID
     document_date: date | None
     fields_updated: int = 0
+    packages_updated: int = 0
     payments_updated: int
     payments_created: int
     payments_removed: int

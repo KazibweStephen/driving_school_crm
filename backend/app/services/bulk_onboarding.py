@@ -27,7 +27,7 @@ from app.models.lesson_plan import (
     TransmissionType,
 )
 from app.models.payment import Installment, InstallmentStatus, Payment
-from app.models.product import Package
+from app.models.product import Package, Product
 from app.models.training import TrainingSession
 from app.schemas.bulk_onboarding import (
     BulkOnboardingCorrection,
@@ -744,6 +744,100 @@ async def _apply_discount_corrections(
     return changed
 
 
+async def _apply_package_corrections(
+    db: AsyncSession,
+    consultation: Consultation,
+    user,
+    packages_data,
+) -> int:
+    company_id = None
+    if consultation.branch_id:
+        branch = await db.get(Branch, consultation.branch_id)
+        if branch is not None:
+            company_id = branch.company_id
+    if company_id is None:
+        company_id = getattr(user, "company_id", None)
+
+    updated = 0
+    for pc in packages_data:
+        cart_item = await db.get(CartItem, pc.cart_item_id)
+        if cart_item is None or cart_item.consultation_id != consultation.id:
+            raise HTTPException(status_code=400, detail="Cart item not found for this consultation")
+
+        new_product_id = pc.product_id or cart_item.product_id
+        new_package_id = pc.package_id if pc.package_id is not None else cart_item.package_id
+
+        if new_product_id == cart_item.product_id and new_package_id == cart_item.package_id:
+            continue
+
+        product = await db.get(Product, new_product_id)
+        if product is None:
+            raise HTTPException(status_code=400, detail="Product not found")
+        if (
+            company_id is not None
+            and product.company_id is not None
+            and str(product.company_id) != str(company_id)
+        ):
+            raise HTTPException(status_code=403, detail="Product does not belong to your company")
+
+        if new_package_id:
+            package = await db.get(Package, new_package_id)
+            if package is None:
+                raise HTTPException(status_code=400, detail="Package not found")
+            if str(package.product_id) != str(new_product_id):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Package does not belong to the selected product",
+                )
+
+        old_product_id = cart_item.product_id
+        old_package_id = cart_item.package_id
+
+        # Relink existing payments so the cart-item recompute still attributes them.
+        payments_result = await db.execute(
+            select(Payment).where(
+                Payment.consultation_id == consultation.id,
+                Payment.product_id == old_product_id,
+                (
+                    Payment.package_id == old_package_id
+                    if old_package_id is not None
+                    else Payment.package_id.is_(None)
+                ),
+            )
+        )
+        for payment in payments_result.scalars().all():
+            if payment.cancelled_at is not None:
+                continue
+            payment.product_id = new_product_id
+            payment.package_id = new_package_id or None
+        await db.flush()
+
+        cart_item.product_id = new_product_id
+        cart_item.package_id = new_package_id or None
+        if new_package_id:
+            package = await db.get(Package, new_package_id)
+            if package is not None:
+                cart_item.requires_driving_training = package.requires_driving_training
+                cart_item.requires_theory_training = package.requires_theory_training
+                cart_item.requires_permit_processing = package.requires_permit_processing
+                cart_item.driving_training_duration_days = package.driving_training_duration_days
+                cart_item.theory_training_hours = package.theory_training_hours
+                cart_item.permit_processing_duration_days = package.permit_processing_duration_days
+        else:
+            cart_item.requires_driving_training = False
+            cart_item.requires_theory_training = False
+            cart_item.requires_permit_processing = False
+            cart_item.driving_training_duration_days = None
+            cart_item.theory_training_hours = None
+            cart_item.permit_processing_duration_days = None
+
+        await _recompute_cart_item(db, consultation, cart_item)
+        updated += 1
+        await db.flush()
+
+    return updated
+
+
 async def _recompute_cart_item(
     db: AsyncSession, consultation: Consultation, cart_item: CartItem
 ) -> None:
@@ -935,7 +1029,7 @@ async def _apply_payment_edits(
         )
         payments_removed += 1
 
-    if data.document_date is not None or data.payments or data.remove_payment_ids or data.discounts:
+    if data.document_date is not None or data.payments or data.remove_payment_ids or data.discounts or data.packages:
         await _update_consultation_status(db, consultation.id, allow_downgrade=True)
         await db.refresh(consultation)
 
@@ -1064,6 +1158,10 @@ async def apply_bulk_onboarding_corrections(
     if data.document_date is not None:
         consultation.document_date = data.document_date
 
+    packages_updated = 0
+    if data.packages:
+        packages_updated = await _apply_package_corrections(db, consultation, user, data.packages)
+
     discounts_updated = 0
     if data.discounts:
         discounts_updated = await _apply_discount_corrections(db, consultation, user, data.discounts)
@@ -1129,6 +1227,7 @@ async def apply_bulk_onboarding_corrections(
         "consultation_id": consultation.id,
         "document_date": consultation.document_date,
         "fields_updated": fields_updated,
+        "packages_updated": packages_updated,
         "payments_updated": payment_result["payments_updated"],
         "payments_created": payment_result["payments_created"],
         "payments_removed": payment_result["payments_removed"],

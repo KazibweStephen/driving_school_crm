@@ -2245,6 +2245,25 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     }
     if (discounts.length > 0) payload.discounts = discounts;
 
+    const packages: any[] = [];
+    for (const pkg of c.packages) {
+      if (!pkg.cart_item_id) continue;
+      const origPkg = orig.packages.find((x) => x.cart_item_id === pkg.cart_item_id);
+      if (!origPkg) continue;
+      const newProduct = pkg.product_id || '';
+      const origProduct = origPkg.product_id || '';
+      const newPackage = pkg.package_id || null;
+      const origPackage = origPkg.package_id || null;
+      if (newProduct !== origProduct || newPackage !== origPackage) {
+        packages.push({
+          cart_item_id: pkg.cart_item_id,
+          product_id: pkg.product_id || undefined,
+          package_id: (pkg.package_id || null) as string | null | undefined,
+        });
+      }
+    }
+    if (packages.length > 0) payload.packages = packages;
+
     const hasChanges =
       !!payload.document_date ||
       !!infoChanged.phone || !!infoChanged.first_name || infoChanged.middle_name !== undefined ||
@@ -2253,7 +2272,8 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
       payload.remove_payment_ids.length > 0 ||
       !!payload.plans ||
       !!payload.regenerate_plans ||
-      !!payload.discounts;
+      !!payload.discounts ||
+      !!payload.packages;
     return hasChanges ? payload : null;
   }
 

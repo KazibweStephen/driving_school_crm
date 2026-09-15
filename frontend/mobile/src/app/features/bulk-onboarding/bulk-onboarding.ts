@@ -1001,7 +1001,18 @@ export class BulkOnboarding implements OnInit {
     const c = this.wizardClient();
     if (!c) return;
     const pkgs = [...c.packages];
-    pkgs[pkgIndex] = { ...pkgs[pkgIndex], product_id: productId, package_id: '', discount_id: '' };
+    pkgs[pkgIndex] = {
+      ...pkgs[pkgIndex],
+      product_id: productId,
+      package_id: '',
+      discount_id: '',
+      plan_id: null,
+      regenerate: false,
+      regenerateStartDate: null,
+      lessons: [],
+      transmission_type: 'manual',
+      lesson_plan_template_id: '',
+    };
     this.updateWizard({ packages: pkgs });
     this.loadDiscountsForPackage(pkgs[pkgIndex]);
   }
@@ -1013,7 +1024,16 @@ export class BulkOnboarding implements OnInit {
     const prev = pkgs[pkgIndex];
     pkgs[pkgIndex] = { ...prev, ...patch };
     if ('package_id' in patch && patch.package_id !== prev.package_id) {
-      pkgs[pkgIndex] = { ...pkgs[pkgIndex], discount_id: '' };
+      pkgs[pkgIndex] = {
+        ...pkgs[pkgIndex],
+        discount_id: '',
+        plan_id: null,
+        regenerate: false,
+        regenerateStartDate: null,
+        lessons: [],
+        transmission_type: 'manual',
+        lesson_plan_template_id: '',
+      };
     }
     if ('transmission_type' in patch && patch.transmission_type !== prev.transmission_type && pkgs[pkgIndex].lesson_plan_template_id) {
       const tpl = this.templates().find((t) => t.id === pkgs[pkgIndex].lesson_plan_template_id);

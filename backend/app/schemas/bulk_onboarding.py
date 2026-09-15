@@ -4,8 +4,6 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from app.schemas.lesson_plan import ClientLessonCreate
-
 
 class BulkOnboardingLesson(BaseModel):
     date: date
@@ -167,7 +165,7 @@ class BulkPlanRegenerate(BaseModel):
     template_id: uuid.UUID | None = None
     transmission_type: str | None = None
     start_date: date | None = None
-    lessons: list[ClientLessonCreate] = []
+    lessons: list[BulkOnboardingLesson] = []
 
 
 class BulkDiscountCorrection(BaseModel):

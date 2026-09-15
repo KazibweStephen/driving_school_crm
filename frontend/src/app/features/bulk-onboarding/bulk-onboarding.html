@@ -615,6 +615,14 @@
                 </table>
               </div>
 
+              @if (pkg.discount_id && discountApplied(pkg) > 0) {
+                <div class="mt-3 px-3 py-2 rounded-lg bg-green-50 border border-green-200 flex items-center gap-2 text-sm">
+                  <i class="pi pi-tag text-green-600"></i>
+                  <span class="text-green-700 font-medium">Discount applied: −{{ discountApplied(pkg) | number }} UGX</span>
+                  <span class="text-green-600 text-xs">({{ discountNameById(pkg.discount_id) || pkg.discount_id }})</span>
+                </div>
+              }
+
               <div class="text-xs font-medium text-gray-500 mt-4 mb-2 flex items-center gap-1.5">
                 <i class="pi pi-book text-gray-400"></i> Lessons
               </div>

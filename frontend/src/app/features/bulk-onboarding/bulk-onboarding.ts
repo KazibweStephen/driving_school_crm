@@ -983,7 +983,18 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     this.clients.update(clients => {
       const updated = [...clients];
       const pkgs = [...updated[clientIndex].packages];
-      pkgs[pkgIndex] = { ...pkgs[pkgIndex], product_id: productId, package_id: '', discount_id: '' };
+      pkgs[pkgIndex] = {
+        ...pkgs[pkgIndex],
+        product_id: productId,
+        package_id: '',
+        discount_id: '',
+        plan_id: null,
+        regenerate: false,
+        regenerateStartDate: null,
+        lessons: [],
+        transmission_type: 'manual',
+        lesson_plan_template_id: null,
+      };
       updated[clientIndex] = { ...updated[clientIndex], packages: pkgs };
       return updated;
     });
@@ -994,11 +1005,30 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     this.clients.update(clients => {
       const updated = [...clients];
       const pkgs = [...updated[clientIndex].packages];
-      pkgs[pkgIndex] = { ...pkgs[pkgIndex], package_id: packageId, discount_id: '' };
+      pkgs[pkgIndex] = {
+        ...pkgs[pkgIndex],
+        package_id: packageId,
+        discount_id: '',
+        plan_id: null,
+        regenerate: false,
+        regenerateStartDate: null,
+        lessons: [],
+        transmission_type: 'manual',
+        lesson_plan_template_id: null,
+      };
       updated[clientIndex] = { ...updated[clientIndex], packages: pkgs };
       return updated;
     });
     this.loadDiscountsForPackage(this.clients()[clientIndex].packages[pkgIndex]);
+  }
+
+  discountNameById(id: string): string {
+    const map = this.discountsForProduct();
+    for (const list of Object.values(map)) {
+      const found = list.find((d: any) => d.id === id);
+      if (found) return found.name || found.code || '';
+    }
+    return '';
   }
 
   discountApplied(pkg: PackageDraft): number {

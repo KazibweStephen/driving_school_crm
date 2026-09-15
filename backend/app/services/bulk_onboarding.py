@@ -1021,15 +1021,17 @@ async def _replace_plan_sessions(
         await db.delete(old_session)
     await db.flush()
     for lesson in lessons:
-        is_theory = bool(lesson.is_theory)
-        session_date = lesson.scheduled_date or new_date
+        is_theory = getattr(lesson, "lesson_type", None) == "theory"
+        lesson_date = getattr(lesson, "date", None)
+        session_date = lesson_date or new_date
+        duration = getattr(lesson, "duration_minutes", None) or (120 if is_theory else 30)
         db.add(
             TrainingSession(
                 cart_item_id=cart_item_id,
                 session_date=datetime.combine(session_date, time.min),
-                duration_minutes=lesson.duration_minutes or (120 if is_theory else 30),
-                driving_minutes=lesson.duration_minutes if not is_theory else 0,
-                theory_minutes=lesson.duration_minutes if is_theory else 0,
+                duration_minutes=duration,
+                driving_minutes=duration if not is_theory else 0,
+                theory_minutes=duration if is_theory else 0,
                 started_at=None,
             )
         )
@@ -1088,7 +1090,22 @@ async def apply_bulk_onboarding_corrections(
 
         plan = await _plan_for_consultation(db, consultation, regen.plan_id)
         _reject_future(regen.start_date, "Plan start date")
-        lessons_data = [lesson.model_dump() for lesson in regen.lessons]
+        lessons_data = []
+        for idx, lesson in enumerate(regen.lessons):
+            lessons_data.append({
+                "day_number": idx + 1,
+                "week_number": (idx // 5) + 1,
+                "title": lesson.title or f"Lesson {idx + 1}",
+                "lesson_objectives": lesson.lesson_objectives or [],
+                "practical_objectives": lesson.practical_objectives or [],
+                "scheduled_date": lesson.date,
+                "duration_minutes": lesson.duration_minutes,
+                "instructor_id": lesson.instructor_id,
+                "vehicle_id": str(lesson.vehicle_id) if lesson.vehicle_id else None,
+                "template_item_id": str(lesson.template_item_id) if lesson.template_item_id else None,
+                "is_theory": lesson.lesson_type == "theory",
+                "status": lesson.status,
+            })
         new_date = regen.start_date or (
             plan.start_date.date() if plan.start_date else date.today()
         )

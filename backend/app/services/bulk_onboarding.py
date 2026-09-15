@@ -991,7 +991,8 @@ async def _apply_lesson_edits(
         lesson = next((l for l in plan.lessons if l.id == le.id), None)
         if lesson is None:
             raise HTTPException(status_code=400, detail="Lesson not found in plan")
-        _reject_future(le.scheduled_date, "Lesson date")
+        if le.scheduled_date is not None and le.scheduled_date > date.today() and le.status == "completed":
+            raise HTTPException(status_code=400, detail="Cannot mark a lesson as completed if its date is in the future")
         old_date = lesson.scheduled_date
         await update_client_lesson(
             db,
@@ -1074,7 +1075,6 @@ async def apply_bulk_onboarding_corrections(
 
     for plan_data in data.plans:
         plan = await _plan_for_consultation(db, consultation, plan_data.plan_id)
-        _reject_future(plan_data.start_date, "Plan start date")
         if plan_data.start_date is not None:
             plan.start_date = datetime.combine(plan_data.start_date, time.min)
         if plan_data.transmission_type is not None:
@@ -1089,9 +1089,13 @@ async def apply_bulk_onboarding_corrections(
         from app.services.lesson_plan import replace_plan_lessons
 
         plan = await _plan_for_consultation(db, consultation, regen.plan_id)
-        _reject_future(regen.start_date, "Plan start date")
         lessons_data = []
         for idx, lesson in enumerate(regen.lessons):
+            if lesson.date is not None and lesson.date > date.today() and lesson.status == "completed":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot mark a lesson as completed if its date is in the future",
+                )
             lessons_data.append({
                 "day_number": idx + 1,
                 "week_number": (idx // 5) + 1,

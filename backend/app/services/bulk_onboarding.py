@@ -662,8 +662,8 @@ async def _receipt_collision(
             Payment.consultation_id != consultation.id,
         )
     )
-    other = result.scalar_one_or_none()
-    if other is not None and other.id != exclude_payment_id:
+    others = result.scalars().all()
+    if any(o.id != exclude_payment_id for o in others):
         raise HTTPException(
             status_code=400,
             detail=f"Receipt number {receipt_number} is already used by another payment",
@@ -802,7 +802,11 @@ async def _apply_payment_edits(
                 raise HTTPException(status_code=400, detail="Payment not found for this consultation")
             if payment.cancelled_at is not None:
                 raise HTTPException(status_code=400, detail="Payment is cancelled")
-            await _receipt_collision(db, consultation, pay_data.receipt_number, exclude_payment_id=payment.id)
+            if (
+                pay_data.receipt_number is not None
+                and pay_data.receipt_number != payment.receipt_number
+            ):
+                await _receipt_collision(db, consultation, pay_data.receipt_number, exclude_payment_id=payment.id)
 
             if pay_data.document_date is not None:
                 if consultation.document_date is not None and pay_data.document_date < consultation.document_date:

@@ -390,7 +390,7 @@ async def get_payment_by_receipt(db: AsyncSession, receipt_number: str) -> Payme
     result = await db.execute(
         select(Payment).where(Payment.receipt_number == receipt_number)
     )
-    return result.scalar_one_or_none()
+    return result.scalars().first()
 
 
 async def get_payments_by_consultation(

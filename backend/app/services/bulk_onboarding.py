@@ -879,10 +879,19 @@ async def _recompute_cart_item(
     )
     all_payments = list(all_payments_result.scalars().all())
     remaining_payments = [p for p in all_payments if p.cancelled_at is None]
+    total_due = await _cart_item_due(db, cart_item, all_payments)
+
+    # Keep the schedule payment rows' total_amount in sync with the current
+    # effective due (package price minus applied discount). Independent collection
+    # payment rows are fully settled (total_amount == total_paid) and stay intact.
+    if cart_item.package_id and total_due > 0:
+        for p in remaining_payments:
+            if p.total_amount > p.total_paid:
+                p.total_amount = total_due
+
     for p in all_payments:
         await _recompute_payment_totals(p)
 
-    total_due = await _cart_item_due(db, cart_item, all_payments)
     total_paid = sum((p.total_paid for p in remaining_payments), Decimal("0"))
 
     if not remaining_payments or total_paid <= 0:

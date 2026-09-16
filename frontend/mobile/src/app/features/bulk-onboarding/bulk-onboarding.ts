@@ -410,6 +410,12 @@ export class BulkOnboarding implements OnInit {
 
   async loadData() {
     try {
+      const me = await this.catalog.getCurrentUser().toPromise();
+      if (me) this.serverCanEditOnboarded.set(!!me.can_edit_onboarded_clients);
+    } catch {
+      /* ignore */
+    }
+    try {
       const res = await this.catalog.listProducts({ status: 'active', page_size: 100 }).toPromise();
       if (res?.products) this.products.set(res.products);
     } catch {
@@ -1502,9 +1508,11 @@ export class BulkOnboarding implements OnInit {
   get canEditOnboarded(): boolean {
     return (
       this.auth.hasPermission('bulk_onboarding.edit') &&
-      this.auth.currentUserCanEditOnboardedClients()
+      (this.serverCanEditOnboarded() || this.auth.currentUserCanEditOnboardedClients())
     );
   }
+
+  serverCanEditOnboarded = signal(false);
 
   get mobileToday(): Date {
     return new Date();

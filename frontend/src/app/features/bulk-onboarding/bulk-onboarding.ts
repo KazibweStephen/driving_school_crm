@@ -323,9 +323,11 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   get canEditOnboarded(): boolean {
     return (
       this.auth.hasPermission('bulk_onboarding.edit') &&
-      this.auth.currentUserCanEditOnboardedClients()
+      (this.serverCanEditOnboarded() || this.auth.currentUserCanEditOnboardedClients())
     );
   }
+
+  serverCanEditOnboarded = signal(false);
 
   constructor(
     private consultationService: ConsultationService,
@@ -361,6 +363,9 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   }
 
   loadData() {
+    this.userService.getProfile().subscribe((u) => {
+      this.serverCanEditOnboarded.set(!!u.can_edit_onboarded_clients);
+    });
     this.productService.listProducts().subscribe((res: any) => {
       this.products.set(res.products || []);
     });

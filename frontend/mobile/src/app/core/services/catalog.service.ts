@@ -65,6 +65,7 @@ export interface User {
   role: string;
   status: string;
   branch_ids: string[];
+  can_edit_onboarded_clients?: boolean;
 }
 
 export interface UserListResponse {

@@ -433,6 +433,7 @@ async def list_payments(
     company_id: uuid.UUID | None = None,
     page: int = 1,
     page_size: int = 20,
+    sort_by: str = "created_desc",
 ) -> tuple[list[Payment], int, Decimal, Decimal, Decimal]:
     from app.models.company import Branch
     from app.models.product import Product
@@ -512,7 +513,7 @@ async def list_payments(
             selectinload(Payment.consultation),
             selectinload(Payment.created_by_user),
         )
-        .order_by(func.coalesce(Payment.document_date, Payment.created_at.cast(Date)).desc())
+        .order_by(*_payment_sort(sort_by))
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
@@ -520,6 +521,196 @@ async def list_payments(
     payments = list(result.scalars().all())
 
     return payments, total, total_amount_sum, total_paid_sum, total_balance_sum
+
+
+def _payment_sort(sort_by: str):
+    if sort_by == "client_date":
+        return (
+            Consultation.first_name.asc(),
+            Consultation.middle_name.asc(),
+            Consultation.last_name.asc(),
+            func.coalesce(Payment.document_date, Payment.created_at.cast(Date)).asc(),
+        )
+    return (func.coalesce(Payment.document_date, Payment.created_at.cast(Date)).desc(),)
+
+
+def _payment_effective_date(payment: Payment) -> date | None:
+    """Document date with created_at fallback (document-date-first semantics)."""
+    if payment.document_date is not None:
+        return payment.document_date
+    if payment.created_at is not None:
+        return payment.created_at.date()
+    return None
+
+
+async def list_payment_groups(
+    db: AsyncSession,
+    search: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
+    company_id: uuid.UUID | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list["PaymentGroup"], int, Decimal, Decimal, Decimal]:
+    """Group a client's payments per product/package for the Payments page.
+
+    The date window only decides WHICH groups appear (a group is included when
+    at least one of its payments has a document date inside the window) and the
+    sort order. Each group's ``total_paid``/``balance`` reflect the FULL payment
+    history for that product/package (all non-cancelled payments, inferred from
+    their document dates).
+    """
+    from app.models.company import Branch
+    from app.models.product import Package, Product
+    from app.schemas.payment import PaymentGroup
+
+    base_query = (
+        select(Payment)
+        .join(Consultation, Payment.consultation_id == Consultation.id)
+        .where(Payment.cancelled_at.is_(None))
+    )
+    filters: list = []
+
+    if company_id is not None:
+        base_query = base_query.join(Branch, Consultation.branch_id == Branch.id)
+        filters.append(Branch.company_id == company_id)
+
+    if search:
+        filters.append(
+            or_(
+                Consultation.first_name.ilike(f"%{search}%"),
+                Consultation.middle_name.ilike(f"%{search}%"),
+                Consultation.last_name.ilike(f"%{search}%"),
+                Consultation.phone.ilike(f"%{search}%"),
+            )
+        )
+
+    if branch_ids:
+        filters.append(
+            or_(
+                Consultation.branch_id.in_(branch_ids),
+                Payment.branch_id.in_(branch_ids),
+            )
+        )
+
+    for f in filters:
+        base_query = base_query.where(f)
+
+    result = await db.execute(
+        base_query
+        .options(selectinload(Payment.consultation))
+        .order_by(Payment.created_at.asc())
+    )
+    payments = list(result.scalars().all())
+
+    def _effective(p: Payment) -> date | None:
+        return _payment_effective_date(p)
+
+    def _in_window(d: date | None) -> bool:
+        if date_from is None and date_to is None:
+            return True
+        if d is None:
+            return False
+        if date_from is not None and d < date_from:
+            return False
+        if date_to is not None and d > date_to:
+            return False
+        return True
+
+    # Group payments by consultation + product + package
+    grouped: dict[tuple, list[Payment]] = {}
+    for p in payments:
+        key = (p.consultation_id, p.product_id, p.package_id)
+        grouped.setdefault(key, []).append(p)
+
+    # Resolve product + package names
+    product_ids = set()
+    package_ids = set()
+    for key in grouped:
+        product_ids.add(key[1])
+        if key[2]:
+            package_ids.add(key[2])
+
+    products: dict[str, str] = {}
+    if product_ids:
+        prods = await db.execute(
+            select(Product.id, Product.name).where(Product.id.in_([uuid.UUID(pid) for pid in product_ids]))
+        )
+        products = {str(pid): name for pid, name in prods.all()}
+
+    packages: dict[str, str] = {}
+    if package_ids:
+        pkgs = await db.execute(
+            select(Package.id, Package.name).where(Package.id.in_([uuid.UUID(pid) for pid in package_ids]))
+        )
+        packages = {str(pid): name for pid, name in pkgs.all()}
+
+    rows: list[PaymentGroup] = []
+    for key, pays in grouped.items():
+        # Only include the group if at least one payment falls inside the window
+        in_window = [p for p in pays if _in_window(_effective(p))]
+        if not in_window:
+            continue
+
+        consultation = pays[0].consultation
+        total_paid = sum((p.total_paid or Decimal("0") for p in pays), Decimal("0"))
+        plan_payment = pays[0]  # payments are ordered by created_at asc
+        total_amount = plan_payment.total_amount
+        balance = max(Decimal("0"), total_amount - total_paid)
+
+        effective_dates = [_effective(p) for p in pays]
+        first_doc = min((d for d in effective_dates if d is not None), default=None)
+        last_in_window = max(
+            (_effective(p) for p in in_window if _effective(p) is not None),
+            default=None,
+        )
+
+        client_name = " ".join(
+            filter(None, [consultation.first_name, consultation.middle_name, consultation.last_name])
+        ).strip() or "—"
+
+        rows.append(PaymentGroup(
+            consultation_id=consultation.id,
+            client_name=client_name,
+            client_phone=consultation.phone or "—",
+            branch_id=consultation.branch_id,
+            product_id=key[1],
+            product_name=products.get(key[1], "Product"),
+            package_id=key[2],
+            package_name=packages.get(key[2]) if key[2] else None,
+            total_amount=total_amount,
+            total_paid=total_paid,
+            balance=balance,
+            payment_count=len(pays),
+            first_document_date=first_doc,
+            last_document_date=last_in_window,
+        ))
+
+    # Resolve branch names
+    branch_ids_to_resolve = {r.branch_id for r in rows if r.branch_id is not None}
+    branch_names: dict[uuid.UUID, str] = {}
+    if branch_ids_to_resolve:
+        br = await db.execute(
+            select(Branch.id, Branch.name).where(Branch.id.in_(branch_ids_to_resolve))
+        )
+        branch_names = {bid: name for bid, name in br.all()}
+    for r in rows:
+        if r.branch_id is not None:
+            r.branch_name = branch_names.get(r.branch_id)
+
+    # Sort by most recent activity (document date) inside the window, newest first
+    rows.sort(key=lambda r: (r.last_document_date is None, r.last_document_date), reverse=True)
+
+    total = len(rows)
+    total_amount_sum = sum((r.total_amount for r in rows), Decimal("0"))
+    total_paid_sum = sum((r.total_paid for r in rows), Decimal("0"))
+    total_balance_sum = sum((r.balance for r in rows), Decimal("0"))
+
+    start = (page - 1) * page_size
+    page_rows = rows[start:start + page_size]
+
+    return page_rows, total, total_amount_sum, total_paid_sum, total_balance_sum
 
 
 async def mark_installment_paid(

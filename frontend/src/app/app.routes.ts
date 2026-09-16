@@ -82,6 +82,12 @@ export const routes: Routes = [
           import('./features/payments/payments').then((c) => c.PaymentsCmp),
       },
       {
+        path: 'transactions',
+        data: { permission: 'payments.view' },
+        loadComponent: () =>
+          import('./features/transactions/transactions').then((c) => c.TransactionsCmp),
+      },
+      {
         path: 'training-schedule',
         data: { permission: 'training.view' },
         loadComponent: () =>

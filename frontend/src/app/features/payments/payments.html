@@ -2,19 +2,17 @@
 
 <div class="p-4 sm:p-6">
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-    <h1 class="text-2xl font-bold text-gray-900">Payments</h1>
-    @if (canPrint()) {
-      <p-button label="Print Report" icon="pi pi-print" severity="info" (onClick)="printReport()" />
-    }
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Payments</h1>
+      <p class="text-sm text-gray-500">Each client's payments grouped by product package. Filters use the transaction Document Date.</p>
+    </div>
   </div>
 
   <div class="mb-4 flex flex-wrap items-center gap-2">
     <span class="p-input-icon-left w-full sm:w-auto">
       <i class="pi pi-search"></i>
-      <input pInputText [(ngModel)]="search" (keyup.enter)="applyFilters()" placeholder="Search by name, phone, or receipt..." class="w-full sm:w-72" />
+      <input pInputText [(ngModel)]="search" (keyup.enter)="applyFilters()" placeholder="Search by name or phone..." class="w-full sm:w-72" />
     </span>
-    <p-select [(ngModel)]="clientType" [options]="clientTypeOptions" optionLabel="label" optionValue="value"
-      placeholder="Client Type" styleClass="w-40" appendTo="body" />
     @if (canViewAllBranches() && branches.length) {
       <p-multiSelect [(ngModel)]="selectedBranchIds" [options]="branches" optionLabel="name" optionValue="id"
         placeholder="All Branches" styleClass="w-56" appendTo="body" [showHeader]="false"
@@ -41,7 +39,7 @@
   @if (!loading() && totals) {
     <div class="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
       <p-card>
-        <div class="text-sm text-gray-500">Total Amount</div>
+        <div class="text-sm text-gray-500">Total Amount Due</div>
         <div class="text-xl font-bold">{{ formatAmount(totals.total_amount_sum) }}</div>
       </p-card>
       <p-card>
@@ -49,72 +47,56 @@
         <div class="text-xl font-bold text-green-600">{{ formatAmount(totals.total_paid_sum) }}</div>
       </p-card>
       <p-card>
-        <div class="text-sm text-gray-500">Total Balance</div>
+        <div class="text-sm text-gray-500">Current Balance</div>
         <div class="text-xl font-bold" [class.text-red-500]="+totals.total_balance_sum > 0">{{ formatAmount(totals.total_balance_sum) }}</div>
       </p-card>
     </div>
   }
 
-  <p-table [value]="payments()" [loading]="loading()" [paginator]="true" [rows]="pageSize"
+  <p-table [value]="groups()" [loading]="loading()" [paginator]="true" [rows]="pageSize"
     [totalRecords]="total" [lazy]="true" (onPage)="onPage($event)"
-    [rowsPerPageOptions]="[10, 20, 50]" sortField="created_at" [sortOrder]="-1">
+    [rowsPerPageOptions]="[10, 20, 50]" sortField="last_document_date" [sortOrder]="-1">
     <ng-template pTemplate="header">
       <tr>
         <th pSortableColumn="client_name"><span class="flex items-center gap-0.5 whitespace-nowrap">Client <p-sortIcon field="client_name"></p-sortIcon></span></th>
-        <th pSortableColumn="product_name"><span class="flex items-center gap-0.5 whitespace-nowrap">Product <p-sortIcon field="product_name"></p-sortIcon></span></th>
+        <th pSortableColumn="product_name"><span class="flex items-center gap-0.5 whitespace-nowrap">Product Package <p-sortIcon field="product_name"></p-sortIcon></span></th>
         <th>Branch</th>
-        <th pSortableColumn="total_amount"><span class="flex items-center gap-0.5 whitespace-nowrap">Total <p-sortIcon field="total_amount"></p-sortIcon></span></th>
+        <th pSortableColumn="total_amount"><span class="flex items-center gap-0.5 whitespace-nowrap">Total Due <p-sortIcon field="total_amount"></p-sortIcon></span></th>
         <th pSortableColumn="total_paid"><span class="flex items-center gap-0.5 whitespace-nowrap">Paid <p-sortIcon field="total_paid"></p-sortIcon></span></th>
         <th pSortableColumn="balance"><span class="flex items-center gap-0.5 whitespace-nowrap">Balance <p-sortIcon field="balance"></p-sortIcon></span></th>
         <th>Status</th>
-        <th pSortableColumn="receipt_number"><span class="flex items-center gap-0.5 whitespace-nowrap">Receipt <p-sortIcon field="receipt_number"></p-sortIcon></span></th>
-        <th><span class="whitespace-nowrap">TID</span></th>
-        <th pSortableColumn="document_date"><span class="flex items-center gap-0.5 whitespace-nowrap">Txn Date <p-sortIcon field="document_date"></p-sortIcon></span></th>
-        <th style="width: 6rem">Actions</th>
+        <th pSortableColumn="payment_count"><span class="whitespace-nowrap">Payments</span></th>
+        <th pSortableColumn="last_document_date"><span class="flex items-center gap-0.5 whitespace-nowrap">Last Activity <p-sortIcon field="last_document_date"></p-sortIcon></span></th>
       </tr>
     </ng-template>
-    <ng-template pTemplate="body" let-p>
+    <ng-template pTemplate="body" let-g>
       <tr>
         <td>
-          <a [routerLink]="'/consultations/' + p.consultation_id" class="flex flex-col no-underline cursor-pointer hover:text-blue-600">
-            <span class="font-medium">{{ p.client_name }}</span>
-            <span class="text-xs text-gray-400">{{ p.client_phone }}</span>
-            @if (p.created_by_name) {
-              <span class="text-xs text-gray-500">Received by {{ p.created_by_name }}</span>
-            }
+          <a [routerLink]="'/consultations/' + g.consultation_id" class="flex flex-col no-underline cursor-pointer hover:text-blue-600">
+            <span class="font-medium">{{ g.client_name }}</span>
+            <span class="text-xs text-gray-400">{{ g.client_phone }}</span>
           </a>
         </td>
-        <td class="text-sm">{{ p.product_name }}</td>
-        <td class="text-sm text-gray-500 whitespace-nowrap">{{ p.branch_name || '—' }}</td>
-        <td class="font-medium whitespace-nowrap">{{ formatAmount(p.total_amount) }}</td>
-        <td class="font-medium whitespace-nowrap text-green-600">{{ formatAmount(p.total_paid) }}</td>
-        <td class="font-medium whitespace-nowrap" [class.text-red-500]="hasBalance(p)">{{ formatAmount(p.balance) }}</td>
-        <td><p-tag [value]="statusLabel(p)" [severity]="statusSeverity(p)" /></td>
-        <td class="text-sm">{{ p.receipt_number || p.system_receipt_number }}</td>
-        <td class="font-mono text-sm">{{ p.transaction_id }}</td>
-        <td class="text-sm text-gray-500">
+        <td class="text-sm">
           <div class="flex flex-col">
-            <span>{{ formatDate(p.document_date || p.created_at) }}</span>
-            @if (p.document_date && p.document_date !== p.created_at.split('T')[0]) {
-              <span class="text-xs text-gray-400">Created {{ formatDate(p.created_at) }}</span>
+            <span class="font-medium">{{ packageLabel(g) }}</span>
+            @if (g.package_name && g.product_name !== g.package_name) {
+              <span class="text-xs text-gray-400">{{ g.product_name }}</span>
             }
           </div>
         </td>
-        <td>
-          <div class="flex items-center gap-1">
-            <p-button icon="pi pi-receipt" rounded="true" text="true" severity="info"
-              pTooltip="View Receipt" (onClick)="openReceipt(p)" />
-            @if (canCancel()) {
-              <p-button icon="pi pi-times" rounded="true" text="true" severity="danger"
-                pTooltip="Cancel Payment" (onClick)="cancelPayment(p)" />
-            }
-          </div>
-        </td>
+        <td class="text-sm text-gray-500 whitespace-nowrap">{{ g.branch_name || '—' }}</td>
+        <td class="font-medium whitespace-nowrap">{{ formatAmount(g.total_amount) }}</td>
+        <td class="font-medium whitespace-nowrap text-green-600">{{ formatAmount(g.total_paid) }}</td>
+        <td class="font-medium whitespace-nowrap" [class.text-red-500]="hasBalance(g)">{{ formatAmount(g.balance) }}</td>
+        <td><p-tag [value]="statusLabel(g)" [severity]="statusSeverity(g)" /></td>
+        <td class="text-sm">{{ g.payment_count }}</td>
+        <td class="text-sm text-gray-500 whitespace-nowrap">{{ formatDate(g.last_document_date) }}</td>
       </tr>
     </ng-template>
     <ng-template pTemplate="emptymessage">
       <tr>
-        <td colspan="10" class="text-center text-gray-500 py-4">No payments found</td>
+        <td colspan="9" class="text-center text-gray-500 py-4">No payments found for the selected filters</td>
       </tr>
     </ng-template>
   </p-table>

@@ -14,41 +14,56 @@ import { TooltipModule } from 'primeng/tooltip';
 import { CardModule } from 'primeng/card';
 import { MessageService } from 'primeng/api';
 import { AuthService } from '../../core/auth/auth.service';
-import { PaymentService, PaymentGroup, PaymentGroupTotals, BranchInfo } from '../../core/services/payment.service';
+import { PaymentService, PaymentWithClient, PaymentTotals, BranchInfo } from '../../core/services/payment.service';
 
 interface Preset {
   label: string;
   key: string;
 }
 
+interface ClientTypeOption {
+  label: string;
+  value: string;
+}
+
 @Component({
-  selector: 'app-payments',
+  selector: 'app-transactions',
   imports: [
     CommonModule, FormsModule, RouterLink, ButtonModule, TableModule,
     TagModule, ToastModule, InputTextModule, SelectModule, MultiSelectModule,
     DatePickerModule, TooltipModule, CardModule,
   ],
   providers: [MessageService],
-  templateUrl: './payments.html',
-  styleUrls: ['./payments.css'],
+  templateUrl: './transactions.html',
+  styleUrls: ['./transactions.css'],
 })
-export class PaymentsCmp implements OnInit {
-  groups = signal<PaymentGroup[]>([]);
+export class TransactionsCmp implements OnInit {
+  payments = signal<PaymentWithClient[]>([]);
   loading = signal(false);
   total = 0;
   page = 1;
   pageSize = 20;
   search = '';
   dateRangeValue: Date[] = [];
+  clientType = 'all';
   activePreset = 'this_week';
-  totals: PaymentGroupTotals = { total_amount_sum: '0', total_paid_sum: '0', total_balance_sum: '0' };
+  totals: PaymentTotals = { total_amount_sum: '0', total_paid_sum: '0', total_balance_sum: '0' };
 
   branches: BranchInfo[] = [];
   selectedBranchIds: string[] = [];
 
+  canPrint = computed(() => {
+    return this.authService.hasPermission('reports.view');
+  });
+
   canViewAllBranches = computed(() => {
     const role = this.authService.currentUserRole();
     return role === 'super_user' || role === 'office_admin' || role === 'manager' || role === 'branch_supervisor';
+  });
+
+  canCancel = computed(() => {
+    const role = this.authService.currentUserRole();
+    return role === 'super_user' || role === 'company_super_user';
   });
 
   presets: Preset[] = [
@@ -57,6 +72,12 @@ export class PaymentsCmp implements OnInit {
     { label: 'This Month', key: 'this_month' },
     { label: 'Last Month', key: 'last_month' },
     { label: 'This Year', key: 'this_year' },
+  ];
+
+  clientTypeOptions: ClientTypeOption[] = [
+    { label: 'All', value: 'all' },
+    { label: 'New Clients', value: 'new' },
+    { label: 'Collections', value: 'collection' },
   ];
 
   constructor(
@@ -74,7 +95,7 @@ export class PaymentsCmp implements OnInit {
       this.selectedBranchIds = [];
     }
     this.setPreset('this_week');
-    this.loadGroups();
+    this.loadPayments();
   }
 
   setPreset(key: string) {
@@ -129,7 +150,7 @@ export class PaymentsCmp implements OnInit {
 
   applyFilters() {
     this.page = 1;
-    this.loadGroups();
+    this.loadPayments();
   }
 
   clearFilters() {
@@ -144,33 +165,36 @@ export class PaymentsCmp implements OnInit {
     const sun = new Date(mon);
     sun.setDate(mon.getDate() + 6);
     this.dateRangeValue = [mon, sun];
+    this.clientType = 'all';
     this.selectedBranchIds = this.branches.map(b => b.id);
     this.page = 1;
-    this.loadGroups();
+    this.loadPayments();
   }
 
-  async loadGroups() {
+  async loadPayments() {
     this.loading.set(true);
     try {
       const dr = this.getDateRange();
       const branch_ids = this.selectedBranchIds.length
         ? this.selectedBranchIds.join(',')
         : undefined;
-      const res = await this.paymentService.listPaymentGroups({
+      const res = await this.paymentService.listAllPayments({
         search: this.search || undefined,
         date_from: dr.date_from,
         date_to: dr.date_to,
+        client_type: this.clientType || undefined,
         branch_ids,
+        sort: 'client_date',
         page: this.page,
         page_size: this.pageSize,
       }).toPromise();
       if (res) {
-        this.groups.set(res.groups);
+        this.payments.set(res.payments);
         this.total = res.total;
         this.totals = res.totals;
       }
     } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load payments' });
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load transactions' });
     } finally {
       this.loading.set(false);
     }
@@ -179,15 +203,37 @@ export class PaymentsCmp implements OnInit {
   onPage(event: any) {
     this.page = (event.first / event.rows) + 1;
     this.pageSize = event.rows;
-    this.loadGroups();
+    this.loadPayments();
   }
 
   onSearch() {
     this.applyFilters();
   }
 
-  packageLabel(g: PaymentGroup): string {
-    return g.package_name || g.product_name;
+  async printReport() {
+    const dr = this.getDateRange();
+    const params = new URLSearchParams();
+    if (dr.date_from) params.set('date_from', dr.date_from);
+    if (dr.date_to) params.set('date_to', dr.date_to);
+    if (this.clientType && this.clientType !== 'all') params.set('client_type', this.clientType);
+    if (this.search) params.set('search', this.search);
+    const branch_ids = this.selectedBranchIds.length
+      ? this.selectedBranchIds.join(',')
+      : undefined;
+    if (branch_ids) params.set('branch_ids', branch_ids);
+    const url = `/api/v1/payments/report?${params.toString()}`;
+    const token = this.authService.getToken();
+    try {
+      const html = await fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.text());
+      const win = window.open('', '_blank');
+      if (win) {
+        win.document.write(html);
+        win.document.close();
+        win.setTimeout(() => win.print(), 500);
+      }
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to generate report' });
+    }
   }
 
   formatAmount(val: string): string {
@@ -195,28 +241,56 @@ export class PaymentsCmp implements OnInit {
     return Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   }
 
-  formatDate(d: string | null): string {
+  formatDate(d: string): string {
     if (!d) return '—';
-    const parsed = new Date(d);
-    if (isNaN(parsed.getTime())) return '—';
-    return parsed.toLocaleDateString();
+    return new Date(d).toLocaleDateString();
   }
 
-  statusSeverity(g: PaymentGroup): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' | null | undefined {
-    const bal = parseFloat(g.balance);
+  formatDateTime(d: string): string {
+    if (!d) return '—';
+    return new Date(d).toLocaleString();
+  }
+
+  statusSeverity(p: PaymentWithClient): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' | null | undefined {
+    const bal = parseFloat(p.balance);
     if (bal <= 0) return 'success';
-    if (bal >= parseFloat(g.total_amount)) return 'danger';
+    if (bal >= parseFloat(p.total_amount)) return 'danger';
     return 'warn';
   }
 
-  statusLabel(g: PaymentGroup): string {
-    const bal = parseFloat(g.balance);
+  statusLabel(p: PaymentWithClient): string {
+    const bal = parseFloat(p.balance);
     if (bal <= 0) return 'Paid';
-    if (bal >= parseFloat(g.total_amount)) return 'Unpaid';
+    if (bal >= parseFloat(p.total_amount)) return 'Unpaid';
     return 'Partial';
   }
 
-  hasBalance(g: PaymentGroup): boolean {
-    return parseFloat(g.balance) > 0;
+  hasBalance(p: PaymentWithClient): boolean {
+    return parseFloat(p.balance) > 0;
+  }
+
+  openReceipt(p: PaymentWithClient) {
+    this.paymentService.getReceipt(p.id).subscribe({
+      next: (html) => {
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+        }
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load receipt' }),
+    });
+  }
+
+  async cancelPayment(p: PaymentWithClient) {
+    const reason = window.prompt('Enter cancellation reason (optional):');
+    if (reason === null) return;
+    try {
+      await this.paymentService.cancelPayment(p.id, reason || undefined).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Cancelled', detail: 'Payment cancelled successfully' });
+      this.loadPayments();
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to cancel payment' });
+    }
   }
 }

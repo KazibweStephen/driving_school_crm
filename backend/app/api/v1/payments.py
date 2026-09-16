@@ -13,7 +13,14 @@ from app.models.company import Branch, Company, UserBranchAssignment
 from app.models.product import Product
 from app.models.user import User, UserRole
 from app.schemas.company import BranchRead
-from app.schemas.payment import PaymentListResponse, PaymentRead, PaymentTotals, PaymentWithClient
+from app.schemas.payment import (
+    PaymentGroupListResponse,
+    PaymentGroupTotals,
+    PaymentListResponse,
+    PaymentRead,
+    PaymentTotals,
+    PaymentWithClient,
+)
 from app.services import payment as payment_service
 
 router = APIRouter(tags=["payments"])
@@ -87,6 +94,42 @@ async def accessible_branches(
     return [BranchRead.model_validate(b) for b in branches]
 
 
+@router.get("/api/v1/payments/grouped/")
+async def list_payment_groups(
+    search: str | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("payments.view")),
+) -> PaymentGroupListResponse:
+    """Payments grouped per client per product/package.
+
+    The date window only selects which groups appear (a group shows when at
+    least one of its payments falls inside the window) and their sort order.
+    Each group's totals are computed from the group's FULL payment history.
+    """
+    resolved = await _resolve_branch_ids(db, current_user, branch_ids.split(",") if branch_ids else None)
+    groups, total, amount_sum, paid_sum, balance_sum = await payment_service.list_payment_groups(
+        db, search=search, date_from=date_from, date_to=date_to,
+        branch_ids=resolved, company_id=current_user.company_id, page=page, page_size=page_size,
+    )
+    return PaymentGroupListResponse(
+        groups=groups,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=(total + page_size - 1) // page_size,
+        totals=PaymentGroupTotals(
+            total_amount_sum=amount_sum,
+            total_paid_sum=paid_sum,
+            total_balance_sum=balance_sum,
+        ),
+    )
+
+
 @router.get("/api/v1/payments/")
 async def list_payments(
     search: str | None = Query(None),
@@ -94,6 +137,7 @@ async def list_payments(
     date_to: date | None = Query(None),
     client_type: str | None = Query("all", pattern="^(all|new|collection)$"),
     branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
+    sort: str | None = Query(None, pattern="^(created_desc|client_date)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -102,7 +146,8 @@ async def list_payments(
     resolved = await _resolve_branch_ids(db, current_user, branch_ids.split(",") if branch_ids else None)
     payments, total, total_amount_sum, total_paid_sum, total_balance_sum = await payment_service.list_payments(
         db, search=search, date_from=date_from, date_to=date_to,
-        client_type=client_type, branch_ids=resolved, company_id=current_user.company_id, page=page, page_size=page_size,
+        client_type=client_type, branch_ids=resolved, company_id=current_user.company_id,
+        page=page, page_size=page_size, sort_by=sort or "created_desc",
     )
 
     # Resolve product names and client info

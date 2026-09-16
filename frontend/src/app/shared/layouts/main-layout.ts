@@ -93,6 +93,7 @@ export class MainLayout implements OnInit, OnDestroy {
         { path: '/expenses', label: 'Expenses', icon: 'pi pi-minus-circle', permission: 'expenses.view' },
         { path: '/expense-categories', label: 'Expense Categories', icon: 'pi pi-tags', permission: 'expenses.manage' },
         { path: '/payments', label: 'Payments', icon: 'pi pi-credit-card', permission: 'payments.view' },
+        { path: '/transactions', label: 'Transactions', icon: 'pi pi-history', permission: 'payments.view' },
         { path: '/collections-sheet', label: 'Collections Sheet', icon: 'pi pi-file-invoice', permission: 'collections.view' },
       ],
     },

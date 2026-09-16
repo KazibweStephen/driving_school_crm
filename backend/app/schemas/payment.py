@@ -158,6 +158,49 @@ class PaymentTotals(BaseModel):
     total_balance_sum: Decimal = Decimal("0.00")
 
 
+class PaymentGroup(BaseModel):
+    """A client's transactions grouped per product/package (Payments page view).
+
+    ``total_amount`` is the package total due (the original plan row's amount),
+    ``total_paid`` the sum of every non-cancelled payment for the group (full
+    history) and ``balance`` the difference. ``last_document_date`` is the most
+    recent transaction document date inside the applied date window (used for
+    sorting), ``first_document_date`` the earliest document date overall.
+    """
+    consultation_id: uuid.UUID
+    client_name: str = ""
+    client_phone: str = ""
+    branch_id: uuid.UUID | None = None
+    branch_name: str | None = None
+    product_id: str
+    product_name: str = ""
+    package_id: str | None = None
+    package_name: str | None = None
+    total_amount: Decimal = Decimal("0.00")
+    total_paid: Decimal = Decimal("0.00")
+    balance: Decimal = Decimal("0.00")
+    payment_count: int = 0
+    first_document_date: date | None = None
+    last_document_date: date | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class PaymentGroupTotals(BaseModel):
+    total_amount_sum: Decimal = Decimal("0.00")
+    total_paid_sum: Decimal = Decimal("0.00")
+    total_balance_sum: Decimal = Decimal("0.00")
+
+
+class PaymentGroupListResponse(BaseModel):
+    groups: list[PaymentGroup]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    totals: PaymentGroupTotals = PaymentGroupTotals()
+
+
 class PaymentListResponse(BaseModel):
     payments: list[PaymentWithClient]
     total: int

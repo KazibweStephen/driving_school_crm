@@ -125,6 +125,39 @@ export interface PaymentTotals {
   total_balance_sum: string;
 }
 
+export interface PaymentGroup {
+  consultation_id: string;
+  client_name: string;
+  client_phone: string;
+  branch_id: string | null;
+  branch_name: string | null;
+  product_id: string;
+  product_name: string;
+  package_id: string | null;
+  package_name: string | null;
+  total_amount: string;
+  total_paid: string;
+  balance: string;
+  payment_count: number;
+  first_document_date: string | null;
+  last_document_date: string | null;
+}
+
+export interface PaymentGroupTotals {
+  total_amount_sum: string;
+  total_paid_sum: string;
+  total_balance_sum: string;
+}
+
+export interface PaymentGroupListResponse {
+  groups: PaymentGroup[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  totals: PaymentGroupTotals;
+}
+
 export interface PaymentListResponse {
   payments: PaymentWithClient[];
   total: number;
@@ -199,7 +232,7 @@ export class PaymentService {
     return this.http.get(url, { responseType: 'text' });
   }
 
-  listAllPayments(params?: { search?: string; date_from?: string; date_to?: string; client_type?: string; branch_ids?: string; page?: number; page_size?: number }) {
+  listAllPayments(params?: { search?: string; date_from?: string; date_to?: string; client_type?: string; branch_ids?: string; sort?: string; page?: number; page_size?: number }) {
     let hp = new HttpParams();
     if (params) {
       if (params.search) hp = hp.set('search', params.search);
@@ -207,10 +240,24 @@ export class PaymentService {
       if (params.date_to) hp = hp.set('date_to', params.date_to);
       if (params.client_type && params.client_type !== 'all') hp = hp.set('client_type', params.client_type);
       if (params.branch_ids) hp = hp.set('branch_ids', params.branch_ids);
+      if (params.sort) hp = hp.set('sort', params.sort);
       if (params.page) hp = hp.set('page', params.page);
       if (params.page_size) hp = hp.set('page_size', params.page_size);
     }
     return this.http.get<PaymentListResponse>('/api/v1/payments/', { params: hp });
+  }
+
+  listPaymentGroups(params?: { search?: string; date_from?: string; date_to?: string; branch_ids?: string; page?: number; page_size?: number }) {
+    let hp = new HttpParams();
+    if (params) {
+      if (params.search) hp = hp.set('search', params.search);
+      if (params.date_from) hp = hp.set('date_from', params.date_from);
+      if (params.date_to) hp = hp.set('date_to', params.date_to);
+      if (params.branch_ids) hp = hp.set('branch_ids', params.branch_ids);
+      if (params.page) hp = hp.set('page', params.page);
+      if (params.page_size) hp = hp.set('page_size', params.page_size);
+    }
+    return this.http.get<PaymentGroupListResponse>('/api/v1/payments/grouped/', { params: hp });
   }
 
   getAccessibleBranches() {

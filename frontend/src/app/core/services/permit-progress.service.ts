@@ -14,9 +14,12 @@ export interface PermitProgress {
   permit_paid: boolean;
   permit_received_date: string | null;
   tested_on_date: string | null;
+  test_date: string | null;
   expecting_permit_on_date: string | null;
   delayed_days: number | null;
   notes: string | null;
+  eligibility_overridden: boolean;
+  eligibility_override_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +35,7 @@ export interface PermitProgressUpdate {
   permit_paid?: boolean;
   permit_received_date?: string | null;
   tested_on_date?: string | null;
+  test_date?: string | null;
   expecting_permit_on_date?: string | null;
   delayed_days?: number | null;
   notes?: string | null;
@@ -62,6 +66,7 @@ export interface PermitTracker {
   permit_paid: boolean;
   permit_received_date: string | null;
   tested_on_date: string | null;
+  test_date: string | null;
   expecting_permit_on_date: string | null;
   delayed_days: number | null;
   notes: string | null;
@@ -69,6 +74,22 @@ export interface PermitTracker {
   days_to_maturity: number | null;
   days_to_expiry: number | null;
   days_since_test: number | null;
+  eligibility_overridden: boolean;
+  eligibility_override_reason: string | null;
+  learner_expense_paid: boolean;
+  testing_expense_paid: boolean;
+  permit_expense_paid: boolean;
+}
+
+export interface PermitAuditLog {
+  id: string;
+  field_changed: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_by: string | null;
+  changed_by_name: string | null;
+  reason: string | null;
+  created_at: string;
 }
 
 export interface PermitTrackerListResponse {
@@ -113,5 +134,16 @@ export class PermitProgressService {
     const formData = new FormData();
     formData.append('file', file, file.name);
     return this.http.post<PermitProgress>(`/api/v1/permits/${cartItemId}/photo`, formData);
+  }
+
+  overrideEligibility(cartItemId: string, eligible: boolean, reason: string) {
+    return this.http.post<PermitProgress>(
+      `/api/v1/cart-items/${cartItemId}/permit-progress/override-eligibility`,
+      { eligible, reason }
+    );
+  }
+
+  getAuditLogs(cartItemId: string) {
+    return this.http.get<PermitAuditLog[]>(`/api/v1/cart-items/${cartItemId}/permit-progress/audit`);
   }
 }

@@ -104,8 +104,12 @@
           {{ t.days_to_expiry !== null ? t.days_to_expiry + 'd' : '—' }}
         </td>
         <td>
-          <p-button icon="pi pi-eye" rounded="true" text="true" severity="info"
-            pTooltip="View Consultation" (onClick)="viewTracker(t)" />
+          <div class="flex items-center gap-1">
+            <p-button icon="pi pi-sliders-h" rounded="true" text="true" severity="warn"
+              pTooltip="Manage Permit Stages" (onClick)="manageStages(t)" />
+            <p-button icon="pi pi-eye" rounded="true" text="true" severity="info"
+              pTooltip="View Consultation" (onClick)="viewTracker(t)" />
+          </div>
         </td>
       </tr>
     </ng-template>
@@ -123,3 +127,5 @@
     </div>
   }
 </div>
+
+<app-permit-stages-dialog #stagesDialog (changed)="onStagesChanged()"></app-permit-stages-dialog>

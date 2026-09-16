@@ -12,6 +12,8 @@ from app.schemas.permit import (
     PermitTrackerListResponse,
     PermitTrackerRead,
     PermitProgressUpdate,
+    EligibilityOverrideCreate,
+    PermitAuditLogRead,
 )
 from app.services import permit as permit_service
 from app.services.permit import categorize_permit_expense, apply_permit_expense_effects
@@ -60,12 +62,49 @@ async def update_permit_progress(
         permit_paid=data.permit_paid,
         permit_received_date=data.permit_received_date,
         tested_on_date=data.tested_on_date,
+        test_date=data.test_date,
         expecting_permit_on_date=data.expecting_permit_on_date,
         delayed_days=data.delayed_days,
         notes=data.notes,
         company_id=current_user.company_id, current_user_role=current_user.role,
+        changed_by=current_user.phone,
+        changed_by_name=(current_user.first_name or "") + " " + (current_user.last_name or ""),
     )
     return PermitProgressRead.model_validate(progress)
+
+
+@router.post("/{cart_item_id}/permit-progress/override-eligibility", response_model=PermitProgressRead)
+async def override_eligibility(
+    cart_item_id: str,
+    data: EligibilityOverrideCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("training.edit")),
+):
+    try:
+        cid = uuid.UUID(cart_item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid cart item ID")
+    progress = await permit_service.override_eligibility(
+        db, cid, data.eligible, data.reason,
+        current_user, company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+    return PermitProgressRead.model_validate(progress)
+
+
+@router.get("/{cart_item_id}/permit-progress/audit", response_model=list[PermitAuditLogRead])
+async def get_audit_logs(
+    cart_item_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("training.view")),
+):
+    try:
+        cid = uuid.UUID(cart_item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid cart item ID")
+    logs = await permit_service.list_audit_logs(
+        db, cid, company_id=current_user.company_id, user_role=current_user.role
+    )
+    return [PermitAuditLogRead.model_validate(l) for l in logs]
 
 
 # ── Permit-tracker list endpoint ────────────────────────────────────

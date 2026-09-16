@@ -1,4 +1,4 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -14,6 +14,7 @@ import { PaginatorModule } from 'primeng/paginator';
 import { MessageService } from 'primeng/api';
 import { PermitProgressService, PermitTracker } from '../../core/services/permit-progress.service';
 import { PaymentService, BranchInfo } from '../../core/services/payment.service';
+import { PermitStagesDialog } from './permit-stages-dialog';
 
 interface StatusOption {
   label: string;
@@ -25,12 +26,13 @@ interface StatusOption {
   imports: [
     CommonModule, FormsModule, RouterLink, ButtonModule, TableModule,
     TagModule, ToastModule, InputTextModule, SelectModule, MultiSelectModule,
-    TooltipModule, PaginatorModule,
+    TooltipModule, PaginatorModule, PermitStagesDialog,
   ],
   providers: [MessageService],
   templateUrl: './permits.html',
 })
 export class PermitsCmp implements OnInit {
+  stagesDialog = viewChild(PermitStagesDialog);
   trackers = signal<PermitTracker[]>([]);
   loading = signal(false);
   total = 0;
@@ -141,6 +143,14 @@ export class PermitsCmp implements OnInit {
 
   viewTracker(t: PermitTracker) {
     this.router.navigate(['/consultations', t.consultation_id]);
+  }
+
+  manageStages(t: PermitTracker) {
+    this.stagesDialog()?.open(t);
+  }
+
+  onStagesChanged() {
+    this.loadTrackers();
   }
 
   formatAmount(val: number): string {

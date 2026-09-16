@@ -761,7 +761,8 @@
                 </span>
               }
             </div>
-            <div class="mt-3">
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <p-button label="Manage Stages" icon="pi pi-sliders-h" size="small" severity="warn" (onClick)="managePermitStages(ci.id)" />
               <p-button label="Save Permit Progress" icon="pi pi-check" size="small" (onClick)="savePermitProgress(ci.id)" [loading]="loading()" />
             </div>
           </div>
@@ -1578,7 +1579,8 @@
                       <textarea [(ngModel)]="pp!.notes" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" rows="2" placeholder="Optional notes..."></textarea>
                     </div>
                   </div>
-                  <div class="mt-3">
+                  <div class="mt-3 flex flex-wrap items-center gap-2">
+                    <p-button label="Manage Stages" icon="pi pi-sliders-h" size="small" severity="warn" (onClick)="managePermitStages(ci.id)" />
                     <p-button label="Save Permit Progress" icon="pi pi-check" size="small" (onClick)="savePermitProgress(ci.id)" [loading]="loading()" />
                   </div>
                 </div>
@@ -3345,3 +3347,5 @@
     </div>
   }
 </div>
+
+<app-permit-stages-dialog #permitStagesDialog (changed)="loadPermitProgress()"></app-permit-stages-dialog>

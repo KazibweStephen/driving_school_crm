@@ -1,5 +1,5 @@
 import { DecimalPipe, CurrencyPipe, DatePipe } from '@angular/common';
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, OnInit, signal, computed, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
@@ -25,7 +25,8 @@ import { PaymentService, PaymentRead } from '../../core/services/payment.service
 import { AuthService } from '../../core/auth/auth.service';
 import { CurrencyService } from '../../core/services/currency.service';
 import { TrainingService, TrainingSession, TrainingSummary, Skill, SkillCreate } from '../../core/services/training.service';
-import { PermitProgressService, PermitProgress } from '../../core/services/permit-progress.service';
+import { PermitProgressService, PermitProgress, PermitTracker } from '../../core/services/permit-progress.service';
+import { PermitStagesDialog } from '../permits/permit-stages-dialog';
 import { OrderListModule } from 'primeng/orderlist';
 import { LessonPlanService, LessonPlanTemplate, ClientLessonPlan, ClientLesson, ClientLessonUpdate } from '../../core/services/lesson-plan.service';
 import { LessonLibraryService } from '../../core/services/lesson-library.service';
@@ -63,6 +64,7 @@ import { LessonQuickGenDialog } from '../../shared/components/lesson-quick-gen-d
     ProgressBarModule,
     OrderListModule,
     LessonQuickGenDialog,
+    PermitStagesDialog,
   ],
   providers: [MessageService, ConfirmationService],
   templateUrl: './client-profile.html',
@@ -71,6 +73,7 @@ export class ClientProfile implements OnInit {
   Math = Math;
   consultation = signal<Consultation | null>(null);
   loading = signal(false);
+  permitStagesDialog = viewChild(PermitStagesDialog);
 
   products = signal<Product[]>([]);
 
@@ -777,6 +780,36 @@ export class ClientProfile implements OnInit {
 
   permitForCartItem(cartItemId: string): PermitProgress | undefined {
     return this.permitProgress().get(cartItemId);
+  }
+
+  managePermitStages(cartItemId: string) {
+    const ci = this.trainableCartItems().find((i) => i.id === cartItemId);
+    if (!ci) return;
+    const tracker: PermitTracker = {
+      cart_item_id: ci.id,
+      consultation_id: this.consultation()?.id ?? '',
+      client_name: this.fullName(this.consultation() ?? ({} as any)),
+      client_phone: this.consultation()?.phone ?? '',
+      branch_id: this.consultation()?.branch_id ?? null,
+      branch_name: '',
+      product_id: ci.product_id ?? '',
+      product_name: this.productName(ci),
+      package_id: ci.package_id ?? null,
+      package_name: this.packageName(ci),
+      total_amount: this.cartItemDiscountedTotal(ci),
+      total_paid: this.cartItemPaid(ci),
+      balance: Math.max(0, this.cartItemDiscountedTotal(ci) - this.cartItemPaid(ci)),
+      paid_ratio: this.cartItemDiscountedTotal(ci) > 0 ? this.cartItemPaid(ci) / this.cartItemDiscountedTotal(ci) : 0,
+      start_date: null, got_learners_permit_date: null, learners_due_date: null,
+      learners_expiry_date: null, learners_permit_photo_url: null,
+      test_ready: false, waiting_for_permit: false, permit_paid: false,
+      permit_received_date: null, tested_on_date: null, test_date: null,
+      expecting_permit_on_date: null, delayed_days: null, notes: null,
+      status: '', days_to_maturity: null, days_to_expiry: null, days_since_test: null,
+      eligibility_overridden: false, eligibility_override_reason: null,
+      learner_expense_paid: false, testing_expense_paid: false, permit_expense_paid: false,
+    };
+    this.permitStagesDialog()?.open(tracker);
   }
 
   async savePermitProgress(cartItemId: string) {

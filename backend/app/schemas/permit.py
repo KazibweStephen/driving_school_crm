@@ -15,6 +15,7 @@ class PermitProgressUpdate(BaseModel):
     permit_paid: bool | None = None
     permit_received_date: date | None = None
     tested_on_date: date | None = None
+    test_date: date | None = None
     expecting_permit_on_date: date | None = None
     delayed_days: int | None = None
     notes: str | None = None
@@ -33,11 +34,32 @@ class PermitProgressRead(BaseModel):
     permit_paid: bool
     permit_received_date: date | None
     tested_on_date: date | None
+    test_date: date | None
     expecting_permit_on_date: date | None
     delayed_days: int | None
     notes: str | None
+    eligibility_overridden: bool
+    eligibility_override_reason: str | None
     created_at: datetime
     updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EligibilityOverrideCreate(BaseModel):
+    eligible: bool
+    reason: str
+
+
+class PermitAuditLogRead(BaseModel):
+    id: uuid.UUID
+    field_changed: str
+    old_value: str | None
+    new_value: str | None
+    changed_by: str | None
+    changed_by_name: str | None
+    reason: str | None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -71,20 +93,28 @@ class PermitTrackerRead(BaseModel):
     expecting_permit_on_date: date | None
     delayed_days: int | None
     notes: str | None
+    eligibility_overridden: bool
+    eligibility_override_reason: str | None
+    test_date: date | None
+    learner_expense_paid: bool = False
+    testing_expense_paid: bool = False
+    permit_expense_paid: bool = False
 
     @computed_field
     @property
     def status(self) -> str:
-        if not self.got_learners_permit_date:
-            return "eligible" if self.paid_ratio >= 0.5 else "not_qualified"
         if self.permit_received_date:
             return "permit_received"
         if self.permit_paid:
             return "permit_paid"
-        if self.tested_on_date:
+        if self.tested_on_date or self.waiting_for_permit:
             return "waiting_for_permit"
         if self.test_ready:
             return "test_ready"
+        if not self.got_learners_permit_date:
+            if self.eligibility_overridden:
+                return "eligible"
+            return "eligible" if self.paid_ratio >= 0.5 else "not_qualified"
         if self.learners_due_date and self.learners_due_date <= date.today():
             return "due_for_testing"
         return "learners_active"

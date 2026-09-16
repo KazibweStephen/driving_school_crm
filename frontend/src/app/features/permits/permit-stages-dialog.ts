@@ -1,0 +1,226 @@
+import { Component, EventEmitter, Output, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ButtonModule } from 'primeng/button';
+import { DialogModule } from 'primeng/dialog';
+import { InputTextModule } from 'primeng/inputtext';
+import { DatePickerModule } from 'primeng/datepicker';
+import { SelectModule } from 'primeng/select';
+import { TagModule } from 'primeng/tag';
+import { MessageService } from 'primeng/api';
+import { ToastModule } from 'primeng/toast';
+import { PermitAuditLog, PermitProgress, PermitProgressService, PermitTracker } from '../../core/services/permit-progress.service';
+
+interface StageDef {
+  key: string;
+  label: string;
+  desc: string;
+}
+
+@Component({
+  selector: 'app-permit-stages-dialog',
+  imports: [
+    CommonModule, FormsModule, ButtonModule, DialogModule, InputTextModule,
+    DatePickerModule, SelectModule, TagModule, ToastModule,
+  ],
+  templateUrl: './permit-stages-dialog.html',
+})
+export class PermitStagesDialog {
+
+  @Output() changed = new EventEmitter<void>();
+
+  visible = signal(false);
+  tracker: PermitTracker | null = null;
+  progress: PermitProgress | null = null;
+  auditLogs = signal<PermitAuditLog[]>([]);
+  saving = signal(false);
+
+  // Eligibility override
+  overrideEligible = true;
+  overrideReason = '';
+
+  // Booked test date + actual test date
+  newTestDate: Date | null = null;
+  testedOnDate: Date | null = null;
+  gotLearnersDate: Date | null = null;
+  learnersDueDate: Date | null = null;
+  learnersExpiryDate: Date | null = null;
+  permitReceivedDate: Date | null = null;
+
+  stages: StageDef[] = [
+    { key: 'not_qualified', label: 'Not Qualified', desc: 'Client has not yet qualified. A Learner\'s Permit application requires at least 50% of the package paid.' },
+    { key: 'eligible', label: 'Eligible', desc: 'Client qualifies for a Learner\'s Permit. Record the Learner Permit Payment expense, then enter the issue date.' },
+    { key: 'learners_active', label: 'Learners Active', desc: 'Learner\'s Permit issued. The permit must mature (30 days) before testing can happen.' },
+    { key: 'due_for_testing', label: 'Due For Testing', desc: 'The Learner\'s Permit has matured. Pay testing expenses (Test Booking, Police Booking, IOV Fees) to become test-ready.' },
+    { key: 'test_ready', label: 'Testing Booked', desc: 'Testing expenses are paid. Book a testing date and reserve IOV fees, then record the scheduled test date.' },
+    { key: 'waiting_for_permit', label: 'Waiting For Permit', desc: 'The test has been completed. Confirm the tested-on date, then pay the Permit Payment expense.' },
+    { key: 'permit_paid', label: 'Permit Paid', desc: 'The permit payment has been made. Record the expected receipt date and mark the permit received when it arrives.' },
+    { key: 'permit_received', label: 'Permit Received', desc: 'The permit has been received. This completes the tracking workflow.' },
+  ];
+
+  constructor(
+    private permitService: PermitProgressService,
+    private messageService: MessageService,
+  ) {}
+
+  get today(): Date {
+    return new Date();
+  }
+
+  get status(): string {
+    return this.tracker?.status ?? 'not_qualified';
+  }
+
+  get stageIndex(): number {
+    return this.stages.findIndex(s => s.key === this.status);
+  }
+
+  get learnerExpensePaid(): boolean {
+    return !!this.tracker?.learner_expense_paid;
+  }
+
+  get testingExpensePaid(): boolean {
+    return !!this.tracker?.testing_expense_paid;
+  }
+
+  get permitExpensePaid(): boolean {
+    return !!this.tracker?.permit_expense_paid;
+  }
+
+  get isPaidRatioEligible(): boolean {
+    return !!this.tracker && this.tracker.paid_ratio >= 0.5;
+  }
+
+  get eligiblePending(): boolean {
+    // Either they already qualify by payment or the testing/permit expense is
+    // already paid — an admin just needs to add the corresponding date.
+    return !!this.tracker && (
+      this.tracker.paid_ratio >= 0.5 ||
+      this.tracker.learner_expense_paid ||
+      this.tracker.testing_expense_paid ||
+      this.tracker.permit_expense_paid
+    );
+  }
+
+  open(tracker: PermitTracker) {
+    this.tracker = tracker;
+    this.overrideEligible = true;
+    this.overrideReason = '';
+    this.visible.set(true);
+    this.loadProgress();
+  }
+
+  close() {
+    this.visible.set(false);
+    this.tracker = null;
+  }
+
+  async loadProgress() {
+    if (!this.tracker) return;
+    try {
+      const pp = await this.permitService.get(this.tracker.cart_item_id).toPromise();
+      this.progress = pp ?? null;
+      if (pp) {
+        this.gotLearnersDate = this.dateOrNull(pp.got_learners_permit_date);
+        this.learnersDueDate = this.dateOrNull(pp.learners_due_date);
+        this.learnersExpiryDate = this.dateOrNull(pp.learners_expiry_date);
+        this.newTestDate = this.dateOrNull(pp.test_date);
+        this.testedOnDate = this.dateOrNull(pp.tested_on_date);
+        this.permitReceivedDate = this.dateOrNull(pp.permit_received_date);
+      }
+      const logs = await this.permitService.getAuditLogs(this.tracker.cart_item_id).toPromise();
+      this.auditLogs.set(logs || []);
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load permit progress' });
+    }
+  }
+
+  dateOrNull(v: string | null): Date | null {
+    if (!v) return null;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  localIso(d: Date | null): string | undefined {
+    if (!d) return undefined;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  // Suggest due date = issue date + 30 days
+  suggestDueDate() {
+    if (this.gotLearnersDate && !this.learnersDueDate) {
+      const d = new Date(this.gotLearnersDate);
+      d.setDate(d.getDate() + 30);
+      this.learnersDueDate = d;
+    }
+  }
+
+  async saveDates() {
+    if (!this.tracker) return;
+    this.saving.set(true);
+    try {
+      const pp = this.progress;
+      const updated = await this.permitService.update(this.tracker.cart_item_id, {
+        got_learners_permit_date: this.localIso(this.gotLearnersDate),
+        learners_due_date: this.localIso(this.learnersDueDate),
+        learners_expiry_date: this.localIso(this.learnersExpiryDate),
+        test_date: this.localIso(this.newTestDate),
+        tested_on_date: this.localIso(this.testedOnDate),
+        permit_received_date: this.localIso(this.permitReceivedDate),
+        test_ready: this.testingExpensePaid,
+        permit_paid: this.permitExpensePaid,
+      }).toPromise();
+      if (updated) this.progress = updated;
+      this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Permit dates updated' });
+      this.changed.emit();
+      await this.loadProgress();
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save permit dates' });
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  async overrideEligibilityNow() {
+    if (!this.tracker) return;
+    if (!this.overrideReason.trim()) {
+      this.messageService.add({ severity: 'warn', summary: 'Reason required', detail: 'Please explain why you are overriding this client\'s eligibility' });
+      return;
+    }
+    this.saving.set(true);
+    try {
+      const updated = await this.permitService.overrideEligibility(
+        this.tracker.cart_item_id, this.overrideEligible, this.overrideReason.trim()
+      ).toPromise();
+      if (updated) this.progress = updated;
+      this.messageService.add({ severity: 'success', summary: 'Overridden', detail: 'Eligibility updated with audit trail' });
+      this.overrideReason = '';
+      this.changed.emit();
+      await this.loadProgress();
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to override eligibility' });
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  auditLabel(field: string): string {
+    const map: Record<string, string> = {
+      got_learners_permit_date: 'Learner\'s permit issue date',
+      learners_due_date: 'Due-for-testing date',
+      learners_expiry_date: 'Permit expiry date',
+      test_date: 'Scheduled test date',
+      tested_on_date: 'Tested-on date',
+      permit_received_date: 'Permit received date',
+      test_ready: 'Testing booked',
+      permit_paid: 'Permit payment marked',
+      waiting_for_permit: 'Waiting for permit',
+      eligibility: 'Eligibility',
+      notes: 'Notes',
+    };
+    return map[field] || field;
+  }
+}

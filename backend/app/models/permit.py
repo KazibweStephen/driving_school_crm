@@ -27,9 +27,14 @@ class PermitProgress(Base):
     permit_paid: Mapped[bool] = mapped_column(Boolean, default=False, server_default="f", nullable=False)
     permit_received_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     tested_on_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    test_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expecting_permit_on_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     delayed_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    eligibility_overridden: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="f", nullable=False
+    )
+    eligibility_override_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -38,3 +43,30 @@ class PermitProgress(Base):
     )
 
     cart_item: Mapped["CartItem"] = relationship("CartItem", back_populates="permit_progress")
+    audit_logs: Mapped[list["PermitAuditLog"]] = relationship(
+        "PermitAuditLog", back_populates="progress", cascade="all, delete-orphan"
+    )
+
+
+class PermitAuditLog(Base):
+    """Audit trail for permit progress changes — tracks who/what/when."""
+    __tablename__ = "permit_audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    progress_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("permit_progress.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    cart_item_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cart_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    field_changed: Mapped[str] = mapped_column(String(80), nullable=False)
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    changed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    changed_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    progress: Mapped["PermitProgress"] = relationship("PermitProgress", back_populates="audit_logs")

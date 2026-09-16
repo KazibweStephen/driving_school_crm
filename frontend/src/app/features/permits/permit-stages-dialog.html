@@ -1,0 +1,154 @@
+<p-toast></p-toast>
+
+<p-dialog [header]="tracker?.client_name" [(visible)]="visible" [modal]="true" [style]="{ width: 'min(92vw, 720px)' }" (onHide)="close()" appendTo="body">
+  @if (tracker) {
+    <div class="mb-3 flex flex-wrap items-center gap-2">
+      <span class="text-sm text-gray-500">{{ tracker.client_phone }}</span>
+      <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 border-blue-200">{{ tracker.product_name }}</span>
+      @if (tracker.package_name) {
+        <span class="text-xs text-gray-400">{{ tracker.package_name }}</span>
+      }
+    </div>
+
+    <!-- Stage stepper -->
+    <div class="mb-4 space-y-1">
+      @for (stage of stages; track stage.key; let i = $index) {
+        <div class="flex items-start gap-2">
+          <div class="flex flex-col items-center">
+            <div class="flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold
+              {{ i < stageIndex ? 'bg-green-500 text-white' : i === stageIndex ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 'bg-gray-200 text-gray-500' }}">
+              {{ i + 1 }}
+            </div>
+            @if (i < stages.length - 1) { <div class="h-4 w-px bg-gray-200"></div> }
+          </div>
+          <div class="pb-2">
+            <div class="text-sm font-medium {{ i <= stageIndex ? 'text-gray-900' : 'text-gray-400' }}">{{ stage.label }}</div>
+            <div class="text-xs text-gray-500">{{ stage.desc }}</div>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Already-paid expense flags -->
+    @if (tracker.learner_expense_paid && !progress?.got_learners_permit_date) {
+      <div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <i class="pi pi-exclamation-triangle mr-1"></i>
+        <b>Learner Permit Payment expense already paid.</b> Add the learner's permit issue date below to continue.
+      </div>
+    }
+    @if (tracker.testing_expense_paid && status !== 'test_ready' && status !== 'waiting_for_permit' && status !== 'permit_paid' && status !== 'permit_received') {
+      <div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <i class="pi pi-exclamation-triangle mr-1"></i>
+        <b>Testing expenses already paid.</b> Add the scheduled test date below to continue.
+      </div>
+    }
+    @if (tracker.permit_expense_paid && !progress?.permit_received_date) {
+      <div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <i class="pi pi-exclamation-triangle mr-1"></i>
+        <b>Permit Payment expense already paid.</b> Add the tested-on and permit received dates to finish.
+      </div>
+    }
+
+    <!-- Stage actions -->
+    @if (status === 'not_qualified' || status === 'eligible') {
+      <div class="rounded-xl border border-gray-200 p-4">
+        @if (status === 'not_qualified') {
+          <p class="text-sm text-gray-600 mb-3">Client does not yet qualify
+            ({{ tracker.paid_ratio * 100 | number: '1.0-0' }}% of {{ tracker.total_amount | number }} paid).
+            Record the Learner Permit Payment expense, or override eligibility if they qualify for another reason.</p>
+        } @else {
+          <p class="text-sm text-gray-600 mb-3"><i class="pi pi-check-circle text-green-600 mr-1"></i>Eligible — record the Learner Permit Payment expense, then set the issue date below.</p>
+        }
+        @if (!isPaidRatioEligible && status === 'not_qualified') {
+          <div class="rounded-lg border border-gray-200 p-3 flex flex-wrap items-center gap-2">
+            <p-select [(ngModel)]="overrideEligible" [options]="[{label: 'Override → Eligible', value: true}, {label: 'Keep Not Qualified', value: false}]" optionLabel="label" optionValue="value" appendTo="body" styleClass="w-48" />
+            <input pInputText [(ngModel)]="overrideReason" placeholder="Reason (required)" class="w-full sm:w-96" />
+            <p-button label="Override Eligibility" severity="warn" [loading]="saving()" (onClick)="overrideEligibilityNow()" />
+          </div>
+        } @else {
+          <p class="text-xs text-gray-400"><i class="pi pi-history mr-1"></i>Recorded the expense? Add the learner's permit issue date below to advance.</p>
+        }
+      </div>
+    }
+
+    <div id="permit-dates" class="mt-3 rounded-xl border border-gray-200 p-4">
+      <h3 class="mb-3 text-sm font-semibold text-gray-800">Stage Dates</h3>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <label class="block text-sm">
+          <span class="mb-1 block text-xs font-medium text-gray-500">Learner's permit issue date</span>
+          <p-datepicker [(ngModel)]="gotLearnersDate" dateFormat="dd/mm/yy" appendTo="body" styleClass="w-full" (ngModelChange)="suggestDueDate()" />
+        </label>
+        <label class="block text-sm">
+          <span class="mb-1 block text-xs font-medium text-gray-500">Due-for-testing (maturity)</span>
+          <p-datepicker [(ngModel)]="learnersDueDate" dateFormat="dd/mm/yy" appendTo="body" styleClass="w-full" />
+        </label>
+        <label class="block text-sm">
+          <span class="mb-1 block text-xs font-medium text-gray-500">Permit expiry</span>
+          <p-datepicker [(ngModel)]="learnersExpiryDate" dateFormat="dd/mm/yy" appendTo="body" styleClass="w-full" />
+        </label>
+      </div>
+      <p class="mt-2 text-xs text-gray-400">Maturity the permit is claimable for testing 30 days after issue; dates may be backdated.</p>
+
+      @if (status === 'due_for_testing' || status === 'test_ready' || stageIndex > 3) {
+        <div class="mt-4 border-t border-gray-100 pt-3">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label class="block text-sm">
+              <span class="mb-1 block text-xs font-medium text-gray-500">Scheduled test date</span>
+              <p-datepicker [(ngModel)]="newTestDate" dateFormat="dd/mm/yy" appendTo="body" styleClass="w-full" />
+            </label>
+            <label class="block text-sm">
+              <span class="mb-1 block text-xs font-medium text-gray-500">Tested-on date</span>
+              <p-datepicker [(ngModel)]="testedOnDate" dateFormat="dd/mm/yy" appendTo="body" styleClass="w-full" />
+            </label>
+          </div>
+          @if (status === 'due_for_testing' && !testingExpensePaid) {
+            <p class="mt-2 text-xs text-amber-700"><i class="pi pi-exclamation-circle mr-1"></i>Testing is allowed now that the permit has matured. Continue below to record testing expenses (booking, police booking, IOV fees).</p>
+          }
+          @if (status === 'test_ready' && !testingExpensePaid) {
+            <p class="mt-2 text-xs text-amber-700"><i class="pi pi-exclamation-circle mr-1"></i>Testing expenses are paid — set the scheduled test date below.</p>
+          }
+        </div>
+      }
+
+      @if (status === 'waiting_for_permit' || status === 'permit_paid' || status === 'permit_received' || stageIndex > 4) {
+        <div class="mt-4 border-t border-gray-100 pt-3">
+          <label class="block text-sm">
+            <span class="mb-1 block text-xs font-medium text-gray-500">Permit received date</span>
+            <p-datepicker [(ngModel)]="permitReceivedDate" dateFormat="dd/mm/yy" appendTo="body" styleClass="w-full" />
+          </label>
+        </div>
+      }
+
+      <div class="mt-4 flex items-center gap-2">
+        <p-button label="Save Dates" icon="pi pi-check" [loading]="saving()" (onClick)="saveDates()" />
+        <span class="text-xs text-gray-400"><i class="pi pi-calendar mr-0.5"></i>Dates may be backdated.</span>
+      </div>
+    </div>
+
+    <!-- Audit trail -->
+    <div class="mt-4 rounded-xl border border-gray-200 p-4">
+      <h3 class="mb-2 text-sm font-semibold text-gray-800"><i class="pi pi-history mr-1"></i>Audit Trail</h3>
+      @if (auditLogs().length) {
+        <ul class="max-h-48 space-y-2 overflow-y-auto pr-1">
+          @for (log of auditLogs(); track log.id) {
+            <li class="rounded-lg bg-gray-50 p-2 text-xs">
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-medium text-gray-700">{{ auditLabel(log.field_changed) }}</span>
+                <span class="text-gray-400 whitespace-nowrap">{{ log.created_at | date: 'short' }}</span>
+              </div>
+              <div class="mt-1 text-gray-500">
+                <span class="text-gray-400">{{ log.changed_by_name || log.changed_by || 'System' }}</span>
+                @if (log.old_value !== null && log.new_value !== null) {
+                  <span class="mx-1 text-gray-300">→</span><span>{{ log.old_value }}</span><span class="mx-1 text-gray-300">→</span><span>{{ log.new_value }}</span>
+                }
+                @if (log.reason) { <div class="mt-0.5 italic">"{{ log.reason }}"</div> }
+              </div>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="text-sm text-gray-400">No changes recorded yet.</p>
+      }
+    </div>
+  }
+</p-dialog>

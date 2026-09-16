@@ -321,7 +321,10 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   }
 
   get canEditOnboarded(): boolean {
-    return this.auth.currentUserCanEditOnboardedClients();
+    return (
+      this.auth.hasPermission('bulk_onboarding.edit') &&
+      this.auth.currentUserCanEditOnboardedClients()
+    );
   }
 
   constructor(

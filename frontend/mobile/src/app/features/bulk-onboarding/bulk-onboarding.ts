@@ -1500,7 +1500,10 @@ export class BulkOnboarding implements OnInit {
   }
 
   get canEditOnboarded(): boolean {
-    return this.auth.currentUserCanEditOnboardedClients();
+    return (
+      this.auth.hasPermission('bulk_onboarding.edit') &&
+      this.auth.currentUserCanEditOnboardedClients()
+    );
   }
 
   get mobileToday(): Date {

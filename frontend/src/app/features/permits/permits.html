@@ -26,22 +26,34 @@
 
   @if (trackers().length) {
     <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <p-card>
-        <div class="text-sm text-gray-500">Total Trackers</div>
-        <div class="text-xl font-bold">{{ totalTrackers }}</div>
-      </p-card>
-      <p-card>
-        <div class="text-sm text-gray-500">Due for Testing</div>
-        <div class="text-xl font-bold text-amber-600">{{ dueForTesting }}</div>
-      </p-card>
-      <p-card>
-        <div class="text-sm text-gray-500">Test Ready</div>
-        <div class="text-xl font-bold text-purple-600">{{ testReady }}</div>
-      </p-card>
-      <p-card>
-        <div class="text-sm text-gray-500">Permit Paid</div>
-        <div class="text-xl font-bold text-emerald-600">{{ permitPaid }}</div>
-      </p-card>
+      <button type="button" (click)="setStatusFilter('')"
+        class="rounded-xl border text-left transition-all hover:shadow-md cursor-pointer {{ status === '' ? 'ring-2 ring-blue-500 border-blue-300' : 'border-gray-200' }}">
+        <div class="p-4">
+          <div class="text-sm text-gray-500">Total Trackers</div>
+          <div class="text-xl font-bold">{{ totalTrackers }}</div>
+        </div>
+      </button>
+      <button type="button" (click)="setStatusFilter('due_for_testing')"
+        class="rounded-xl border text-left transition-all hover:shadow-md cursor-pointer {{ status === 'due_for_testing' ? 'ring-2 ring-amber-500 border-amber-300' : 'border-gray-200' }}">
+        <div class="p-4">
+          <div class="text-sm text-gray-500">Due for Testing</div>
+          <div class="text-xl font-bold text-amber-600">{{ dueForTesting }}</div>
+        </div>
+      </button>
+      <button type="button" (click)="setStatusFilter('test_ready')"
+        class="rounded-xl border text-left transition-all hover:shadow-md cursor-pointer {{ status === 'test_ready' ? 'ring-2 ring-purple-500 border-purple-300' : 'border-gray-200' }}">
+        <div class="p-4">
+          <div class="text-sm text-gray-500">Test Ready</div>
+          <div class="text-xl font-bold text-purple-600">{{ testReady }}</div>
+        </div>
+      </button>
+      <button type="button" (click)="setStatusFilter('permit_paid')"
+        class="rounded-xl border text-left transition-all hover:shadow-md cursor-pointer {{ status === 'permit_paid' ? 'ring-2 ring-emerald-500 border-emerald-300' : 'border-gray-200' }}">
+        <div class="p-4">
+          <div class="text-sm text-gray-500">Permit Paid</div>
+          <div class="text-xl font-bold text-emerald-600">{{ permitPaid }}</div>
+        </div>
+      </button>
     </div>
   }
 

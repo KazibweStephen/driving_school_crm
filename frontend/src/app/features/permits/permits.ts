@@ -10,7 +10,6 @@ import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { TooltipModule } from 'primeng/tooltip';
-import { CardModule } from 'primeng/card';
 import { PaginatorModule } from 'primeng/paginator';
 import { MessageService } from 'primeng/api';
 import { PermitProgressService, PermitTracker } from '../../core/services/permit-progress.service';
@@ -26,7 +25,7 @@ interface StatusOption {
   imports: [
     CommonModule, FormsModule, RouterLink, ButtonModule, TableModule,
     TagModule, ToastModule, InputTextModule, SelectModule, MultiSelectModule,
-    TooltipModule, CardModule, PaginatorModule,
+    TooltipModule, PaginatorModule,
   ],
   providers: [MessageService],
   templateUrl: './permits.html',
@@ -99,6 +98,11 @@ export class PermitsCmp implements OnInit {
     this.selectedBranchIds = this.branches.map(b => b.id);
     this.page = 1;
     this.loadTrackers();
+  }
+
+  setStatusFilter(value: string) {
+    this.status = this.status === value ? '' : value;
+    this.applyFilters();
   }
 
   async loadTrackers() {

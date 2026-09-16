@@ -1506,6 +1506,7 @@ export class BulkOnboarding implements OnInit {
   }
 
   get canEditOnboarded(): boolean {
+    if (this.auth.currentUserRole() === 'super_user') return true;
     return (
       this.auth.hasPermission('bulk_onboarding.edit') &&
       (this.serverCanEditOnboarded() || this.auth.currentUserCanEditOnboardedClients())

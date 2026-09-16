@@ -81,7 +81,9 @@ async def correct_onboarded_client(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("bulk_onboarding.edit")),
 ):
-    if not getattr(current_user, "can_edit_onboarded_clients", False):
+    if current_user.role.value != "super_user" and not getattr(
+        current_user, "can_edit_onboarded_clients", False
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Editing onboarded clients is not enabled for this user",

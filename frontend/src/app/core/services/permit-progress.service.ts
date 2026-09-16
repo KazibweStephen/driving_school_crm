@@ -53,6 +53,7 @@ export interface PermitTracker {
   package_id: string | null;
   package_name: string | null;
   total_amount: number;
+  discount_amount: number;
   total_paid: number;
   balance: number;
   paid_ratio: number;

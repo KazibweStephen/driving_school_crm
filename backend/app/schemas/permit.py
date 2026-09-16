@@ -76,6 +76,7 @@ class PermitTrackerRead(BaseModel):
     package_id: str | None
     package_name: str | None
     total_amount: float
+    discount_amount: float = 0.0
     total_paid: float
     balance: float
     paid_ratio: float

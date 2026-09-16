@@ -797,6 +797,7 @@ export class ClientProfile implements OnInit {
       package_id: ci.package_id ?? null,
       package_name: this.packageName(ci),
       total_amount: this.cartItemDiscountedTotal(ci),
+      discount_amount: this.getCartItemDiscountTotal(ci),
       total_paid: this.cartItemPaid(ci),
       balance: Math.max(0, this.cartItemDiscountedTotal(ci) - this.cartItemPaid(ci)),
       paid_ratio: this.cartItemDiscountedTotal(ci) > 0 ? this.cartItemPaid(ci) / this.cartItemDiscountedTotal(ci) : 0,

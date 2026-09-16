@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.models.cart import CartItem
 from app.models.company import Branch, Expense
 from app.models.consultation import Consultation
+from app.models.discount import CartItemDiscount
 from app.models.payment import Payment
 from app.models.permit import PermitAuditLog, PermitProgress
 from app.models.product import Package, Product
@@ -314,6 +315,18 @@ async def list_permit_trackers(
         )
         progress_map = {p.cart_item_id: p for p in pp_rows.scalars().all()}
 
+    # Applied discounts per cart item (effective price = package price − discounts)
+    discount_map: dict[uuid.UUID, float] = {}
+    if rows:
+        disc_rows = await db.execute(
+            select(CartItemDiscount.cart_item_id, CartItemDiscount.applied_amount).where(
+                CartItemDiscount.cart_item_id.in_([ci.id for ci in rows])
+            )
+        )
+        for cid, amount in disc_rows.all():
+            discount_map.setdefault(cid, 0.0)
+            discount_map[cid] += float(amount)
+
     # Already-paid permit/testing expenses per consultation (flag to admin:
     # the expense is paid but the date/photo may still need capturing).
     consultation_ids = {ci.consultation_id for ci in rows}
@@ -355,9 +368,11 @@ async def list_permit_trackers(
         pp = progress_map.get(ci.id)
         package_info = packages.get(ci.package_id) if ci.package_id else None
         total_amount = package_info[1] if package_info else 0.0
+        discount_amount = discount_map.get(ci.id, 0.0)
+        effective_total = max(0.0, total_amount - discount_amount)
         total_paid = await _paid_for_cart_item(db, ci)
-        balance = max(0.0, total_amount - total_paid)
-        ratio = (total_paid / total_amount) if total_amount > 0 else 0.0
+        balance = max(0.0, effective_total - total_paid)
+        ratio = (total_paid / effective_total) if effective_total > 0 else 0.0
 
         tracker = {
             "cart_item_id": ci.id,
@@ -370,7 +385,8 @@ async def list_permit_trackers(
             "product_name": products.get(ci.product_id, "Product"),
             "package_id": ci.package_id,
             "package_name": package_info[0] if package_info else None,
-            "total_amount": total_amount,
+            "total_amount": effective_total,
+            "discount_amount": discount_amount,
             "total_paid": total_paid,
             "balance": balance,
             "paid_ratio": ratio,

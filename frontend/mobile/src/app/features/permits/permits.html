@@ -98,7 +98,7 @@
         <button
           type="button"
           class="w-full rounded-xl border border-slate-200 bg-white p-3 text-left"
-          (click)="goToConsultation(t.consultation_id)"
+          (click)="openStagesDialog(t)"
           data-testid="tracker-row"
         >
           <div class="flex items-start justify-between">
@@ -178,3 +178,5 @@
 </div>
 
 <app-loading-overlay [visible]="loading()" message="Loading permits..." />
+
+<app-permit-stages-dialog (changed)="onStagesChanged()" />

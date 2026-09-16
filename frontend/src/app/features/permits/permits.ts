@@ -1,7 +1,6 @@
 import { Component, OnInit, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
@@ -24,7 +23,7 @@ interface StatusOption {
 @Component({
   selector: 'app-permits',
   imports: [
-    CommonModule, FormsModule, RouterLink, ButtonModule, TableModule,
+    CommonModule, FormsModule, ButtonModule, TableModule,
     TagModule, ToastModule, InputTextModule, SelectModule, MultiSelectModule,
     TooltipModule, PaginatorModule, PermitStagesDialog,
   ],
@@ -58,7 +57,6 @@ export class PermitsCmp implements OnInit {
   constructor(
     private permitService: PermitProgressService,
     private paymentService: PaymentService,
-    private router: Router,
     private messageService: MessageService,
   ) {}
 
@@ -139,10 +137,6 @@ export class PermitsCmp implements OnInit {
 
   onSearch() {
     this.applyFilters();
-  }
-
-  viewTracker(t: PermitTracker) {
-    this.router.navigate(['/consultations', t.consultation_id]);
   }
 
   manageStages(t: PermitTracker) {

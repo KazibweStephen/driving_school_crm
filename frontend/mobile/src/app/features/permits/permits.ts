@@ -1,6 +1,5 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -19,6 +18,7 @@ import {
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { PageHeader } from '../../shared/page-header/page-header';
 import { formatMoney } from '../../shared/format';
+import { PermitStagesDialog } from './permit-stages-dialog';
 
 interface StatusOption {
   label: string;
@@ -36,6 +36,7 @@ interface StatusOption {
     MultiSelectModule,
     LoadingOverlay,
     PageHeader,
+    PermitStagesDialog,
   ],
   providers: [MessageService],
   templateUrl: './permits.html',
@@ -44,8 +45,9 @@ export class PermitsList {
   private auth = inject(AuthService);
   private paymentService = inject(PaymentService);
   private permitService = inject(PermitService);
-  private router = inject(Router);
   private messageService = inject(MessageService);
+
+  @ViewChild(PermitStagesDialog) stagesDialog!: PermitStagesDialog;
 
   currency = this.auth.currencyCode;
 
@@ -146,8 +148,12 @@ export class PermitsList {
     this.loadTrackers();
   }
 
-  goToConsultation(cid: string) {
-    this.router.navigate(['/consultations', cid]);
+  openStagesDialog(t: PermitTracker) {
+    this.stagesDialog.open(t);
+  }
+
+  onStagesChanged() {
+    this.loadTrackers();
   }
 
   packageLabel(t: PermitTracker): string {

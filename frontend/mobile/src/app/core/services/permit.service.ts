@@ -82,6 +82,17 @@ export interface PermitAuditLog {
   created_at: string;
 }
 
+export interface PermitExpenseItemCreate {
+  category_code: string;
+  amount: number;
+  description?: string | null;
+}
+
+export interface PermitExpenseRecordCreate {
+  expenses: PermitExpenseItemCreate[];
+  expense_date?: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PermitService {
   constructor(private http: HttpClient) {}
@@ -125,5 +136,12 @@ export class PermitService {
 
   getAuditLogs(cartItemId: string) {
     return this.http.get<PermitAuditLog[]>(`/api/v1/cart-items/${cartItemId}/permit-progress/audit`);
+  }
+
+  recordExpense(cartItemId: string, data: PermitExpenseRecordCreate) {
+    return this.http.post<PermitProgress>(
+      `/api/v1/cart-items/${cartItemId}/permit-progress/record-expense`,
+      data
+    );
   }
 }

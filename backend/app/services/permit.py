@@ -1,14 +1,15 @@
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from decimal import Decimal
 
+from fastapi import HTTPException
 from sqlalchemy import or_, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.cart import CartItem
-from app.models.company import Branch, Expense
+from app.models.company import Branch, Expense, ExpenseCategory
 from app.models.consultation import Consultation
 from app.models.discount import CartItemDiscount
 from app.models.payment import Payment
@@ -521,3 +522,114 @@ async def apply_permit_expense_effects(
                 updated += 1
     await db.flush()
     return updated
+
+
+async def record_permit_expense(
+    db: AsyncSession,
+    cart_item_id: uuid.UUID,
+    expense_items: list[dict],
+    expense_date: datetime | None,
+    current_user: User,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> PermitProgress:
+    """Record stage-required permit expenses directly from the permits page.
+
+    Resolves each expense category (company-scoped), then creates a PAID expense
+    linked to the cart item's consultation. Because the expenses are created as
+    paid + consultation-linked, `apply_permit_expense_effects` fires and the
+    permit stage advances automatically (test → `test_ready`, permit →
+    `permit_paid`). Returns the updated permit progress.
+    """
+    if not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
+        raise HTTPException(status_code=404, detail="Cart item not found")
+
+    ci = (await db.execute(select(CartItem).where(CartItem.id == cart_item_id))).scalar_one_or_none()
+    if ci is None:
+        raise HTTPException(status_code=404, detail="Cart item not found")
+    cons = (
+        await db.execute(
+            select(Consultation).where(Consultation.id == ci.consultation_id)
+        )
+    ).scalar_one_or_none()
+    if cons is None:
+        raise HTTPException(status_code=404, detail="Client not found")
+    if cons.branch_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="This client has no branch; cannot record an expense. Assign a branch first.",
+        )
+
+    # Import lazily to avoid circular import (finance lazy-imports permit).
+    from app.services.finance import create_expense
+
+    for item in expense_items:
+        category_code = item.get("category_code")
+        if category_code not in _PERMIT_CATEGORY_CODES:
+            raise HTTPException(status_code=400, detail=f"Unknown permit expense category: {category_code}")
+        category_name = _PERMIT_CATEGORY_RESOLVE[category_code]
+        amount = float(item.get("amount") or 0)
+        if amount <= 0:
+            raise HTTPException(status_code=400, detail=f"Amount is required for {category_name}")
+        account = await _resolve_expense_account(db, cons.branch_id, category_name, company_id)
+        await create_expense(
+            db,
+            branch_id=cons.branch_id,
+            amount=amount,
+            description=item.get("description") or f"{category_name} — {cons.first_name} {cons.last_name}".strip(),
+            category=category_name,
+            consultation_id=cons.id,
+            expense_date=expense_date,
+            status="paid",  # paid → apply_permit_expense_effects runs inside create_expense
+            account=account,
+            created_by_phone=current_user.phone,
+            company_id=company_id,
+            current_user_role=current_user_role,
+        )
+    await db.flush()
+
+    progress = await upsert_permit_progress(
+        db, cart_item_id, company_id=company_id, current_user_role=current_user_role
+    )
+    await db.refresh(progress)
+    return progress
+
+
+_PERMIT_CATEGORY_CODES = {
+    "learner_permit_payment",
+    "test_booking",
+    "police_booking",
+    "iov_fees",
+    "permit_payment",
+}
+
+_PERMIT_CATEGORY_RESOLVE = {
+    "learner_permit_payment": "Learner Permit Payment",
+    "test_booking": "Test Booking",
+    "police_booking": "Police Booking",
+    "iov_fees": "IOV Fees",
+    "permit_payment": "Permit Payment",
+}
+
+
+async def _resolve_expense_account(
+    db: AsyncSession,
+    branch_id: uuid.UUID,
+    category_name: str,
+    company_id: uuid.UUID | None,
+) -> str:
+    if company_id is None:
+        branch = (await db.execute(select(Branch).where(Branch.id == branch_id))).scalar_one_or_none()
+        company_id = branch.company_id if branch else None
+    if company_id is not None:
+        match = (
+            await db.execute(
+                select(ExpenseCategory).where(
+                    ExpenseCategory.company_id == company_id,
+                    ExpenseCategory.name == category_name,
+                )
+            )
+        ).scalar_one_or_none()
+        if match is not None:
+            return match.account
+    return "client_accounts"

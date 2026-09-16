@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, Field, computed_field
 
 
 class PermitProgressUpdate(BaseModel):
@@ -49,6 +49,17 @@ class PermitProgressRead(BaseModel):
 class EligibilityOverrideCreate(BaseModel):
     eligible: bool
     reason: str
+
+
+class PermitExpenseItemCreate(BaseModel):
+    category_code: str = Field(..., description="Expense category code, e.g. learner_permit_payment")
+    amount: float
+    description: str | None = None
+
+
+class PermitExpenseRecordCreate(BaseModel):
+    expenses: list[PermitExpenseItemCreate] = Field(..., min_length=1)
+    expense_date: datetime | None = None
 
 
 class PermitAuditLogRead(BaseModel):

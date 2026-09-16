@@ -71,6 +71,58 @@
       </div>
     }
 
+    <!-- Record stage-required expenses -->
+    @if (showLearnerExpense || showTestingExpenses || showPermitExpense) {
+      <div id="permit-record-expense" class="mt-3 rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
+        <h3 class="mb-1 text-sm font-semibold text-gray-800"><i class="pi pi-shopping-cart mr-1"></i>Record Stage Expense</h3>
+        <p class="mb-3 text-xs text-gray-500">
+          @if (showLearnerExpense) {
+            Pay the <b>Learner Permit Payment</b> to secure the learner's permit application. Once recorded, add the issue date below.
+          } @else if (showTestingExpenses) {
+            Pay the testing dues to mark the client <b>ready for testing</b>. Enter amounts for the fees that apply, then record.
+          } @else {
+            Pay the <b>Permit Payment</b> to complete the permit processing. Once recorded, add the tested-on and permit received dates.
+          }
+        </p>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          @if (showLearnerExpense) {
+            <label class="block text-sm">
+              <span class="mb-1 block text-xs font-medium text-gray-500">Learner Permit Payment</span>
+              <p-inputnumber [(ngModel)]="learnerAmount" mode="currency" currency="UGX" locale="en-UG" [min]="0" styleClass="w-full" inputId="learner-expense-amount" />
+            </label>
+          }
+          @if (showTestingExpenses) {
+            <label class="block text-sm">
+              <span class="mb-1 block text-xs font-medium text-gray-500">Test Booking</span>
+              <p-inputnumber [(ngModel)]="testBookingAmount" mode="currency" currency="UGX" locale="en-UG" [min]="0" styleClass="w-full" inputId="test-booking-amount" />
+            </label>
+            <label class="block text-sm">
+              <span class="mb-1 block text-xs font-medium text-gray-500">Police Booking</span>
+              <p-inputnumber [(ngModel)]="policeBookingAmount" mode="currency" currency="UGX" locale="en-UG" [min]="0" styleClass="w-full" inputId="police-booking-amount" />
+            </label>
+            <label class="block text-sm">
+              <span class="mb-1 block text-xs font-medium text-gray-500">IOV Fees</span>
+              <p-inputnumber [(ngModel)]="iovFeesAmount" mode="currency" currency="UGX" locale="en-UG" [min]="0" styleClass="w-full" inputId="iov-fees-amount" />
+            </label>
+          }
+          @if (showPermitExpense) {
+            <label class="block text-sm">
+              <span class="mb-1 block text-xs font-medium text-gray-500">Permit Payment</span>
+              <p-inputnumber [(ngModel)]="permitAmount" mode="currency" currency="UGX" locale="en-UG" [min]="0" styleClass="w-full" inputId="permit-expense-amount" />
+            </label>
+          }
+          <label class="block text-sm">
+            <span class="mb-1 block text-xs font-medium text-gray-500">Expense date</span>
+            <p-datepicker [(ngModel)]="expenseDate" dateFormat="dd/mm/yy" appendTo="body" styleClass="w-full" inputId="expense-date" />
+          </label>
+        </div>
+        <div class="mt-3 flex items-center gap-2">
+          <p-button label="Record Expense" icon="pi pi-check-circle" severity="info" [loading]="recording()" (onClick)="recordExpenseNow()" />
+          <span class="text-xs text-gray-500">Total: {{ stageExpenseTotal | number }} UGX</span>
+        </div>
+      </div>
+    }
+
     <div id="permit-dates" class="mt-3 rounded-xl border border-gray-200 p-4">
       <h3 class="mb-3 text-sm font-semibold text-gray-800">Stage Dates</h3>
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">

@@ -82,6 +82,17 @@ export interface PermitTracker {
   permit_expense_paid: boolean;
 }
 
+export interface PermitExpenseItemCreate {
+  category_code: string;
+  amount: number;
+  description?: string | null;
+}
+
+export interface PermitExpenseRecordCreate {
+  expenses: PermitExpenseItemCreate[];
+  expense_date?: string | null;
+}
+
 export interface PermitAuditLog {
   id: string;
   field_changed: string;
@@ -146,5 +157,12 @@ export class PermitProgressService {
 
   getAuditLogs(cartItemId: string) {
     return this.http.get<PermitAuditLog[]>(`/api/v1/cart-items/${cartItemId}/permit-progress/audit`);
+  }
+
+  recordExpense(cartItemId: string, data: PermitExpenseRecordCreate) {
+    return this.http.post<PermitProgress>(
+      `/api/v1/cart-items/${cartItemId}/permit-progress/record-expense`,
+      data
+    );
   }
 }

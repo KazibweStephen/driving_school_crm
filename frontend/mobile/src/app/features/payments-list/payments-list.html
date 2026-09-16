@@ -1,0 +1,183 @@
+<app-page-header title="Payments">
+  <p-button icon="pi pi-wallet" label="Collect" size="small" severity="secondary"
+    (onClick)="goCollect()" data-testid="go-collect" />
+</app-page-header>
+
+<div class="space-y-3">
+  <div class="rounded-xl border border-slate-200 bg-white p-3">
+    <div class="relative">
+      <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400"></i>
+      <input
+        pInputText
+        [(ngModel)]="search"
+        (keyup.enter)="applyFilters()"
+        placeholder="Search client, product..."
+        class="w-full pl-9"
+        data-testid="search"
+      />
+    </div>
+  </div>
+
+  <div class="space-y-2">
+    <div class="flex items-center gap-2">
+      @if (branches().length > 1) {
+        <p-multiSelect
+          [ngModel]="selectedBranchIds()"
+          (ngModelChange)="selectedBranchIds.set($event)"
+          [options]="branches()"
+          optionLabel="name"
+          optionValue="id"
+          placeholder="All Branches"
+          appendTo="body"
+          styleClass="flex-1"
+          [maxSelectedLabels]="1"
+          [selectedItemsLabel]="'{0} selected'"
+          data-testid="branch-filter"
+        />
+      } @else if (branches().length === 1) {
+        <span class="text-xs text-slate-500">Branch: {{ branches()[0].name }}</span>
+      }
+    </div>
+
+    <div class="flex gap-1 overflow-x-auto pb-1">
+      @for (p of presets; track p.key) {
+        <button
+          type="button"
+          class="shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
+          [class]="activePreset === p.key
+            ? 'bg-slate-900 text-white'
+            : 'bg-slate-100 text-slate-600'"
+          (click)="setPreset(p.key)"
+          data-testid="preset"
+        >
+          {{ p.label }}
+        </button>
+      }
+      <p-datepicker
+        [(ngModel)]="dateRangeValue"
+        selectionMode="range"
+        dateFormat="dd/mm/yy"
+        placeholder="Custom"
+        styleClass="w-32 shrink-0"
+        appendTo="body"
+        (onSelect)="onCustomRangeSelect()"
+        data-testid="custom-range"
+      />
+    </div>
+
+    <div class="flex gap-2">
+      <p-button
+        icon="pi pi-search"
+        label="Apply"
+        size="small"
+        (onClick)="applyFilters()"
+        data-testid="apply"
+      />
+      <p-button
+        icon="pi pi-filter-slash"
+        label="Clear"
+        size="small"
+        severity="secondary"
+        (onClick)="clearFilters()"
+        data-testid="clear"
+      />
+    </div>
+  </div>
+
+  @if (groups().length > 0 || total() > 0) {
+    <div class="grid grid-cols-3 gap-2">
+      <div class="rounded-lg bg-slate-50 p-2.5 text-center">
+        <div class="text-[10px] text-slate-500">Total Due</div>
+        <div class="text-sm font-bold text-slate-900">{{ money(totals().total_amount_sum) }}</div>
+      </div>
+      <div class="rounded-lg bg-green-50 p-2.5 text-center">
+        <div class="text-[10px] text-green-600">Paid</div>
+        <div class="text-sm font-bold text-green-700">{{ money(totals().total_paid_sum) }}</div>
+      </div>
+      <div class="rounded-lg bg-red-50 p-2.5 text-center">
+        <div class="text-[10px] text-red-500">Balance</div>
+        <div class="text-sm font-bold text-red-600">{{ money(totals().total_balance_sum) }}</div>
+      </div>
+    </div>
+  }
+
+  <div>
+    <div class="flex items-center justify-between px-1">
+      <span class="text-xs font-medium text-slate-500">{{ total() }} group(s)</span>
+    </div>
+    <div class="mt-2 space-y-2" data-testid="groups-list">
+      @for (g of groups(); track g.consultation_id + g.product_id + g.package_id) {
+        <button
+          type="button"
+          class="w-full rounded-xl border border-slate-200 bg-white p-3 text-left"
+          (click)="goToConsultation(g.consultation_id)"
+          data-testid="group-row"
+        >
+          <div class="flex items-start justify-between">
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-semibold text-slate-800">{{ g.client_name }}</div>
+              <div class="text-xs text-slate-500">{{ g.client_phone }}</div>
+            </div>
+            <span class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium" [class]="statusClass(g)">
+              {{ statusLabel(g) }}
+            </span>
+          </div>
+
+          <div class="mt-2 border-t border-slate-100 pt-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-slate-700">{{ packageLabel(g) }}</span>
+              <span class="text-[10px] text-slate-400">{{ g.payment_count }} pmt(s)</span>
+            </div>
+            @if (g.branch_name) {
+              <div class="text-[10px] text-slate-400">{{ g.branch_name }}</div>
+            }
+          </div>
+
+          <div class="mt-1.5 grid grid-cols-3 gap-2 text-center">
+            <div>
+              <div class="text-[10px] text-slate-500">Due</div>
+              <div class="text-xs font-semibold text-slate-800">{{ money(g.total_amount) }}</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-green-600">Paid</div>
+              <div class="text-xs font-semibold text-green-700">{{ money(g.total_paid) }}</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-red-500">Balance</div>
+              <div class="text-xs font-semibold text-red-600">{{ money(g.balance) }}</div>
+            </div>
+          </div>
+
+          @if (g.last_document_date) {
+            <div class="mt-1.5 text-[10px] text-slate-400">
+              Last activity: {{ durationSince(g.last_document_date) }}
+            </div>
+          }
+        </button>
+      } @empty {
+        @if (!loading()) {
+          <p class="px-1 py-6 text-center text-sm text-slate-500">No payment groups found.</p>
+        }
+      }
+    </div>
+
+    @if (loading()) {
+      <div class="flex justify-center py-4">
+        <p-progressSpinner styleClass="w-6 h-6" />
+      </div>
+    }
+
+    @if (!loading() && hasMore()) {
+      <button
+        type="button"
+        class="w-full rounded-lg border border-slate-200 bg-white py-2.5 text-sm text-slate-600"
+        (click)="loadMore()"
+        data-testid="load-more"
+      >
+        Load more
+      </button>
+    }
+  </div>
+</div>
+
+<app-loading-overlay [visible]="loading()" message="Loading payments..." />

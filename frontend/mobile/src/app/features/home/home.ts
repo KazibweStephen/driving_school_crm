@@ -26,6 +26,8 @@ export class Home {
       { label: 'Dashboard', icon: 'pi-chart-bar', route: '/dashboard', color: 'bg-slate-900 text-white' },
       { label: 'Sales', icon: 'pi-tags', route: '/sales', color: 'bg-blue-600 text-white', permission: 'consultations.create' },
       { label: 'Payments', icon: 'pi-wallet', route: '/payments', color: 'bg-green-600 text-white', permission: 'payments.record' },
+      { label: 'Payment List', icon: 'pi-list', route: '/payments-list', color: 'bg-emerald-600 text-white', permission: 'payments.view' },
+      { label: 'Transactions', icon: 'pi-dollar', route: '/transactions', color: 'bg-teal-700 text-white', permission: 'payments.view' },
       { label: 'Finance', icon: 'pi-building', route: '/finance', color: 'bg-indigo-600 text-white', permission: 'finance.view' },
       { label: 'Expenses', icon: 'pi-money-bill', route: '/expenses', color: 'bg-amber-600 text-white', permission: 'expenses.view' },
       { label: 'Lessons', icon: 'pi-calendar', route: '/lessons', color: 'bg-purple-600 text-white', permission: 'lesson_plans.edit' },

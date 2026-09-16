@@ -219,4 +219,27 @@ export class PaymentsCmp implements OnInit {
   hasBalance(g: PaymentGroup): boolean {
     return parseFloat(g.balance) > 0;
   }
+
+  durationSince(d: string | null): string {
+    if (!d) return '';
+    const date = new Date(d + (d.length === 10 ? 'T00:00:00' : ''));
+    if (isNaN(date.getTime())) return '';
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return 'today';
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays === 0) return 'today';
+    if (diffDays === 1) return 'yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) {
+      const weeks = Math.floor(diffDays / 7);
+      return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+    }
+    if (diffDays < 365) {
+      const months = Math.floor(diffDays / 30);
+      return months === 1 ? '1 month ago' : `${months} months ago`;
+    }
+    const years = Math.floor(diffDays / 365);
+    return years === 1 ? '1 year ago' : `${years} years ago`;
+  }
 }

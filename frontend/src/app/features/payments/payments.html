@@ -90,8 +90,17 @@
         <td class="font-medium whitespace-nowrap text-green-600">{{ formatAmount(g.total_paid) }}</td>
         <td class="font-medium whitespace-nowrap" [class.text-red-500]="hasBalance(g)">{{ formatAmount(g.balance) }}</td>
         <td><p-tag [value]="statusLabel(g)" [severity]="statusSeverity(g)" /></td>
-        <td class="text-sm">{{ g.payment_count }}</td>
-        <td class="text-sm text-gray-500 whitespace-nowrap">{{ formatDate(g.last_document_date) }}</td>
+        <td class="text-sm">
+          <a [routerLink]="'/consultations/' + g.consultation_id" class="text-blue-600 hover:underline font-medium">{{ g.payment_count }}</a>
+        </td>
+        <td class="text-sm text-gray-500 whitespace-nowrap">
+          <div class="flex flex-col">
+            <span>{{ formatDate(g.last_document_date) }}</span>
+            @if (durationSince(g.last_document_date)) {
+              <span class="text-xs text-gray-400">{{ durationSince(g.last_document_date) }}</span>
+            }
+          </div>
+        </td>
       </tr>
     </ng-template>
     <ng-template pTemplate="emptymessage">

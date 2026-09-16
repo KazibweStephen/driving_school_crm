@@ -9,10 +9,11 @@ import {
   CartItem,
 } from '../../core/services/consultation.service';
 import { PaymentService, PaymentRead } from '../../core/services/payment.service';
+import { PermitService, PermitProgress } from '../../core/services/permit.service';
 import { CatalogService, Product } from '../../core/services/catalog.service';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { PageHeader } from '../../shared/page-header/page-header';
-import { formatMoney } from '../../shared/format';
+import { formatMoney, formatDate } from '../../shared/format';
 
 @Component({
   selector: 'app-consultations',
@@ -23,6 +24,7 @@ export class Consultations {
   private auth = inject(AuthService);
   private consultationService = inject(ConsultationService);
   private paymentService = inject(PaymentService);
+  private permitService = inject(PermitService);
   private catalogService = inject(CatalogService);
   private messageService = inject(MessageService);
   private route = inject(ActivatedRoute);
@@ -33,6 +35,7 @@ export class Consultations {
   consultation = signal<Consultation | null>(null);
   payments = signal<PaymentRead[]>([]);
   products = signal<Product[]>([]);
+  permitProgress = signal<Record<string, PermitProgress | null>>({});
   loading = signal(false);
   removing = signal(false);
 
@@ -53,10 +56,12 @@ export class Consultations {
 
   load(id: string) {
     this.loading.set(true);
+    this.permitProgress.set({});
     this.consultationService.get(id).subscribe({
       next: (consultation) => {
         this.consultation.set(consultation);
         this.loadPayments(id);
+        this.loadPermits(consultation);
       },
       error: (err) => {
         this.loading.set(false);
@@ -80,6 +85,75 @@ export class Consultations {
         this.loading.set(false);
       },
     });
+  }
+
+  private loadPermits(c: Consultation) {
+    const items = (c.cart_items ?? []).filter((ci) => ci.requires_permit_processing);
+    if (!items.length) return;
+    for (const ci of items) {
+      this.permitService.getPermitProgress(ci.id).subscribe({
+        next: (pp) => this.permitProgress.update((m) => ({ ...m, [ci.id]: pp })),
+        error: () => this.permitProgress.update((m) => ({ ...m, [ci.id]: null })),
+      });
+    }
+  }
+
+  requirePermit(ci: CartItem): boolean {
+    return !!ci.requires_permit_processing;
+  }
+
+  permitForItem(ci: CartItem): PermitProgress | null | undefined {
+    return this.permitProgress()[ci.id];
+  }
+
+  permitStatus(ci: CartItem, pp: PermitProgress | null | undefined): string {
+    if (pp === undefined) return '';
+    if (!pp) return 'not_qualified';
+    if (pp.permit_received_date) return 'permit_received';
+    if (pp.permit_paid) return 'permit_paid';
+    if (pp.tested_on_date || pp.waiting_for_permit) return 'waiting_for_permit';
+    if (pp.test_ready) return 'test_ready';
+    if (!pp.got_learners_permit_date) {
+      const total = this.totalForItem(ci);
+      const ratio = total > 0 ? this.paidForItem(ci) / total : 0;
+      return ratio >= 0.5 ? 'eligible' : 'not_qualified';
+    }
+    if (pp.learners_due_date && pp.learners_due_date <= new Date().toISOString().slice(0, 10)) {
+      return 'due_for_testing';
+    }
+    return 'learners_active';
+  }
+
+  permitStatusLabel(status: string): string {
+    const map: Record<string, string> = {
+      not_qualified: 'Not Qualified',
+      eligible: 'Eligible',
+      learners_active: 'Learners Active',
+      due_for_testing: 'Due For Testing',
+      test_ready: 'Test Ready',
+      waiting_for_permit: 'Waiting For Permit',
+      permit_paid: 'Permit Paid',
+      permit_received: 'Permit Received',
+    };
+    return map[status] ?? status;
+  }
+
+  permitStatusClass(status: string): string {
+    const map: Record<string, string> = {
+      not_qualified: 'bg-gray-100 text-gray-700',
+      eligible: 'bg-blue-50 text-blue-700',
+      learners_active: 'bg-green-50 text-green-700',
+      due_for_testing: 'bg-amber-50 text-amber-700',
+      test_ready: 'bg-purple-50 text-purple-700',
+      waiting_for_permit: 'bg-orange-50 text-orange-700',
+      permit_paid: 'bg-emerald-50 text-emerald-700',
+      permit_received: 'bg-green-100 text-green-800',
+    };
+    return map[status] ?? 'bg-gray-100 text-gray-700';
+  }
+
+  permitDate(d: string | null | undefined): string {
+    return formatDate(d ?? undefined);
   }
 
   clientName(): string {

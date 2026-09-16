@@ -81,6 +81,55 @@
                 </button>
               }
             </div>
+            @if (requirePermit(ci)) {
+              @let pp = permitForItem(ci);
+              @if (pp !== undefined) {
+                <div class="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2" data-testid="permit-section">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-slate-700">
+                      <span class="pi pi-id-card mr-1"></span>Permits
+                    </span>
+                    @if (pp) {
+                      <span class="rounded-full px-2 py-0.5 text-[10px] font-medium" [class]="permitStatusClass(permitStatus(ci, pp))">
+                        {{ permitStatusLabel(permitStatus(ci, pp)) }}
+                      </span>
+                    }
+                  </div>
+                  @if (pp) {
+                    <div class="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-600">
+                      @if (pp.got_learners_permit_date) {
+                        <div>Got Learners: <span class="font-medium text-slate-800">{{ permitDate(pp.got_learners_permit_date) }}</span></div>
+                      }
+                      @if (pp.learners_due_date) {
+                        <div>Due For Test: <span class="font-medium text-slate-800">{{ permitDate(pp.learners_due_date) }}</span></div>
+                      }
+                      @if (pp.learners_expiry_date) {
+                        <div>Expiry: <span class="font-medium text-slate-800">{{ permitDate(pp.learners_expiry_date) }}</span></div>
+                      }
+                      @if (pp.tested_on_date) {
+                        <div>Tested On: <span class="font-medium text-slate-800">{{ permitDate(pp.tested_on_date) }}</span></div>
+                      }
+                      @if (pp.permit_received_date) {
+                        <div>Permit Received: <span class="font-medium text-slate-800">{{ permitDate(pp.permit_received_date) }}</span></div>
+                      }
+                    </div>
+                    <div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+                      @if (pp.test_ready) {
+                        <span class="text-purple-700">✓ test_ready</span>
+                      }
+                      @if (pp.waiting_for_permit) {
+                        <span class="text-orange-700">✓ waiting_for_permit</span>
+                      }
+                      @if (pp.permit_paid) {
+                        <span class="text-emerald-700">✓ permit_paid</span>
+                      }
+                    </div>
+                  } @else {
+                    <div class="mt-1 text-[11px] text-slate-400">No permit data yet.</div>
+                  }
+                </div>
+              }
+            }
           </li>
         } @empty {
           <li class="text-sm text-slate-500">No products on this consultation.</li>

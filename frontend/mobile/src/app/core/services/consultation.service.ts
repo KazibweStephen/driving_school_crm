@@ -10,6 +10,7 @@ export interface CartItem {
   notes: string | null;
   is_important: boolean;
   recovery_reason: string | null;
+  requires_permit_processing?: boolean;
   created_at: string;
   updated_at: string;
   product_name?: string;

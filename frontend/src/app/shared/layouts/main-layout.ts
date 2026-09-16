@@ -116,6 +116,7 @@ export class MainLayout implements OnInit, OnDestroy {
         { path: '/schedule-breaks', label: 'Schedule Breaks', icon: 'pi pi-clock', permission: 'schedule_breaks.manage' },
         { path: '/fuel-tracking', label: 'Fuel Tracking', icon: 'pi pi-car', permission: 'fuel.view' },
         { path: '/training-schedule', label: 'Training Schedule', icon: 'pi pi-calendar-clock', permission: 'training.view' },
+        { path: '/permits', label: 'Permits', icon: 'pi pi-id-card', permission: 'training.view' },
       ],
     },
     {

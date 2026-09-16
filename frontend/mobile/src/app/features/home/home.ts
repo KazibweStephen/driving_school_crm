@@ -32,6 +32,7 @@ export class Home {
       { label: 'Expenses', icon: 'pi-money-bill', route: '/expenses', color: 'bg-amber-600 text-white', permission: 'expenses.view' },
       { label: 'Lessons', icon: 'pi-calendar', route: '/lessons', color: 'bg-purple-600 text-white', permission: 'lesson_plans.edit' },
       { label: 'Schedule', icon: 'pi-plus-circle', route: '/schedule', color: 'bg-teal-600 text-white', permission: 'lesson_plans.create' },
+      { label: 'Permits', icon: 'pi-id-card', route: '/permits', color: 'bg-purple-600 text-white', permission: 'training.view' },
       { label: 'SMS', icon: 'pi-comments', route: '/sms', color: 'bg-pink-600 text-white', permission: 'sms.send' },
       { label: 'Bulk Onboard', icon: 'pi-users', route: '/bulk-onboarding', color: 'bg-indigo-600 text-white', permission: 'bulk_onboarding.manage' },
     ];

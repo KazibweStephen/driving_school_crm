@@ -781,7 +781,8 @@ export class ClientProfile implements OnInit {
 
   async savePermitProgress(cartItemId: string) {
     const pp = this.permitForCartItem(cartItemId);
-    if (!pp) return;
+    const ci = this.trainableCartItems().find((i) => i.id === cartItemId);
+    if (!pp || !ci) return;
     this.loading.set(true);
     try {
       const updated = await this.permitProgressService.update(cartItemId, {
@@ -789,6 +790,11 @@ export class ClientProfile implements OnInit {
         got_learners_permit_date: pp.got_learners_permit_date,
         learners_due_date: pp.learners_due_date,
         learners_expiry_date: pp.learners_expiry_date,
+        learners_permit_photo_url: pp.learners_permit_photo_url,
+        test_ready: pp.test_ready,
+        waiting_for_permit: pp.waiting_for_permit,
+        permit_paid: pp.permit_paid,
+        permit_received_date: pp.permit_received_date,
         tested_on_date: pp.tested_on_date,
         expecting_permit_on_date: pp.expecting_permit_on_date,
         delayed_days: pp.delayed_days,
@@ -813,6 +819,78 @@ export class ClientProfile implements OnInit {
     if (diff < 0) return `${Math.abs(diff)} days overdue`;
     if (diff === 0) return 'Today';
     return `in ${diff} days`;
+  }
+
+  permitStatus(pp: PermitProgress, ci: CartItemRead): string {
+    const total = this.cartItemDiscountedTotal(ci);
+    const paid = this.cartItemPaid(ci);
+    const paidRatio = total > 0 ? paid / total : 0;
+    if (!pp.got_learners_permit_date) {
+      return paidRatio >= 0.5 ? 'eligible' : 'not_qualified';
+    }
+    if (pp.permit_received_date) return 'permit_received';
+    if (pp.permit_paid) return 'permit_paid';
+    if (pp.tested_on_date) return 'waiting_for_permit';
+    if (pp.test_ready) return 'test_ready';
+    if (pp.learners_due_date && new Date(pp.learners_due_date).getTime() <= Date.now()) return 'due_for_testing';
+    return 'learners_active';
+  }
+
+  permitStatusLabel(status: string): string {
+    switch (status) {
+      case 'not_qualified': return 'Not Qualified';
+      case 'eligible': return 'Eligible';
+      case 'learners_active': return 'Learners Active';
+      case 'due_for_testing': return 'Due For Testing';
+      case 'test_ready': return 'Test Ready';
+      case 'waiting_for_permit': return 'Waiting For Permit';
+      case 'permit_paid': return 'Permit Paid';
+      case 'permit_received': return 'Permit Received';
+      default: return status;
+    }
+  }
+
+  permitStatusClass(status: string): string {
+    switch (status) {
+      case 'not_qualified': return 'bg-gray-100 text-gray-700 border-gray-200';
+      case 'eligible': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'learners_active': return 'bg-green-50 text-green-700 border-green-200';
+      case 'due_for_testing': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'test_ready': return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'waiting_for_permit': return 'bg-orange-50 text-orange-700 border-orange-200';
+      case 'permit_paid': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'permit_received': return 'bg-green-100 text-green-800 border-green-300';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  }
+
+  permitDaysToMaturity(pp: PermitProgress): number | null {
+    if (!pp.learners_due_date) return null;
+    return Math.ceil((new Date(pp.learners_due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  }
+
+  permitDaysToExpiry(pp: PermitProgress): number | null {
+    if (!pp.learners_expiry_date) return null;
+    return Math.ceil((new Date(pp.learners_expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  }
+
+  async uploadPermitPhoto(cartItemId: string, event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.loading.set(true);
+    try {
+      const updated = await this.permitProgressService.uploadPhoto(cartItemId, file).toPromise();
+      if (updated) {
+        this.permitProgress.update(m => { m.set(cartItemId, updated); return new Map(m); });
+      }
+      this.messageService.add({ severity: 'success', summary: 'Uploaded', detail: 'Permit photo uploaded' });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to upload permit photo' });
+    } finally {
+      this.loading.set(false);
+      input.value = '';
+    }
   }
 
   // ── Lesson Plan Methods ──

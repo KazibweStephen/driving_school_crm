@@ -408,6 +408,11 @@ async def mark_expense_paid(
         expense.receipt_url = data.receipt_url
     await db.flush()
     await db.refresh(expense)
+
+    if expense.consultation_id:
+        from app.services.permit import apply_permit_expense_effects
+        await apply_permit_expense_effects(db, expense)
+
     return _expense_read(expense)
 
 

@@ -1,0 +1,97 @@
+import { Injectable } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+
+export interface PermitTracker {
+  cart_item_id: string;
+  consultation_id: string;
+  client_name: string;
+  client_phone: string;
+  branch_id: string;
+  branch_name: string;
+  product_id: string;
+  product_name: string;
+  package_id: string;
+  package_name: string;
+  total_amount: number;
+  total_paid: number;
+  balance: number;
+  paid_ratio: number;
+  start_date: string | null;
+  got_learners_permit_date: string | null;
+  learners_due_date: string | null;
+  learners_expiry_date: string | null;
+  learners_permit_photo_url: string | null;
+  test_ready: boolean;
+  waiting_for_permit: boolean;
+  permit_paid: boolean;
+  permit_received_date: string | null;
+  tested_on_date: string | null;
+  expecting_permit_on_date: string | null;
+  delayed_days: number | null;
+  notes: string | null;
+  status: string;
+  days_to_maturity: number | null;
+  days_to_expiry: number | null;
+  days_since_test: number | null;
+}
+
+export interface PermitTrackerListResponse {
+  trackers: PermitTracker[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface PermitProgress {
+  id: string;
+  cart_item_id: string;
+  start_date: string | null;
+  got_learners_permit_date: string | null;
+  learners_due_date: string | null;
+  learners_expiry_date: string | null;
+  learners_permit_photo_url: string | null;
+  test_ready: boolean;
+  waiting_for_permit: boolean;
+  permit_paid: boolean;
+  permit_received_date: string | null;
+  tested_on_date: string | null;
+  expecting_permit_on_date: string | null;
+  delayed_days: number | null;
+  notes: string | null;
+}
+
+@Injectable({ providedIn: 'root' })
+export class PermitService {
+  constructor(private http: HttpClient) {}
+
+  listPermitTrackers(params: {
+    search?: string;
+    branch_ids?: string[];
+    status?: string;
+    page?: number;
+    page_size?: number;
+  }) {
+    let p = new HttpParams();
+    if (params.search) p = p.set('search', params.search);
+    if (params.branch_ids?.length) p = p.set('branch_ids', params.branch_ids.join(','));
+    if (params.status) p = p.set('status', params.status);
+    if (params.page != null) p = p.set('page', String(params.page));
+    if (params.page_size != null) p = p.set('page_size', String(params.page_size));
+    return this.http.get<PermitTrackerListResponse>('/api/v1/permits/', { params: p });
+  }
+
+  getPermitProgress(cartItemId: string) {
+    return this.http.get<PermitProgress>(`/api/v1/cart-items/${cartItemId}/permit-progress`);
+  }
+
+  updatePermitProgress(cartItemId: string, data: Partial<PermitProgress>) {
+    return this.http.patch<PermitProgress>(`/api/v1/cart-items/${cartItemId}/permit-progress`, data);
+  }
+
+  uploadPermitPhoto(cartItemId: string, file: File) {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<PermitProgress>(`/api/v1/permits/${cartItemId}/photo`, form);
+  }
+}

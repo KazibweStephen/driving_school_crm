@@ -1,0 +1,180 @@
+<app-page-header title="Permits" />
+<p class="mb-3 -mt-2 text-xs text-slate-500">Learner permit & testing status</p>
+
+<div class="space-y-3">
+  <div class="rounded-xl border border-slate-200 bg-white p-3">
+    <div class="relative">
+      <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400"></i>
+      <input
+        pInputText
+        [(ngModel)]="search"
+        (keyup.enter)="applyFilters()"
+        placeholder="Search client, product..."
+        class="w-full pl-9"
+        data-testid="search"
+      />
+    </div>
+  </div>
+
+  <div class="space-y-2">
+    <div class="flex items-center gap-2">
+      @if (branches().length > 1) {
+        <p-multiSelect
+          [ngModel]="selectedBranchIds()"
+          (ngModelChange)="selectedBranchIds.set($event)"
+          [options]="branches()"
+          optionLabel="name"
+          optionValue="id"
+          placeholder="All Branches"
+          appendTo="body"
+          styleClass="flex-1"
+          [maxSelectedLabels]="1"
+          [selectedItemsLabel]="'{0} selected'"
+          data-testid="branch-filter"
+        />
+      } @else if (branches().length === 1) {
+        <span class="text-xs text-slate-500">Branch: {{ branches()[0].name }}</span>
+      }
+    </div>
+
+    <p-select
+      [ngModel]="status"
+      (ngModelChange)="status = $event"
+      [options]="statusOptions"
+      optionLabel="label"
+      optionValue="value"
+      placeholder="Status"
+      appendTo="body"
+      styleClass="w-full"
+      data-testid="status-filter"
+    />
+
+    <div class="flex gap-2">
+      <p-button
+        icon="pi pi-search"
+        label="Apply"
+        size="small"
+        (onClick)="applyFilters()"
+        data-testid="apply"
+      />
+      <p-button
+        icon="pi pi-filter-slash"
+        label="Clear"
+        size="small"
+        severity="secondary"
+        (onClick)="clearFilters()"
+        data-testid="clear"
+      />
+    </div>
+  </div>
+
+  @if (total() > 0) {
+    <div class="grid grid-cols-4 gap-2">
+      <div class="rounded-lg bg-slate-50 p-2 text-center">
+        <div class="text-[10px] text-slate-500">Total</div>
+        <div class="text-sm font-bold text-slate-900">{{ total() }}</div>
+      </div>
+      <div class="rounded-lg bg-amber-50 p-2 text-center">
+        <div class="text-[10px] text-amber-600">Due Testing</div>
+        <div class="text-sm font-bold text-amber-700">{{ dueForTesting() }}</div>
+      </div>
+      <div class="rounded-lg bg-purple-50 p-2 text-center">
+        <div class="text-[10px] text-purple-600">Test Ready</div>
+        <div class="text-sm font-bold text-purple-700">{{ testReady() }}</div>
+      </div>
+      <div class="rounded-lg bg-emerald-50 p-2 text-center">
+        <div class="text-[10px] text-emerald-600">Permit Paid</div>
+        <div class="text-sm font-bold text-emerald-700">{{ permitPaid() }}</div>
+      </div>
+    </div>
+  }
+
+  <div>
+    <div class="flex items-center justify-between px-1">
+      <span class="text-xs font-medium text-slate-500">{{ total() }} tracker(s)</span>
+    </div>
+    <div class="mt-2 space-y-2" data-testid="trackers-list">
+      @for (t of trackers(); track t.cart_item_id) {
+        <button
+          type="button"
+          class="w-full rounded-xl border border-slate-200 bg-white p-3 text-left"
+          (click)="goToConsultation(t.consultation_id)"
+          data-testid="tracker-row"
+        >
+          <div class="flex items-start justify-between">
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-semibold text-slate-800">{{ t.client_name }}</div>
+              <div class="text-xs text-slate-500">{{ t.client_phone }}</div>
+            </div>
+            <span class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium" [class]="statusClass(t.status)">
+              {{ statusLabel(t.status) }}
+            </span>
+          </div>
+
+          <div class="mt-2 border-t border-slate-100 pt-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-slate-700">{{ packageLabel(t) }}</span>
+            </div>
+            @if (t.branch_name) {
+              <div class="text-[10px] text-slate-400">{{ t.branch_name }}</div>
+            }
+          </div>
+
+          <div class="mt-1.5 grid grid-cols-3 gap-2 text-center">
+            <div>
+              <div class="text-[10px] text-slate-500">Total</div>
+              <div class="text-xs font-semibold text-slate-800">{{ money(t.total_amount) }}</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-green-600">Paid</div>
+              <div class="text-xs font-semibold text-green-700">{{ money(t.total_paid) }}</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-red-500">Balance</div>
+              <div class="text-xs font-semibold text-red-600">{{ money(t.balance) }}</div>
+            </div>
+          </div>
+
+          <div class="mt-1.5 space-y-0.5 text-[10px] text-slate-400">
+            @if (t.days_to_maturity != null) {
+              <div [class.text-red-600]="t.days_to_maturity < 0">
+                Maturity: {{ dayLine(t.days_to_maturity) }}
+              </div>
+            }
+            @if (t.days_to_expiry != null) {
+              <div [class.text-red-600]="t.days_to_expiry < 0">
+                Expiry: {{ dayLine(t.days_to_expiry) }}
+              </div>
+            }
+            @if (t.days_since_test != null) {
+              <div>Days since test: {{ t.days_since_test }}</div>
+            }
+          </div>
+        </button>
+      } @empty {
+        @if (!loading()) {
+          <p class="px-1 py-6 text-center text-sm text-slate-500">No permit trackers found.</p>
+        }
+      }
+    </div>
+
+    @if (loading()) {
+      <div class="flex justify-center py-4">
+        <p-progressSpinner styleClass="w-6 h-6" />
+      </div>
+    }
+
+    @if (!loading() && hasMore()) {
+      <button
+        type="button"
+        class="w-full rounded-lg border border-slate-200 bg-white py-2.5 text-sm text-slate-600"
+        (click)="loadMore()"
+        data-testid="load-more"
+      >
+        Load more
+      </button>
+    }
+  </div>
+</div>
+
+<app-loading-overlay [visible]="loading()" message="Loading permits..." />

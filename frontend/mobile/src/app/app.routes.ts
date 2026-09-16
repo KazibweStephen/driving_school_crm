@@ -42,6 +42,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/transactions/transactions').then((m) => m.Transactions),
       },
       {
+        path: 'permits',
+        loadComponent: () => import('./features/permits/permits').then((m) => m.PermitsList),
+        data: { permission: 'training.view' },
+      },
+      {
         path: 'lessons',
         loadComponent: () => import('./features/lessons/lessons').then((m) => m.Lessons),
       },

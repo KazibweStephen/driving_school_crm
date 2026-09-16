@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,13 @@ class PermitProgress(Base):
     got_learners_permit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     learners_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     learners_expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    learners_permit_photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    test_ready: Mapped[bool] = mapped_column(Boolean, default=False, server_default="f", nullable=False)
+    waiting_for_permit: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="f", nullable=False
+    )
+    permit_paid: Mapped[bool] = mapped_column(Boolean, default=False, server_default="f", nullable=False)
+    permit_received_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     tested_on_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expecting_permit_on_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     delayed_days: Mapped[int | None] = mapped_column(Integer, nullable=True)

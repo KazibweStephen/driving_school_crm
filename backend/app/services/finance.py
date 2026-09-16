@@ -179,6 +179,12 @@ async def create_expense(
     db.add(expense)
     await db.flush()
     await db.refresh(expense)
+
+    # Auto-mark permit progress when paid expense is linked to a consultation
+    if ExpenseStatus(status) == ExpenseStatus.PAID and consultation_id:
+        from app.services.permit import apply_permit_expense_effects
+        await apply_permit_expense_effects(db, expense)
+
     return expense
 
 

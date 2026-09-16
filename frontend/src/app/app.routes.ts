@@ -94,6 +94,12 @@ export const routes: Routes = [
           import('./features/training-schedule/training-schedule').then((c) => c.TrainingScheduleCmp),
       },
       {
+        path: 'permits',
+        data: { permission: 'training.view' },
+        loadComponent: () =>
+          import('./features/permits/permits').then((c) => c.PermitsCmp),
+      },
+      {
         path: 'collections-sheet',
         data: { permission: 'collections.view' },
         loadComponent: () =>

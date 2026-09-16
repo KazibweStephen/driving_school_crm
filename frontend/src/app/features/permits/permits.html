@@ -1,0 +1,113 @@
+<p-toast></p-toast>
+
+<div class="p-4 sm:p-6">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Permits</h1>
+      <p class="text-sm text-gray-500">Track learners permit processing, testing, and permit status</p>
+    </div>
+  </div>
+
+  <div class="mb-4 flex flex-wrap items-center gap-2">
+    <span class="p-input-icon-left w-full sm:w-auto">
+      <i class="pi pi-search"></i>
+      <input pInputText [(ngModel)]="search" (keyup.enter)="applyFilters()" placeholder="Search by name, phone, or product..." class="w-full sm:w-72" />
+    </span>
+    <p-select [(ngModel)]="status" [options]="statusOptions" optionLabel="label" optionValue="value"
+      placeholder="Status" styleClass="w-48" appendTo="body" />
+    @if (branches.length) {
+      <p-multiSelect [(ngModel)]="selectedBranchIds" [options]="branches" optionLabel="name" optionValue="id"
+        placeholder="All Branches" styleClass="w-56" appendTo="body" [showHeader]="false"
+        [maxSelectedLabels]="2" [selectedItemsLabel]="'{0} branches'" />
+    }
+    <p-button label="Apply" icon="pi pi-search" (onClick)="applyFilters()" />
+    <p-button label="Clear" severity="secondary" icon="pi pi-filter-slash" (onClick)="clearFilters()" />
+  </div>
+
+  @if (trackers().length) {
+    <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <p-card>
+        <div class="text-sm text-gray-500">Total Trackers</div>
+        <div class="text-xl font-bold">{{ totalTrackers }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Due for Testing</div>
+        <div class="text-xl font-bold text-amber-600">{{ dueForTesting }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Test Ready</div>
+        <div class="text-xl font-bold text-purple-600">{{ testReady }}</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Permit Paid</div>
+        <div class="text-xl font-bold text-emerald-600">{{ permitPaid }}</div>
+      </p-card>
+    </div>
+  }
+
+  <p-table [value]="trackers()" [loading]="loading()" [rows]="pageSize" [totalRecords]="total">
+    <ng-template pTemplate="header">
+      <tr>
+        <th><span class="whitespace-nowrap">Client</span></th>
+        <th><span class="whitespace-nowrap">Product/Package</span></th>
+        <th>Branch</th>
+        <th>Status</th>
+        <th><span class="whitespace-nowrap">Paid/Total/Balance</span></th>
+        <th><span class="whitespace-nowrap">Days to Maturity</span></th>
+        <th><span class="whitespace-nowrap">Days to Expiry</span></th>
+        <th style="width: 6rem">Actions</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-t>
+      <tr>
+        <td>
+          <a [routerLink]="'/consultations/' + t.consultation_id" class="flex flex-col no-underline cursor-pointer hover:text-blue-600">
+            <span class="font-medium">{{ t.client_name }}</span>
+            <span class="text-xs text-gray-400">{{ t.client_phone }}</span>
+          </a>
+        </td>
+        <td class="text-sm">
+          <span class="font-medium">{{ t.product_name }}</span>
+          @if (t.package_name) {
+            <span class="block text-xs text-gray-500">{{ t.package_name }}</span>
+          }
+        </td>
+        <td class="text-sm text-gray-500 whitespace-nowrap">{{ t.branch_name || '—' }}</td>
+        <td>
+          <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium {{ statusClass(t) }}">
+            {{ statusLabel(t) }}
+          </span>
+        </td>
+        <td class="whitespace-nowrap text-sm">
+          <span class="text-green-600 font-medium">{{ formatAmount(t.total_paid) }}</span>
+          <span class="text-gray-400"> / {{ formatAmount(t.total_amount) }}</span>
+          @if (t.balance > 0) {
+            <span class="text-red-500"> / {{ formatAmount(t.balance) }}</span>
+          }
+        </td>
+        <td class="text-sm" [class.text-red-500]="t.days_to_maturity !== null && t.days_to_maturity < 0">
+          {{ t.days_to_maturity !== null ? t.days_to_maturity + 'd' : '—' }}
+        </td>
+        <td class="text-sm" [class.text-red-500]="t.days_to_expiry !== null && t.days_to_expiry < 0">
+          {{ t.days_to_expiry !== null ? t.days_to_expiry + 'd' : '—' }}
+        </td>
+        <td>
+          <p-button icon="pi pi-eye" rounded="true" text="true" severity="info"
+            pTooltip="View Consultation" (onClick)="viewTracker(t)" />
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="8" class="text-center text-gray-500 py-4">No permit trackers found</td>
+      </tr>
+    </ng-template>
+  </p-table>
+
+  @if (total > pageSize) {
+    <div class="mt-4 flex justify-end">
+      <p-paginator [rows]="pageSize" [totalRecords]="total" [rowsPerPageOptions]="[10, 20, 50]"
+        (onPageChange)="onPage($event)" [showJumpToPageDropdown]="true" />
+    </div>
+  }
+</div>

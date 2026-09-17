@@ -11,6 +11,7 @@ import { LessonPlanService, LessonPlanTemplate, ClientLesson, ClientLessonPlan }
 import { ProductService } from '../../core/services/product.service';
 import { User } from '../../core/services/user.service';
 import { Vehicle } from '../../core/services/vehicle.service';
+import { toLocalDateStr } from '../utils/date.utils';
 
 interface QuickGenForm {
   practicalDays: number | null;
@@ -739,7 +740,7 @@ export class LessonQuickGenDialog {
       await this.lessonPlanService.updateClientPlan(this.planId, {
         template_id: newTemplateId || undefined,
         transmission_type: f.transmission || 'manual',
-        start_date: f.startDate ? f.startDate.toISOString().split('T')[0] : undefined,
+        start_date: f.startDate ? toLocalDateStr(f.startDate) : undefined,
         lessons: lessonsToSave.map(ls => ({
           day_number: ls.order,
           week_number: Math.ceil(ls.order / 5),
@@ -750,7 +751,7 @@ export class LessonQuickGenDialog {
           is_active: true,
           is_locked: ls.is_locked || false,
           status: ls.status,
-          scheduled_date: ls.scheduled_date ? ls.scheduled_date.toISOString().split('T')[0] : undefined,
+          scheduled_date: ls.scheduled_date ? toLocalDateStr(ls.scheduled_date) : undefined,
           duration_minutes: ls.duration_minutes,
           is_theory: ls.is_theory,
           instructor_id: ls.instructor_id || undefined,

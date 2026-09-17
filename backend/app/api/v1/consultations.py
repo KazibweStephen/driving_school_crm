@@ -28,6 +28,7 @@ from app.schemas.consultation import (
 from app.services import consultation as consultation_service
 from app.services import payment as payment_service
 from app.services import discount as discount_service
+from app.utils.timezones import today_local
 from app.services.notification import on_consultation_created
 from app.utils.tenant import resolve_branch_ids
 
@@ -44,7 +45,6 @@ async def create_consultation(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("consultations.create")),
 ):
-    from datetime import date as date_type
     consultation = await consultation_service.create_consultation(
         db,
         phone=data.phone,
@@ -60,7 +60,7 @@ async def create_consultation(
             else None
         ),
         start_date=data.start_date,
-        document_date=data.document_date or date_type.today(),
+        document_date=data.document_date or today_local(),
         notes=data.notes,
         branch_id=data.branch_id,
         created_by_phone=current_user.phone,
@@ -83,7 +83,6 @@ async def create_full_consultation(
     current_user: User = Depends(require_permission("consultations.create")),
 ):
     """Create a consultation with products and optional payment in a single transaction."""
-    from datetime import date as date_type
     # Create consultation
     consultation = await consultation_service.create_consultation(
         db,
@@ -95,7 +94,7 @@ async def create_full_consultation(
         how_they_knew_us=data.how_they_knew_us,
         interest_level=data.interest_level,
         start_date=data.start_date,
-        document_date=data.document_date or date_type.today(),
+        document_date=data.document_date or today_local(),
         notes=data.notes,
         branch_id=data.branch_id,
         created_by_phone=current_user.phone,
@@ -110,9 +109,9 @@ async def create_full_consultation(
     transaction_date = (
         (data.payment.transaction_date if data.payment else None)
         or data.document_date
-        or date_type.today()
+        or today_local()
     )
-    if transaction_date < (data.document_date or date_type.today()):
+    if transaction_date < (data.document_date or today_local()):
         raise HTTPException(
             status_code=400,
             detail="Transaction Date cannot be before Document Date",

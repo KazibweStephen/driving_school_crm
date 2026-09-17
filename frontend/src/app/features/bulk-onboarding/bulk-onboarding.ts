@@ -23,6 +23,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { LessonPlanService, LessonPlanTemplate, LessonTemplateItem } from '../../core/services/lesson-plan.service';
 import { DiscountService, Discount } from '../../core/services/discount.service';
+import { toLocalDateStr } from '../../shared/utils/date.utils';
 
 interface LessonDraft {
   id?: string | null;
@@ -539,7 +540,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     const inst = client.packages[pi]?.installments[ii];
     if (!inst?.document_date) return;
     if (inst.document_date < client.document_date) {
-      this.dateErrors.update(e => ({ ...e, [key]: `Date cannot be before client document date (${client.document_date!.toISOString().split('T')[0]})` }));
+      this.dateErrors.update(e => ({ ...e, [key]: `Date cannot be before client document date (${toLocalDateStr(client.document_date)})` }));
     }
   }
 
@@ -555,12 +556,12 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
     }
     const docDate = client?.document_date;
     if (docDate && lesson.date < docDate) {
-      this.dateErrors.update(e => ({ ...e, [key]: `Date cannot be before client document date (${docDate.toISOString().split('T')[0]})` }));
+      this.dateErrors.update(e => ({ ...e, [key]: `Date cannot be before client document date (${toLocalDateStr(docDate)})` }));
       return;
     }
     const firstPay = this.packageFirstPaymentDate(ci, pi);
     if (firstPay && lesson.date < firstPay) {
-      this.dateErrors.update(e => ({ ...e, [key]: `Date cannot be before the first payment date (${firstPay.toISOString().split('T')[0]})` }));
+      this.dateErrors.update(e => ({ ...e, [key]: `Date cannot be before the first payment date (${toLocalDateStr(firstPay)})` }));
     }
   }
 
@@ -682,7 +683,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
         last_name: c.last_name,
         location: c.location,
         branch_id: c.branch_id,
-        document_date: c.document_date?.toISOString()?.split('T')[0] || null,
+        document_date: toLocalDateStr(c.document_date) || null,
         converter_id: c.converter_id,
         primary_recommender_id: c.primary_recommender_id,
         secondary_recommender_id: c.secondary_recommender_id,
@@ -690,19 +691,19 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
           cart_item_id: p.cart_item_id || null,
           plan_id: p.plan_id || null,
           regenerate: !!p.regenerate,
-          regenerateStartDate: p.regenerateStartDate ? p.regenerateStartDate.toISOString().split('T')[0] : null,
+          regenerateStartDate: p.regenerateStartDate ? toLocalDateStr(p.regenerateStartDate) : null,
           product_id: p.product_id,
           package_id: p.package_id,
           installments: p.installments.map(i => ({
             id: i.id || null,
             receipt_number: i.receipt_number,
-            document_date: i.document_date?.toISOString()?.split('T')[0] || null,
+            document_date: toLocalDateStr(i.document_date) || null,
             amount: i.amount,
             received_by_phone: i.received_by_phone,
           })),
           lessons: p.lessons.map(l => ({
             id: l.id || null,
-            date: l.date?.toISOString()?.split('T')[0] || null,
+            date: toLocalDateStr(l.date) || null,
             duration_minutes: l.duration_minutes,
             lesson_type: l.lesson_type,
             instructor_id: l.instructor_id,
@@ -1273,7 +1274,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   }
 
   private quickGenRangeError(): string {
-    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    const fmt = (d: Date) => toLocalDateStr(d);
     const form = this.quickGenForm();
     const start = form.startDate ? this.startOfDay(form.startDate) : null;
     const last = form.lastDate ? this.startOfDay(form.lastDate) : null;
@@ -1293,7 +1294,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
   }
 
   private quickGenLessonsError(): string {
-    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    const fmt = (d: Date) => toLocalDateStr(d);
     const template = this.quickGenSelectedTemplate();
     const docDate = this.quickGenDocDate();
     const firstPay = this.quickGenFirstPaymentDate();
@@ -1928,7 +1929,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
       last_name: c.last_name || undefined,
       location: c.location || undefined,
       branch_id: this.branchId() || c.branch_id || undefined,
-      document_date: c.document_date?.toISOString()?.split('T')[0] || undefined,
+      document_date: toLocalDateStr(c.document_date) || undefined,
       converter_id: c.converter_id || undefined,
       primary_recommender_id: c.primary_recommender_id || undefined,
       secondary_recommender_id: c.secondary_recommender_id || undefined,
@@ -1940,12 +1941,12 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
         discount_id: p.discount_id || undefined,
         installments: p.installments.map(i => ({
           receipt_number: i.receipt_number,
-          document_date: i.document_date!.toISOString().split('T')[0],
+          document_date: toLocalDateStr(i.document_date),
           amount: i.amount!,
           received_by_phone: i.received_by_phone,
         })),
         lessons: p.lessons.filter(l => l.date && l.duration_minutes).map(l => ({
-          date: l.date!.toISOString().split('T')[0],
+          date: toLocalDateStr(l.date),
           duration_minutes: l.duration_minutes!,
           lesson_type: l.lesson_type,
           instructor_id: l.instructor_id || undefined,
@@ -2052,9 +2053,7 @@ export class BulkOnboardingCmp implements OnInit, OnDestroy {
 
   private dateStr(d: Date | null): string | null {
     if (!d) return null;
-    const copy = new Date(d);
-    copy.setHours(0, 0, 0, 0);
-    return copy.toISOString().split('T')[0];
+    return toLocalDateStr(d);
   }
 
   private isoToDate(iso: string | null): Date | null {

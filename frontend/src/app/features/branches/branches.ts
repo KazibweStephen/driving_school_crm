@@ -17,6 +17,7 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import {
   CompanyService, Company, Branch, BranchCreate, BranchUpdate, BranchMonthlyTarget,
 } from '../../core/services/company.service';
+import { toLocalDateStr } from '../../shared/utils/date.utils';
 import { CurrencyService } from '../../core/services/currency.service';
 
 @Component({
@@ -175,7 +176,7 @@ export class BranchesCmp implements OnInit {
 
   private toISO(month: Date): string {
     const m = new Date(month.getFullYear(), month.getMonth(), 1);
-    return m.toISOString().slice(0, 10);
+    return toLocalDateStr(m);
   }
 
   async loadCompanies() {

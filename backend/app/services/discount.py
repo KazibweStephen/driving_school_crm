@@ -10,6 +10,7 @@ from app.models.company import Branch, UserBranchAssignment
 from app.models.discount import CartItemDiscount, Discount, DiscountAppliesTo, DiscountBranchAssignment, DiscountStatus, DiscountType
 from app.models.product import Package, Product
 from app.models.user import User, UserRole
+from app.utils.timezones import today_local
 
 
 async def _get_company_branches(db: AsyncSession, company_id: uuid.UUID):
@@ -461,7 +462,7 @@ async def get_applicable_discounts_for_product(
     package_id: uuid.UUID | str | None,
 ) -> list[Discount]:
     """Return active, non-expired discounts (approved or pending) that apply to a product/package."""
-    today = date.today()
+    today = today_local()
     query = (
         select(Discount)
         .options(selectinload(Discount.branch), selectinload(Discount.requested_by_user), selectinload(Discount.branch_assignments).selectinload(DiscountBranchAssignment.branch))
@@ -521,7 +522,7 @@ async def apply_discount_to_cart_item(
     if not discount.is_active:
         raise ValueError("Discount is not active")
 
-    today = date.today()
+    today = today_local()
     if discount.start_date > today:
         raise ValueError("Discount has not started yet")
     if discount.end_date is not None and discount.end_date < today:
@@ -585,7 +586,7 @@ async def get_cart_item_discounts(
 
 
 async def expire_discounts(db: AsyncSession) -> int:
-    today = date.today()
+    today = today_local()
     result = await db.execute(
         select(Discount).where(
             Discount.status == DiscountStatus.APPROVED,
@@ -644,7 +645,7 @@ async def get_applicable_discounts(
     Pending discounts can be selected during first payment; they require approval after
     being applied to the sale.
     """
-    today = date.today()
+    today = today_local()
     query = (
         select(Discount)
         .options(selectinload(Discount.branch), selectinload(Discount.requested_by_user), selectinload(Discount.branch_assignments).selectinload(DiscountBranchAssignment.branch))

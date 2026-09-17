@@ -3,6 +3,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, computed_field
 
+from app.utils.timezones import today_local
+
 
 class PermitProgressUpdate(BaseModel):
     start_date: date | None = None
@@ -127,7 +129,7 @@ class PermitTrackerRead(BaseModel):
             if self.eligibility_overridden:
                 return "eligible"
             return "eligible" if self.paid_ratio >= 0.5 else "not_qualified"
-        if self.learners_due_date and self.learners_due_date <= date.today():
+        if self.learners_due_date and self.learners_due_date <= today_local():
             return "due_for_testing"
         return "learners_active"
 
@@ -135,21 +137,21 @@ class PermitTrackerRead(BaseModel):
     @property
     def days_to_maturity(self) -> int | None:
         if self.learners_due_date:
-            return (self.learners_due_date - date.today()).days
+            return (self.learners_due_date - today_local()).days
         return None
 
     @computed_field
     @property
     def days_to_expiry(self) -> int | None:
         if self.learners_expiry_date:
-            return (self.learners_expiry_date - date.today()).days
+            return (self.learners_expiry_date - today_local()).days
         return None
 
     @computed_field
     @property
     def days_since_test(self) -> int | None:
         if self.tested_on_date:
-            return (date.today() - self.tested_on_date).days
+            return (today_local() - self.tested_on_date).days
         return None
 
     model_config = {"from_attributes": False}

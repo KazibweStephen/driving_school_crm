@@ -15,6 +15,7 @@ from app.models.cart import CartItem, CartItemStatus
 from app.models.lesson_plan import ClientLesson, ClientLessonPlan, LessonState
 from app.models.user import User
 from app.utils.tenant import add_company_filter, add_branch_company_filter
+from app.utils.timezones import today_local, now_local
 
 
 async def get_dashboard_summary(
@@ -23,7 +24,7 @@ async def get_dashboard_summary(
     user_role: str | None = None,
     branch_ids: Optional[list[uuid.UUID]] = None,
 ) -> dict:
-    now = datetime.now(timezone.utc)
+    now = now_local()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     month_start = today_start.replace(day=1)
 

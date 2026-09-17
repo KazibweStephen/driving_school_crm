@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.models.cart import CartItem
 from app.models.company import Branch
 from app.models.consultation import Consultation
+from app.utils.timezones import today_local
 from app.models.lesson_plan import (
     ClientAvailability,
     ClientLesson,
@@ -33,16 +34,16 @@ def _generate_slots(
     end: time | None = None,
 ) -> list[tuple[time, time]]:
     slots: list[tuple[time, time]] = []
-    current = datetime.combine(date.today(), start or DAY_START)
-    end_dt = datetime.combine(date.today(), end or DAY_END)
+    current = datetime.combine(today_local(), start or DAY_START)
+    end_dt = datetime.combine(today_local(), end or DAY_END)
     breaks = breaks or []
     while current + timedelta(minutes=SLOT_MINUTES) <= end_dt:
         slot_start = current.time()
         slot_end = (current + timedelta(minutes=SLOT_MINUTES)).time()
         in_break = False
         for b_start, b_end in breaks:
-            b_s = datetime.combine(date.today(), b_start)
-            b_e = datetime.combine(date.today(), b_end)
+            b_s = datetime.combine(today_local(), b_start)
+            b_e = datetime.combine(today_local(), b_end)
             if current >= b_s and current < b_e:
                 in_break = True
                 break
@@ -733,7 +734,7 @@ async def lock_schedule(
     if duration_minutes > 30:
         raise ValueError("Duration cannot exceed 30 minutes per lesson")
 
-    end_dt = datetime.combine(date.today(), start_time) + timedelta(minutes=duration_minutes)
+    end_dt = datetime.combine(today_local(), start_time) + timedelta(minutes=duration_minutes)
     end_time = end_dt.time()
 
     # Validate against active breaks

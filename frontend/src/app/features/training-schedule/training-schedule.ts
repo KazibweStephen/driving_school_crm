@@ -21,6 +21,7 @@ import { TrainingService } from '../../core/services/training.service';
 import { PaymentService } from '../../core/services/payment.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { CurrencyService } from '../../core/services/currency.service';
+import { toLocalDateStr } from '../../shared/utils/date.utils';
 
 type Period = 'today' | 'this_week' | 'this_month' | 'last_month';
 
@@ -306,7 +307,7 @@ export class TrainingScheduleCmp implements OnInit, OnDestroy {
             notes: 'Payment from Training Schedule',
             receipt_number: receipt || undefined,
             installments,
-            document_date: this.payDocumentDate()?.toISOString().split('T')[0] || undefined,
+            document_date: this.payDocumentDate() ? toLocalDateStr(this.payDocumentDate()) : undefined,
           })
         );
 

@@ -15,6 +15,7 @@ from app.models.consultation import Consultation
 from app.models.product import Package, Product
 from app.models.user import User
 from app.utils.tenant import resolve_branch_ids
+from app.utils.timezones import now_local, today_local
 from app.schemas.payment import (
     ClientActiveProduct,
     ClientListResponse,
@@ -158,7 +159,7 @@ async def list_clients(
         active_started = min(active_dates) if active_dates else c.created_at
         active_for_days = 0
         if active_started:
-            active_for_days = max(0, (datetime.now(timezone.utc) - active_started).days)
+            active_for_days = max(0, (now_local() - active_started).days)
 
         clients.append(ClientSummary(
             id=c.id,
@@ -230,17 +231,16 @@ async def create_payment(
         raise HTTPException(status_code=400, detail="Invalid ID")
 
     installments = data.installments or [
-        InstallmentCreate(due_date=date.today(), amount=data.total_amount)
+        InstallmentCreate(due_date=today_local(), amount=data.total_amount)
     ]
 
-    from datetime import date as date_type
     payment = await payment_service.create_payment(
         db,
         consultation_id=cid,
         product_id=data.product_id,
         package_id=data.package_id,
         total_amount=data.total_amount,
-        document_date=data.document_date or date_type.today(),
+        document_date=data.document_date or today_local(),
         notes=data.notes,
         installments_data=[i.model_dump() for i in installments],
         receipt_number=data.receipt_number,

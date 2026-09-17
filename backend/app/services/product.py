@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload, joinedload
 
 from app.models.product import EntityStatus, Package, PackageExpectedExpense, Product
 from app.models.commission import CommissionRate, commission_rate_packages
+from app.utils.timezones import today_local
 
 
 async def create_product(
@@ -322,7 +323,7 @@ async def get_package_commission_rate(
 ) -> CommissionRate | None:
     """Return the most recent active commission rate linked to a package, if any."""
     from sqlalchemy import select as sa_select
-    today = date.today()
+    today = today_local()
     query = (
         sa_select(CommissionRate)
         .options(joinedload(CommissionRate.packages))
@@ -414,7 +415,7 @@ async def update_package_with_rate(
                 converter_pct=converter,
                 primary_recommender_pct=primary,
                 secondary_recommender_pct=secondary,
-                active_from=rate_active_from or date.today(),
+                active_from=rate_active_from or today_local(),
                 active_until=rate_active_until,
                 notes=rate_notes,
             )

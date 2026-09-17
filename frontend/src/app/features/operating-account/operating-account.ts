@@ -12,6 +12,7 @@ import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { DatePickerModule } from 'primeng/datepicker';
 import { MessageService } from 'primeng/api';
+import { toLocalDateStr } from '../../shared/utils/date.utils';
 import { AuthService } from '../../core/auth/auth.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import {
@@ -153,7 +154,7 @@ export class OperatingAccountCmp implements OnInit {
         amount: this.record.amount,
         description: this.record.description,
         reference: this.record.reference || null,
-        entry_date: this.record.entryDate ? this.record.entryDate.toISOString().slice(0, 10) : null,
+        entry_date: this.record.entryDate ? toLocalDateStr(this.record.entryDate) : null,
         funded_by: this.record.fundedBy || null,
         repay_from_profit: this.record.repayFromProfit,
       }).toPromise();

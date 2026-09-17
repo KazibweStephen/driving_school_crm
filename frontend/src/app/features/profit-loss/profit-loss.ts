@@ -11,6 +11,7 @@ import { MessageService } from 'primeng/api';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { FinanceService, ProfitLossItem } from '../../core/services/finance.service';
 import { CurrencyService } from '../../core/services/currency.service';
+import { toLocalDateStr } from '../../shared/utils/date.utils';
 
 @Component({
   selector: 'app-profit-loss',
@@ -51,8 +52,8 @@ export class ProfitLossCmp implements OnInit {
   async load() {
     this.loading.set(true);
     try {
-      const from = this.startDate ? this.startDate.toISOString().slice(0, 10) : undefined;
-      const to = this.endDate ? this.endDate.toISOString().slice(0, 10) : undefined;
+      const from = this.startDate ? toLocalDateStr(this.startDate) : undefined;
+      const to = this.endDate ? toLocalDateStr(this.endDate) : undefined;
       const res = await this.financeService.getProfitLoss({
         from_date: from,
         to_date: to,

@@ -19,6 +19,7 @@ from app.models.consultation import Consultation
 from app.models.lesson_plan import ClientLesson, ClientLessonPlan
 from app.models.user import UserRole
 from app.services.commission import compute_maturity
+from app.utils.timezones import today_local
 
 PRIVILEGED_ROLES = (
     UserRole.SUPER_USER,
@@ -34,7 +35,7 @@ VALID_PERIODS = ("today", "yesterday", "this_week", "last_week", "this_month")
 
 def _period_range(period: str) -> tuple[date, date]:
     """Inclusive [start, end] date range for a dashboard period."""
-    today = date.today()
+    today = today_local()
     if period == "yesterday":
         d = today - timedelta(days=1)
         return d, d
@@ -122,7 +123,7 @@ async def get_mobile_dashboard(
         period = "today"
     period_start, period_end = _period_range(period)
 
-    today = date.today()
+    today = today_local()
     month_start = today.replace(day=1)
     next_month = (month_start + timedelta(days=32)).replace(day=1)
 

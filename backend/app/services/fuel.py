@@ -12,6 +12,7 @@ from app.models.lesson_plan import ClientLesson, ClientLessonPlan, LessonState, 
 from app.models.company import Branch
 from app.models.cart import CartItem
 from app.models.consultation import Consultation
+from app.utils.timezones import today_local
 from app.utils.tenant import add_company_filter
 
 
@@ -96,7 +97,7 @@ async def create_fuel_rate(
         vehicle_id=data["vehicle_id"],
         rate_per_lesson=data["rate_per_lesson"],
         is_active=data.get("is_active", True),
-        effective_from=data.get("effective_from") or date.today(),
+        effective_from=data.get("effective_from") or today_local(),
         notes=data.get("notes"),
     )
     db.add(rate)
@@ -420,7 +421,7 @@ async def get_active_package_fuel_rate(
 ) -> Optional[PackageFuelRate]:
     """Return the single active package fuel rate (not soft-deactivated and
     within its active window)."""
-    today = date.today()
+    today = today_local()
     query = (
         select(PackageFuelRate)
         .where(
@@ -455,7 +456,7 @@ async def create_package_fuel_rate(
     if not pkg.requires_driving_training:
         raise ValueError("Fuel rate requires the package to have practical (driving) training enabled")
 
-    active_from = data.get("active_from") or date.today()
+    active_from = data.get("active_from") or today_local()
     active_until = data.get("active_until")
     if active_until and active_until < active_from:
         raise ValueError("active_until cannot be before active_from")

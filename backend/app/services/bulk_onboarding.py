@@ -35,6 +35,7 @@ from app.schemas.bulk_onboarding import (
 )
 from app.services.commission import create_commission_from_conversion
 from app.services.discount import compute_discount_amount
+from app.utils.timezones import today_local
 from app.services.payment import (
     _generate_system_receipt_number,
     _recompute_payment_totals,
@@ -102,7 +103,7 @@ async def bulk_onboard_clients(
             last_name=client_data.last_name,
             location=client_data.location,
             branch_id=client_data.branch_id,
-            document_date=client_data.document_date or date.today(),
+            document_date=client_data.document_date or today_local(),
             created_by_phone=user.phone,
             status=ConsultationStatus.CONVERTED_COMPLETED,
         )
@@ -135,7 +136,7 @@ async def bulk_onboard_clients(
                     )
                 if not discount.is_active:
                     raise HTTPException(status_code=400, detail="Discount is not active")
-                today = date.today()
+                today = today_local()
                 if discount.start_date > today:
                     raise HTTPException(status_code=400, detail="Discount has not started yet")
                 if discount.end_date is not None and discount.end_date < today:
@@ -389,7 +390,7 @@ _ACTIVE_CART_STATUSES = (CartItemStatus.CONVERTED_PAID, CartItemStatus.CONVERTED
 
 
 def _reject_future(d: date | None, label: str = "Date") -> None:
-    if d is not None and d > date.today():
+    if d is not None and d > today_local():
         raise HTTPException(status_code=400, detail=f"{label} cannot be in the future")
 
 
@@ -458,7 +459,7 @@ async def list_onboarded_clients(
     if user.company_id is not None and branch.company_id != user.company_id:
         raise HTTPException(status_code=403, detail="Branch not in your company")
 
-    today = date.today()
+    today = today_local()
     from_d = from_date or (today - timedelta(days=30))
     to_d = to_date or today
     if from_d > to_d:
@@ -735,7 +736,7 @@ async def _apply_discount_corrections(
                 raise HTTPException(status_code=400, detail="Discount must be approved or pending to be applied")
             if not discount.is_active:
                 raise HTTPException(status_code=400, detail="Discount is not active")
-            today = date.today()
+            today = today_local()
             if discount.start_date > today:
                 raise HTTPException(status_code=400, detail="Discount has not started yet")
             if discount.end_date is not None and discount.end_date < today:
@@ -971,7 +972,7 @@ async def _apply_payment_edits(
             affected_items.add(edit_cart_item.id)
         else:
             cart_item = await _find_cart_item(db, consultation, pay_data.product_id, pay_data.package_id)
-            effective_date = pay_data.document_date or consultation.document_date or date.today()
+            effective_date = pay_data.document_date or consultation.document_date or today_local()
             if consultation.document_date is not None and effective_date < consultation.document_date:
                 raise HTTPException(
                     status_code=400,
@@ -1116,7 +1117,7 @@ async def _apply_lesson_edits(
         lesson = next((l for l in plan.lessons if l.id == le.id), None)
         if lesson is None:
             raise HTTPException(status_code=400, detail="Lesson not found in plan")
-        if le.scheduled_date is not None and le.scheduled_date > date.today() and le.status == "completed":
+        if le.scheduled_date is not None and le.scheduled_date > today_local() and le.status == "completed":
             raise HTTPException(status_code=400, detail="Cannot mark a lesson as completed if its date is in the future")
         old_date = lesson.scheduled_date
         await update_client_lesson(
@@ -1220,7 +1221,7 @@ async def apply_bulk_onboarding_corrections(
         plan = await _plan_for_consultation(db, consultation, regen.plan_id)
         lessons_data = []
         for idx, lesson in enumerate(regen.lessons):
-            if lesson.date is not None and lesson.date > date.today() and lesson.status == "completed":
+            if lesson.date is not None and lesson.date > today_local() and lesson.status == "completed":
                 raise HTTPException(
                     status_code=400,
                     detail="Cannot mark a lesson as completed if its date is in the future",
@@ -1240,7 +1241,7 @@ async def apply_bulk_onboarding_corrections(
                 "status": lesson.status,
             })
         new_date = regen.start_date or (
-            plan.start_date.date() if plan.start_date else date.today()
+            plan.start_date.date() if plan.start_date else today_local()
         )
         await replace_plan_lessons(
             db,

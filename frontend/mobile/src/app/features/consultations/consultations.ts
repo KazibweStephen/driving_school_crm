@@ -13,7 +13,7 @@ import { PermitService, PermitProgress } from '../../core/services/permit.servic
 import { CatalogService, Product } from '../../core/services/catalog.service';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
 import { PageHeader } from '../../shared/page-header/page-header';
-import { formatMoney, formatDate } from '../../shared/format';
+import { formatMoney, formatDate, todayISO } from '../../shared/format';
 
 @Component({
   selector: 'app-consultations',
@@ -118,7 +118,7 @@ export class Consultations {
       const ratio = total > 0 ? this.paidForItem(ci) / total : 0;
       return ratio >= 0.5 ? 'eligible' : 'not_qualified';
     }
-    if (pp.learners_due_date && pp.learners_due_date <= new Date().toISOString().slice(0, 10)) {
+    if (pp.learners_due_date && pp.learners_due_date <= todayISO()) {
       return 'due_for_testing';
     }
     return 'learners_active';

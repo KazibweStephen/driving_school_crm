@@ -15,6 +15,7 @@ from app.models.cart import CartItem, CartItemStatus
 from app.models.consultation import Consultation
 from app.models.user import User
 from app.models.product import Package
+from app.utils.timezones import today_local
 
 
 async def list_commission_rates(
@@ -28,7 +29,7 @@ async def list_commission_rates(
     if user_role != "super_user" and company_id is not None:
         query = query.where(CommissionRate.company_id == company_id)
     if active_only:
-        today = date.today()
+        today = today_local()
         query = query.where(
             CommissionRate.active_from <= today,
             and_(
@@ -226,12 +227,12 @@ async def create_commission_from_conversion(
         .where(
             CommissionRate.company_id == company_id,
             commission_rate_packages.c.package_id == package_id,
-            CommissionRate.active_from <= date.today(),
+            CommissionRate.active_from <= today_local(),
             and_(
                 CommissionRate.active_until.is_(None),
                 CommissionRate.deactivated_at.is_(None),
             ) | and_(
-                CommissionRate.active_until >= date.today(),
+                CommissionRate.active_until >= today_local(),
                 CommissionRate.deactivated_at.is_(None),
             )
         )

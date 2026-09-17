@@ -18,6 +18,7 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import { FinanceService, Expense, ExpenseCreate, ExpenseCategory, UnremittedClientPayment } from '../../core/services/finance.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
+import { toLocalDateStr } from '../../shared/utils/date.utils';
 import { ConsultationService, ClientInfo } from '../../core/services/consultation.service';
 import { CurrencyService } from '../../core/services/currency.service';
 import { UserDisplayCmp } from '../../shared/components/user-display';
@@ -364,7 +365,7 @@ export class ExpensesCmp implements OnInit {
         vehicle_id: f.vehicle_id || undefined,
         consultation_id: f.consultation_id || undefined,
         expense_date: f.expense_date instanceof Date
-          ? f.expense_date.toISOString().slice(0, 10)
+          ? toLocalDateStr(f.expense_date)
           : f.expense_date,
         receipt_url,
       };

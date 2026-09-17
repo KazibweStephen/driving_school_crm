@@ -5,6 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.product import EntityStatus
+from app.utils.timezones import today_local
 
 
 class PackageExpectedExpenseRead(BaseModel):
@@ -119,7 +120,7 @@ class PackageRead(BaseModel):
         if v is None:
             return None
         if isinstance(v, list):
-            today = date.today()
+            today = today_local()
             for rate in v:
                 active_from = getattr(rate, "active_from", None)
                 deactivated_at = getattr(rate, "deactivated_at", None)

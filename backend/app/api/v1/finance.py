@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.company import BorrowStatus, CollectionStatus, Company, ExpenseStatus, TransferStatus
 from app.models.user import User
+from app.utils.timezones import today_local, now_local
 from app.schemas.company import (
     BorrowedMoneyCreate,
     BorrowedMoneyRead,
@@ -326,7 +327,7 @@ async def approve_expense(
 
     expense.status = ExpenseStatus.APPROVED
     expense.approved_by = current_user.phone
-    expense.approved_at = datetime.now()
+    expense.approved_at = now_local()
     expense.rejection_reason = None
     await db.flush()
     await db.refresh(expense)
@@ -369,7 +370,7 @@ async def reject_expense(
     expense.status = ExpenseStatus.REJECTED
     expense.rejection_reason = data.rejection_reason
     expense.approved_by = current_user.phone
-    expense.approved_at = datetime.now()
+    expense.approved_at = now_local()
     await db.flush()
     await db.refresh(expense)
     return _expense_read(expense)
@@ -404,7 +405,7 @@ async def mark_expense_paid(
 
     expense.status = ExpenseStatus.PAID
     expense.paid_by = current_user.phone
-    expense.paid_at = datetime.now()
+    expense.paid_at = now_local()
     expense.paid_charges = charges
     if data and data.receipt_url is not None:
         expense.receipt_url = data.receipt_url
@@ -1047,7 +1048,7 @@ async def get_end_of_day(
     from app.models.company import Branch
     from app.schemas.end_of_day import EndOfDayReportRead, EndOfDayRead
 
-    day = report_date or date.today()
+    day = report_date or today_local()
     resolved_branch_ids = await resolve_assigned_branch_ids(
         db, current_user, [branch_id] if branch_id else None
     )

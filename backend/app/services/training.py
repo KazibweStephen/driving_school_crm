@@ -13,6 +13,7 @@ from app.models.lesson_plan import Vehicle
 from app.models.product import Package, Product
 from app.models.training import Skill, TrainingSession
 from app.models.user import UserRole
+from app.utils.timezones import today_local
 from app.schemas.training import TrainingSummary
 
 
@@ -346,7 +347,7 @@ async def get_daily_schedule(
         day_start = datetime.combine(schedule_date, datetime.min.time())
         day_end = datetime.combine(schedule_date, datetime.max.time())
     else:
-        today = date.today()
+        today = today_local()
         if period == "weekly":
             monday = today - timedelta(days=today.weekday())
             sunday = monday + timedelta(days=6)

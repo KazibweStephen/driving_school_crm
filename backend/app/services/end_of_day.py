@@ -19,6 +19,7 @@ from app.models.consultation import Consultation
 from app.models.end_of_day import EndOfDayReport
 from app.models.payment import Payment
 from app.schemas.end_of_day import EndOfDaySummary
+from app.utils.timezones import at_business_tz
 
 
 def _branch_cash_filter(branch_id: uuid.UUID):
@@ -91,7 +92,7 @@ async def compute_summary(
         ).where(
             Expense.branch_id == branch_id,
             Expense.status == ExpenseStatus.PAID,
-            func.date(Expense.paid_at) == day,
+            func.date(at_business_tz(Expense.paid_at)) == day,
         )
     )
 

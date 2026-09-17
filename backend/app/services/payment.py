@@ -12,6 +12,7 @@ from app.models.company import Branch, BranchTransfer, TransferStatus
 from app.models.consultation import Consultation, FollowUp
 from app.models.payment import Installment, InstallmentStatus, Payment
 from app.models.user import UserRole
+from app.utils.timezones import today_local
 
 
 def _generate_system_receipt_number() -> str:
@@ -184,7 +185,7 @@ async def create_collection_payment(
         if company_id is not None and branch.company_id != company_id:
             raise HTTPException(status_code=403, detail="Branch not in your company")
 
-    effective_date = document_date or date.today()
+    effective_date = document_date or today_local()
     if (
         consultation.document_date is not None
         and effective_date < consultation.document_date
@@ -745,7 +746,7 @@ async def mark_installment_paid(
     if inst.status == InstallmentStatus.CANCELLED:
         raise HTTPException(status_code=400, detail="Installment is cancelled")
 
-    now = date.today()
+    now = today_local()
     paid_amount = paid_amount if paid_amount is not None else inst.amount
     if paid_amount <= 0:
         raise HTTPException(status_code=400, detail="Payment amount must be greater than zero")

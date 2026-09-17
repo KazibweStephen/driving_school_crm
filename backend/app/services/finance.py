@@ -558,7 +558,7 @@ async def get_dunning_list(
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> list[dict]:
-    today = date.today()
+    today = today_local()
     query = (
         select(Installment)
         .options(

@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.models.company import Branch, Company, UserBranchAssignment
 from app.models.product import Product
 from app.models.user import User, UserRole
+from app.utils.timezones import now_local
 from app.schemas.company import BranchRead
 from app.schemas.payment import (
     PaymentGroupListResponse,
@@ -261,7 +262,7 @@ async def payments_report(
             <td>{doc_date}</td>
         </tr>"""
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = now_local().strftime("%Y-%m-%d %H:%M")
 
     html = f"""<!DOCTYPE html>
 <html lang="en">

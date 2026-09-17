@@ -16,6 +16,7 @@ from app.models.payment import Payment
 from app.models.permit import PermitAuditLog, PermitProgress
 from app.models.product import Package, Product
 from app.models.user import User, UserRole
+from app.utils.timezones import today_local
 
 
 async def _verify_cart_item_company(
@@ -438,7 +439,7 @@ def compute_tracker_status(t: dict) -> str:
         if t.get("eligibility_overridden"):
             return "eligible"
         return "eligible" if (t.get("paid_ratio") or 0) >= 0.5 else "not_qualified"
-    if t.get("learners_due_date") and t["learners_due_date"] <= date.today():
+    if t.get("learners_due_date") and t["learners_due_date"] <= today_local():
         return "due_for_testing"
     return "learners_active"
 

@@ -19,6 +19,7 @@ import { DiscountService, Discount, DiscountCreate, DiscountType, DiscountApplie
 import { AuthService } from '../../core/auth/auth.service';
 import { CompanyService, Company, Branch } from '../../core/services/company.service';
 import { ProductService, Product } from '../../core/services/product.service';
+import { toLocalDateStr } from '../../shared/utils/date.utils';
 
 @Component({
   selector: 'app-discounts',
@@ -122,7 +123,7 @@ export class DiscountsCmp implements OnInit {
   }
 
   formatDate(d: Date): string {
-    return d.toISOString().split('T')[0];
+    return toLocalDateStr(d);
   }
 
   async loadBranches() {

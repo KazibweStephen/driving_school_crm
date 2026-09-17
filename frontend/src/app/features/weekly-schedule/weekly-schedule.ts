@@ -11,6 +11,7 @@ import {
   SchedulingService,
   WeeklyScheduleEntry,
 } from '../../core/services/scheduling.service';
+import { toLocalDateStr } from '../../shared/utils/date.utils';
 
 @Component({
   selector: 'app-weekly-schedule',
@@ -142,7 +143,7 @@ export class WeeklyScheduleCmp implements OnInit {
     if (!d) return;
     this.loading.set(true);
     try {
-      const ds = d.toISOString().split('T')[0];
+      const ds = toLocalDateStr(d);
       const res = await this.schedulingService.getWeeklySchedule(ds).toPromise();
       this.slots.set(res?.slots || []);
     } catch {
@@ -158,7 +159,7 @@ export class WeeklyScheduleCmp implements OnInit {
     if (!d) return [];
     const date = new Date(d);
     date.setDate(date.getDate() + dayIdx);
-    const ds = date.toISOString().split('T')[0];
+    const ds = toLocalDateStr(date);
     return this.slots().filter(
       s => s.scheduled_date === ds && (s.scheduled_start_time?.substring(0, 5) === time)
     );

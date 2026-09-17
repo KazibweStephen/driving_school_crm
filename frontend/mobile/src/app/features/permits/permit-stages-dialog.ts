@@ -111,6 +111,57 @@ export class PermitStagesDialog {
     return [];
   }
 
+  // Journey steps: only the current stage's action is enabled; future steps stay visible (but locked).
+  get learnerExpenseEnabled(): boolean {
+    return this.stageIndex >= 0 && this.stageIndex <= 1 && !this.learnerExpensePaid;
+  }
+  get learnerExpenseDone(): boolean {
+    return this.learnerExpensePaid;
+  }
+
+  get learnerDatesEnabled(): boolean {
+    return this.stageIndex === 1 || this.stageIndex === 2
+      || (!!this.tracker?.learner_expense_paid && !this.progress?.got_learners_permit_date);
+  }
+  get learnerDatesDone(): boolean {
+    return !!this.progress?.got_learners_permit_date;
+  }
+
+  get testingDueEnabled(): boolean {
+    return this.stageIndex === 3 && !this.testingExpensePaid;
+  }
+  get testingDueDone(): boolean {
+    return this.testingExpensePaid;
+  }
+
+  get testDateEnabled(): boolean {
+    return this.stageIndex === 4 || (this.stageIndex === 3 && this.testingExpensePaid);
+  }
+  get testDateDone(): boolean {
+    return !!this.progress?.test_date;
+  }
+
+  get testedOnEnabled(): boolean {
+    return this.stageIndex === 5;
+  }
+  get testedOnDone(): boolean {
+    return !!this.progress?.tested_on_date;
+  }
+
+  get permitExpenseEnabled(): boolean {
+    return this.stageIndex === 5 && !this.permitExpensePaid;
+  }
+  get permitExpenseDone(): boolean {
+    return this.permitExpensePaid;
+  }
+
+  get permitReceivedEnabled(): boolean {
+    return this.stageIndex === 6;
+  }
+  get permitReceivedDone(): boolean {
+    return !!this.progress?.permit_received_date;
+  }
+
   open(tracker: PermitTracker) {
     this.tracker = tracker;
     this.overrideEligible = true;
@@ -166,18 +217,31 @@ export class PermitStagesDialog {
     }
   }
 
-  async saveDates() {
+  async saveLearnerDates() {
+    await this.saveFields({
+      got_learners_permit_date: this.localIso(this.gotLearnersDate),
+      learners_due_date: this.localIso(this.learnersDueDate),
+      learners_expiry_date: this.localIso(this.learnersExpiryDate),
+    });
+  }
+
+  async saveTestDate() {
+    await this.saveFields({ test_date: this.localIso(this.newTestDate) });
+  }
+
+  async saveTestedOnDate() {
+    await this.saveFields({ tested_on_date: this.localIso(this.testedOnDate) });
+  }
+
+  async savePermitReceivedDate() {
+    await this.saveFields({ permit_received_date: this.localIso(this.permitReceivedDate) });
+  }
+
+  private async saveFields(fields: Record<string, string | undefined>) {
     if (!this.tracker) return;
     this.saving.set(true);
     try {
-      const updated = await this.permitService.updatePermitProgress(this.tracker.cart_item_id, {
-        got_learners_permit_date: this.localIso(this.gotLearnersDate) as any,
-        learners_due_date: this.localIso(this.learnersDueDate) as any,
-        learners_expiry_date: this.localIso(this.learnersExpiryDate) as any,
-        test_date: this.localIso(this.newTestDate) as any,
-        tested_on_date: this.localIso(this.testedOnDate) as any,
-        permit_received_date: this.localIso(this.permitReceivedDate) as any,
-      } as any).toPromise();
+      const updated = await this.permitService.updatePermitProgress(this.tracker.cart_item_id, fields as any).toPromise();
       if (updated) this.progress = updated;
       this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Permit dates updated' });
       this.changed.emit();
@@ -214,6 +278,7 @@ export class PermitStagesDialog {
 
   goToExpenses() {
     if (!this.tracker) return;
+    const consultationId = this.tracker.consultation_id;
     const category = this.showLearnerExpense ? 'Learner Permit Payment'
       : this.showPermitExpense ? 'Permit Payment'
       : '';
@@ -223,7 +288,7 @@ export class PermitStagesDialog {
     this.close();
     this.router.navigate(['expenses'], {
       queryParams: {
-        consultation_id: this.tracker.consultation_id,
+        consultation_id: consultationId,
         category: category || undefined,
         back,
       },

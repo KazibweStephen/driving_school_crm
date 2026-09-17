@@ -28,6 +28,7 @@ from app.models.consultation import Consultation
 from app.models.payment import Installment, InstallmentStatus, Payment
 from app.models.user import UserRole
 from app.services.notification import on_installment_overdue, on_expense_approved
+from app.utils.timezones import today_local, now_local
 
 
 # ── Expenses ──
@@ -44,6 +45,7 @@ async def list_expenses(
     current_user_role: UserRole | None = None,
     category: str | None = None,
     category_not: str | None = None,
+    consultation_id: uuid.UUID | None = None,
 ) -> tuple[list[Expense], int]:
     query = select(Expense).options(
         selectinload(Expense.created_by_user),
@@ -69,6 +71,9 @@ async def list_expenses(
     if category_not:
         query = query.where(or_(Expense.category != category_not, Expense.category.is_(None)))
         count_query = count_query.where(or_(Expense.category != category_not, Expense.category.is_(None)))
+    if consultation_id:
+        query = query.where(Expense.consultation_id == consultation_id)
+        count_query = count_query.where(Expense.consultation_id == consultation_id)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
@@ -171,7 +176,7 @@ async def create_expense(
         consultation_id=consultation_id,
         mileage=mileage,
         vehicle_id=vehicle_id,
-        expense_date=expense_date or datetime.now(timezone.utc),
+        expense_date=expense_date or now_local(),
         status=ExpenseStatus(status),
         receipt_url=receipt_url,
         created_by_phone=created_by_phone,
@@ -498,7 +503,7 @@ async def update_collection(
 
 
 async def get_overdue_installments(db: AsyncSession) -> list[Installment]:
-    today = date.today()
+    today = today_local()
     result = await db.execute(
         select(Installment)
         .options(selectinload(Installment.payment).selectinload(Payment.consultation))
@@ -592,7 +597,7 @@ async def get_dunning_list(
 
 async def send_dunning_notifications(db: AsyncSession) -> int:
     from app.models.branch import Branch
-    today = date.today()
+    today = today_local()
     result = await db.execute(
         select(Installment)
         .options(
@@ -1257,7 +1262,7 @@ async def get_collections_sheet(
     current_user_role: UserRole | None = None,
 ) -> list[dict]:
     if not start_date:
-        start_date = date.today()
+        start_date = today_local()
     if not end_date:
         end_date = start_date
 
@@ -1287,7 +1292,7 @@ async def get_collections_sheet(
     for c in collections:
         consultation = c.consultation
         client_name = f"{consultation.first_name} {consultation.last_name or ''}".strip()
-        created = c.created_at.date() if c.created_at else date.today()
+        created = c.created_at.date() if c.created_at else today_local()
         rows.append({
             "id": str(c.id),
             "consultation_id": str(c.consultation_id),

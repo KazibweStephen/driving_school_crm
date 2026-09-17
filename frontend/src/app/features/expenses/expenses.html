@@ -1,6 +1,33 @@
 <p-toast></p-toast>
 
 <div class="p-4 sm:p-6">
+  @if (routeConsultationId()) {
+    <div class="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3" data-testid="permit-context-banner">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="text-sm text-indigo-900">
+          <i class="pi pi-id-card mr-2"></i>
+          <span class="font-semibold">Recording a permit stage expense</span>
+          @if (contextClientLabel()) {
+            <span> for <span class="font-semibold">{{ contextClientLabel() }}</span></span>
+          }
+          @if (routeCategory) {
+            <span> — <span class="font-semibold">{{ routeCategory }}</span></span>
+          }
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <p-button label="Back to Permits" icon="pi pi-arrow-left" severity="secondary" (onClick)="backToPrevious()" data-testid="back-to-permits" />
+        </div>
+      </div>
+      @if (expenses().filter(e => e.status === 'pending' || e.status === 'approved').length > 0) {
+        <div class="mt-2 text-xs text-amber-700">
+          <i class="pi pi-exclamation-triangle mr-1"></i>
+          {{ expenses().filter(e => e.status === 'pending' || e.status === 'approved').length }}
+          existing expense(s) awaiting action found below — approve or mark paid to advance the permit stage.
+        </div>
+      }
+    </div>
+  }
+
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
     <h1 class="text-2xl font-bold text-gray-900">Expenses</h1>
     <div class="flex flex-wrap gap-2">

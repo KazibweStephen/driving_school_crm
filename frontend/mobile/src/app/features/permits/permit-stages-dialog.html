@@ -52,54 +52,20 @@
     @if (status === 'not_qualified' || status === 'eligible') {
 <!-- Record stage-required expenses -->
     @if (showLearnerExpense || showTestingExpenses || showPermitExpense) {
-      <div class="mb-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3">
+      <div class="mb-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3" data-testid="permit-record-expense">
         <h3 class="mb-1 text-xs font-semibold text-gray-800"><i class="pi pi-shopping-cart mr-1"></i>Record Stage Expense</h3>
         <p class="mb-2 text-[10px] text-gray-500">
           @if (showLearnerExpense) {
-            Pay the <b>Learner Permit Payment</b> to secure the permit application. Then add the issue date.
+            Pay the <b>Learner Permit Payment</b> on the Expenses page to secure the permit application. Then add the issue date.
           } @else if (showTestingExpenses) {
-            Pay testing dues (Test/Police/IOV) to mark the client <b>ready for testing</b>.
+            Pay the testing dues (<b>{{ stageExpenseCategories.join(', ') }}</b>) on the Expenses page to mark the client <b>ready for testing</b>.
           } @else {
-            Pay the <b>Permit Payment</b> to complete permit processing. Then add the tested-on and permit received dates.
+            Pay the <b>Permit Payment</b> on the Expenses page to complete permit processing. Then add the tested-on and permit received dates.
           }
         </p>
-        @if (showLearnerExpense) {
-          <label class="block text-xs mb-2">
-            <span class="mb-1 block text-[10px] font-medium text-gray-500">Learner Permit Payment</span>
-            <input id="learner-expense-amount" pInputText type="number" [(ngModel)]="learnerAmount" class="w-full text-xs" placeholder="0" />
-          </label>
-        }
-        @if (showTestingExpenses) {
-          <div class="grid grid-cols-3 gap-2 mb-2">
-            <label class="block text-xs">
-              <span class="mb-1 block text-[10px] font-medium text-gray-500">Test</span>
-              <input id="test-booking-amount" pInputText type="number" [(ngModel)]="testBookingAmount" class="w-full text-xs" placeholder="0" />
-            </label>
-            <label class="block text-xs">
-              <span class="mb-1 block text-[10px] font-medium text-gray-500">Police</span>
-              <input id="police-booking-amount" pInputText type="number" [(ngModel)]="policeBookingAmount" class="w-full text-xs" placeholder="0" />
-            </label>
-            <label class="block text-xs">
-              <span class="mb-1 block text-[10px] font-medium text-gray-500">IOV</span>
-              <input id="iov-fees-amount" pInputText type="number" [(ngModel)]="iovFeesAmount" class="w-full text-xs" placeholder="0" />
-            </label>
-          </div>
-        }
-        @if (showPermitExpense) {
-          <label class="block text-xs mb-2">
-            <span class="mb-1 block text-[10px] font-medium text-gray-500">Permit Payment</span>
-            <input id="permit-expense-amount" pInputText type="number" [(ngModel)]="permitAmount" class="w-full text-xs" placeholder="0" />
-          </label>
-        }
-        <div class="mb-2">
-          <label class="block text-xs">
-            <span class="mb-1 block text-[10px] font-medium text-gray-500">Expense date</span>
-            <p-datepicker [(ngModel)]="expenseDate" dateFormat="dd/mm/yy" appendTo="body" styleClass="w-full" [showIcon]="true" />
-          </label>
-        </div>
-        <div class="flex items-center gap-2">
-          <p-button label="Record Expense" icon="pi pi-check-circle" severity="info" size="small" [loading]="recording()" (onClick)="recordExpenseNow()" />
-          <span class="text-[10px] text-gray-500">Total: {{ stageExpenseTotal | number }} UGX</span>
+        <div class="flex flex-wrap items-center gap-2">
+          <p-button label="Go to Expenses" icon="pi pi-external-link" severity="info" size="small" (onClick)="goToExpenses()" data-testid="permit-go-expenses" />
+          <span class="text-[10px] text-gray-500">{{ stageExpenseCategories.join(', ') }}</span>
         </div>
       </div>
     }

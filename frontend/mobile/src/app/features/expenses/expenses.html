@@ -1,5 +1,36 @@
 <app-page-header title="Expenses" />
 
+@if (routeConsultationId()) {
+  <div class="mx-4 my-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3" data-testid="permit-context-banner">
+    <div class="text-xs text-indigo-900">
+      <span class="pi pi-id-card mr-1"></span>
+      <span class="font-semibold">Recording a permit stage expense</span>
+      @if (contextClientLabel()) {
+        <div class="mt-1 font-semibold">{{ contextClientLabel() }}</div>
+      }
+      @if (routeCategory) {
+        <div class="mt-0.5">Category: <span class="font-semibold">{{ routeCategory }}</span></div>
+      }
+    </div>
+    @if (expenses().filter(e => e.status === 'pending' || e.status === 'approved').length > 0) {
+      <div class="mt-2 text-xs text-amber-700">
+        <span class="pi pi-exclamation-triangle mr-1"></span>
+        {{ expenses().filter(e => e.status === 'pending' || e.status === 'approved').length }}
+        existing expense(s) awaiting action below — approve or mark paid to advance the permit stage.
+      </div>
+    }
+    <p-button
+      label="Back to Permits"
+      icon="pi pi-arrow-left"
+      severity="secondary"
+      size="small"
+      styleClass="mt-2"
+      (click)="backToPrevious()"
+      data-testid="back-to-permits"
+    />
+  </div>
+}
+
 @if (step() === 'list') {
   <div class="space-y-4">
     <div class="grid grid-cols-2 gap-2">

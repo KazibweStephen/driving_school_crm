@@ -184,6 +184,7 @@ async def list_expenses(
     status: ExpenseStatus | None = Query(None),
     category: str | None = Query(None),
     category_not: str | None = Query(None),
+    consultation_id: uuid.UUID | None = Query(None, description="Filter to expenses attached to this consultation"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -202,6 +203,7 @@ async def list_expenses(
         page=page, page_size=page_size,
         company_id=current_user.company_id, current_user_role=current_user.role,
         category=category, category_not=category_not,
+        consultation_id=consultation_id,
     )
 
     items = []

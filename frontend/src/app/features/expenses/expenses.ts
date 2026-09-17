@@ -1,6 +1,7 @@
 import { Component, OnInit, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
@@ -58,6 +59,15 @@ export class ExpensesCmp implements OnInit {
   payCharges = signal(0);
   payReceiptFile = signal<File | null>(null);
   payingUpload = signal(false);
+
+  // Permit-stage navigation context (query params: consultation_id, category, back)
+  routeConsultationId = signal<string>('');
+  routeCategory = '';
+  backUrl = '';
+  contextClientLabel = signal('');
+  contextPrefilled = signal(false);
+  contextReadyConsultation = false;
+  contextReadyCategories = false;
 
   categories = signal<ExpenseCategory[]>([]);
   categoryOptions = computed(() => {
@@ -177,58 +187,42 @@ export class ExpensesCmp implements OnInit {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public currencyService: CurrencyService,
+    private route: ActivatedRoute,
+    private router: Router,
   ) {}
 
   ngOnInit() {
     this.loadBranches();
     this.loadExpenses();
     this.loadCategories();
-  }
-
-  private loadCategories() {
-    this.financeService.listExpenseCategories().subscribe({
-      next: (res) => this.categories.set(res.items),
-      error: () => {},
+    this.route.queryParams.subscribe((params: any) => {
+      const cid = params['consultation_id'];
+      if (!cid) return;
+      this.routeConsultationId.set(cid);
+      this.routeCategory = params['category'] || '';
+      this.backUrl = params['back'] || '/permits';
+      this.loadExpenses();
+      this.setupPermitContext(cid);
     });
   }
 
-  private loadBranches() {
-    this.companyService.list().subscribe({
-      next: (companies) => {
-        for (const c of companies) {
-          this.companyService.listBranches(c.id).subscribe({
-            next: (branches) => this.branches.set([...this.branches(), ...branches]),
-          });
-        }
-      },
-    });
+  private setupPermitContext(cid: string) {
+    this.consultationService.get(cid).toPromise()
+      .then((c) => {
+        if (!c) return;
+        this.contextClientLabel.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
+        this.prefillForm.branch_id = c.branch_id || '';
+        this.prefillForm.consultation_id = cid;
+        this.contextReadyConsultation = true;
+        this.doTryOpenCreate();
+      })
+      .catch(() => {});
   }
 
-  async loadExpenses() {
-    this.loading.set(true);
-    try {
-      const res = await this.financeService.listExpenses({
-        branch_id: this.filterBranch() || undefined,
-        status: this.filterStatus() || undefined,
-        page: this.page,
-        page_size: this.pageSize,
-      }).toPromise();
-      if (res) {
-        this.expenses.set(res.items);
-        this.total = res.total;
-      }
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load expenses' });
-    } finally {
-      this.loading.set(false);
-    }
-  }
-
-  onPage(event: any) {
-    this.page = Math.floor(event.first / event.rows) + 1;
-    this.pageSize = event.rows;
-    this.loadExpenses();
-  }
+  private prefillForm = {
+    branch_id: '',
+    consultation_id: '',
+  };
 
   openCreate() {
     this.editing.set(null);
@@ -249,6 +243,78 @@ export class ExpensesCmp implements OnInit {
     this.receiptFile.set(null);
     this.vehicles.set([]);
     this.showDialog.set(true);
+  }
+
+  private doTryOpenCreate() {
+    if (this.contextPrefilled()) return;
+    if (!this.routeConsultationId()) return;
+    if (!this.contextReadyConsultation || !this.contextReadyCategories) return;
+    this.contextPrefilled.set(true);
+    this.openCreate();
+    if (this.routeCategory) this.form.category = this.routeCategory;
+    if (this.prefillForm.branch_id) this.form.branch_id = this.prefillForm.branch_id;
+    if (this.prefillForm.consultation_id) {
+      this.form.consultation_id = this.prefillForm.consultation_id;
+      this.clientQuery.set(this.contextClientLabel());
+    }
+    this.loadVehiclesForBranch();
+    this.loadClientAccountDetail();
+  }
+
+  backToPrevious() {
+    this.router.navigateByUrl(this.backUrl || '/permits');
+  }
+
+  private loadCategories() {
+    this.financeService.listExpenseCategories().subscribe({
+      next: (res) => {
+        this.categories.set(res.items);
+        this.contextReadyCategories = true;
+        this.doTryOpenCreate();
+      },
+      error: () => {},
+    });
+  }
+
+  private loadBranches() {
+    this.companyService.list().subscribe({
+      next: (companies) => {
+        for (const c of companies) {
+          this.companyService.listBranches(c.id).subscribe({
+            next: (branches) => this.branches.set([...this.branches(), ...branches]),
+          });
+        }
+      },
+    });
+  }
+
+  async loadExpenses() {
+    this.loading.set(true);
+    try {
+      const inContext = !!this.routeConsultationId();
+      const res = await this.financeService.listExpenses({
+        branch_id: this.filterBranch() || undefined,
+        status: this.filterStatus() || undefined,
+        consultation_id: inContext ? this.routeConsultationId() : undefined,
+        category: inContext ? (this.routeCategory || undefined) : undefined,
+        page: this.page,
+        page_size: this.pageSize,
+      }).toPromise();
+      if (res) {
+        this.expenses.set(res.items);
+        this.total = res.total;
+      }
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load expenses' });
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  onPage(event: any) {
+    this.page = Math.floor(event.first / event.rows) + 1;
+    this.pageSize = event.rows;
+    this.loadExpenses();
   }
 
   onBranchChangeInDialog() {

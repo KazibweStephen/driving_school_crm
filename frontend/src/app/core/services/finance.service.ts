@@ -308,12 +308,18 @@ export class FinanceService {
     status?: string;
     page?: number;
     page_size?: number;
+    consultation_id?: string;
+    category?: string;
+    category_not?: string;
   }): Observable<ExpenseListResponse> {
     let p = new HttpParams();
     if (params?.branch_id) p = p.set('branch_id', params.branch_id);
     if (params?.status) p = p.set('status', params.status);
     if (params?.page) p = p.set('page', params.page);
     if (params?.page_size) p = p.set('page_size', params.page_size);
+    if (params?.consultation_id) p = p.set('consultation_id', params.consultation_id);
+    if (params?.category) p = p.set('category', params.category);
+    if (params?.category_not) p = p.set('category_not', params.category_not);
     return this.http.get<ExpenseListResponse>(`${this.base}/expenses`, { params: p });
   }
 

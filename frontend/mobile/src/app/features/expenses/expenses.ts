@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -42,10 +43,22 @@ export class Expenses {
   private catalog = inject(CatalogService);
   private consultationService = inject(ConsultationService);
   private messageService = inject(MessageService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
 
   currency = this.auth.currencyCode;
   canBackdate = this.auth.currentUserCanBackdate;
   permissions = this.auth.permissions;
+
+  // Permit-stage navigation context (query params: consultation_id, category, back)
+  routeConsultationId = signal('');
+  routeCategory = '';
+  backUrl = '';
+  contextClientLabel = signal('');
+  contextPrefilled = signal(false);
+  contextReadyConsultation = false;
+  contextReadyCategories = false;
+  contextClientBranch = signal<string | null>(null);
 
   step = signal<Step>('list');
   loading = signal(false);
@@ -125,6 +138,47 @@ export class Expenses {
     this.loadExpenses();
     this.loadBranches();
     this.loadCategoryAccounts();
+    this.route.queryParams.subscribe((params: any) => {
+      const cid = params['consultation_id'];
+      if (!cid) return;
+      this.routeConsultationId.set(cid);
+      this.routeCategory = params['category'] || '';
+      this.backUrl = params['back'] || '/permits';
+      this.tab.set('expenses');
+      this.loadExpenses();
+      this.setupPermitContext(cid);
+    });
+  }
+
+  private setupPermitContext(cid: string) {
+    this.consultationService.get(cid).toPromise()
+      .then((c) => {
+        if (!c) return;
+        this.contextClientLabel.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
+        if (c.branch_id) this.contextClientBranch.set(c.branch_id);
+        this.contextReadyConsultation = true;
+        this.doTryOpenCreate();
+      })
+      .catch(() => {});
+  }
+
+  private doTryOpenCreate() {
+    if (this.contextPrefilled()) return;
+    if (!this.routeConsultationId()) return;
+    if (!this.contextReadyConsultation || !this.contextReadyCategories) return;
+    this.contextPrefilled.set(true);
+    this.openCreate();
+    if (this.routeCategory) this.category.set(this.routeCategory);
+    const branchId = this.contextClientBranch() || this.branchId();
+    if (branchId) this.branchId.set(branchId);
+    this.consultationId.set(this.routeConsultationId());
+    this.selectedClientLabel.set(this.contextClientLabel());
+    this.loadVehiclesForBranch();
+    this.loadClientAccountDetail();
+  }
+
+  backToPrevious() {
+    this.router.navigateByUrl(this.backUrl || '/permits');
   }
 
   private loadCategoryAccounts() {
@@ -142,6 +196,8 @@ export class Expenses {
         this.accountCategories = clientAcc;
         this.requiresClientCategories = clientReq;
         this.categories.set((res.items ?? []).filter((c) => c.is_active));
+        this.contextReadyCategories = true;
+        this.doTryOpenCreate();
       },
       error: () => {},
     });
@@ -237,12 +293,14 @@ export class Expenses {
   loadExpenses() {
     this.loading.set(true);
     const isSms = this.tab() === 'sms';
+    const inContext = !!this.routeConsultationId();
     this.expenseService
       .getExpenses({
         branch_id: this.branchId(),
         status: isSms ? 'paid' : (this.statusFilter() || null),
-        category: isSms ? SMS_CATEGORY : null,
+        category: isSms ? SMS_CATEGORY : (inContext && this.routeCategory ? this.routeCategory : null),
         category_not: isSms ? null : SMS_CATEGORY,
+        consultation_id: inContext ? this.routeConsultationId() : null,
         page: this.page(),
         page_size: this.pageSize,
       })

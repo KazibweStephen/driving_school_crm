@@ -1,11 +1,11 @@
 import { Component, EventEmitter, Output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { DatePickerModule } from 'primeng/datepicker';
-import { InputNumberModule } from 'primeng/inputnumber';
 import { SelectModule } from 'primeng/select';
 import { TagModule } from 'primeng/tag';
 import { MessageService } from 'primeng/api';
@@ -22,7 +22,7 @@ interface StageDef {
   selector: 'app-permit-stages-dialog',
   imports: [
     CommonModule, FormsModule, ButtonModule, DialogModule, InputTextModule,
-    DatePickerModule, SelectModule, TagModule, ToastModule, InputNumberModule,
+    DatePickerModule, SelectModule, TagModule, ToastModule,
   ],
   templateUrl: './permit-stages-dialog.html',
 })
@@ -39,15 +39,6 @@ export class PermitStagesDialog {
   // Eligibility override
   overrideEligible = true;
   overrideReason = '';
-
-  // Stage-required expense recording (amounts in UGX)
-  expenseDate: Date | null = null;
-  learnerAmount: number | null = null;
-  testBookingAmount: number | null = null;
-  policeBookingAmount: number | null = null;
-  iovFeesAmount: number | null = null;
-  permitAmount: number | null = null;
-  recording = signal(false);
 
   // Booked test date + actual test date
   newTestDate: Date | null = null;
@@ -71,6 +62,7 @@ export class PermitStagesDialog {
   constructor(
     private permitService: PermitProgressService,
     private messageService: MessageService,
+    private router: Router,
   ) {}
 
   get today(): Date {
@@ -124,13 +116,11 @@ export class PermitStagesDialog {
     return !!this.tracker && (this.status === 'waiting_for_permit') && !this.permitExpensePaid;
   }
 
-  get stageExpenseTotal(): number {
-    if (this.showLearnerExpense) return this.learnerAmount || 0;
-    if (this.showTestingExpenses) {
-      return (this.testBookingAmount || 0) + (this.policeBookingAmount || 0) + (this.iovFeesAmount || 0);
-    }
-    if (this.showPermitExpense) return this.permitAmount || 0;
-    return 0;
+  get stageExpenseCategories(): string[] {
+    if (this.showLearnerExpense) return ['Learner Permit Payment'];
+    if (this.showTestingExpenses) return ['Test Booking', 'Police Booking', 'IOV Fees'];
+    if (this.showPermitExpense) return ['Permit Payment'];
+    return [];
   }
 
   open(tracker: PermitTracker) {
@@ -238,49 +228,22 @@ export class PermitStagesDialog {
     }
   }
 
-  async recordExpenseNow() {
+  goToExpenses() {
     if (!this.tracker) return;
-    const expenses: { category_code: string; amount: number; description?: string }[] = [];
-    if (this.showLearnerExpense) {
-      if (!this.learnerAmount) {
-        this.messageService.add({ severity: 'warn', summary: 'Amount required', detail: 'Enter the Learner Permit Payment amount' });
-        return;
-      }
-      expenses.push({ category_code: 'learner_permit_payment', amount: this.learnerAmount, description: 'Learner Permit Payment' });
-    } else if (this.showTestingExpenses) {
-      if (this.testBookingAmount) expenses.push({ category_code: 'test_booking', amount: this.testBookingAmount, description: 'Test Booking' });
-      if (this.policeBookingAmount) expenses.push({ category_code: 'police_booking', amount: this.policeBookingAmount, description: 'Police Booking' });
-      if (this.iovFeesAmount) expenses.push({ category_code: 'iov_fees', amount: this.iovFeesAmount, description: 'IOV Fees' });
-      if (!expenses.length) {
-        this.messageService.add({ severity: 'warn', summary: 'Amount required', detail: 'Enter at least one testing expense amount' });
-        return;
-      }
-    } else if (this.showPermitExpense) {
-      if (!this.permitAmount) {
-        this.messageService.add({ severity: 'warn', summary: 'Amount required', detail: 'Enter the Permit Payment amount' });
-        return;
-      }
-      expenses.push({ category_code: 'permit_payment', amount: this.permitAmount, description: 'Permit Payment' });
-    }
-    if (!expenses.length) return;
-    this.recording.set(true);
-    try {
-      await this.permitService.recordExpense(this.tracker.cart_item_id, {
-        expenses,
-        expense_date: this.expenseDate ? this.localIso(this.expenseDate) : null,
-      }).toPromise();
-      const total = expenses.reduce((s, e) => s + e.amount, 0);
-      this.messageService.add({ severity: 'success', summary: 'Expense recorded', detail: `${expenses.map(e => e.description).join(', ')} recorded (${total} UGX) and matched to the client` });
-      this.learnerAmount = null; this.testBookingAmount = null; this.policeBookingAmount = null;
-      this.iovFeesAmount = null; this.permitAmount = null; this.expenseDate = null;
-      this.changed.emit();
-      await this.loadProgress();
-    } catch (err: any) {
-      const detail = err?.error?.detail || 'Failed to record the permit expense';
-      this.messageService.add({ severity: 'error', summary: 'Error', detail });
-    } finally {
-      this.recording.set(false);
-    }
+    const category = this.showLearnerExpense ? 'Learner Permit Payment'
+      : this.showPermitExpense ? 'Permit Payment'
+      : '';
+    const back = this.router.url && !this.router.url.startsWith('/expenses')
+      ? this.router.url
+      : '/permits';
+    this.close();
+    this.router.navigate(['/expenses'], {
+      queryParams: {
+        consultation_id: this.tracker.consultation_id,
+        category: category || undefined,
+        back,
+      },
+    });
   }
 
   auditLabel(field: string): string {

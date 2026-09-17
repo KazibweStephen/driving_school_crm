@@ -100,6 +100,7 @@ export class ExpenseService {
     status?: string | null;
     category?: string | null;
     category_not?: string | null;
+    consultation_id?: string | null;
     page?: number;
     page_size?: number;
   }) {
@@ -108,6 +109,7 @@ export class ExpenseService {
     if (params?.status) httpParams = httpParams.set('status', params.status);
     if (params?.category) httpParams = httpParams.set('category', params.category);
     if (params?.category_not) httpParams = httpParams.set('category_not', params.category_not);
+    if (params?.consultation_id) httpParams = httpParams.set('consultation_id', params.consultation_id);
     if (params?.page != null) httpParams = httpParams.set('page', String(params.page));
     if (params?.page_size != null) httpParams = httpParams.set('page_size', String(params.page_size));
     return this.http.get<ExpenseListResponse>('/api/v1/finance/expenses', { params: httpParams });

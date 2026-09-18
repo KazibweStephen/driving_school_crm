@@ -14,6 +14,8 @@ export interface Expense {
   category: string | null;
   mileage: number | null;
   vehicle_id: string | null;
+  consultation_id: string | null;
+  cart_item_id: string | null;
   status: 'pending' | 'approved' | 'rejected' | 'paid';
   approved_by: string | null;
   approved_at: string | null;
@@ -45,6 +47,7 @@ export interface ExpenseCreatePayload {
   mileage?: number;
   vehicle_id?: string;
   consultation_id?: string;
+  cart_item_id?: string;
   expense_date?: string;
   status?: string;
   receipt_url?: string;
@@ -101,6 +104,7 @@ export class ExpenseService {
     category?: string | null;
     category_not?: string | null;
     consultation_id?: string | null;
+    cart_item_id?: string | null;
     page?: number;
     page_size?: number;
   }) {
@@ -110,6 +114,7 @@ export class ExpenseService {
     if (params?.category) httpParams = httpParams.set('category', params.category);
     if (params?.category_not) httpParams = httpParams.set('category_not', params.category_not);
     if (params?.consultation_id) httpParams = httpParams.set('consultation_id', params.consultation_id);
+    if (params?.cart_item_id) httpParams = httpParams.set('cart_item_id', params.cart_item_id);
     if (params?.page != null) httpParams = httpParams.set('page', String(params.page));
     if (params?.page_size != null) httpParams = httpParams.set('page_size', String(params.page_size));
     return this.http.get<ExpenseListResponse>('/api/v1/finance/expenses', { params: httpParams });

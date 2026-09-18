@@ -4,6 +4,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import require_permission
 from app.core.database import get_db
@@ -637,18 +638,24 @@ async def create_expense(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Branch not found",
         )
+    if not (data.category or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category is required",
+        )
     expense = Expense(
         branch_id=bid,
         amount=data.amount,
         description=data.description,
-        category=data.category,
+        category=data.category.strip(),
         expense_date=data.expense_date,
         created_by_phone=current_user.phone,
     )
     db.add(expense)
     await db.commit()
     await db.refresh(expense)
-    return ExpenseRead.model_validate(expense)
+    read = ExpenseRead.model_validate(expense)
+    return read.model_copy(update={"branch_name": branch.name if branch else None})
 
 
 @router.get(
@@ -669,11 +676,17 @@ async def list_expenses(
         )
     result = await db.execute(
         select(Expense)
+        .options(selectinload(Expense.branch))
         .where(Expense.branch_id == bid)
         .order_by(Expense.expense_date.desc())
     )
     expenses = result.scalars().all()
-    return [ExpenseRead.model_validate(e) for e in expenses]
+    return [
+        ExpenseRead.model_validate(e).model_copy(
+            update={"branch_name": e.branch.name if e.branch else None}
+        )
+        for e in expenses
+    ]
 
 
 # ── Sale ──

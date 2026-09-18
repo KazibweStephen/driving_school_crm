@@ -331,20 +331,29 @@ async def list_permit_trackers(
 
     # Already-paid permit/testing expenses per consultation (flag to admin:
     # the expense is paid but the date/photo may still need capturing).
+    # When an expense has cart_item_id, it's linked to that specific cart item.
     consultation_ids = {ci.consultation_id for ci in rows}
     paid_expense_kinds: dict[uuid.UUID, set[str]] = {}
     if consultation_ids:
         exp_rows = await db.execute(
-            select(Expense.consultation_id, Expense.category, Expense.status)
+            select(
+                Expense.consultation_id,
+                Expense.cart_item_id,
+                Expense.category,
+                Expense.status,
+            )
             .where(
                 Expense.consultation_id.in_(consultation_ids),
                 Expense.status == "paid",
             )
         )
-        for cid, category, _status in exp_rows.all():
+        for cid, cart_item_id, category, _status in exp_rows.all():
             kind = categorize_permit_expense(category)
-            if kind is not None:
-                paid_expense_kinds.setdefault(cid, set()).add(kind)
+            if kind is None:
+                continue
+            # If expense has cart_item_id, key by cart_item_id; otherwise by consultation_id
+            key = cart_item_id if cart_item_id else cid
+            paid_expense_kinds.setdefault(key, set()).add(kind)
 
     # Load product + package names
     product_ids = {ci.product_id for ci in rows if ci.product_id}
@@ -409,7 +418,8 @@ async def list_permit_trackers(
             "eligibility_overridden": bool(pp.eligibility_overridden) if pp else False,
             "eligibility_override_reason": pp.eligibility_override_reason if pp else None,
         }
-        kinds = paid_expense_kinds.get(cons.id, set())
+        # Look up paid expense kinds: prefer cart_item_id match, fall back to consultation_id
+        kinds = paid_expense_kinds.get(ci.id, set()) or paid_expense_kinds.get(cons.id, set())
         tracker["learner_expense_paid"] = "learner" in kinds
         tracker["testing_expense_paid"] = "test" in kinds
         tracker["permit_expense_paid"] = "permit" in kinds
@@ -495,6 +505,10 @@ async def apply_permit_expense_effects(
     - "permit" category → permit_paid = True (waiting resolved)
     - "learner" category → ensure a progress row exists (dates captured manually)
 
+    When the expense has a cart_item_id, only that specific cart item is
+    updated. Otherwise all permit-processing cart items on the consultation
+    are updated (backward compatibility).
+
     Returns the number of cart items updated.
     """
     if expense.consultation_id is None:
@@ -502,12 +516,22 @@ async def apply_permit_expense_effects(
     kind = categorize_permit_expense(expense.category)
     if kind is None:
         return 0
-    rows = await db.execute(
-        select(CartItem).where(
-            CartItem.consultation_id == expense.consultation_id,
-            CartItem.requires_permit_processing.is_(True),
+    # If expense already has cart_item_id, target only that cart item
+    if expense.cart_item_id:
+        rows = await db.execute(
+            select(CartItem).where(
+                CartItem.id == expense.cart_item_id,
+                CartItem.consultation_id == expense.consultation_id,
+                CartItem.requires_permit_processing.is_(True),
+            )
         )
-    )
+    else:
+        rows = await db.execute(
+            select(CartItem).where(
+                CartItem.consultation_id == expense.consultation_id,
+                CartItem.requires_permit_processing.is_(True),
+            )
+        )
     cart_items = rows.scalars().all()
     updated = 0
     for ci in cart_items:

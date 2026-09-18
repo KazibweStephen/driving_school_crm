@@ -14,6 +14,7 @@ export interface Expense {
   mileage?: number;
   vehicle_id?: string;
   consultation_id?: string;
+  cart_item_id?: string;
   client_name?: string;
   status: string;
   approved_by?: string;
@@ -36,6 +37,7 @@ export interface ExpenseCreate {
   mileage?: number;
   vehicle_id?: string;
   consultation_id?: string;
+  cart_item_id?: string;
   expense_date?: string | Date;
   status?: string;
   receipt_url?: string;
@@ -309,6 +311,7 @@ export class FinanceService {
     page?: number;
     page_size?: number;
     consultation_id?: string;
+    cart_item_id?: string;
     category?: string;
     category_not?: string;
   }): Observable<ExpenseListResponse> {
@@ -318,6 +321,7 @@ export class FinanceService {
     if (params?.page) p = p.set('page', params.page);
     if (params?.page_size) p = p.set('page_size', params.page_size);
     if (params?.consultation_id) p = p.set('consultation_id', params.consultation_id);
+    if (params?.cart_item_id) p = p.set('cart_item_id', params.cart_item_id);
     if (params?.category) p = p.set('category', params.category);
     if (params?.category_not) p = p.set('category_not', params.category_not);
     return this.http.get<ExpenseListResponse>(`${this.base}/expenses`, { params: p });

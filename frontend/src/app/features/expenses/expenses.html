@@ -156,6 +156,7 @@
       <label class="mb-1 block text-sm font-medium text-gray-700">Category</label>
       <p-select [(ngModel)]="form.category" [options]="categoryOptions()" optionLabel="label" optionValue="value"
         placeholder="Select category" styleClass="w-full" appendTo="body" [filter]="true" filterPlaceholder="Search..."
+        [optionDisabled]="'disabled'"
         (onChange)="onCategoryChangeInDialog()" />
     </div>
     @if (form.category === '__other__') {
@@ -209,6 +210,35 @@
         }
       </div>
     }
+    @if (form.consultation_id && permitCartItems().length > 0) {
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Cart Item *</label>
+        <p-select [(ngModel)]="form.cart_item_id" [options]="permitCartItemOptions()" optionLabel="label" optionValue="value"
+          placeholder="Select the bought package" styleClass="w-full" appendTo="body"
+          (onChange)="onCartItemChange($event.value)" />
+        <p class="mt-1 text-xs text-gray-400">Select the bought package from the cart — its tagged expense types will load.</p>
+        @if (cartExpenseTypeLoading()) {
+          <p class="mt-1 text-xs text-blue-500">Loading tagged expense types...</p>
+        }
+        @if (hasCartExpenseTypes()) {
+          <div class="mt-2 rounded border border-slate-200 bg-slate-50 px-3 py-2">
+            <span class="text-xs font-medium text-slate-600">Tagged expense types:</span>
+            <ul class="mt-1 space-y-1">
+              @for (t of cartExpenseTypes(); track t.category) {
+                <li class="flex items-center justify-between text-xs"
+                  [class.text-green-700]="t.already_paid"
+                  [class.text-slate-600]="!t.already_paid">
+                  <span>{{ t.category }}</span>
+                  <span class="font-semibold">{{ currencyService.symbol() }} {{ t.amount.toLocaleString() }}
+                    @if (t.already_paid) { <span class="ml-1 rounded bg-green-100 px-1">done</span> }
+                  </span>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+    }
     @if (isClientAccountCategory()) {
       <div class="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
         <span class="font-medium">Funding:</span> client-account money at this branch
@@ -224,6 +254,15 @@
       <label class="mb-1 block text-sm font-medium text-gray-700">Amount *</label>
       <p-inputNumber [(ngModel)]="form.amount" [min]="0" [max]="999999" mode="decimal"
         [maxFractionDigits]="2" styleClass="w-full" inputStyleClass="w-full" />
+      @if (expectedAmountForCategory() !== null) {
+        <p class="mt-1 text-xs text-slate-500">
+          Automatically filled from the package allocation. Amount + charges cannot exceed
+          {{ currencyService.symbol() }} {{ expectedAmountForCategory()!.toLocaleString() }}
+          @if ((form.amount ?? 0) + (form.charges || 0) > expectedAmountForCategory()!) {
+            <span class="text-red-600 font-semibold"> — exceeds allocation</span>
+          }
+        </p>
+      }
     </div>
     <div>
       <label class="mb-1 block text-sm font-medium text-gray-700">Charges (additional monies)</label>

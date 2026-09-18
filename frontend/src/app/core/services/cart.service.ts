@@ -16,8 +16,25 @@ export interface CartItemRead {
   driving_training_duration_days: number | null;
   theory_training_hours: number | null;
   permit_processing_duration_days: number | null;
+  product_name?: string | null;
+  package_name?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CartItemExpectedExpenseType {
+  category: string;
+  amount: number;
+  already_paid: boolean;
+}
+
+export interface CartItemExpectedExpenses {
+  cart_item_id: string;
+  product_id: string;
+  package_id: string | null;
+  product_name: string | null;
+  package_name: string | null;
+  items: CartItemExpectedExpenseType[];
 }
 
 export interface CartItemCreate {
@@ -45,6 +62,10 @@ export class CartItemService {
 
   list(consultationId: string) {
     return this.http.get<CartItemRead[]>(`/api/v1/consultations/${consultationId}/cart-items`);
+  }
+
+  getExpectedExpenses(itemId: string) {
+    return this.http.get<CartItemExpectedExpenses>(`/api/v1/cart-items/${itemId}/expected-expenses`);
   }
 
   create(consultationId: string, data: CartItemCreate) {

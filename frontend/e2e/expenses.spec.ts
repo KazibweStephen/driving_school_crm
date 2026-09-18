@@ -26,6 +26,13 @@ test.describe('Expenses Workflow', () => {
     await expect(branchOption).toBeVisible({ timeout: 3000 });
     await branchOption.click();
 
+    const categorySelect = dialog.locator('p-select').nth(1).locator('[role="combobox"]').first();
+    await categorySelect.click();
+    await page.waitForTimeout(300);
+    const categoryOption = page.locator('.p-select-option:has-text("Vehicle Maintenance")').first();
+    await expect(categoryOption).toBeVisible({ timeout: 3000 });
+    await categoryOption.click();
+
     const amountInput = dialog.locator('input[inputmode="decimal"]').first();
     await amountInput.fill('75000');
     await dialog.locator('textarea').first().fill('e2e dialog expense');
@@ -35,6 +42,7 @@ test.describe('Expenses Workflow', () => {
 
     await expect(page.locator('table').first().getByText('PENDING').first()).toBeVisible({ timeout: 5000 });
     await expect(page.locator('table').first().getByText('e2e dialog expense').first()).toBeVisible();
+    await expect(page.locator('table').first().getByText('Vehicle Maintenance').first()).toBeVisible();
   });
 
   test('full approve / reject / pay workflow is enforced', async ({ page }) => {

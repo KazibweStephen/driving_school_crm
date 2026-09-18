@@ -227,6 +227,7 @@
             [options]="categoryOptions()"
             optionLabel="label"
             optionValue="value"
+            optionDisabled="disabled"
             [ngModel]="category()"
             (ngModelChange)="onCategoryChange($event)"
             placeholder="Select category"
@@ -299,6 +300,44 @@
           </div>
         }
 
+        @if (consultationId() && permitCartItems().length > 0) {
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700">Cart Item *</label>
+            <select
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              [ngModel]="cartItemId()"
+              (ngModelChange)="onCartItemChange($event)"
+              data-testid="expense-cart-item"
+            >
+              <option value="">Select the bought package</option>
+              @for (ci of permitCartItems(); track ci.id) {
+                <option [value]="ci.id">{{ cartItemLabel(ci) }}</option>
+              }
+            </select>
+            <p class="mt-1 text-xs text-slate-400">Select the bought package — its tagged expense types will load.</p>
+            @if (cartExpenseTypeLoading()) {
+              <p class="mt-1 text-xs text-blue-500">Loading tagged expense types...</p>
+            }
+            @if (hasCartExpenseTypes()) {
+              <div class="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <span class="text-xs font-medium text-slate-600">Tagged expense types:</span>
+                <ul class="mt-1 space-y-1">
+                  @for (t of cartExpenseTypes(); track t.category) {
+                    <li class="flex items-center justify-between text-xs"
+                      [class.text-green-700]="t.already_paid"
+                      [class.text-slate-600]="!t.already_paid">
+                      <span>{{ t.category }}</span>
+                      <span class="font-semibold">{{ money(t.amount) }}
+                        @if (t.already_paid) { <span class="ml-1 rounded bg-green-100 px-1 text-green-700">done</span> }
+                      </span>
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
+          </div>
+        }
+
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-700">Amount</label>
           <input
@@ -309,6 +348,15 @@
             (ngModelChange)="amount.set($event ?? null)"
             data-testid="expense-amount"
           />
+          @if (expectedAmountForCategory() !== null) {
+            <div class="mt-1 text-xs text-slate-500">
+              Auto-filled from the package allocation. Amount + charges cannot exceed
+              <span class="font-semibold">{{ money(expectedAmountForCategory()!) }}</span>
+              @if ((amount() ?? 0) + (charges() || 0) > expectedAmountForCategory()!) {
+                <span class="text-red-600 font-semibold"> — exceeds allocation</span>
+              }
+            </div>
+          }
         </div>
 
         <div>

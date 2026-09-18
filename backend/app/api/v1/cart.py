@@ -56,6 +56,32 @@ async def list_cart_items(
     return [CartItemRead.model_validate(i) for i in items]
 
 
+@router.get("/api/v1/cart-items/{item_id}/expected-expenses", response_model=dict)
+async def cart_item_expected_expenses(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.view")),
+):
+    try:
+        iid = uuid.UUID(item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID")
+
+    item = await cart_service.get_cart_item(db, iid, company_id=current_user.company_id, current_user_role=current_user.role)
+    if not item:
+        raise HTTPException(status_code=404, detail="Cart item not found")
+    from app.services.expected_expense import get_cart_item_expense_types
+    types = await get_cart_item_expense_types(db, item, current_user.company_id)
+    return {
+        "cart_item_id": str(item.id),
+        "product_id": item.product_id,
+        "package_id": item.package_id,
+        "product_name": item.product_name,
+        "package_name": item.package_name,
+        "items": types,
+    }
+
+
 @router.patch("/api/v1/cart-items/{item_id}", response_model=CartItemRead)
 async def update_cart_item(
     item_id: str,

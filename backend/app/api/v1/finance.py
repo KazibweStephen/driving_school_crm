@@ -45,17 +45,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/finance", tags=["finance"])
 
 
-def _expense_read(e) -> ExpenseRead:
+async def _expense_read(db: AsyncSession, e) -> ExpenseRead:
     read = ExpenseRead.model_validate(e)
     client_name = None
     if e.consultation:
         c = e.consultation
         client_name = f"{c.first_name} {c.last_name or ''}".strip()
+    branch_name = None
+    if e.branch_id and e.branch is None:
+        try:
+            branch = await db.get(Branch, e.branch_id)
+            branch_name = branch.name if branch else None
+        except Exception:
+            pass
+    elif e.branch is not None:
+        branch_name = e.branch.name
     return read.model_copy(update={
         "created_by_name": e.created_by_user.name if e.created_by_user else None,
         "approved_by_name": e.approved_by_user.name if e.approved_by_user else None,
         "paid_by_name": e.paid_by_user.name if e.paid_by_user else None,
         "client_name": client_name,
+        "branch_name": branch_name,
     })
 
 
@@ -186,6 +196,7 @@ async def list_expenses(
     category: str | None = Query(None),
     category_not: str | None = Query(None),
     consultation_id: uuid.UUID | None = Query(None, description="Filter to expenses attached to this consultation"),
+    cart_item_id: uuid.UUID | None = Query(None, description="Filter to expenses attached to this cart item"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -205,11 +216,12 @@ async def list_expenses(
         company_id=current_user.company_id, current_user_role=current_user.role,
         category=category, category_not=category_not,
         consultation_id=consultation_id,
+        cart_item_id=cart_item_id,
     )
 
     items = []
     for e in expenses:
-        items.append(_expense_read(e))
+        items.append(await _expense_read(db, e))
 
     return {
         "items": items,
@@ -233,6 +245,7 @@ async def create_expense(
         description=data.description,
         category=data.category,
         consultation_id=data.consultation_id,
+        cart_item_id=data.cart_item_id,
         mileage=data.mileage,
         vehicle_id=data.vehicle_id,
         expense_date=data.expense_date,
@@ -245,7 +258,7 @@ async def create_expense(
     expense = await finance_service.get_expense(
         db, expense.id, company_id=current_user.company_id, current_user_role=current_user.role
     )
-    return _expense_read(expense)
+    return await _expense_read(db, expense)
 
 
 @router.patch("/expenses/{expense_id}", response_model=ExpenseRead)
@@ -298,7 +311,7 @@ async def update_expense(
         except Exception as e:
             logger.warning("[SMS] Failed to send expense_approved notification: %s", e)
 
-    return _expense_read(expense)
+    return await _expense_read(db, expense)
 
 
 class ExpenseReject(BaseModel):
@@ -347,7 +360,7 @@ async def approve_expense(
         except Exception as e:
             logger.warning("[SMS] Failed to send expense_approved notification: %s", e)
 
-    return _expense_read(expense)
+    return await _expense_read(db, expense)
 
 
 @router.post("/expenses/{expense_id}/reject", response_model=ExpenseRead)
@@ -373,7 +386,7 @@ async def reject_expense(
     expense.approved_at = now_local()
     await db.flush()
     await db.refresh(expense)
-    return _expense_read(expense)
+    return await _expense_read(db, expense)
 
 
 @router.post("/expenses/{expense_id}/mark-paid", response_model=ExpenseRead)
@@ -416,7 +429,7 @@ async def mark_expense_paid(
         from app.services.permit import apply_permit_expense_effects
         await apply_permit_expense_effects(db, expense)
 
-    return _expense_read(expense)
+    return await _expense_read(db, expense)
 
 
 @router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)

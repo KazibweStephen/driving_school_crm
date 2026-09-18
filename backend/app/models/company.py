@@ -225,6 +225,9 @@ class Expense(Base):
     consultation_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("consultations.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    cart_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cart_items.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     mileage: Mapped[int | None] = mapped_column(nullable=True)
     vehicle_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True, index=True
@@ -259,6 +262,7 @@ class Expense(Base):
 
     branch: Mapped["Branch"] = relationship("Branch", back_populates="expenses")
     consultation: Mapped["Consultation | None"] = relationship("Consultation")
+    cart_item: Mapped["CartItem | None"] = relationship("CartItem")
     created_by_user: Mapped["User | None"] = relationship(
         "User", foreign_keys=[created_by_phone], uselist=False
     )

@@ -297,6 +297,7 @@ export class PermitStagesDialog {
   goToExpenses() {
     if (!this.tracker) return;
     const consultationId = this.tracker.consultation_id;
+    const cartItemId = this.tracker.cart_item_id;
     const category = this.showLearnerExpense ? 'Learner Permit Payment'
       : this.showPermitExpense ? 'Permit Payment'
       : '';
@@ -307,6 +308,7 @@ export class PermitStagesDialog {
     this.router.navigate(['/expenses'], {
       queryParams: {
         consultation_id: consultationId,
+        cart_item_id: cartItemId,
         category: category || undefined,
         back,
       },

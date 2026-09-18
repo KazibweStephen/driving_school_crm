@@ -231,6 +231,29 @@ async def remove_cart_item(
     return True
 
 
+async def get_cart_item(
+    db: AsyncSession,
+    item_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> CartItem | None:
+    result = await db.execute(select(CartItem).where(CartItem.id == item_id))
+    item = result.scalar_one_or_none()
+    if not item:
+        return None
+    if company_id is not None:
+        c_result = await db.execute(
+            select(Consultation).join(Branch, Consultation.branch_id == Branch.id).where(
+                Consultation.id == item.consultation_id,
+                Branch.company_id == company_id,
+            )
+        )
+        if not c_result.scalar_one_or_none():
+            return None
+    await _attach_names(db, [item])
+    return item
+
+
 async def get_cart_items(
     db: AsyncSession,
     consultation_id: uuid.UUID,
@@ -251,7 +274,41 @@ async def get_cart_items(
         .where(CartItem.consultation_id == consultation_id)
         .order_by(CartItem.created_at)
     )
-    return list(result.scalars().all())
+    items = list(result.scalars().all())
+    await _attach_names(db, items)
+    return items
+
+
+async def _attach_names(db: AsyncSession, items: list[CartItem]) -> None:
+    """Populate product_name/package_name on cart items (products/packages are
+    referenced by string id, not FK relationships)."""
+    if not items:
+        return
+    product_ids = {i.product_id for i in items if i.product_id}
+    package_ids = {i.package_id for i in items if i.package_id}
+    products = {}
+    packages = {}
+    if product_ids:
+        from app.models.product import Product
+        rows = (await db.execute(select(Product).where(Product.id.in_([uuid.UUID(p) for p in product_ids if _is_uuid(p)])))).scalars().all()
+        for p in rows:
+            products[str(p.id)] = p.name
+    if package_ids:
+        from app.models.product import Package
+        rows = (await db.execute(select(Package).where(Package.id.in_([uuid.UUID(p) for p in package_ids if _is_uuid(p)])))).scalars().all()
+        for p in rows:
+            packages[str(p.id)] = p.name
+    for item in items:
+        item.product_name = products.get(str(item.product_id))
+        item.package_name = packages.get(str(item.package_id)) if item.package_id else None
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+        return True
+    except Exception:
+        return False
 
 
 async def _update_consultation_status(

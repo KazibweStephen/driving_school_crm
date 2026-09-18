@@ -142,6 +142,7 @@ class ExpenseCreate(BaseModel):
     description: str | None = None
     category: str | None = None
     consultation_id: uuid.UUID | None = None
+    cart_item_id: uuid.UUID | None = None
     mileage: int | None = None
     vehicle_id: uuid.UUID | None = None
     expense_date: datetime | None = None
@@ -172,6 +173,7 @@ class MarkExpensePaid(BaseModel):
 class ExpenseRead(BaseModel):
     id: uuid.UUID
     branch_id: uuid.UUID
+    branch_name: str | None = None
     amount: float
     charges: float = 0.0
     paid_charges: float | None = None
@@ -179,6 +181,7 @@ class ExpenseRead(BaseModel):
     category: str | None = None
     account: str | None = None
     consultation_id: uuid.UUID | None = None
+    cart_item_id: uuid.UUID | None = None
     client_name: str | None = None
     mileage: int | None = None
     vehicle_id: uuid.UUID | None = None

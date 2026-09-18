@@ -166,3 +166,120 @@ async def compute_package_total(
 ) -> Decimal:
     data = await get_package_links(db, package_id, company_id)
     return Decimal(str(data["total"] or 0))
+
+
+async def get_cart_item_expense_types(
+    db: AsyncSession,
+    cart_item,
+    company_id: uuid.UUID,
+) -> list[dict]:
+    """The expense types (categories) the user should choose from when filing
+    an expense against a cart item, derived from the expenses tagged to the
+    cart item's package:
+      - legacy per-package rows (PackageExpectedExpense: category + amount)
+      - catalogue links (PackageExpenseLink -> ExpectedExpenseItem.name)
+    Each entry returns category, a suggested amount, and whether an expense for
+    this cart_item_id + category already exists (so it can be shown as paid).
+    Fuel is intentionally excluded (fuel expense is computed per lesson).
+    """
+    from app.models.cart import CartItem
+    from app.models.company import Expense, ExpenseStatus
+    from app.models.product import PackageExpectedExpense
+
+    if cart_item.package_id is None or not _valid_uuid(cart_item.package_id):
+        return []
+
+    package_id = uuid.UUID(cart_item.package_id)
+
+    # Legacy per-package expected expenses (category + amount).
+    rows = (
+        await db.execute(
+            select(PackageExpectedExpense).where(
+                PackageExpectedExpense.package_id == package_id
+            )
+        )
+    ).scalars().all()
+    by_category: dict[str, dict] = {}
+    for r in rows:
+        key = (r.category or "").strip().lower()
+        if not key or "fuel" in key:
+            continue
+        by_category.setdefault(
+            key, {"category": r.category.strip(), "amount": float(r.amount)}
+        )
+
+    # Catalogue-linked expected expense items (name is the expense type).
+    links = await get_package_links(db, package_id, company_id)
+    for line in links["items"]:
+        name = line.get("name") or line.get("category_name") or ""
+        key = name.strip().lower()
+        if not key or "fuel" in key:
+            continue
+        item = by_category.get(key)
+        if item is None:
+            by_category[key] = {"category": name.strip(), "amount": float(line.get("line_total") or 0)}
+
+    # Mark already-paid: an expense already exists for this cart item + category.
+    existing = (
+        await db.execute(
+            select(Expense.category)
+            .where(
+                Expense.cart_item_id == cart_item.id,
+                Expense.status != ExpenseStatus.REJECTED,
+            )
+        )
+    ).scalars().all()
+    paid_categories = {str(c).strip().lower() for c in existing}
+
+    result = []
+    for key, item in by_category.items():
+        result.append({**item, "already_paid": key in paid_categories})
+    result.sort(key=lambda x: (x["already_paid"], x["category"]))
+    return result
+
+
+async def cart_item_expected_categories(
+    db: AsyncSession,
+    cart_item,
+    company_id: uuid.UUID,
+) -> set[str]:
+    """Lowercase set of expense-type categories tagged to a cart item's package
+    (fuel excluded). Used by the finance duplicate guard so each tagged type is
+    only ever filed once per cart item."""
+    return {
+        e["category"].lower()
+        for e in await get_cart_item_expense_types(db, cart_item, company_id)
+    }
+
+
+async def cart_item_expected_amount(
+    db: AsyncSession,
+    cart_item_id,
+    category: str,
+    company_id: uuid.UUID,
+) -> float | None:
+    """The allocated (expected) amount for a single tagged expense type on a
+    cart item's package, or None when the category is not tagged. Used to cap
+    the filed amount (amount + charges cannot exceed the allocation)."""
+    from app.models.cart import CartItem
+
+    item = (
+        await db.execute(select(CartItem).where(CartItem.id == cart_item_id))
+    ).scalar_one_or_none()
+    if not item:
+        return None
+    low = (category or "").strip().lower()
+    if not low:
+        return None
+    for e in await get_cart_item_expense_types(db, item, company_id):
+        if e["category"].lower() == low:
+            return float(e.get("amount") or 0)
+    return None
+
+
+def _valid_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+        return True
+    except Exception:
+        return False

@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -45,13 +46,15 @@ export class Expenses {
   private messageService = inject(MessageService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private http = inject(HttpClient);
 
   currency = this.auth.currencyCode;
   canBackdate = this.auth.currentUserCanBackdate;
   permissions = this.auth.permissions;
 
-  // Permit-stage navigation context (query params: consultation_id, category, back)
+  // Permit-stage navigation context (query params: consultation_id, cart_item_id, category, back)
   routeConsultationId = signal('');
+  routeCartItem = signal('');
   routeCategory = '';
   backUrl = '';
   contextClientLabel = signal('');
@@ -118,8 +121,26 @@ export class Expenses {
   // client-linked expense support (categories with requires_client)
   requiresClientCategories = new Set<string>();
   consultationId = signal<string | null>(null);
+  cartItemId = signal<string | null>(null);
   selectedClientLabel = signal('');
   selectedClientAvailable = signal<number | null>(null);
+
+  permitCartItems = signal<{ id: string; product_id: string; package_id: string | null; product_name?: string | null; package_name?: string | null; requires_permit_processing: boolean }[]>([]);
+  cartExpenseTypes = signal<{ category: string; amount: number; already_paid: boolean }[]>([]);
+  cartExpenseTypeLoading = signal(false);
+  hasCartExpenseTypes = computed(() => this.cartExpenseTypes().length > 0);
+
+  cartItemLabel(ci: { id: string; product_id: string; package_id: string | null; product_name?: string | null; package_name?: string | null; requires_permit_processing: boolean }): string {
+    const name = ci.package_name || ci.product_name || `Cart item (${ci.id.slice(0, 8)})`;
+    return ci.requires_permit_processing ? `✓ ${name} — permit` : name;
+  }
+
+  permitCartItemOptions = computed(() =>
+    this.permitCartItems().map(ci => ({
+      label: this.cartItemLabel(ci),
+      value: ci.id,
+    }))
+  );
 
   statusOptions = [
     { label: 'All', value: '' },
@@ -130,8 +151,16 @@ export class Expenses {
   ];
   categories = signal<ExpenseCategory[]>([]);
   categoryOptions = computed(() => {
-    const opts = this.categories().map((c) => ({ label: c.name, value: c.name }));
-    return [...opts, { label: 'Other', value: 'Other' }];
+    if (this.hasCartExpenseTypes()) {
+      const opts = this.cartExpenseTypes().map((t) => ({
+        label: t.already_paid ? `${t.category} — already filed` : (t.amount > 0 ? `${t.category} (${this.money(t.amount)})` : t.category),
+        value: t.category,
+        disabled: t.already_paid,
+      }));
+      return [...opts, { label: 'Other', value: 'Other', disabled: false }];
+    }
+    const opts = this.categories().map((c) => ({ label: c.name, value: c.name, disabled: false }));
+    return [...opts, { label: 'Other', value: 'Other', disabled: false }];
   });
 
   constructor() {
@@ -142,6 +171,7 @@ export class Expenses {
       const cid = params['consultation_id'];
       if (!cid) return;
       this.routeConsultationId.set(cid);
+      this.routeCartItem.set(params['cart_item_id'] || '');
       this.routeCategory = params['category'] || '';
       this.backUrl = params['back'] || '/permits';
       this.tab.set('expenses');
@@ -167,14 +197,66 @@ export class Expenses {
     if (!this.routeConsultationId()) return;
     if (!this.contextReadyConsultation || !this.contextReadyCategories) return;
     this.contextPrefilled.set(true);
+    this.checkExistingExpenseThenOpen();
+  }
+
+  private checkExistingExpenseThenOpen() {
+    const inContext = !!this.routeConsultationId();
+    if (!inContext) { this.openCreate(); return; }
+    if (!this.routeCategory) {
+      this.openCreateForContext();
+      return;
+    }
+    this.expenseService.getExpenses({
+      consultation_id: this.routeConsultationId(),
+      category: this.routeCategory || null,
+      page: 1,
+      page_size: 5,
+    }).subscribe({
+      next: (res) => {
+        if (res.items && res.items.length > 0) {
+          return;
+        }
+        this.openCreateForContext();
+      },
+      error: () => {
+        this.openCreateForContext();
+      },
+    });
+  }
+
+  private openCreateForContext() {
     this.openCreate();
     if (this.routeCategory) this.category.set(this.routeCategory);
     const branchId = this.contextClientBranch() || this.branchId();
     if (branchId) this.branchId.set(branchId);
     this.consultationId.set(this.routeConsultationId());
+    this.cartItemId.set(this.routeCartItem() || null);
     this.selectedClientLabel.set(this.contextClientLabel());
+    this.loadPermitCartItems(this.routeConsultationId());
+    if (this.cartItemId()) this.onCartItemChange(this.cartItemId()!);
     this.loadVehiclesForBranch();
     this.loadClientAccountDetail();
+  }
+
+  private loadPermitCartItems(consultationId: string) {
+    this.http.get<any[]>(`/api/v1/consultations/${consultationId}/cart-items`).subscribe({
+      next: (items) => {
+        this.permitCartItems.set(
+          (items || [])
+            .filter((ci: any) => ci.requires_permit_processing)
+            .map((ci: any) => ({
+              id: ci.id,
+              product_id: ci.product_id,
+              package_id: ci.package_id ?? null,
+              product_name: ci.product_name ?? null,
+              package_name: ci.package_name ?? null,
+              requires_permit_processing: !!ci.requires_permit_processing,
+            })),
+        );
+      },
+      error: () => this.permitCartItems.set([]),
+    });
   }
 
   backToPrevious() {
@@ -207,20 +289,66 @@ export class Expenses {
     return this.requiresClientCategories.has(this.category());
   }
 
+  private isPermitCategory(): boolean {
+    const cat = (this.category() || '').toLowerCase();
+    return cat.includes('permit') || cat.includes('test booking')
+      || cat.includes('police booking') || cat.includes('iov');
+  }
+
   selectClientAccount(p: UnremittedClientPayment) {
     this.consultationId.set(p.consultation_id);
     this.selectedClientLabel.set(`${p.client_name || p.client_phone} · ${p.client_phone}`);
     this.selectedClientAvailable.set(p.amount ?? 0);
     this.clientAccountSearch.set('');
     this.applyClientAccountPaymentFilter();
+    if (p.consultation_id) this.loadPermitCartItems(p.consultation_id);
   }
 
   clearClient() {
     this.consultationId.set(null);
+    this.cartItemId.set(null);
     this.selectedClientLabel.set('');
     this.selectedClientAvailable.set(null);
     this.clientAccountSearch.set('');
+    this.permitCartItems.set([]);
+    this.cartExpenseTypes.set([]);
+    this.cartExpenseTypeLoading.set(false);
     this.applyClientAccountPaymentFilter();
+  }
+
+  onCartItemChange(itemId: string) {
+    this.cartItemId.set(itemId);
+    this.cartExpenseTypes.set([]);
+    if (!itemId) {
+      this.loadClientAccountDetail();
+      return;
+    }
+    this.cartExpenseTypeLoading.set(true);
+    this.http.get<any>(`/api/v1/cart-items/${itemId}/expected-expenses`).subscribe({
+      next: (res) => {
+        this.cartExpenseTypes.set(res.items || []);
+        const payable = (res.items || []).filter((t: any) => !t.already_paid);
+        const currentCategory = (this.category() || '').toLowerCase();
+        const currentMatch = payable.find((t: any) => t.category.toLowerCase() === currentCategory);
+        if (currentMatch) {
+          // Keep the user's already-selected category; auto-fill its expected amount.
+          this.category.set(currentMatch.category);
+          this.amount.set(currentMatch.amount);
+        } else if (!this.category() && payable.length === 1) {
+          // Only auto-select when the user hasn't already picked a category.
+          this.category.set(payable[0].category);
+          this.amount.set(payable[0].amount);
+        }
+        // Never wipe the already-selected category or client here.
+        this.loadClientAccountDetail();
+        this.cartExpenseTypeLoading.set(false);
+      },
+      error: () => {
+        this.cartExpenseTypes.set([]);
+        this.cartExpenseTypeLoading.set(false);
+        this.loadClientAccountDetail();
+      },
+    });
   }
 
   clientFundsOk(): boolean {
@@ -235,7 +363,7 @@ export class Expenses {
   }
 
   needsClient(): boolean {
-    return this.requiresClientCategories.has(this.category()) || this.isClientAccountCategory();
+    return !!(this.cartItemId() || this.requiresClientCategories.has(this.category()) || this.isClientAccountCategory());
   }
 
   async loadClientAccountDetail() {
@@ -301,6 +429,7 @@ export class Expenses {
         category: isSms ? SMS_CATEGORY : (inContext && this.routeCategory ? this.routeCategory : null),
         category_not: isSms ? null : SMS_CATEGORY,
         consultation_id: inContext ? this.routeConsultationId() : null,
+        cart_item_id: inContext ? (this.routeCartItem() || null) : null,
         page: this.page(),
         page_size: this.pageSize,
       })
@@ -389,6 +518,9 @@ export class Expenses {
     this.clientAccountPayments.set([]);
     this.clientAccountPaymentsFiltered.set([]);
     this.clientAccountSearch.set('');
+    this.permitCartItems.set([]);
+    this.cartExpenseTypes.set([]);
+    this.cartExpenseTypeLoading.set(false);
     this.clearClient();
     this.loadVehiclesForBranch();
     this.loadClientAccountDetail();
@@ -403,8 +535,23 @@ export class Expenses {
 
   onCategoryChange(value: string) {
     this.category.set(value);
+    const expected = this.expectedAmountForCategory();
+    if (expected !== null) {
+      this.amount.set(expected);
+      this.loadClientAccountDetail();
+      return;
+    }
     this.clearClient();
     this.loadClientAccountDetail();
+  }
+
+  expectedAmountForCategory(): number | null {
+    if (!this.cartItemId() || !this.hasCartExpenseTypes()) return null;
+    const low = (this.category() || '').toLowerCase();
+    if (!low) return null;
+    const match = this.cartExpenseTypes().find(t => t.category.toLowerCase() === low);
+    if (!match || match.already_paid) return null;
+    return match.amount;
   }
 
   private loadVehiclesForBranch() {
@@ -466,12 +613,29 @@ export class Expenses {
       this.messageService.add({ severity: 'warn', summary: 'Select a branch' });
       return;
     }
+    if (!(this.category() || '').trim()) {
+      this.messageService.add({ severity: 'warn', summary: 'Select a category' });
+      return;
+    }
     if (amount == null || amount <= 0) {
       this.messageService.add({ severity: 'warn', summary: 'Enter a valid amount' });
       return;
     }
+    const expected = this.expectedAmountForCategory();
+    if (expected !== null && amount + (this.charges() || 0) > expected + 0.001) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Exceeds allocation',
+        detail: `Amount + charges cannot exceed ${this.money(expected)} (the package allocation for ${this.category()}).`,
+      });
+      return;
+    }
     if (this.needsClient() && !this.consultationId()) {
       this.messageService.add({ severity: 'warn', summary: 'Select a client for this expense' });
+      return;
+    }
+    if (this.isPermitCategory() && this.permitCartItems().length > 0 && !this.cartItemId()) {
+      this.messageService.add({ severity: 'warn', summary: 'Select the cart item for this expense' });
       return;
     }
     if (this.needsClient() && !this.clientFundsOk()) {
@@ -497,6 +661,7 @@ export class Expenses {
       vehicle_id: isFuel ? (this.vehicleId() ?? undefined) : undefined,
       mileage: isFuel ? (this.mileage() ?? undefined) : undefined,
       consultation_id: this.consultationId() ?? undefined,
+      cart_item_id: this.cartItemId() ?? undefined,
       expense_date: this.expenseDate(),
       status: 'pending',
     };

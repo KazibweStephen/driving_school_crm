@@ -44,6 +44,8 @@ class CartItemRead(BaseModel):
     converter_id: str | None = None
     primary_recommender_id: str | None = None
     secondary_recommender_id: str | None = None
+    product_name: str | None = None
+    package_name: str | None = None
     created_at: datetime
     updated_at: datetime
 

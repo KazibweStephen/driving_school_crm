@@ -20,6 +20,7 @@ import { CompanyService, Branch } from '../../core/services/company.service';
 import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
 import { toLocalDateStr } from '../../shared/utils/date.utils';
 import { ConsultationService, ClientInfo } from '../../core/services/consultation.service';
+import { CartItemService, CartItemRead, CartItemExpectedExpenseType } from '../../core/services/cart.service';
 import { CurrencyService } from '../../core/services/currency.service';
 import { UserDisplayCmp } from '../../shared/components/user-display';
 import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
@@ -61,8 +62,9 @@ export class ExpensesCmp implements OnInit {
   payReceiptFile = signal<File | null>(null);
   payingUpload = signal(false);
 
-  // Permit-stage navigation context (query params: consultation_id, category, back)
+  // Permit-stage navigation context (query params: consultation_id, cart_item_id, category, back)
   routeConsultationId = signal<string>('');
+  routeCartItem = signal<string>('');
   routeCategory = '';
   backUrl = '';
   contextClientLabel = signal('');
@@ -72,12 +74,22 @@ export class ExpensesCmp implements OnInit {
 
   categories = signal<ExpenseCategory[]>([]);
   categoryOptions = computed(() => {
+    if (this.hasCartExpenseTypes()) {
+      const opts = this.cartExpenseTypes().map(t => ({
+        label: t.already_paid ? `${t.category} — already filed` : (t.amount > 0 ? `${t.category} (${t.amount.toLocaleString()})` : t.category),
+        value: t.category,
+        requires_client: false,
+        disabled: t.already_paid,
+      }));
+      return [...opts, { label: 'Other', value: '__other__', requires_client: false, disabled: false }];
+    }
     const opts = this.categories().map(c => ({
       label: c.name,
       value: c.name,
       requires_client: c.requires_client,
+      disabled: false,
     }));
-    return [...opts, { label: 'Other', value: '__other__', requires_client: false }];
+    return [...opts, { label: 'Other', value: '__other__', requires_client: false, disabled: false }];
   });
   selectedCategory(): { label: string; value: string; requires_client: boolean } | null {
     return this.categoryOptions().find(c => c.value === this.form.category) ?? null;
@@ -94,7 +106,7 @@ export class ExpensesCmp implements OnInit {
   }
 
   needsClient(): boolean {
-    return !!(this.selectedCategory()?.requires_client || this.isClientAccountCategory());
+    return !!(this.form.cart_item_id || this.selectedCategory()?.requires_client || this.isClientAccountCategory());
   }
 
   async loadClientAccountDetail() {
@@ -153,6 +165,23 @@ export class ExpensesCmp implements OnInit {
   clientSearching = signal(false);
   clientQuery = signal('');
 
+  permitCartItems = signal<CartItemRead[]>([]);
+  permitCartItemOptions = computed(() =>
+    this.permitCartItems().map(ci => ({
+      label: this.cartItemLabel(ci),
+      value: ci.id,
+    }))
+  );
+
+  cartExpenseTypes = signal<CartItemExpectedExpenseType[]>([]);
+  cartExpenseTypeLoading = signal(false);
+  hasCartExpenseTypes = computed(() => this.cartExpenseTypes().length > 0);
+
+  cartItemLabel(ci: CartItemRead): string {
+    const name = ci.package_name || ci.product_name || `Cart item (${ci.id.slice(0, 8)})`;
+    return ci.requires_permit_processing ? `✓ ${name} — permit` : name;
+  }
+
   clientAccountAvailable = signal(0);
   clientAccountAccountLoading = signal(false);
   clientAccountPayments = signal<UnremittedClientPayment[]>([]);
@@ -170,6 +199,7 @@ export class ExpensesCmp implements OnInit {
     vehicle_id: '',
     mileage: null as number | null,
     consultation_id: '',
+    cart_item_id: '',
     expense_date: new Date(),
   };
 
@@ -185,6 +215,7 @@ export class ExpensesCmp implements OnInit {
     private companyService: CompanyService,
     private vehicleService: VehicleService,
     private consultationService: ConsultationService,
+    private cartItemService: CartItemService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public currencyService: CurrencyService,
@@ -200,6 +231,7 @@ export class ExpensesCmp implements OnInit {
       const cid = params['consultation_id'];
       if (!cid) return;
       this.routeConsultationId.set(cid);
+      this.routeCartItem.set(params['cart_item_id'] || '');
       this.routeCategory = params['category'] || '';
       this.backUrl = params['back'] || '/permits';
       this.loadExpenses();
@@ -237,12 +269,15 @@ export class ExpensesCmp implements OnInit {
       vehicle_id: '',
       mileage: null,
       consultation_id: '',
+      cart_item_id: '',
       expense_date: new Date(),
     };
     this.clientResults.set([]);
     this.clientQuery.set('');
     this.receiptFile.set(null);
     this.vehicles.set([]);
+    this.permitCartItems.set([]);
+    this.cartExpenseTypes.set([]);
     this.showDialog.set(true);
   }
 
@@ -251,15 +286,61 @@ export class ExpensesCmp implements OnInit {
     if (!this.routeConsultationId()) return;
     if (!this.contextReadyConsultation || !this.contextReadyCategories) return;
     this.contextPrefilled.set(true);
+    // Check if an existing expense already exists for this consultation+category+cart_item
+    this.checkExistingExpenseThenOpen();
+  }
+
+  private checkExistingExpenseThenOpen() {
+    const inContext = !!this.routeConsultationId();
+    if (!inContext) { this.openCreate(); return; }
+    // For stages with a specific category (Learner Permit Payment, Permit Payment),
+    // check if an expense already exists — don't open create dialog if so.
+    // For testing stage (no category — 3 separate expenses needed), always open.
+    if (!this.routeCategory) {
+      this.openCreateForContext();
+      return;
+    }
+    this.financeService.listExpenses({
+      consultation_id: this.routeConsultationId(),
+      category: this.routeCategory,
+      page: 1,
+      page_size: 5,
+    }).subscribe({
+      next: (res) => {
+        if (res.items && res.items.length > 0) {
+          // Existing expense found — don't open create dialog
+          return;
+        }
+        this.openCreateForContext();
+      },
+      error: () => {
+        this.openCreateForContext();
+      },
+    });
+  }
+
+  private openCreateForContext() {
     this.openCreate();
     if (this.routeCategory) this.form.category = this.routeCategory;
     if (this.prefillForm.branch_id) this.form.branch_id = this.prefillForm.branch_id;
     if (this.prefillForm.consultation_id) {
       this.form.consultation_id = this.prefillForm.consultation_id;
+      this.form.cart_item_id = this.routeCartItem() || '';
       this.clientQuery.set(this.contextClientLabel());
+      this.loadPermitCartItems(this.prefillForm.consultation_id);
+      if (this.form.cart_item_id) this.onCartItemChange(this.form.cart_item_id);
     }
     this.loadVehiclesForBranch();
     this.loadClientAccountDetail();
+  }
+
+  private loadPermitCartItems(consultationId: string) {
+    this.cartItemService.list(consultationId).subscribe({
+      next: (items) => {
+        this.permitCartItems.set(items.filter(ci => ci.requires_permit_processing));
+      },
+      error: () => this.permitCartItems.set([]),
+    });
   }
 
   backToPrevious() {
@@ -297,6 +378,7 @@ export class ExpensesCmp implements OnInit {
         branch_id: this.filterBranch() || undefined,
         status: this.filterStatus() || undefined,
         consultation_id: inContext ? this.routeConsultationId() : undefined,
+        cart_item_id: inContext ? (this.routeCartItem() || undefined) : undefined,
         category: inContext ? (this.routeCategory || undefined) : undefined,
         page: this.page,
         page_size: this.pageSize,
@@ -324,10 +406,28 @@ export class ExpensesCmp implements OnInit {
   }
 
   onCategoryChangeInDialog() {
+    // When filing a tagged expense (cart item selected + category matches one
+    // of the package's expected expense types), auto-fill the amount from the
+    // expected allocation for that category, and keep the client/cart context.
+    const expected = this.expectedAmountForCategory();
+    if (expected !== null) {
+      this.form.amount = expected;
+      this.loadClientAccountDetail();
+      return;
+    }
     this.clientResults.set([]);
     this.clientQuery.set('');
     this.form.consultation_id = '';
     this.loadClientAccountDetail();
+  }
+
+  expectedAmountForCategory(): number | null {
+    if (!this.form.cart_item_id || !this.hasCartExpenseTypes()) return null;
+    const low = (this.form.category || '').toLowerCase();
+    if (!low) return null;
+    const match = this.cartExpenseTypes().find(t => t.category.toLowerCase() === low);
+    if (!match || match.already_paid) return null;
+    return match.amount;
   }
 
   onReceiptSelected(event: Event) {
@@ -364,6 +464,7 @@ export class ExpensesCmp implements OnInit {
         mileage: f.mileage ?? undefined,
         vehicle_id: f.vehicle_id || undefined,
         consultation_id: f.consultation_id || undefined,
+        cart_item_id: f.cart_item_id || undefined,
         expense_date: f.expense_date instanceof Date
           ? toLocalDateStr(f.expense_date)
           : f.expense_date,
@@ -494,11 +595,26 @@ export class ExpensesCmp implements OnInit {
   }
 
   formIsValid(): boolean {
+    if (!this.form.category) return false;
+    if (this.expectedAmountForCategory() !== null) {
+      const expected = this.expectedAmountForCategory()!;
+      const total = (this.form.amount ?? 0) + (this.form.charges || 0);
+      if (total > expected + 0.001) return false;
+    }
     if (!this.form.branch_id || (this.form.amount ?? 0) <= 0) return false;
     if (this.form.category === '__other__' && !this.form.otherDetail.trim()) return false;
     if (this.selectedCategory()?.requires_client && !this.form.consultation_id) return false;
     if (this.isClientAccountCategory() && !this.canFundFromClientAccount()) return false;
+    // Require cart item for permit-related categories when the selected
+    // client has permit-processing cart items (tagged-expense flow).
+    if (this.isPermitCategory() && this.permitCartItems().length > 0 && !this.form.cart_item_id) return false;
     return true;
+  }
+
+  private isPermitCategory(): boolean {
+    const cat = (this.form.category || '').toLowerCase();
+    return cat.includes('permit') || cat.includes('test booking')
+      || cat.includes('police booking') || cat.includes('iov');
   }
 
   onClientQueryChange(q: string) {
@@ -526,17 +642,60 @@ export class ExpensesCmp implements OnInit {
 
   selectClient(c: ClientInfo) {
     this.form.consultation_id = c.latest_consultation_id || '';
+    this.form.cart_item_id = '';
+    this.cartExpenseTypes.set([]);
     this.clientQuery.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
     this.clientResults.set([]);
     if (!c.latest_consultation_id) {
+      this.permitCartItems.set([]);
       this.messageService.add({ severity: 'warn', summary: 'No consultation', detail: 'This client has no consultation to attach' });
+    } else {
+      this.loadPermitCartItems(c.latest_consultation_id);
     }
   }
 
   clearClient() {
     this.form.consultation_id = '';
+    this.form.cart_item_id = '';
+    this.cartExpenseTypes.set([]);
+    this.permitCartItems.set([]);
     this.clientQuery.set('');
     this.clientResults.set([]);
+  }
+
+  onCartItemChange(itemId: string) {
+    this.form.cart_item_id = itemId;
+    this.cartExpenseTypes.set([]);
+    if (!itemId) {
+      this.loadClientAccountDetail();
+      return;
+    }
+    this.cartExpenseTypeLoading.set(true);
+    this.cartItemService.getExpectedExpenses(itemId).subscribe({
+      next: (res) => {
+        this.cartExpenseTypes.set(res.items || []);
+        const payable = (res.items || []).filter(t => !t.already_paid);
+        const currentCategory = (this.form.category || '').toLowerCase();
+        const currentMatch = payable.find(t => t.category.toLowerCase() === currentCategory);
+        if (currentMatch) {
+          // Keep the user's already-selected category; auto-fill its expected amount.
+          this.form.category = currentMatch.category;
+          this.form.amount = currentMatch.amount;
+        } else if (!this.form.category && payable.length === 1) {
+          // Only auto-select when the user hasn't already picked a category.
+          this.form.category = payable[0].category;
+          this.form.amount = payable[0].amount;
+        }
+        // Never wipe the already-selected category or client here.
+        this.loadClientAccountDetail();
+        this.cartExpenseTypeLoading.set(false);
+      },
+      error: () => {
+        this.cartExpenseTypes.set([]);
+        this.cartExpenseTypeLoading.set(false);
+        this.loadClientAccountDetail();
+      },
+    });
   }
 
   loadVehiclesForBranch() {

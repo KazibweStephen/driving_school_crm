@@ -34,6 +34,50 @@ from app.utils.timezones import today_local, now_local
 # ── Expenses ──
 
 
+async def _is_once_per_cart_item_category(
+    db: AsyncSession,
+    cart_item_id: uuid.UUID,
+    category: str,
+    company_id: uuid.UUID | None,
+) -> bool:
+    """A category is "once per cart item" when it is a permit milestone
+    (learner/test/permit) or one of the expense types tagged to the cart
+    item's package. Fuel is exempt (expensed per lesson)."""
+    low = (category or "").lower().replace("_", " ").strip()
+    if "fuel" in low:
+        return False
+    from app.services.permit import categorize_permit_expense
+    if categorize_permit_expense(category) is not None:
+        return True
+    if company_id is None:
+        return False
+    from app.models.cart import CartItem
+    from app.services.expected_expense import cart_item_expected_categories
+    item = (
+        await db.execute(select(CartItem).where(CartItem.id == cart_item_id))
+    ).scalar_one_or_none()
+    if not item:
+        return False
+    expected = await cart_item_expected_categories(db, item, company_id)
+    return low in expected
+
+
+async def _expected_amount_for(
+    db: AsyncSession,
+    cart_item_id: uuid.UUID,
+    category: str,
+    company_id: uuid.UUID | None,
+) -> float | None:
+    """The allocated amount for a tagged expense type on a cart item, used to
+    cap amount + charges at create time. Returns None for untagged categories
+    (permit milestones resolve through the permit categories, which have no
+    package allocation — those stay uncapped)."""
+    if company_id is None:
+        return None
+    from app.services.expected_expense import cart_item_expected_amount
+    return await cart_item_expected_amount(db, cart_item_id, category, company_id)
+
+
 async def list_expenses(
     db: AsyncSession,
     branch_id: uuid.UUID | None = None,
@@ -46,12 +90,14 @@ async def list_expenses(
     category: str | None = None,
     category_not: str | None = None,
     consultation_id: uuid.UUID | None = None,
+    cart_item_id: uuid.UUID | None = None,
 ) -> tuple[list[Expense], int]:
     query = select(Expense).options(
         selectinload(Expense.created_by_user),
         selectinload(Expense.approved_by_user),
         selectinload(Expense.paid_by_user),
         selectinload(Expense.consultation),
+        selectinload(Expense.branch),
     )
     count_query = select(func.count(Expense.id))
 
@@ -74,6 +120,9 @@ async def list_expenses(
     if consultation_id:
         query = query.where(Expense.consultation_id == consultation_id)
         count_query = count_query.where(Expense.consultation_id == consultation_id)
+    if cart_item_id:
+        query = query.where(Expense.cart_item_id == cart_item_id)
+        count_query = count_query.where(Expense.cart_item_id == cart_item_id)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
@@ -123,6 +172,7 @@ async def create_expense(
     description: str | None = None,
     category: str | None = None,
     consultation_id: uuid.UUID | None = None,
+    cart_item_id: uuid.UUID | None = None,
     mileage: int | None = None,
     vehicle_id: uuid.UUID | None = None,
     expense_date: datetime | None = None,
@@ -136,6 +186,13 @@ async def create_expense(
     if not await _verify_branch_company(db, branch_id, company_id, current_user_role):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Branch not found")
+    if not (category or "").strip():
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail="Category is required",
+        )
+    category = category.strip()
     if consultation_id is not None:
         if not await _verify_consultation_company(db, consultation_id, company_id, current_user_role):
             from fastapi import HTTPException
@@ -166,6 +223,40 @@ async def create_expense(
                     f"Available: {available}. Fund the client account first."
                 ),
             )
+    # Prevent duplicate expenses per cart item: when a cart_item_id is linked,
+    # block if an expense for the same cart_item + category already exists AND
+    # the category is a "one-time per cart item" type — i.e. a permit milestone
+    # OR one of the expense types tagged to the cart item's package.
+    # Fuel is exempt: its expense is computed per lesson finished, not per package.
+    if cart_item_id and category:
+        if await _is_once_per_cart_item_category(db, cart_item_id, category, company_id):
+            norm = func.lower(func.replace(Expense.category, ' ', ''))
+            existing = (
+                await db.execute(
+                    select(Expense.id).where(
+                        Expense.cart_item_id == cart_item_id,
+                        norm == category.lower().replace(' ', ''),
+                        Expense.consultation_id == consultation_id,
+                    ).limit(1)
+                )
+            ).scalar_one_or_none()
+            if existing:
+                from fastapi import HTTPException
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"A {category} expense already exists for this cart item. "
+                           "Cannot create a duplicate expense.",
+                )
+            expected = await _expected_amount_for(db, cart_item_id, category, company_id)
+            if expected is not None and (float(amount) + float(charges or 0.0)) > expected:
+                from fastapi import HTTPException
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"{category} amount cannot exceed the allocated amount "
+                        f"({expected}). Amount + charges = {float(amount) + float(charges or 0.0)}."
+                    ),
+                )
     expense = Expense(
         branch_id=branch_id,
         amount=amount,
@@ -174,6 +265,7 @@ async def create_expense(
         category=category,
         account=resolved_account,
         consultation_id=consultation_id,
+        cart_item_id=cart_item_id,
         mileage=mileage,
         vehicle_id=vehicle_id,
         expense_date=expense_date or now_local(),
@@ -204,6 +296,7 @@ async def get_expense(
         selectinload(Expense.created_by_user),
         selectinload(Expense.approved_by_user),
         selectinload(Expense.paid_by_user),
+        selectinload(Expense.branch),
     ).where(Expense.id == expense_id)
     if company_id is not None:
         query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
@@ -230,6 +323,13 @@ async def update_expense(
     query = select(Expense).where(Expense.id == expense_id)
     if company_id is not None:
         query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
+    query = query.options(
+        selectinload(Expense.created_by_user),
+        selectinload(Expense.approved_by_user),
+        selectinload(Expense.paid_by_user),
+        selectinload(Expense.consultation),
+        selectinload(Expense.branch),
+    )
     result = await db.execute(query)
     expense = result.scalar_one_or_none()
     if not expense:

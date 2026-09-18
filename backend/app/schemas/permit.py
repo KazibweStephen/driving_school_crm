@@ -137,6 +137,8 @@ class PermitTrackerRead(BaseModel):
                 return "learner_pending_approval"
             if self.learner_expense_status == "approved":
                 return "learner_pending_payment"
+            if self.learner_expense_status == "paid":
+                return "learner_paid"
             if self.eligibility_overridden:
                 return "eligible"
             return "eligible" if self.paid_ratio >= 0.5 else "not_qualified"

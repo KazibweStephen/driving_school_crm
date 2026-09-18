@@ -463,6 +463,8 @@ def compute_tracker_status(t: dict) -> str:
             return "learner_pending_approval"
         if lstat == "approved":
             return "learner_pending_payment"
+        if lstat == "paid":
+            return "learner_paid"
         if t.get("eligibility_overridden"):
             return "eligible"
         return "eligible" if (t.get("paid_ratio") or 0) >= 0.5 else "not_qualified"
@@ -474,6 +476,140 @@ def compute_tracker_status(t: dict) -> str:
             return "test_pending_payment"
         return "due_for_testing"
     return "learners_active"
+
+
+_PERMIT_NOTIFY_MESSAGES = {
+    "learner_pending_approval": "Learner Permit Payment expense is pending approval",
+    "learner_pending_payment": "Learner Permit Payment is approved — mark it paid",
+    "learner_paid": "Learner Permit Payment is paid — add the learner's permit issue date",
+    "test_pending_approval": "Testing dues are pending approval",
+    "test_pending_payment": "Testing dues are approved — mark them paid",
+    "test_ready": "Testing dues are paid — add the scheduled test date",
+    "permit_pending_approval": "Permit Payment expense is pending approval",
+    "permit_pending_payment": "Permit Payment is approved — mark it paid",
+    "permit_paid": "Permit Payment is paid — add the tested-on and permit received dates",
+}
+
+
+async def list_permit_notifications(
+    db: AsyncSession,
+    company_id: uuid.UUID | None,
+    current_user_role: UserRole | None,
+    branch_ids: list[uuid.UUID] | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Permit trackers that currently need an admin action (computed on read).
+
+    Mirrors `list_permit_trackers` scoping but returns only tracker statuses
+    that indicate a pending approval, an approved-but-unpaid expense, or a paid
+    stage still missing its date(s). Newest first.
+    """
+    query = (
+        select(CartItem)
+        .join(Consultation, CartItem.consultation_id == Consultation.id)
+        .outerjoin(Branch, Consultation.branch_id == Branch.id)
+        .options(
+            selectinload(CartItem.consultation).selectinload(Consultation.branch)
+        )
+        .where(CartItem.requires_permit_processing.is_(True))
+    )
+    if company_id is not None:
+        query = query.where(
+            or_(Consultation.branch_id.is_(None), Branch.company_id == company_id)
+        )
+    if branch_ids:
+        query = query.where(Consultation.branch_id.in_(branch_ids))
+    rows = (await db.execute(query.order_by(CartItem.created_at.desc()))).scalars().all()
+
+    progress_map: dict[uuid.UUID, PermitProgress] = {}
+    if rows:
+        pp_rows = await db.execute(
+            select(PermitProgress).where(
+                PermitProgress.cart_item_id.in_([ci.id for ci in rows])
+            )
+        )
+        progress_map = {p.cart_item_id: p for p in pp_rows.scalars().all()}
+
+    # Permit expense statuses per cart item/consultation (most-advanced wins),
+    # plus the newest created_at among them for recency ordering.
+    consultation_ids = {ci.consultation_id for ci in rows}
+    expense_kinds_status: dict[uuid.UUID, dict[str, str]] = {}
+    expense_kinds_created: dict[uuid.UUID, dict[str, datetime]] = {}
+    _STATUS_PRIORITY = {"pending": 1, "approved": 2, "paid": 3}
+    if consultation_ids:
+        exp_rows = await db.execute(
+            select(
+                Expense.consultation_id,
+                Expense.cart_item_id,
+                Expense.category,
+                Expense.status,
+                Expense.created_at,
+            )
+            .where(Expense.consultation_id.in_(consultation_ids))
+        )
+        for cid, cart_item_id, category, exp_status, exp_created in exp_rows.all():
+            exp_status = exp_status.value if hasattr(exp_status, "value") else exp_status
+            if exp_status not in _STATUS_PRIORITY:
+                continue
+            kind = categorize_permit_expense(category)
+            if kind is None:
+                continue
+            key = cart_item_id if cart_item_id else cid
+            current = expense_kinds_status.get(key, {}).get(kind)
+            if current is None or _STATUS_PRIORITY[exp_status] > _STATUS_PRIORITY[current]:
+                expense_kinds_status.setdefault(key, {})[kind] = exp_status
+                expense_kinds_created.setdefault(key, {})[kind] = exp_created
+            else:
+                prev_created = expense_kinds_created.get(key, {}).get(kind)
+                if prev_created is None or exp_created > prev_created:
+                    expense_kinds_created.setdefault(key, {})[kind] = exp_created
+
+    items: list[dict] = []
+    for ci in rows:
+        cons = ci.consultation
+        pp = progress_map.get(ci.id)
+        tracker = {
+            "permit_received_date": pp.permit_received_date if pp else None,
+            "permit_paid": bool(pp.permit_paid) if pp else False,
+            "tested_on_date": pp.tested_on_date if pp else None,
+            "waiting_for_permit": bool(pp.waiting_for_permit) if pp else False,
+            "test_ready": bool(pp.test_ready) if pp else False,
+            "got_learners_permit_date": pp.got_learners_permit_date if pp else None,
+            "eligibility_overridden": bool(pp.eligibility_overridden) if pp else False,
+            "learners_due_date": pp.learners_due_date if pp else None,
+            "paid_ratio": 0.0,
+        }
+        kinds = expense_kinds_status.get(ci.id) or expense_kinds_status.get(cons.id) or {}
+        tracker["learner_expense_status"] = kinds.get("learner")
+        tracker["testing_expense_status"] = kinds.get("test")
+        tracker["permit_expense_status"] = kinds.get("permit")
+        status = compute_tracker_status(tracker)
+        message = _PERMIT_NOTIFY_MESSAGES.get(status)
+        if message is None:
+            continue
+        created = (
+            expense_kinds_created.get(ci.id) or expense_kinds_created.get(cons.id) or {}
+        )
+        latest = None
+        for kind in ("learner", "test", "permit"):
+            ts = created.get(kind)
+            if ts is not None and (latest is None or ts > latest):
+                latest = ts
+        items.append({
+            "id": ci.id,
+            "cart_item_id": ci.id,
+            "consultation_id": cons.id,
+            "client_name": _display_name(cons),
+            "client_phone": cons.phone or "—",
+            "branch_id": cons.branch_id,
+            "branch_name": cons.branch.name if cons.branch else None,
+            "status": status,
+            "message": message,
+            "created_at": (latest or ci.created_at),
+        })
+
+    items.sort(key=lambda i: i["created_at"], reverse=True)
+    return items[:limit]
 
 
 async def _paid_for_cart_item(db: AsyncSession, ci: CartItem) -> float:

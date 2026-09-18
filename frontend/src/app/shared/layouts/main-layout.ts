@@ -10,11 +10,18 @@ import {
   FinanceService,
   TransferNotification,
   TransferNotificationsResponse,
+  ExpenseNotification,
+  ExpenseNotificationsResponse,
 } from '../../core/services/finance.service';
 import {
   DiscountNotification,
   DiscountService,
 } from '../../core/services/discount.service';
+import {
+  PermitNotificationItem,
+  PermitNotificationsResponse,
+  PermitProgressService,
+} from '../../core/services/permit-progress.service';
 import { NotificationRefreshService } from '../../core/services/notification-refresh.service';
 import { CompanyService, Company } from '../../core/services/company.service';
 
@@ -45,9 +52,13 @@ export class MainLayout implements OnInit, OnDestroy {
   notificationsOpen = signal(false);
   notifications = signal<TransferNotification[]>([]);
   discountNotifications = signal<DiscountNotification[]>([]);
+  permitNotifications = signal<PermitNotificationItem[]>([]);
+  expenseNotifications = signal<ExpenseNotification[]>([]);
   toReceiveCount = signal(0);
   toReceiveAmount = signal('0.00');
   pendingDiscountCount = signal(0);
+  pendingPermitCount = signal(0);
+  pendingExpenseCount = signal(0);
   loadingNotifications = signal(false);
   receivingId = signal<string | null>(null);
   cancellingId = signal<string | null>(null);
@@ -149,6 +160,7 @@ export class MainLayout implements OnInit, OnDestroy {
     public auth: AuthService,
     private financeService: FinanceService,
     private discountService: DiscountService,
+    private permitService: PermitProgressService,
     private notificationRefresh: NotificationRefreshService,
     private companyService: CompanyService,
     private messageService: MessageService,
@@ -220,11 +232,48 @@ export class MainLayout implements OnInit, OnDestroy {
         /* non-critical */
       }
     }
+
+    if (this.auth.hasPermission('training.view')) {
+      try {
+        const permitRes: PermitNotificationsResponse | undefined = await this.permitService
+          .getPermitNotifications(20)
+          .toPromise();
+        if (permitRes) {
+          this.permitNotifications.set(permitRes.items);
+          this.pendingPermitCount.set(permitRes.total);
+        }
+      } catch {
+        /* non-critical */
+      }
+    }
+
+    if (this.auth.hasPermission('expenses.view')) {
+      try {
+        const expenseRes: ExpenseNotificationsResponse | undefined = await this.financeService
+          .getExpenseNotifications(20)
+          .toPromise();
+        if (expenseRes) {
+          this.expenseNotifications.set(expenseRes.items);
+          this.pendingExpenseCount.set(expenseRes.pending_count + expenseRes.approved_count);
+        }
+      } catch {
+        /* non-critical */
+      }
+    }
   }
 
   toggleNotifications() {
     this.notificationsOpen.set(!this.notificationsOpen());
     if (this.notificationsOpen()) this.refreshNotifications();
+  }
+
+  get totalNotificationCount(): number {
+    return (
+      this.toReceiveCount() +
+      this.pendingDiscountCount() +
+      this.pendingPermitCount() +
+      this.pendingExpenseCount()
+    );
   }
 
   closeNotifications() {
@@ -306,6 +355,20 @@ export class MainLayout implements OnInit, OnDestroy {
   goToDiscounts() {
     this.notificationsOpen.set(false);
     this.router.navigate(['/discounts']);
+  }
+
+  goToPermits() {
+    this.notificationsOpen.set(false);
+    this.router.navigate(['/permits']);
+  }
+
+  goToExpenses() {
+    this.notificationsOpen.set(false);
+    this.router.navigate(['/expenses']);
+  }
+
+  goToPermit(p: PermitNotificationItem) {
+    this.goToPermits();
   }
 
   async loadCompanies() {

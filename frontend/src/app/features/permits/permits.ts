@@ -48,6 +48,7 @@ export class PermitsCmp implements OnInit {
     { label: 'Eligible', value: 'eligible' },
     { label: 'Learners Pending Approval', value: 'learner_pending_approval' },
     { label: 'Learners Pending Payment', value: 'learner_pending_payment' },
+    { label: 'Learners Paid', value: 'learner_paid' },
     { label: 'Learners Active', value: 'learners_active' },
     { label: 'Due For Testing', value: 'due_for_testing' },
     { label: 'Testing Pending Approval', value: 'test_pending_approval' },
@@ -162,6 +163,7 @@ export class PermitsCmp implements OnInit {
       case 'eligible': return 'info';
       case 'learner_pending_approval': return 'warn';
       case 'learner_pending_payment': return 'info';
+      case 'learner_paid': return 'success';
       case 'learners_active': return 'success';
       case 'due_for_testing': return 'warn';
       case 'test_pending_approval': return 'warn';
@@ -182,6 +184,7 @@ export class PermitsCmp implements OnInit {
       case 'eligible': return 'Eligible';
       case 'learner_pending_approval': return 'Learners Pending Approval';
       case 'learner_pending_payment': return 'Learners Pending Payment';
+      case 'learner_paid': return 'Learners Paid';
       case 'learners_active': return 'Learners Active';
       case 'due_for_testing': return 'Due For Testing';
       case 'test_pending_approval': return 'Testing Pending Approval';
@@ -202,6 +205,7 @@ export class PermitsCmp implements OnInit {
       case 'eligible': return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'learner_pending_approval': return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'learner_pending_payment': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'learner_paid': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'learners_active': return 'bg-green-50 text-green-700 border-green-200';
       case 'due_for_testing': return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'test_pending_approval': return 'bg-orange-50 text-orange-700 border-orange-200';

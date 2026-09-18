@@ -172,6 +172,29 @@ export interface TransferNotificationsResponse {
   to_receive_amount: string;
 }
 
+export interface ExpenseNotification {
+  id: string;
+  branch_id: string;
+  branch_name: string | null;
+  category: string | null;
+  amount: string;
+  charges: string;
+  description?: string | null;
+  status: 'pending' | 'approved';
+  consultation_id?: string;
+  cart_item_id?: string;
+  client_name?: string;
+  created_by_name?: string;
+  created_at: string;
+}
+
+export interface ExpenseNotificationsResponse {
+  items: ExpenseNotification[];
+  total: number;
+  pending_count: number;
+  approved_count: number;
+}
+
 export interface PoolPosition {
   pool: string;
   collected: number;
@@ -407,6 +430,12 @@ export class FinanceService {
 
   getTransferNotifications(limit = 20): Observable<TransferNotificationsResponse> {
     return this.http.get<TransferNotificationsResponse>(`${this.base}/transfers/notifications`, {
+      params: new HttpParams().set('limit', limit),
+    });
+  }
+
+  getExpenseNotifications(limit = 20): Observable<ExpenseNotificationsResponse> {
+    return this.http.get<ExpenseNotificationsResponse>(`${this.base}/expenses/notifications`, {
       params: new HttpParams().set('limit', limit),
     });
   }

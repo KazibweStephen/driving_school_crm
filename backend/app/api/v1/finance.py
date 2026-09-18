@@ -231,6 +231,22 @@ async def list_expenses(
     }
 
 
+@router.get("/expenses/notifications", response_model=dict)
+async def list_expense_notifications(
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.view")),
+):
+    resolved_branch_ids = await resolve_branch_ids(db, current_user, None)
+    return await finance_service.list_expense_notifications(
+        db,
+        company_id=current_user.company_id,
+        current_user_role=current_user.role,
+        branch_ids=resolved_branch_ids,
+        limit=limit,
+    )
+
+
 @router.post("/expenses", response_model=ExpenseRead, status_code=status.HTTP_201_CREATED)
 async def create_expense(
     data: ExpenseCreate,

@@ -1301,6 +1301,76 @@ async def list_transfer_notifications(
     }
 
 
+async def list_expense_notifications(
+    db: AsyncSession,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+    branch_ids: list[uuid.UUID] | None = None,
+    limit: int = 20,
+) -> dict:
+    """Expenses needing an admin action (pending → approve, approved → pay).
+
+    Scoped to the given branch_ids (resolved by the caller to the user's
+    accessible branches). Newest first.
+    """
+    query = (
+        select(Expense)
+        .options(
+            selectinload(Expense.consultation),
+            selectinload(Expense.branch),
+            selectinload(Expense.created_by_user),
+        )
+        .where(Expense.status.in_([ExpenseStatus.PENDING, ExpenseStatus.APPROVED]))
+    )
+    count_query = select(func.count(Expense.id)).where(
+        Expense.status.in_([ExpenseStatus.PENDING, ExpenseStatus.APPROVED])
+    )
+    if branch_ids:
+        query = query.where(Expense.branch_id.in_(branch_ids))
+        count_query = count_query.where(Expense.branch_id.in_(branch_ids))
+    if company_id is not None:
+        query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
+        count_query = count_query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    result = await db.execute(query.order_by(Expense.created_at.desc()).limit(limit))
+    expenses = list(result.scalars().all())
+
+    items = []
+    for e in expenses:
+        client_name = None
+        if e.consultation:
+            c = e.consultation
+            client_name = f"{c.first_name} {c.last_name or ''}".strip()
+        branch_name = e.branch.name if e.branch else None
+        items.append({
+            "id": e.id,
+            "branch_id": e.branch_id,
+            "branch_name": branch_name,
+            "category": e.category,
+            "amount": str(e.amount),
+            "charges": str(e.charges),
+            "description": e.description,
+            "status": e.status.value,
+            "consultation_id": e.consultation_id,
+            "cart_item_id": e.cart_item_id,
+            "client_name": client_name,
+            "created_by_name": e.created_by_user.name if e.created_by_user else None,
+            "created_at": e.created_at,
+        })
+
+    pending_count = sum(1 for i in items if i["status"] == "pending")
+    approved_count = sum(1 for i in items if i["status"] == "approved")
+    return {
+        "items": items,
+        "total": total,
+        "pending_count": pending_count,
+        "approved_count": approved_count,
+    }
+
+
 async def get_transfer_summary(
     db: AsyncSession,
     branch_id: uuid.UUID | None = None,

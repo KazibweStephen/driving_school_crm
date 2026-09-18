@@ -30,9 +30,9 @@
       aria-label="Notifications"
     >
       <span class="pi pi-bell text-xl"></span>
-      @if (toReceiveCount() + pendingDiscountCount() > 0) {
+      @if (totalNotificationCount > 0) {
         <span class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-          {{ toReceiveCount() + pendingDiscountCount() > 9 ? '9+' : toReceiveCount() + pendingDiscountCount() }}
+          {{ totalNotificationCount > 9 ? '9+' : totalNotificationCount }}
         </span>
       }
     </button>
@@ -71,9 +71,9 @@
       tooltipPosition="bottom"
     >
       <span class="pi pi-bell text-xl"></span>
-      @if (toReceiveCount() + pendingDiscountCount() > 0) {
+      @if (totalNotificationCount > 0) {
         <span class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-          {{ toReceiveCount() + pendingDiscountCount() > 9 ? '9+' : toReceiveCount() + pendingDiscountCount() }}
+          {{ totalNotificationCount > 9 ? '9+' : totalNotificationCount }}
         </span>
       }
     </button>
@@ -105,11 +105,13 @@
     <div class="flex items-center justify-between border-b px-4 py-3">
       <div>
         <p class="text-sm font-semibold text-gray-900">Notifications</p>
-        @if (toReceiveCount() + pendingDiscountCount() > 0) {
+        @if (totalNotificationCount > 0) {
           <p class="text-xs text-gray-500">
-            {{ toReceiveCount() + pendingDiscountCount() }} pending
+            {{ totalNotificationCount }} pending
             @if (toReceiveCount() > 0) { · {{ toReceiveCount() }} transfers }
             @if (pendingDiscountCount() > 0) { · {{ pendingDiscountCount() }} discounts }
+            @if (pendingPermitCount() > 0) { · {{ pendingPermitCount() }} permits }
+            @if (pendingExpenseCount() > 0) { · {{ pendingExpenseCount() }} expenses }
           </p>
         } @else {
           <p class="text-xs text-gray-500">No pending notifications</p>
@@ -129,7 +131,7 @@
         <div class="flex items-center justify-center py-8">
           <span class="pi pi-spin pi-spinner text-2xl text-gray-400"></span>
         </div>
-      } @else if (notifications().length === 0 && discountNotifications().length === 0) {
+      } @else if (notifications().length === 0 && discountNotifications().length === 0 && permitNotifications().length === 0 && expenseNotifications().length === 0) {
         <div class="flex flex-col items-center justify-center gap-2 py-10 text-gray-400">
           <span class="pi pi-bell-slash text-3xl"></span>
           <p class="text-sm">No pending notifications</p>
@@ -255,6 +257,79 @@
             }
           </ul>
         }
+
+        @if (permitNotifications().length > 0) {
+          @if (notifications().length > 0 || discountNotifications().length > 0) {
+            <div class="border-t px-4 py-2">
+              <p class="text-xs font-medium text-gray-400 uppercase">Permit Follow-ups</p>
+            </div>
+          }
+          <ul class="divide-y">
+            @for (p of permitNotifications(); track p.id) {
+              <li class="flex items-start gap-3 px-4 py-3">
+                <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm text-indigo-700">
+                  <span class="pi pi-id-card"></span>
+                </span>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm text-gray-900">
+                    <span class="font-medium">{{ p.client_name }}</span>
+                    @if (p.branch_name) {
+                      <span class="text-gray-400">· {{ p.branch_name }}</span>
+                    }
+                  </p>
+                  <p class="text-xs text-gray-500">{{ p.message }} · {{ timeAgo(p.created_at) }}</p>
+                </div>
+                <div class="flex shrink-0 flex-col items-end">
+                  <button
+                    class="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+                    (click)="goToPermit(p)"
+                  >
+                    Open
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+
+        @if (expenseNotifications().length > 0) {
+          @if (notifications().length > 0 || discountNotifications().length > 0 || permitNotifications().length > 0) {
+            <div class="border-t px-4 py-2">
+              <p class="text-xs font-medium text-gray-400 uppercase">Expenses to Act On</p>
+            </div>
+          }
+          <ul class="divide-y">
+            @for (e of expenseNotifications(); track e.id) {
+              <li class="flex items-start gap-3 px-4 py-3">
+                <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-sm text-cyan-700">
+                  <span class="pi pi-minus-circle"></span>
+                </span>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm text-gray-900">
+                    <span class="font-medium">{{ e.category || 'Expense' }}</span>
+                    @if (e.status === 'approved') {
+                      <p-tag value="Approved" severity="warn" />
+                    } @else {
+                      <p-tag value="Pending" severity="info" />
+                    }
+                  </p>
+                  <p class="text-xs text-gray-500">
+                    UGX {{ formatAmount(e.amount) }}
+                    @if (e.client_name) { · {{ e.client_name }} }
+                    @if (e.branch_name) { · {{ e.branch_name }} }
+                    · {{ timeAgo(e.created_at) }}
+                  </p>
+                </div>
+                <button
+                  class="shrink-0 rounded-md bg-cyan-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-cyan-700"
+                  (click)="goToExpenses()"
+                >
+                  Open
+                </button>
+              </li>
+            }
+          </ul>
+        }
       }
     </div>
 
@@ -275,7 +350,23 @@
           View all discounts
         </button>
       }
-      @if (toReceiveCount() === 0 && pendingDiscountCount() === 0) {
+      @if (pendingPermitCount() > 0) {
+        <button
+          class="w-full rounded-lg px-3 py-2 text-center text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+          (click)="goToPermits()"
+        >
+          View all permits
+        </button>
+      }
+      @if (pendingExpenseCount() > 0) {
+        <button
+          class="w-full rounded-lg px-3 py-2 text-center text-sm font-medium text-cyan-700 hover:bg-cyan-50"
+          (click)="goToExpenses()"
+        >
+          View all expenses
+        </button>
+      }
+      @if (totalNotificationCount === 0) {
         <button
           class="w-full rounded-lg px-3 py-2 text-center text-sm font-medium text-gray-400"
           disabled

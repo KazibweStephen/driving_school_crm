@@ -89,6 +89,9 @@
           <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium {{ statusClass(t) }}">
             {{ statusLabel(t) }}
           </span>
+          @if (t.status === 'learner_paid') {
+            <div class="mt-1 text-xs text-amber-600">Add the learner's permit issue date.</div>
+          }
         </td>
         <td class="whitespace-nowrap text-sm">
           <span class="text-green-600 font-medium">{{ formatAmount(t.total_paid) }}</span>

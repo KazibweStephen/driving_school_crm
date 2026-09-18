@@ -110,6 +110,9 @@
               {{ statusLabel(t.status) }}
             </span>
           </div>
+          @if (t.status === 'learner_paid') {
+            <div class="mt-1 text-[10px] text-amber-600">Add the learner's permit issue date.</div>
+          }
 
           <div class="mt-2 border-t border-slate-100 pt-2">
             <div class="flex items-center justify-between">

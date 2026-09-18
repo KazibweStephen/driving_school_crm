@@ -134,13 +134,26 @@ async def record_permit_expense(
 permit_router = APIRouter(prefix="/permits", tags=["permit"])
 
 
+@permit_router.get("/notifications", response_model=dict)
+async def list_permit_notifications(
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("training.view")),
+):
+    items = await permit_service.list_permit_notifications(
+        db, current_user.company_id, current_user.role,
+        branch_ids=None, limit=limit,
+    )
+    return {"items": items, "total": len(items)}
+
+
 @permit_router.get("/", response_model=PermitTrackerListResponse)
 async def list_permit_trackers(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("training.view")),
     branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     search: str | None = None,
-    status: str | None = Query(None, pattern="^(eligible|not_qualified|learners_active|due_for_testing|test_ready|waiting_for_permit|permit_paid|permit_received|learner_pending_approval|learner_pending_payment|test_pending_approval|test_pending_payment|permit_pending_approval|permit_pending_payment)$"),
+    status: str | None = Query(None, pattern="^(eligible|not_qualified|learners_active|due_for_testing|test_ready|waiting_for_permit|permit_paid|permit_received|learner_pending_approval|learner_pending_payment|learner_paid|test_pending_approval|test_pending_payment|permit_pending_approval|permit_pending_payment)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):

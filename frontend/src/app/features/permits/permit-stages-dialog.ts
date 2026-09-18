@@ -78,6 +78,7 @@ export class PermitStagesDialog {
   private readonly statusStageIndexMap: Record<string, number> = {
     learner_pending_approval: 1,
     learner_pending_payment: 1,
+    learner_paid: 1,
     test_pending_approval: 3,
     test_pending_payment: 3,
     permit_pending_approval: 5,

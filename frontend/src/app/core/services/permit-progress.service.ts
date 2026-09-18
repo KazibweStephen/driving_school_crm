@@ -123,6 +123,24 @@ export interface PermitTrackerParams {
   page_size?: number;
 }
 
+export interface PermitNotificationItem {
+  id: string;
+  cart_item_id: string;
+  consultation_id: string;
+  client_name: string;
+  client_phone: string;
+  branch_id: string | null;
+  branch_name: string | null;
+  status: string;
+  message: string;
+  created_at: string;
+}
+
+export interface PermitNotificationsResponse {
+  items: PermitNotificationItem[];
+  total: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PermitProgressService {
   constructor(private http: HttpClient) {}
@@ -143,6 +161,12 @@ export class PermitProgressService {
     if (params.page) hp = hp.set('page', String(params.page));
     if (params.page_size) hp = hp.set('page_size', String(params.page_size));
     return this.http.get<PermitTrackerListResponse>('/api/v1/permits/', { params: hp });
+  }
+
+  getPermitNotifications(limit = 20) {
+    return this.http.get<PermitNotificationsResponse>('/api/v1/permits/notifications', {
+      params: new HttpParams().set('limit', String(limit)),
+    });
   }
 
   uploadPhoto(cartItemId: string, file: File) {

@@ -46,10 +46,16 @@ export class PermitsCmp implements OnInit {
     { label: 'All', value: '' },
     { label: 'Not Qualified', value: 'not_qualified' },
     { label: 'Eligible', value: 'eligible' },
+    { label: 'Learners Pending Approval', value: 'learner_pending_approval' },
+    { label: 'Learners Pending Payment', value: 'learner_pending_payment' },
     { label: 'Learners Active', value: 'learners_active' },
     { label: 'Due For Testing', value: 'due_for_testing' },
+    { label: 'Testing Pending Approval', value: 'test_pending_approval' },
+    { label: 'Testing Pending Payment', value: 'test_pending_payment' },
     { label: 'Test Ready', value: 'test_ready' },
     { label: 'Waiting For Permit', value: 'waiting_for_permit' },
+    { label: 'Permit Pending Approval', value: 'permit_pending_approval' },
+    { label: 'Permit Pending Payment', value: 'permit_pending_payment' },
     { label: 'Permit Paid', value: 'permit_paid' },
     { label: 'Permit Received', value: 'permit_received' },
   ];
@@ -154,10 +160,16 @@ export class PermitsCmp implements OnInit {
   statusSeverity(t: PermitTracker): string {
     switch (t.status) {
       case 'eligible': return 'info';
+      case 'learner_pending_approval': return 'warn';
+      case 'learner_pending_payment': return 'info';
       case 'learners_active': return 'success';
       case 'due_for_testing': return 'warn';
+      case 'test_pending_approval': return 'warn';
+      case 'test_pending_payment': return 'info';
       case 'test_ready': return 'secondary';
       case 'waiting_for_permit': return 'warn';
+      case 'permit_pending_approval': return 'warn';
+      case 'permit_pending_payment': return 'info';
       case 'permit_paid': return 'success';
       case 'permit_received': return 'success';
       default: return 'secondary';
@@ -168,10 +180,16 @@ export class PermitsCmp implements OnInit {
     switch (t.status) {
       case 'not_qualified': return 'Not Qualified';
       case 'eligible': return 'Eligible';
+      case 'learner_pending_approval': return 'Learners Pending Approval';
+      case 'learner_pending_payment': return 'Learners Pending Payment';
       case 'learners_active': return 'Learners Active';
       case 'due_for_testing': return 'Due For Testing';
+      case 'test_pending_approval': return 'Testing Pending Approval';
+      case 'test_pending_payment': return 'Testing Pending Payment';
       case 'test_ready': return 'Test Ready';
       case 'waiting_for_permit': return 'Waiting For Permit';
+      case 'permit_pending_approval': return 'Permit Pending Approval';
+      case 'permit_pending_payment': return 'Permit Pending Payment';
       case 'permit_paid': return 'Permit Paid';
       case 'permit_received': return 'Permit Received';
       default: return t.status;
@@ -182,10 +200,16 @@ export class PermitsCmp implements OnInit {
     switch (t.status) {
       case 'not_qualified': return 'bg-gray-100 text-gray-700 border-gray-200';
       case 'eligible': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'learner_pending_approval': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'learner_pending_payment': return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'learners_active': return 'bg-green-50 text-green-700 border-green-200';
       case 'due_for_testing': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'test_pending_approval': return 'bg-orange-50 text-orange-700 border-orange-200';
+      case 'test_pending_payment': return 'bg-purple-50 text-purple-700 border-purple-200';
       case 'test_ready': return 'bg-purple-50 text-purple-700 border-purple-200';
       case 'waiting_for_permit': return 'bg-orange-50 text-orange-700 border-orange-200';
+      case 'permit_pending_approval': return 'bg-orange-50 text-orange-700 border-orange-200';
+      case 'permit_pending_payment': return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'permit_paid': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'permit_received': return 'bg-green-100 text-green-800 border-green-300';
       default: return 'bg-gray-100 text-gray-700 border-gray-200';

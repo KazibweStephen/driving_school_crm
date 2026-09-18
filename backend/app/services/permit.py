@@ -329,11 +329,13 @@ async def list_permit_trackers(
             discount_map.setdefault(cid, 0.0)
             discount_map[cid] += float(amount)
 
-    # Already-paid permit/testing expenses per consultation (flag to admin:
-    # the expense is paid but the date/photo may still need capturing).
-    # When an expense has cart_item_id, it's linked to that specific cart item.
+    # Permit expenses per consultation/cart item (all statuses). When an
+    # expense has cart_item_id, it's linked to that specific cart item;
+    # otherwise it falls back to the consultation. For each permit kind we keep
+    # the most advanced status (paid > approved > pending; rejected is ignored).
     consultation_ids = {ci.consultation_id for ci in rows}
-    paid_expense_kinds: dict[uuid.UUID, set[str]] = {}
+    expense_kinds_status: dict[uuid.UUID, dict[str, str]] = {}
+    _STATUS_PRIORITY = {"pending": 1, "approved": 2, "paid": 3}
     if consultation_ids:
         exp_rows = await db.execute(
             select(
@@ -342,18 +344,20 @@ async def list_permit_trackers(
                 Expense.category,
                 Expense.status,
             )
-            .where(
-                Expense.consultation_id.in_(consultation_ids),
-                Expense.status == "paid",
-            )
+            .where(Expense.consultation_id.in_(consultation_ids))
         )
-        for cid, cart_item_id, category, _status in exp_rows.all():
+        for cid, cart_item_id, category, exp_status in exp_rows.all():
+            exp_status = exp_status.value if hasattr(exp_status, "value") else exp_status
+            if exp_status not in _STATUS_PRIORITY:
+                continue
             kind = categorize_permit_expense(category)
             if kind is None:
                 continue
             # If expense has cart_item_id, key by cart_item_id; otherwise by consultation_id
             key = cart_item_id if cart_item_id else cid
-            paid_expense_kinds.setdefault(key, set()).add(kind)
+            current = expense_kinds_status.get(key, {}).get(kind)
+            if current is None or _STATUS_PRIORITY[exp_status] > _STATUS_PRIORITY[current]:
+                expense_kinds_status.setdefault(key, {})[kind] = exp_status
 
     # Load product + package names
     product_ids = {ci.product_id for ci in rows if ci.product_id}
@@ -418,11 +422,14 @@ async def list_permit_trackers(
             "eligibility_overridden": bool(pp.eligibility_overridden) if pp else False,
             "eligibility_override_reason": pp.eligibility_override_reason if pp else None,
         }
-        # Look up paid expense kinds: prefer cart_item_id match, fall back to consultation_id
-        kinds = paid_expense_kinds.get(ci.id, set()) or paid_expense_kinds.get(cons.id, set())
-        tracker["learner_expense_paid"] = "learner" in kinds
-        tracker["testing_expense_paid"] = "test" in kinds
-        tracker["permit_expense_paid"] = "permit" in kinds
+        # Look up expense kinds: prefer cart_item_id match, fall back to consultation_id
+        kinds = expense_kinds_status.get(ci.id) or expense_kinds_status.get(cons.id) or {}
+        tracker["learner_expense_status"] = kinds.get("learner")
+        tracker["testing_expense_status"] = kinds.get("test")
+        tracker["permit_expense_status"] = kinds.get("permit")
+        tracker["learner_expense_paid"] = kinds.get("learner") == "paid"
+        tracker["testing_expense_paid"] = kinds.get("test") == "paid"
+        tracker["permit_expense_paid"] = kinds.get("permit") == "paid"
         trackers.append(tracker)
 
     if status:
@@ -442,14 +449,29 @@ def compute_tracker_status(t: dict) -> str:
     if t.get("permit_paid"):
         return "permit_paid"
     if t.get("tested_on_date") or t.get("waiting_for_permit"):
+        pstat = t.get("permit_expense_status")
+        if pstat == "pending":
+            return "permit_pending_approval"
+        if pstat == "approved":
+            return "permit_pending_payment"
         return "waiting_for_permit"
     if t.get("test_ready"):
         return "test_ready"
     if not t.get("got_learners_permit_date"):
+        lstat = t.get("learner_expense_status")
+        if lstat == "pending":
+            return "learner_pending_approval"
+        if lstat == "approved":
+            return "learner_pending_payment"
         if t.get("eligibility_overridden"):
             return "eligible"
         return "eligible" if (t.get("paid_ratio") or 0) >= 0.5 else "not_qualified"
     if t.get("learners_due_date") and t["learners_due_date"] <= today_local():
+        tstat = t.get("testing_expense_status")
+        if tstat == "pending":
+            return "test_pending_approval"
+        if tstat == "approved":
+            return "test_pending_payment"
         return "due_for_testing"
     return "learners_active"
 

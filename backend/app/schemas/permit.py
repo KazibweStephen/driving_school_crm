@@ -113,6 +113,9 @@ class PermitTrackerRead(BaseModel):
     learner_expense_paid: bool = False
     testing_expense_paid: bool = False
     permit_expense_paid: bool = False
+    learner_expense_status: str | None = None
+    testing_expense_status: str | None = None
+    permit_expense_status: str | None = None
 
     @computed_field
     @property
@@ -122,14 +125,26 @@ class PermitTrackerRead(BaseModel):
         if self.permit_paid:
             return "permit_paid"
         if self.tested_on_date or self.waiting_for_permit:
+            if self.permit_expense_status == "pending":
+                return "permit_pending_approval"
+            if self.permit_expense_status == "approved":
+                return "permit_pending_payment"
             return "waiting_for_permit"
         if self.test_ready:
             return "test_ready"
         if not self.got_learners_permit_date:
+            if self.learner_expense_status == "pending":
+                return "learner_pending_approval"
+            if self.learner_expense_status == "approved":
+                return "learner_pending_payment"
             if self.eligibility_overridden:
                 return "eligible"
             return "eligible" if self.paid_ratio >= 0.5 else "not_qualified"
         if self.learners_due_date and self.learners_due_date <= today_local():
+            if self.testing_expense_status == "pending":
+                return "test_pending_approval"
+            if self.testing_expense_status == "approved":
+                return "test_pending_payment"
             return "due_for_testing"
         return "learners_active"
 

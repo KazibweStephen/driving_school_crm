@@ -378,7 +378,6 @@ export class ExpensesCmp implements OnInit {
         branch_id: this.filterBranch() || undefined,
         status: this.filterStatus() || undefined,
         consultation_id: inContext ? this.routeConsultationId() : undefined,
-        cart_item_id: inContext ? (this.routeCartItem() || undefined) : undefined,
         category: inContext ? (this.routeCategory || undefined) : undefined,
         page: this.page,
         page_size: this.pageSize,

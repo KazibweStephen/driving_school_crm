@@ -72,7 +72,20 @@ export class PermitStagesDialog {
     return this.tracker?.status ?? 'not_qualified';
   }
 
+  // Expense-status-aware statuses map onto the base stage they belong to.
+  private readonly statusStageIndexMap: Record<string, number> = {
+    learner_pending_approval: 1,
+    learner_pending_payment: 1,
+    test_pending_approval: 3,
+    test_pending_payment: 3,
+    permit_pending_approval: 5,
+    permit_pending_payment: 5,
+  };
+
   get stageIndex(): number {
+    if (this.status in this.statusStageIndexMap) {
+      return this.statusStageIndexMap[this.status];
+    }
     return this.stages.findIndex(s => s.key === this.status);
   }
 
@@ -84,6 +97,21 @@ export class PermitStagesDialog {
     return !!this.tracker?.learner_expense_paid;
   }
 
+  get learnerExpensePending(): boolean {
+    const s = this.tracker?.learner_expense_status;
+    return s === 'pending' || s === 'approved';
+  }
+
+  get testingExpensePending(): boolean {
+    const s = this.tracker?.testing_expense_status;
+    return s === 'pending' || s === 'approved';
+  }
+
+  get permitExpensePending(): boolean {
+    const s = this.tracker?.permit_expense_status;
+    return s === 'pending' || s === 'approved';
+  }
+
   get testingExpensePaid(): boolean {
     return !!this.tracker?.testing_expense_paid;
   }
@@ -93,15 +121,21 @@ export class PermitStagesDialog {
   }
 
   get showLearnerExpense(): boolean {
-    return !!this.tracker && (this.status === 'not_qualified' || this.status === 'eligible') && !this.learnerExpensePaid;
+    return !!this.tracker && (this.status === 'not_qualified' || this.status === 'eligible'
+      || this.status === 'learner_pending_approval' || this.status === 'learner_pending_payment')
+      && !this.learnerExpensePaid;
   }
 
   get showTestingExpenses(): boolean {
-    return !!this.tracker && this.status === 'due_for_testing' && !this.testingExpensePaid;
+    return !!this.tracker && (this.status === 'due_for_testing'
+      || this.status === 'test_pending_approval' || this.status === 'test_pending_payment')
+      && !this.testingExpensePaid;
   }
 
   get showPermitExpense(): boolean {
-    return !!this.tracker && this.status === 'waiting_for_permit' && !this.permitExpensePaid;
+    return !!this.tracker && (this.status === 'waiting_for_permit'
+      || this.status === 'permit_pending_approval' || this.status === 'permit_pending_payment')
+      && !this.permitExpensePaid;
   }
 
   get stageExpenseCategories(): string[] {
@@ -120,6 +154,7 @@ export class PermitStagesDialog {
   }
 
   get learnerDatesEnabled(): boolean {
+    if (this.learnerExpensePending) return false;
     return this.stageIndex === 1 || this.stageIndex === 2
       || (!!this.tracker?.learner_expense_paid && !this.progress?.got_learners_permit_date);
   }
@@ -142,6 +177,7 @@ export class PermitStagesDialog {
   }
 
   get testedOnEnabled(): boolean {
+    if (this.permitExpensePending) return false;
     return this.stageIndex === 5;
   }
   get testedOnDone(): boolean {
@@ -156,6 +192,7 @@ export class PermitStagesDialog {
   }
 
   get permitReceivedEnabled(): boolean {
+    if (this.permitExpensePending) return false;
     return this.stageIndex === 6;
   }
   get permitReceivedDone(): boolean {

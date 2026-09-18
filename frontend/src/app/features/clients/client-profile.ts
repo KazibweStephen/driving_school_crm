@@ -809,6 +809,7 @@ export class ClientProfile implements OnInit {
       status: '', days_to_maturity: null, days_to_expiry: null, days_since_test: null,
       eligibility_overridden: false, eligibility_override_reason: null,
       learner_expense_paid: false, testing_expense_paid: false, permit_expense_paid: false,
+      learner_expense_status: null, testing_expense_status: null, permit_expense_status: null,
     };
     this.permitStagesDialog()?.open(tracker);
   }

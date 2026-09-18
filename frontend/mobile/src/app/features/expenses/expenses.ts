@@ -429,7 +429,6 @@ export class Expenses {
         category: isSms ? SMS_CATEGORY : (inContext && this.routeCategory ? this.routeCategory : null),
         category_not: isSms ? null : SMS_CATEGORY,
         consultation_id: inContext ? this.routeConsultationId() : null,
-        cart_item_id: inContext ? (this.routeCartItem() || null) : null,
         page: this.page(),
         page_size: this.pageSize,
       })

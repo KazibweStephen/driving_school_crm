@@ -140,7 +140,7 @@ async def list_permit_trackers(
     current_user: User = Depends(require_permission("training.view")),
     branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     search: str | None = None,
-    status: str | None = Query(None, pattern="^(eligible|not_qualified|learners_active|due_for_testing|test_ready|waiting_for_permit|permit_paid|permit_received)$"),
+    status: str | None = Query(None, pattern="^(eligible|not_qualified|learners_active|due_for_testing|test_ready|waiting_for_permit|permit_paid|permit_received|learner_pending_approval|learner_pending_payment|test_pending_approval|test_pending_payment|permit_pending_approval|permit_pending_payment)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):

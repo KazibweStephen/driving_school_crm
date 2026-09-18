@@ -35,16 +35,52 @@
         <b>Learner Permit expense paid.</b> Add the issue date below.
       </div>
     }
+    @if (tracker.learner_expense_status === 'pending') {
+      <div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+        <i class="pi pi-clock mr-1"></i>
+        <b>Learners Pending Approval.</b> Awaiting approval on the Expenses page.
+      </div>
+    }
+    @if (tracker.learner_expense_status === 'approved') {
+      <div class="mb-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+        <i class="pi pi-hourglass mr-1"></i>
+        <b>Learners Pending Payment.</b> Approved — mark it paid on the Expenses page, then add the issue date.
+      </div>
+    }
     @if (tracker.testing_expense_paid && status !== 'test_ready' && status !== 'waiting_for_permit' && status !== 'permit_paid' && status !== 'permit_received') {
       <div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
         <i class="pi pi-exclamation-triangle mr-1"></i>
         <b>Testing expenses paid.</b> Add the scheduled test date below.
       </div>
     }
+    @if (tracker.testing_expense_status === 'pending') {
+      <div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+        <i class="pi pi-clock mr-1"></i>
+        <b>Testing Pending Approval.</b> Stage testing expenses are awaiting approval.
+      </div>
+    }
+    @if (tracker.testing_expense_status === 'approved') {
+      <div class="mb-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+        <i class="pi pi-hourglass mr-1"></i>
+        <b>Testing Pending Payment.</b> Approved — mark paid to become test-ready.
+      </div>
+    }
     @if (tracker.permit_expense_paid && !progress?.permit_received_date) {
       <div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
         <i class="pi pi-exclamation-triangle mr-1"></i>
         <b>Permit Payment expense paid.</b> Add tested-on and permit received dates.
+      </div>
+    }
+    @if (tracker.permit_expense_status === 'pending') {
+      <div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+        <i class="pi pi-clock mr-1"></i>
+        <b>Permit Pending Approval.</b> Awaiting approval on the Expenses page.
+      </div>
+    }
+    @if (tracker.permit_expense_status === 'approved') {
+      <div class="mb-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+        <i class="pi pi-hourglass mr-1"></i>
+        <b>Permit Pending Payment.</b> Approved — mark it paid to complete permit processing.
       </div>
     }
 

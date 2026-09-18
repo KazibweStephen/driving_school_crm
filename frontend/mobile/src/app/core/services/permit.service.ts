@@ -40,6 +40,9 @@ export interface PermitTracker {
   learner_expense_paid: boolean;
   testing_expense_paid: boolean;
   permit_expense_paid: boolean;
+  learner_expense_status: string | null;
+  testing_expense_status: string | null;
+  permit_expense_status: string | null;
 }
 
 export interface PermitTrackerListResponse {

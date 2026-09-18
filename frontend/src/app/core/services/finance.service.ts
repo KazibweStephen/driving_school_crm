@@ -78,6 +78,8 @@ export interface ExpenseUpdate {
   approved_at?: string;
   rejection_reason?: string;
   receipt_url?: string;
+  consultation_id?: string;
+  category?: string;
 }
 
 export interface ExpenseListResponse {
@@ -366,7 +368,7 @@ export class FinanceService {
     return this.http.post<Expense>(`${this.base}/expenses/${id}/reject`, { rejection_reason: reason });
   }
 
-  markExpensePaid(id: string, body?: { charges?: number; receipt_url?: string }): Observable<Expense> {
+  markExpensePaid(id: string, body?: { charges?: number; receipt_url?: string; paid_at?: string }): Observable<Expense> {
     return this.http.post<Expense>(`${this.base}/expenses/${id}/mark-paid`, body ?? {});
   }
 

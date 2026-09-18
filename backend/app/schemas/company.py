@@ -161,6 +161,7 @@ class ExpenseUpdate(BaseModel):
     receipt_url: str | None = None
     vehicle_id: uuid.UUID | None = None
     consultation_id: uuid.UUID | None = None
+    category: str | None = None
     charges: float | None = None
     paid_charges: float | None = None
 
@@ -168,6 +169,7 @@ class ExpenseUpdate(BaseModel):
 class MarkExpensePaid(BaseModel):
     charges: float | None = None
     receipt_url: str | None = None
+    paid_at: datetime | None = None
 
 
 class ExpenseRead(BaseModel):

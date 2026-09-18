@@ -24,6 +24,7 @@ import { CartItemService, CartItemRead, CartItemExpectedExpenseType } from '../.
 import { CurrencyService } from '../../core/services/currency.service';
 import { UserDisplayCmp } from '../../shared/components/user-display';
 import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
+import { AuthService } from '../../core/auth/auth.service';
 
 @Component({
   selector: 'app-expenses',
@@ -61,6 +62,7 @@ export class ExpensesCmp implements OnInit {
   payCharges = signal(0);
   payReceiptFile = signal<File | null>(null);
   payingUpload = signal(false);
+  payDate = signal<Date | null>(null);
 
   // Permit-stage navigation context (query params: consultation_id, cart_item_id, category, back)
   routeConsultationId = signal<string>('');
@@ -165,6 +167,37 @@ export class ExpensesCmp implements OnInit {
   clientSearching = signal(false);
   clientQuery = signal('');
 
+  // Edit dialog — only fills MISSING category and client (allowed even on paid expenses)
+  showEditDialog = signal(false);
+  editingExpense = signal<Expense | null>(null);
+  editCategory = signal('');
+  editOtherDetail = signal('');
+  editClientLabel = signal('');
+  editClientResults = signal<ClientInfo[]>([]);
+  editClientSearching = signal(false);
+  editClientQuery = signal('');
+  editHadCategory = false;
+  editHadClient = false;
+
+  canBackdate(): boolean {
+    return this.authService.currentUserCanBackdate();
+  }
+
+  editCategoryOptions = computed(() => {
+    const opts = this.categories().map(c => ({ label: c.name, value: c.name }));
+    return [...opts, { label: 'Other', value: '__other__' }];
+  });
+
+  editCanSave(): boolean {
+    const e = this.editingExpense();
+    if (!e) return false;
+    const needsCategory = !this.editHadCategory;
+    const needsClient = !this.editHadClient;
+    if (needsCategory && !this.editCategory()) return false;
+    if (needsCategory && this.editCategory() === '__other__' && !this.editOtherDetail().trim()) return false;
+    return needsCategory || needsClient;
+  }
+
   permitCartItems = signal<CartItemRead[]>([]);
   permitCartItemOptions = computed(() =>
     this.permitCartItems().map(ci => ({
@@ -210,6 +243,8 @@ export class ExpensesCmp implements OnInit {
     paid: 'info',
   };
 
+  today = new Date();
+
   constructor(
     private financeService: FinanceService,
     private companyService: CompanyService,
@@ -221,6 +256,7 @@ export class ExpensesCmp implements OnInit {
     public currencyService: CurrencyService,
     private route: ActivatedRoute,
     private router: Router,
+    private authService: AuthService,
   ) {}
 
   ngOnInit() {
@@ -543,7 +579,12 @@ export class ExpensesCmp implements OnInit {
     this.payingExpense.set(e);
     this.payCharges.set(e.charges ?? 0);
     this.payReceiptFile.set(null);
+    this.payDate.set(e.paid_at ? new Date(e.paid_at) : this.toLocalDateOnly(new Date()));
     this.showPayDialog.set(true);
+  }
+
+  private toLocalDateOnly(d: Date): Date {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
 
   async onPayReceiptSelected(event: Event) {
@@ -563,9 +604,12 @@ export class ExpensesCmp implements OnInit {
         const uploadRes = await this.financeService.uploadReceipt(this.payReceiptFile()!).toPromise();
         receipt_url = uploadRes?.url;
       }
+      const pd = this.payDate();
+      const paid_at = pd ? toLocalDateStr(pd) : undefined;
       const updated = await this.financeService.markExpensePaid(e.id, {
         charges: this.payCharges() || 0,
         receipt_url,
+        paid_at,
       }).toPromise();
       if (updated) {
         this.expenses.update(list => list.map(x => x.id === e.id ? updated : x));
@@ -580,6 +624,80 @@ export class ExpensesCmp implements OnInit {
       });
     } finally {
       this.payingUpload.set(false);
+    }
+  }
+
+  openEdit(e: Expense) {
+    this.editingExpense.set(e);
+    this.editCategory.set('');
+    this.editOtherDetail.set('');
+    this.editClientLabel.set(e.client_name || '');
+    this.editClientQuery.set('');
+    this.editClientResults.set([]);
+    this.editHadCategory = !!(e.category && e.category.trim());
+    this.editHadClient = !!e.consultation_id;
+    this.showEditDialog.set(true);
+  }
+
+  onEditCategoryChange() {
+    this.editClientResults.set([]);
+  }
+
+  async searchEditClient(q: string) {
+    this.editClientQuery.set(q);
+    const search = (q || '').trim();
+    if (search.length < 2) {
+      this.editClientResults.set([]);
+      return;
+    }
+    this.editClientSearching.set(true);
+    try {
+      const res = await this.consultationService.clientSearch(search).toPromise();
+      this.editClientResults.set(res || []);
+    } catch {
+      this.editClientResults.set([]);
+    } finally {
+      this.editClientSearching.set(false);
+    }
+  }
+
+  selectEditClient(c: ClientInfo) {
+    this.editingExpense.update(e => e ? { ...e, consultation_id: c.latest_consultation_id || '' } : e);
+    this.editClientLabel.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
+    this.editClientResults.set([]);
+  }
+
+  async saveEdit() {
+    const e = this.editingExpense();
+    if (!e) return;
+    this.loading.set(true);
+    try {
+      const payload: { consultation_id?: string; category?: string } = {};
+      if (!this.editHadClient && e.consultation_id) payload.consultation_id = e.consultation_id;
+      if (!this.editHadCategory) {
+        const cat = this.editCategory();
+        if (cat === '__other__') payload.category = this.editOtherDetail().trim();
+        else if (cat) payload.category = cat;
+      }
+      if (!Object.keys(payload).length) {
+        this.messageService.add({ severity: 'warn', summary: 'Nothing to update', detail: 'Nothing to update — both category and client are already set.' });
+        this.loading.set(false);
+        return;
+      }
+      const updated = await this.financeService.updateExpense(e.id, payload).toPromise();
+      if (updated) {
+        this.expenses.update(list => list.map(x => x.id === e.id ? updated : x));
+        this.messageService.add({ severity: 'success', summary: 'Updated', detail: 'Expense updated' });
+      }
+      this.showEditDialog.set(false);
+    } catch (err: any) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: err?.error?.detail || 'Failed to update expense',
+      });
+    } finally {
+      this.loading.set(false);
     }
   }
 

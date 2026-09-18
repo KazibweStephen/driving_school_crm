@@ -16,6 +16,7 @@ export interface Expense {
   vehicle_id: string | null;
   consultation_id: string | null;
   cart_item_id: string | null;
+  client_name?: string | null;
   status: 'pending' | 'approved' | 'rejected' | 'paid';
   approved_by: string | null;
   approved_at: string | null;
@@ -124,6 +125,10 @@ export class ExpenseService {
     return this.http.post<Expense>('/api/v1/finance/expenses', payload);
   }
 
+  updateExpense(id: string, data: { category?: string; consultation_id?: string }) {
+    return this.http.patch<Expense>(`/api/v1/finance/expenses/${id}`, data);
+  }
+
   approveExpense(id: string) {
     return this.http.post<Expense>(`/api/v1/finance/expenses/${id}/approve`, {});
   }
@@ -132,7 +137,7 @@ export class ExpenseService {
     return this.http.post<Expense>(`/api/v1/finance/expenses/${id}/reject`, { rejection_reason });
   }
 
-  markPaid(id: string, body?: { charges?: number; receipt_url?: string }) {
+  markPaid(id: string, body?: { charges?: number; receipt_url?: string; paid_at?: string }) {
     return this.http.post<Expense>(`/api/v1/finance/expenses/${id}/mark-paid`, body ?? {});
   }
 

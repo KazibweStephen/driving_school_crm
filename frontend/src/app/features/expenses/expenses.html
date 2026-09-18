@@ -124,6 +124,9 @@
             @if (e.status === 'rejected') {
               <p-button *appHasPermission="'expenses.manage'" icon="pi pi-trash" severity="secondary" rounded="true" pTooltip="Delete rejected" (onClick)="confirmDelete(e)" />
             }
+            @if (!e.category || !e.consultation_id) {
+              <p-button *appHasPermission="'expenses.edit'" icon="pi pi-pencil" severity="secondary" rounded="true" pTooltip="Add missing category / client" (onClick)="openEdit(e)" />
+            }
           </div>
         </td>
       </tr>
@@ -355,6 +358,14 @@
       <p-inputNumber [(ngModel)]="payCharges" [min]="0" [max]="999999" mode="decimal"
         [maxFractionDigits]="2" styleClass="w-full" inputStyleClass="w-full" />
     </div>
+    @if (canBackdate()) {
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Paid Date</label>
+        <p-datepicker [(ngModel)]="payDate" dateFormat="yy-mm-dd" [showIcon]="true" styleClass="w-full" appendTo="body"
+          [maxDate]="today" />
+        <p class="mt-1 text-xs text-gray-400">Backdate to reflect the payment on an earlier day's end-of-day report.</p>
+      </div>
+    }
     <div>
       <label class="mb-1 block text-sm font-medium text-gray-700">Receipt</label>
       <input type="file" class="w-full" accept=".heic,.heif,.pdf,.png,.jpg,.jpeg,.webp,.bmp,.gif" (change)="onPayReceiptSelected($event)" />
@@ -370,6 +381,77 @@
     <p-button label="Cancel" severity="secondary" (onClick)="showPayDialog.set(false)" />
     <p-button label="Pay" [disabled]="payingUpload()" [loading]="payingUpload()" (onClick)="submitPayment()" />
   </ng-template>
+</p-dialog>
+
+<p-dialog
+  [(visible)]="showEditDialog"
+  header="Edit Expense"
+  [modal]="true"
+  [style]="{ width: '440px' }"
+  [draggable]="false"
+  [resizable]="false"
+  appendTo="body"
+>
+  @if (editingExpense(); as e) {
+    <div class="flex flex-col gap-3 pt-2">
+      <p class="text-sm text-gray-600">
+        <span class="font-medium">{{ currencyService.symbol() }} {{ e.amount }}</span>
+        <span> — only the fields that are missing below can be added.</span>
+      </p>
+      @if (editHadCategory && editHadClient) {
+        <p class="text-sm text-amber-700">
+          <i class="pi pi-check-circle mr-1"></i>Both category and client are already set — nothing to add.
+        </p>
+      }
+      @if (!editHadCategory) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Category</label>
+          <p-select [(ngModel)]="editCategory" [options]="editCategoryOptions()" optionLabel="label" optionValue="value"
+            placeholder="Select category" styleClass="w-full" appendTo="body" [filter]="true" filterPlaceholder="Search..."
+            (onChange)="onEditCategoryChange()" />
+        </div>
+        @if (editCategory() === '__other__') {
+          <div>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Other Detail *</label>
+            <input pInputText [(ngModel)]="editOtherDetail" class="w-full" placeholder="Specify category" />
+          </div>
+        }
+      }
+      @if (!editHadClient) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Client</label>
+          <div class="relative">
+            <input pInputText [ngModel]="editClientQuery()" (ngModelChange)="searchEditClient($event)"
+              placeholder="Search client by name or phone..." class="w-full" />
+            @if (editClientSearching()) {
+              <div class="absolute z-10 w-full bg-white border rounded shadow-lg mt-1 p-2 text-sm text-gray-500">Searching...</div>
+            } @else if (editClientResults().length) {
+              <ul class="absolute z-10 w-full bg-white border rounded shadow-lg mt-1 max-h-56 overflow-auto p-0 m-0 list-none">
+                @for (c of editClientResults(); track c.phone) {
+                  <li class="px-3 py-2 text-sm cursor-pointer border-b last:border-b-0 hover:bg-blue-50"
+                    [class.text-gray-400]="!c.latest_consultation_id"
+                    (mousedown)="selectEditClient(c); $event.preventDefault()">
+                    <span class="font-medium">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
+                    <span class="text-gray-500"> · {{ c.phone }}</span>
+                    @if (!c.latest_consultation_id) {
+                      <span class="ml-2 text-xs text-red-400">no consultation</span>
+                    }
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+          @if (editClientLabel()) {
+            <div class="mt-1 text-xs text-blue-600"><i class="pi pi-user mr-1"></i>{{ editClientLabel() }}</div>
+          }
+        </div>
+      }
+    </div>
+    <ng-template pTemplate="footer">
+      <p-button label="Cancel" severity="secondary" (onClick)="showEditDialog.set(false)" />
+      <p-button label="Add" [disabled]="!editCanSave()" (onClick)="saveEdit()" />
+    </ng-template>
+  }
 </p-dialog>
 
 <p-confirmDialog></p-confirmDialog>

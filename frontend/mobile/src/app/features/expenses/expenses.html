@@ -166,6 +166,16 @@
                 data-testid="delete-expense"
               />
             }
+            @if (canEdit(e)) {
+              <p-button
+                label="Add Category/Client"
+                size="small"
+                severity="secondary"
+                icon="pi pi-pencil"
+                (click)="openEdit(e)"
+                data-testid="edit-expense"
+              />
+            }
           </div>
         </div>
       }
@@ -475,6 +485,20 @@
             data-testid="pay-charges"
           />
         </div>
+        @if (canBackdate()) {
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">Paid date</label>
+            <p-datepicker
+              [ngModel]="payDateObject()"
+              (ngModelChange)="onPayDateChange($event)"
+              dateFormat="dd/mm/yy"
+              appendTo="body"
+              class="w-full"
+              data-testid="pay-date"
+            />
+            <p class="mt-1 text-xs text-slate-400">Backdate to reflect the payment on an earlier day's report.</p>
+          </div>
+        }
         <div>
           <label class="mb-1 block text-xs font-medium text-slate-600">Receipt</label>
           <input
@@ -498,6 +522,94 @@
       </div>
     </div>
   </div>
+}
+
+@if (showEditDialog()) {
+  @if (editingExpense(); as e) {
+    <div class="fixed inset-0 z-50 flex items-end bg-black/40" data-testid="expense-edit-dialog">
+      <div class="w-full rounded-t-2xl bg-white p-4">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-base font-semibold">Edit Expense</h2>
+          <button type="button" class="text-slate-400" (click)="showEditDialog.set(false)"><span class="pi pi-times"></span></button>
+        </div>
+        <div class="space-y-3">
+          <div class="text-sm text-slate-600">
+            <span class="font-semibold">{{ money(e.amount) }}</span> — only missing fields can be added.
+          </div>
+          @if (editHadCategory && editHadClient) {
+            <div class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              <span class="pi pi-check-circle mr-1"></span>Both category and client are already set — nothing to add.
+            </div>
+          }
+          @if (!editHadCategory) {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Category</label>
+              <p-select
+                [options]="editCategoryOptions()"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="editCategory()"
+                (ngModelChange)="editCategory.set($event)"
+                placeholder="Select category"
+                appendTo="body"
+                class="w-full"
+                data-testid="edit-category"
+              />
+            </div>
+            @if (editCategory() === 'Other') {
+              <div>
+                <label class="mb-1 block text-xs font-medium text-slate-600">Other detail</label>
+                <input
+                  pInputText
+                  [(ngModel)]="editOtherDetail"
+                  class="w-full"
+                  data-testid="edit-category-other"
+                />
+              </div>
+            }
+          }
+          @if (!editHadClient) {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Client</label>
+              <input
+                type="text"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                [ngModel]="editClientQuery()"
+                (ngModelChange)="searchEditClient($event)"
+                placeholder="Search client by name or phone..."
+                data-testid="edit-client-search"
+              />
+              @if (editClientSearching()) {
+                <p class="mt-1 text-xs text-slate-500">Searching...</p>
+              }
+              @if (editClientResults().length) {
+                <div class="mt-1 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-white">
+                  @for (c of editClientResults(); track c.phone) {
+                    <button
+                      type="button"
+                      class="block w-full border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-blue-50"
+                      (mousedown)="selectEditClient(c); $event.preventDefault()"
+                    >
+                      <span class="font-medium text-slate-900">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
+                      <span class="text-xs text-slate-500"> · {{ c.phone }}</span>
+                      @if (!c.latest_consultation_id) { <span class="text-xs text-red-400">no consultation</span> }
+                    </button>
+                  }
+                </div>
+              }
+              @if (editClientLabel()) {
+                <p class="mt-1 text-xs text-blue-600"><span class="pi pi-user mr-1"></span>{{ editClientLabel() }}</p>
+              }
+            </div>
+          }
+          <div class="flex gap-2 pt-1">
+            <button type="button" class="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-medium text-slate-600" (click)="showEditDialog.set(false)">Cancel</button>
+            <button type="button" class="flex-1 rounded-lg bg-blue-600 p-2 text-sm font-medium text-white" [disabled]="!editCanSave()" (click)="saveEdit()" data-testid="confirm-edit">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
 }
 
 <app-loading-overlay [visible]="loading()" message="Loading..." />

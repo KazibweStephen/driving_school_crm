@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.company import BorrowStatus, CollectionStatus, Company, ExpenseStatus, TransferStatus
 from app.models.user import User
-from app.utils.timezones import today_local, now_local
+from app.utils.timezones import today_local, now_local, BUSINESS_TZ
 from app.schemas.company import (
     BorrowedMoneyCreate,
     BorrowedMoneyRead,
@@ -302,6 +302,7 @@ async def update_expense(
         rejection_reason=data.rejection_reason,
         receipt_url=data.receipt_url,
         consultation_id=data.consultation_id,
+        category=data.category,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
     if not expense:
@@ -434,7 +435,18 @@ async def mark_expense_paid(
 
     expense.status = ExpenseStatus.PAID
     expense.paid_by = current_user.phone
-    expense.paid_at = now_local()
+    if data and data.paid_at is not None:
+        paid_at = data.paid_at
+        if paid_at.tzinfo is None:
+            paid_at = paid_at.replace(tzinfo=BUSINESS_TZ)
+        if paid_at > now_local():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Paid date cannot be in the future",
+            )
+        expense.paid_at = paid_at
+    else:
+        expense.paid_at = now_local()
     expense.paid_charges = charges
     if data and data.receipt_url is not None:
         expense.receipt_url = data.receipt_url

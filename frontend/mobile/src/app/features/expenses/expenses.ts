@@ -99,6 +99,37 @@ export class Expenses {
   payCharges = signal(0);
   payReceiptUrl = signal<string | null>(null);
   paySelectedFile: File | null = null;
+  payDate = signal<string | null>(null);
+  payDateObject = computed(() =>
+    this.payDate() ? new Date(this.payDate() + 'T00:00:00') : null,
+  );
+
+  // edit dialog state — adds MISSING category + client (allowed even on paid expenses)
+  showEditDialog = signal(false);
+  editingExpense = signal<Expense | null>(null);
+  editHadCategory = false;
+  editHadClient = false;
+  editCategory = signal('');
+  editOtherDetail = signal('');
+  editClientLabel = signal('');
+  editClientQuery = signal('');
+  editClientResults = signal<any[]>([]);
+  editClientSearching = signal(false);
+
+  editCategoryOptions = computed(() => {
+    const opts = this.categories().map((c) => ({ label: c.name, value: c.name }));
+    return [...opts, { label: 'Other', value: 'Other' }];
+  });
+
+  editCanSave(): boolean {
+    const e = this.editingExpense();
+    if (!e) return false;
+    const needsCategory = !this.editHadCategory;
+    const needsClient = !this.editHadClient;
+    if (needsCategory && !this.editCategory()) return false;
+    if (needsCategory && this.editCategory() === 'Other' && !this.editOtherDetail().trim()) return false;
+    return needsCategory || needsClient;
+  }
 
   vehicles = signal<Vehicle[]>([]);
   vehicleId = signal<string | null>(null);
@@ -690,6 +721,7 @@ export class Expenses {
     this.payCharges.set(expense.charges ?? 0);
     this.payReceiptUrl.set(null);
     this.paySelectedFile = null;
+    this.payDate.set(expense.paid_at ? toISODate(new Date(expense.paid_at)) : todayISO());
     this.showPayDialog.set(true);
   }
 
@@ -718,10 +750,15 @@ export class Expenses {
     this.doPay(expense, this.payCharges() || 0, this.payReceiptUrl());
   }
 
+  onPayDateChange(date: Date | null) {
+    if (date) this.payDate.set(toISODate(date));
+  }
+
   private doPay(expense: Expense, charges: number, receiptUrl: string | null) {
     this.expenseService.markPaid(expense.id, {
       charges,
       receipt_url: receiptUrl || undefined,
+      paid_at: this.payDate() || undefined,
     }).subscribe({
       next: () => {
         this.loading.set(false);
@@ -751,6 +788,77 @@ export class Expenses {
         this.messageService.add({
           severity: 'error',
           summary: 'Could not delete',
+          detail: err.error?.detail || 'Try again',
+        });
+      },
+    });
+  }
+
+  openEdit(expense: Expense) {
+    this.editingExpense.set(expense);
+    this.editHadCategory = !!(expense.category && expense.category.trim());
+    this.editHadClient = !!expense.consultation_id;
+    this.editCategory.set('');
+    this.editOtherDetail.set('');
+    this.editClientLabel.set(expense.client_name || '');
+    this.editClientQuery.set('');
+    this.editClientResults.set([]);
+    this.showEditDialog.set(true);
+  }
+
+  searchEditClient(q: string) {
+    this.editClientQuery.set(q);
+    const search = (q || '').trim();
+    if (search.length < 2) {
+      this.editClientResults.set([]);
+      return;
+    }
+    this.editClientSearching.set(true);
+    this.consultationService.clientSearch(search).subscribe({
+      next: (res) => {
+        this.editClientResults.set(res ?? []);
+        this.editClientSearching.set(false);
+      },
+      error: () => {
+        this.editClientResults.set([]);
+        this.editClientSearching.set(false);
+      },
+    });
+  }
+
+  selectEditClient(c: any) {
+    this.editingExpense.update(e => e ? { ...e, consultation_id: c.latest_consultation_id || '' } : e);
+    this.editClientLabel.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
+    this.editClientResults.set([]);
+  }
+
+  saveEdit() {
+    const e = this.editingExpense();
+    if (!e) return;
+    const payload: { category?: string; consultation_id?: string } = {};
+    if (!this.editHadClient && e.consultation_id) payload.consultation_id = e.consultation_id;
+    if (!this.editHadCategory) {
+      const cat = this.editCategory();
+      if (cat === 'Other') payload.category = this.editOtherDetail().trim();
+      else if (cat) payload.category = cat;
+    }
+    if (!Object.keys(payload).length) {
+      this.messageService.add({ severity: 'warn', summary: 'Nothing to add' });
+      return;
+    }
+    this.loading.set(true);
+    this.expenseService.updateExpense(e.id, payload).subscribe({
+      next: (updated) => {
+        this.loading.set(false);
+        this.showEditDialog.set(false);
+        this.expenses.update(list => list.map(x => x.id === updated.id ? updated : x));
+        this.messageService.add({ severity: 'success', summary: 'Expense updated' });
+      },
+      error: (err) => {
+        this.loading.set(false);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Could not update',
           detail: err.error?.detail || 'Try again',
         });
       },
@@ -804,6 +912,13 @@ export class Expenses {
     return (
       (expense.status === 'pending' || expense.status === 'rejected') &&
       this.permissions().includes('expenses.delete')
+    );
+  }
+
+  canEdit(expense: Expense) {
+    return (
+      this.permissions().includes('expenses.edit') &&
+      (!(expense.category && expense.category.trim()) || !expense.consultation_id)
     );
   }
 

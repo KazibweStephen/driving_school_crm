@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
 
 export interface PermitTracker {
   cart_item_id: string;
@@ -96,6 +97,24 @@ export interface PermitExpenseRecordCreate {
   expense_date?: string | null;
 }
 
+export interface PermitNotificationItem {
+  id: string;
+  cart_item_id: string;
+  consultation_id: string;
+  client_name: string;
+  client_phone: string;
+  branch_id: string | null;
+  branch_name: string | null;
+  status: string;
+  message: string;
+  created_at: string;
+}
+
+export interface PermitNotificationsResponse {
+  items: PermitNotificationItem[];
+  total: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PermitService {
   constructor(private http: HttpClient) {}
@@ -146,5 +165,10 @@ export class PermitService {
       `/api/v1/cart-items/${cartItemId}/permit-progress/record-expense`,
       data
     );
+  }
+
+  getPermitNotifications(limit = 20): Observable<PermitNotificationsResponse> {
+    const p = new HttpParams().set('limit', String(limit));
+    return this.http.get<PermitNotificationsResponse>('/api/v1/permits/notifications', { params: p });
   }
 }

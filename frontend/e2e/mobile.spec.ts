@@ -49,12 +49,29 @@ test.describe('Mobile PWA', () => {
     await expect(nav.getByText('Home')).toBeVisible();
   });
 
+  test('notification bell opens panel and shows sections', async ({ page }) => {
+    await mobileLogin(page);
+    await page.goto('/m/home');
+    await page.waitForLoadState('networkidle');
+    const bell = page.getByTestId('notifications-bell');
+    await expect(bell).toBeVisible();
+    await bell.click();
+    await expect(page.getByText('Notifications', { exact: true })).toBeVisible();
+    // Close via backdrop
+    await page.locator('div.fixed.inset-0.z-40').click();
+    await expect(page.getByText('Notifications', { exact: true })).toBeHidden();
+  });
+
   test('expenses page loads and can create an expense', async ({ page }) => {
     await mobileLogin(page);
     await page.goto('/m/expenses');
     await page.waitForLoadState('networkidle');
     await expect(page.getByRole('heading', { name: 'Expenses' })).toBeVisible();
     await page.getByTestId('new-expense').click();
+    await page.getByTestId('expense-category').click();
+    const categoryOption = page.locator('.p-select-option:has-text("Vehicle Maintenance")').first();
+    await expect(categoryOption).toBeVisible({ timeout: 3000 });
+    await categoryOption.click();
     await page.getByTestId('expense-amount').fill('50000');
     await page.getByTestId('expense-description').fill('Fuel for office car');
     await page.getByTestId('submit-expense').click();

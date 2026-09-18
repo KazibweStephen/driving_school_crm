@@ -72,6 +72,53 @@ export interface BranchTransferListResponse {
   page_size: number;
 }
 
+export interface TransferNotification {
+  id: string;
+  from_branch_id: string;
+  to_branch_id: string;
+  from_branch_name: string | null;
+  to_branch_name: string | null;
+  amount: string;
+  reason?: string;
+  consultation_id?: string;
+  payment_id?: string;
+  status: 'initiated' | 'received' | 'cancelled';
+  direction: 'incoming' | 'outgoing';
+  initiated_by?: string;
+  initiated_at: string;
+  created_at: string;
+}
+
+export interface TransferNotificationsResponse {
+  items: TransferNotification[];
+  total: number;
+  to_receive_count: number;
+  to_receive_amount: string;
+}
+
+export interface ExpenseNotification {
+  id: string;
+  branch_id: string;
+  branch_name: string | null;
+  category: string | null;
+  amount: string;
+  charges: string;
+  description?: string | null;
+  status: 'pending' | 'approved';
+  consultation_id?: string;
+  cart_item_id?: string;
+  client_name?: string;
+  created_by_name?: string;
+  created_at: string;
+}
+
+export interface ExpenseNotificationsResponse {
+  items: ExpenseNotification[];
+  total: number;
+  pending_count: number;
+  approved_count: number;
+}
+
 export interface CompanyInfo {
   id: string;
   name: string;
@@ -233,6 +280,16 @@ export class FinanceService {
     p = p.set('page', String(params?.page || 1));
     p = p.set('page_size', String(params?.page_size || 50));
     return this.http.get<BranchTransferListResponse>(`${this.base}/transfers`, { params: p });
+  }
+
+  getTransferNotifications(limit = 20): Observable<TransferNotificationsResponse> {
+    const p = new HttpParams().set('limit', String(limit));
+    return this.http.get<TransferNotificationsResponse>(`${this.base}/transfers/notifications`, { params: p });
+  }
+
+  getExpenseNotifications(limit = 20): Observable<ExpenseNotificationsResponse> {
+    const p = new HttpParams().set('limit', String(limit));
+    return this.http.get<ExpenseNotificationsResponse>(`${this.base}/expenses/notifications`, { params: p });
   }
 
   createTransfer(data: {

@@ -300,13 +300,31 @@ async def list_permit_trackers(
     count = await db.execute(select(func.count()).select_from(query.subquery()))
     total = int(count.scalar() or 0)
 
+    if status:
+        # Status is computed in Python from progress + expense kinds + paid
+        # ratio, so it cannot be pushed into SQL. Fetch ALL matching rows,
+        # compute statuses, then filter + paginate in Python — otherwise
+        # matches beyond the current DB page vanish and total is wrong.
+        rows = (await db.execute(query.order_by(CartItem.created_at.desc()))).scalars().all()
+        trackers = await _build_permit_trackers(db, rows)
+        filtered = [t for t in trackers if t["status"] == status]
+        total = len(filtered)
+        start = (page - 1) * page_size
+        return filtered[start:start + page_size], total
+
     query = (
         query.order_by(CartItem.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
     rows = (await db.execute(query)).scalars().all()
+    trackers = await _build_permit_trackers(db, rows)
+    return trackers, total
 
+
+async def _build_permit_trackers(
+    db: AsyncSession, rows: list[CartItem],
+) -> list[dict]:
     # Load permit progress for all cart items in this page
     progress_map: dict[uuid.UUID, PermitProgress] = {}
     if rows:
@@ -430,17 +448,10 @@ async def list_permit_trackers(
         tracker["learner_expense_paid"] = kinds.get("learner") == "paid"
         tracker["testing_expense_paid"] = kinds.get("test") == "paid"
         tracker["permit_expense_paid"] = kinds.get("permit") == "paid"
+        tracker["status"] = compute_tracker_status(tracker)
         trackers.append(tracker)
 
-    if status:
-        trackers = [
-            t for t in trackers if compute_tracker_status(t) == status
-        ]
-
-    total = len(trackers) if status else total
-    for t in trackers:
-        t["status"] = compute_tracker_status(t)
-    return trackers, total
+    return trackers
 
 
 def compute_tracker_status(t: dict) -> str:

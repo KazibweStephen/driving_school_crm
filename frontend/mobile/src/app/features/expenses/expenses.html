@@ -151,6 +151,11 @@
                 {{ e.description || e.category || 'Expense' }}
               </div>
               <div class="text-xs text-slate-500">{{ e.category || 'Uncategorized' }}</div>
+              @if (e.client_name) {
+                <div class="mt-0.5 text-xs text-blue-600" data-testid="expense-client">
+                  <span class="pi pi-user"></span> {{ e.client_name }}
+                </div>
+              }
               @if (e.branch_name) {
                 <div class="mt-0.5 text-xs text-slate-400">
                   <span class="pi pi-map-marker"></span> {{ e.branch_name }}

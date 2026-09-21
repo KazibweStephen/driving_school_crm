@@ -1006,3 +1006,88 @@ async def _resolve_expense_account(
         if match is not None:
             return match.account
     return "client_accounts"
+
+
+# Ordered permit expense categories shown in the client-profile checklist.
+_PERMIT_CATEGORY_ORDER = [
+    ("learner_permit_payment", "Learner Permit Payment"),
+    ("test_booking", "Test Booking"),
+    ("police_booking", "Police Booking"),
+    ("iov_fees", "IOV Fees"),
+    ("permit_payment", "Permit Payment"),
+]
+
+
+async def list_permit_expense_checklist(
+    db: AsyncSession,
+    cart_item_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> dict:
+    """All permit-processing expense categories for a client's permit cart item.
+
+    For each category the most recent filed expense (any status) is returned so
+    the UI can file/approve/pay it. ``can_file`` is True only when nothing has
+    been filed yet or the latest expense was rejected (declined) — deleted
+    expenses leave no row, so they are naturally re-fileable.
+    """
+    if not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
+        raise HTTPException(status_code=404, detail="Cart item not found")
+
+    ci = (await db.execute(select(CartItem).where(CartItem.id == cart_item_id))).scalar_one_or_none()
+    if ci is None:
+        raise HTTPException(status_code=404, detail="Cart item not found")
+    cons = (
+        await db.execute(select(Consultation).where(Consultation.id == ci.consultation_id))
+    ).scalar_one_or_none()
+    if cons is None:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    exp_rows = (
+        await db.execute(
+            select(Expense)
+            .where(Expense.consultation_id == cons.id)
+            .order_by(Expense.created_at.asc())
+        )
+    ).scalars().all()
+
+    latest_by_name: dict[str, Expense] = {}
+    for e in exp_rows:
+        if not is_permit_processing_category(e.category):
+            continue
+        latest_by_name[(e.category or "").strip()] = e
+
+    items: list[dict] = []
+    for code, name in _PERMIT_CATEGORY_ORDER:
+        e = latest_by_name.get(name)
+        status = None
+        if e is not None:
+            status = e.status.value if hasattr(e.status, "value") else e.status
+        account = await _resolve_expense_account(db, cons.branch_id, name, company_id)
+        default_date = await default_permit_expense_date(db, cons.id, name, ci.id)
+        items.append({
+            "category_code": code,
+            "category_name": name,
+            "account": account,
+            "expense_id": e.id if e is not None else None,
+            "status": status,
+            "amount": float(e.amount) if e is not None else None,
+            "expense_date": (
+                e.expense_date.astimezone(BUSINESS_TZ).date()
+                if e is not None and e.expense_date is not None else None
+            ),
+            "default_date": default_date,
+            "rejection_reason": e.rejection_reason if e is not None else None,
+            "approved_by": e.approved_by if e is not None else None,
+            "paid_by": e.paid_by if e is not None else None,
+            "can_file": e is None or status == "rejected",
+            "is_paid": status == "paid",
+        })
+
+    return {
+        "cart_item_id": ci.id,
+        "consultation_id": cons.id,
+        "client_name": _display_name(cons),
+        "branch_id": cons.branch_id,
+        "items": items,
+    }

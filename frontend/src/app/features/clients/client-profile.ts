@@ -25,7 +25,7 @@ import { PaymentService, PaymentRead } from '../../core/services/payment.service
 import { AuthService } from '../../core/auth/auth.service';
 import { CurrencyService } from '../../core/services/currency.service';
 import { TrainingService, TrainingSession, TrainingSummary, Skill, SkillCreate } from '../../core/services/training.service';
-import { PermitProgressService, PermitProgress, PermitTracker } from '../../core/services/permit-progress.service';
+import { PermitProgressService, PermitProgress, PermitTracker, PermitExpenseChecklistItem } from '../../core/services/permit-progress.service';
 import { PermitStagesDialog } from '../permits/permit-stages-dialog';
 import { OrderListModule } from 'primeng/orderlist';
 import { LessonPlanService, LessonPlanTemplate, ClientLessonPlan, ClientLesson, ClientLessonUpdate } from '../../core/services/lesson-plan.service';
@@ -38,6 +38,7 @@ import { VehicleScheduleService } from '../../core/services/vehicle-schedule.ser
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { DiscountService, Discount, CartItemDiscount } from '../../core/services/discount.service';
 import { NotificationRefreshService } from '../../core/services/notification-refresh.service';
+import { FinanceService } from '../../core/services/finance.service';
 import { LessonQuickGenDialog } from '../../shared/components/lesson-quick-gen-dialog';
 
 @Component({
@@ -312,6 +313,7 @@ export class ClientProfile implements OnInit {
     private schedulingService: SchedulingService,
     private vehicleScheduleService: VehicleScheduleService,
     private permitProgressService: PermitProgressService,
+    private financeService: FinanceService,
     private companyService: CompanyService,
     private discountService: DiscountService,
     private notificationRefresh: NotificationRefreshService,
@@ -381,6 +383,7 @@ export class ClientProfile implements OnInit {
         this.loadPayments();
         this.loadTrainingData();
         this.loadPermitProgress();
+        this.loadPermitExpenses();
         this.loadLessonPlans();
         this.loadVehiclesAndInstructors();
         this.loadCartItemDiscounts();
@@ -926,6 +929,158 @@ export class ClientProfile implements OnInit {
       this.loading.set(false);
       input.value = '';
     }
+  }
+
+  // ── Permit Expense Checklist ───────────────────────────────
+
+  permitExpenses = signal<Map<string, PermitExpenseChecklistItem[]>>(new Map());
+  permitRejectTarget = signal<{ cartItemId: string; item: PermitExpenseChecklistItem } | null>(null);
+  permitRejectReason = signal<string>('');
+
+  canCreateExpense(): boolean { return this.authService.hasPermission('expenses.create'); }
+  canApproveExpense(): boolean { return this.authService.hasPermission('expenses.approve'); }
+  canRejectExpense(): boolean { return this.authService.hasPermission('expenses.reject'); }
+  canPayExpense(): boolean { return this.authService.hasPermission('expenses.pay'); }
+
+  async loadPermitExpenses() {
+    const items = this.trainableCartItems();
+    const map = new Map<string, PermitExpenseChecklistItem[]>();
+    for (const ci of items) {
+      if (!ci.requires_permit_processing) continue;
+      try {
+        const res = await this.permitProgressService.getPermitExpenses(ci.id).toPromise();
+        if (res) {
+          for (const it of res.items) {
+            it.draft_amount = it.can_file ? null : it.amount;
+            it.draft_date = it.default_date ? new Date(it.default_date) : null;
+          }
+          map.set(ci.id, res.items);
+        }
+      } catch { /* skip */ }
+    }
+    this.permitExpenses.set(map);
+  }
+
+  permitExpensesFor(cartItemId: string): PermitExpenseChecklistItem[] {
+    return this.permitExpenses().get(cartItemId) || [];
+  }
+
+  permitExpenseStatusLabel(status: string | null): string {
+    switch (status) {
+      case 'pending': return 'Pending Approval';
+      case 'approved': return 'Pending Payment';
+      case 'paid': return 'Paid';
+      case 'rejected': return 'Declined';
+      default: return 'Not Filed';
+    }
+  }
+
+  permitExpenseStatusClass(status: string | null): string {
+    switch (status) {
+      case 'pending': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'approved': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'paid': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'rejected': return 'bg-red-50 text-red-700 border-red-200';
+      default: return 'bg-gray-100 text-gray-600 border-gray-200';
+    }
+  }
+
+  private async reloadPermitExpenses(cartItemId: string) {
+    await Promise.all([this.loadPermitExpenses(), this.loadPermitProgress()]);
+    this.notificationRefresh.trigger();
+  }
+
+  async filePermitExpense(ci: CartItemRead, item: PermitExpenseChecklistItem) {
+    if (!item.can_file) return;
+    if (!item.draft_amount || item.draft_amount <= 0) {
+      this.messageService.add({ severity: 'warn', summary: 'Amount required', detail: `Enter an amount for ${item.category_name}` });
+      return;
+    }
+    const branchId = this.consultation()?.branch_id;
+    if (!branchId) {
+      this.messageService.add({ severity: 'error', summary: 'No branch', detail: 'This client has no branch; assign one first.' });
+      return;
+    }
+    this.loading.set(true);
+    try {
+      await this.financeService.createExpense({
+        branch_id: branchId,
+        amount: item.draft_amount,
+        category: item.category_name,
+        consultation_id: this.consultation()?.id,
+        cart_item_id: ci.id,
+        account: item.account,
+        expense_date: item.draft_date ? this.toDateStr(item.draft_date) : undefined,
+        description: `${item.category_name} — ${this.fullName(this.consultation() ?? ({} as any))}`.trim(),
+      }).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Filed', detail: `${item.category_name} filed for approval` });
+      await this.reloadPermitExpenses(ci.id);
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || `Failed to file ${item.category_name}` });
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async approvePermitExpense(ci: CartItemRead, item: PermitExpenseChecklistItem) {
+    if (!item.expense_id) return;
+    this.loading.set(true);
+    try {
+      await this.financeService.approveExpense(item.expense_id).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Approved', detail: `${item.category_name} approved` });
+      await this.reloadPermitExpenses(ci.id);
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to approve expense' });
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  openPermitExpenseReject(ci: CartItemRead, item: PermitExpenseChecklistItem) {
+    this.permitRejectReason.set('');
+    this.permitRejectTarget.set({ cartItemId: ci.id, item });
+  }
+
+  async submitPermitExpenseReject() {
+    const target = this.permitRejectTarget();
+    if (!target || !target.item.expense_id) return;
+    const reason = this.permitRejectReason().trim();
+    if (!reason) {
+      this.messageService.add({ severity: 'warn', summary: 'Reason required', detail: 'Enter a reason for declining' });
+      return;
+    }
+    this.loading.set(true);
+    try {
+      await this.financeService.rejectExpense(target.item.expense_id, reason).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Declined', detail: `${target.item.category_name} declined` });
+      this.permitRejectTarget.set(null);
+      await this.reloadPermitExpenses(target.cartItemId);
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to decline expense' });
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async payPermitExpense(ci: CartItemRead, item: PermitExpenseChecklistItem) {
+    if (!item.expense_id || item.status !== 'approved') return;
+    this.loading.set(true);
+    try {
+      await this.financeService.markExpensePaid(item.expense_id).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Paid', detail: `${item.category_name} marked paid` });
+      await this.reloadPermitExpenses(ci.id);
+    } catch (e: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to pay expense' });
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  private toDateStr(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 
   // ── Lesson Plan Methods ──

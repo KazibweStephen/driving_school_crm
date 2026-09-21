@@ -141,6 +141,32 @@ export interface PermitNotificationsResponse {
   total: number;
 }
 
+export interface PermitExpenseChecklistItem {
+  category_code: string;
+  category_name: string;
+  account: string;
+  expense_id: string | null;
+  status: string | null;
+  amount: number | null;
+  expense_date: string | null;
+  default_date: string | null;
+  rejection_reason: string | null;
+  approved_by: string | null;
+  paid_by: string | null;
+  can_file: boolean;
+  is_paid: boolean;
+  draft_amount?: number | null;
+  draft_date?: Date | null;
+}
+
+export interface PermitExpenseChecklistResponse {
+  cart_item_id: string;
+  consultation_id: string;
+  client_name: string;
+  branch_id: string | null;
+  items: PermitExpenseChecklistItem[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class PermitProgressService {
   constructor(private http: HttpClient) {}
@@ -190,6 +216,12 @@ export class PermitProgressService {
     return this.http.post<PermitProgress>(
       `/api/v1/cart-items/${cartItemId}/permit-progress/record-expense`,
       data
+    );
+  }
+
+  getPermitExpenses(cartItemId: string) {
+    return this.http.get<PermitExpenseChecklistResponse>(
+      `/api/v1/cart-items/${cartItemId}/permit-expenses`
     );
   }
 }

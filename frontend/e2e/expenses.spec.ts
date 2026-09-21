@@ -265,4 +265,88 @@ test.describe('Expenses Workflow', () => {
       { token, phone: managerPhone },
     );
   });
+
+  test('permit expense checklist files an expense from the client profile', async ({ page }) => {
+    const token = await page.evaluate(
+      async ({ phone, pin }) => {
+        const res = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, pin }),
+        });
+        return (await res.json()).access_token;
+      },
+      { phone: SUPER_PHONE, pin: SUPER_PIN },
+    );
+
+    const ids = await page.evaluate(
+      async ({ token, branchId }) => {
+        const phone = `25672${Date.now().toString().slice(-6)}`;
+        const res = await fetch('/api/v1/consultations/full', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({
+            phone,
+            first_name: 'Permit',
+            last_name: 'Checklist',
+            location: 'Kampala',
+            branch_id: branchId,
+            items: [{ product_id: '6fbd1fb8-3997-4b5e-8ecb-aba5d7bec58c', package_id: 'd2857f8b-6118-4206-8fbd-857a39667fb6', allocation: 500000 }],
+            payment: { receipt_number: `RP-${phone}` },
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const c = await res.json();
+        const dres = await fetch(`/api/v1/consultations/${c.id}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const d = await dres.json();
+        return { consultationId: c.id as string, cartItemId: d.cart_items[0].id as string };
+      },
+      { token, branchId: BRANCH_ID },
+    );
+
+    await page.goto(`/consultations/${ids.consultationId}`);
+    await page.getByRole('button', { name: 'Permit', exact: true }).click();
+
+    const checklist = page.getByTestId('permit-expense-checklist');
+    await expect(checklist).toBeVisible({ timeout: 10000 });
+    await expect(checklist.getByTestId('permit-expense-learner_permit_payment')).toBeVisible();
+    await expect(checklist.getByTestId('permit-expense-permit_payment')).toBeVisible();
+
+    const card = checklist.getByTestId('permit-expense-learner_permit_payment');
+    const amountInput = card.locator('input[inputmode="decimal"]').first();
+    await amountInput.click();
+    await amountInput.pressSequentially('50000');
+    await page.waitForTimeout(300);
+    await card.getByTestId('file-learner_permit_payment').click();
+
+    await expect(page.locator('.p-toast-message', { hasText: 'filed for approval' }).first()).toBeVisible({ timeout: 10000 });
+    await expect(card.getByText('Pending Approval')).toBeVisible({ timeout: 10000 });
+    await expect(card.getByTestId('file-learner_permit_payment')).toHaveCount(0);
+
+    // Cleanup: delete the filed (pending) expense + the throwaway consultation
+    await page.evaluate(
+      async ({ token, cartItemId, consultationId }) => {
+        const lres = await fetch(`/api/v1/cart-items/${cartItemId}/permit-expenses`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const list = await lres.json();
+        for (const it of list.items) {
+          if (it.expense_id) {
+            await fetch(`/api/v1/finance/expenses/${it.expense_id}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` },
+            });
+          }
+        }
+        await fetch('/api/v1/consultations/bulk-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ ids: [consultationId] }),
+        });
+      },
+      { token, cartItemId: ids.cartItemId, consultationId: ids.consultationId },
+    );
+  });
 });

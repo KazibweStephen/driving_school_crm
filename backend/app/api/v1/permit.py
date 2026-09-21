@@ -15,6 +15,7 @@ from app.schemas.permit import (
     EligibilityOverrideCreate,
     PermitAuditLogRead,
     PermitExpenseRecordCreate,
+    PermitExpenseChecklistResponse,
 )
 from app.services import permit as permit_service
 from app.services.permit import categorize_permit_expense, apply_permit_expense_effects
@@ -127,6 +128,23 @@ async def record_permit_expense(
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return PermitProgressRead.model_validate(progress)
+
+
+@router.get("/{cart_item_id}/permit-expenses", response_model=PermitExpenseChecklistResponse)
+async def get_permit_expenses(
+    cart_item_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.view")),
+):
+    try:
+        cid = uuid.UUID(cart_item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid cart item ID")
+    data = await permit_service.list_permit_expense_checklist(
+        db, cid,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+    return data
 
 
 # ── Permit-tracker list endpoint ────────────────────────────────────

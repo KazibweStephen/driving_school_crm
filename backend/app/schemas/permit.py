@@ -64,6 +64,30 @@ class PermitExpenseRecordCreate(BaseModel):
     expense_date: datetime | None = None
 
 
+class PermitExpenseChecklistItem(BaseModel):
+    category_code: str
+    category_name: str
+    account: str
+    expense_id: uuid.UUID | None = None
+    status: str | None = None
+    amount: float | None = None
+    expense_date: date | None = None
+    default_date: date | None = None
+    rejection_reason: str | None = None
+    approved_by: str | None = None
+    paid_by: str | None = None
+    can_file: bool = True
+    is_paid: bool = False
+
+
+class PermitExpenseChecklistResponse(BaseModel):
+    cart_item_id: uuid.UUID
+    consultation_id: uuid.UUID
+    client_name: str
+    branch_id: uuid.UUID | None
+    items: list[PermitExpenseChecklistItem]
+
+
 class PermitAuditLogRead(BaseModel):
     id: uuid.UUID
     field_changed: str

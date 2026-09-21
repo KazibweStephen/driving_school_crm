@@ -41,6 +41,7 @@ export interface ExpenseCreate {
   expense_date?: string | Date;
   status?: string;
   receipt_url?: string;
+  account?: string;
 }
 
 export interface ExpenseCategory {

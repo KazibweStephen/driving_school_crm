@@ -129,8 +129,8 @@ export class ExpenseService {
     return this.http.patch<Expense>(`/api/v1/finance/expenses/${id}`, data);
   }
 
-  approveExpense(id: string) {
-    return this.http.post<Expense>(`/api/v1/finance/expenses/${id}/approve`, {});
+  approveExpense(id: string, body?: { approved_at?: string }) {
+    return this.http.post<Expense>(`/api/v1/finance/expenses/${id}/approve`, body ?? {});
   }
 
   rejectExpense(id: string, rejection_reason: string) {
@@ -139,6 +139,10 @@ export class ExpenseService {
 
   markPaid(id: string, body?: { charges?: number; receipt_url?: string; paid_at?: string }) {
     return this.http.post<Expense>(`/api/v1/finance/expenses/${id}/mark-paid`, body ?? {});
+  }
+
+  updateExpenseDates(id: string, body: { approved_at?: string; paid_at?: string }) {
+    return this.http.patch<Expense>(`/api/v1/finance/expenses/${id}/dates`, body);
   }
 
   deleteExpense(id: string) {

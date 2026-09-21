@@ -104,6 +104,28 @@ export class Expenses {
     this.payDate() ? new Date(this.payDate() + 'T00:00:00') : null,
   );
 
+  // approve dialog state
+  showApproveDialog = signal(false);
+  approvingExpense = signal<Expense | null>(null);
+  approveDate = signal<string | null>(null);
+  approveDateObject = computed(() =>
+    this.approveDate() ? new Date(this.approveDate() + 'T00:00:00') : null,
+  );
+  approving = signal(false);
+
+  // edit dates dialog state (approval + payment dates)
+  showDatesDialog = signal(false);
+  datesExpense = signal<Expense | null>(null);
+  editApprovalDate = signal<string | null>(null);
+  editPaymentDate = signal<string | null>(null);
+  editApprovalDateObject = computed(() =>
+    this.editApprovalDate() ? new Date(this.editApprovalDate() + 'T00:00:00') : null,
+  );
+  editPaymentDateObject = computed(() =>
+    this.editPaymentDate() ? new Date(this.editPaymentDate() + 'T00:00:00') : null,
+  );
+  savingDates = signal(false);
+
   // edit dialog state — adds MISSING category + client (allowed even on paid expenses)
   showEditDialog = signal(false);
   editingExpense = signal<Expense | null>(null);
@@ -698,12 +720,44 @@ export class Expenses {
     this.uploadThenCreate(payload);
   }
 
-  approve(expense: Expense) {
-    this.runAction(
-      expense.id,
-      () => this.expenseService.approveExpense(expense.id),
-      'Expense approved',
-    );
+  private docDateISO(expense: Expense): string {
+    if (!expense.expense_date) return todayISO();
+    const d = new Date(expense.expense_date);
+    return Number.isNaN(d.getTime()) ? todayISO() : toISODate(d);
+  }
+
+  openApprove(expense: Expense) {
+    this.approvingExpense.set(expense);
+    this.approveDate.set(this.docDateISO(expense));
+    this.showApproveDialog.set(true);
+  }
+
+  onApproveDateChange(date: Date | null) {
+    if (date) this.approveDate.set(toISODate(date));
+  }
+
+  submitApprove() {
+    const expense = this.approvingExpense();
+    if (!expense) return;
+    this.approving.set(true);
+    this.expenseService
+      .approveExpense(expense.id, { approved_at: this.approveDate() || undefined })
+      .subscribe({
+        next: (updated) => {
+          this.approving.set(false);
+          this.showApproveDialog.set(false);
+          this.expenses.update(list => list.map(x => x.id === updated.id ? updated : x));
+          this.messageService.add({ severity: 'success', summary: 'Expense approved' });
+        },
+        error: (err) => {
+          this.approving.set(false);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Could not approve',
+            detail: err.error?.detail || 'Try again',
+          });
+        },
+      });
   }
 
   reject(expense: Expense) {
@@ -721,8 +775,52 @@ export class Expenses {
     this.payCharges.set(expense.charges ?? 0);
     this.payReceiptUrl.set(null);
     this.paySelectedFile = null;
-    this.payDate.set(expense.paid_at ? toISODate(new Date(expense.paid_at)) : todayISO());
+    this.payDate.set(expense.paid_at ? toISODate(new Date(expense.paid_at)) : this.docDateISO(expense));
     this.showPayDialog.set(true);
+  }
+
+  openEditDates(expense: Expense) {
+    this.datesExpense.set(expense);
+    this.editApprovalDate.set(expense.approved_at ? toISODate(new Date(expense.approved_at)) : null);
+    this.editPaymentDate.set(expense.paid_at ? toISODate(new Date(expense.paid_at)) : null);
+    this.showDatesDialog.set(true);
+  }
+
+  onEditApprovalDateChange(date: Date | null) {
+    this.editApprovalDate.set(date ? toISODate(date) : null);
+  }
+
+  onEditPaymentDateChange(date: Date | null) {
+    this.editPaymentDate.set(date ? toISODate(date) : null);
+  }
+
+  submitEditDates() {
+    const expense = this.datesExpense();
+    if (!expense) return;
+    const payload: { approved_at?: string; paid_at?: string } = {};
+    if (this.editApprovalDate()) payload.approved_at = this.editApprovalDate()!;
+    if (this.editPaymentDate()) payload.paid_at = this.editPaymentDate()!;
+    if (!Object.keys(payload).length) {
+      this.messageService.add({ severity: 'warn', summary: 'Set an approval or payment date' });
+      return;
+    }
+    this.savingDates.set(true);
+    this.expenseService.updateExpenseDates(expense.id, payload).subscribe({
+      next: (updated) => {
+        this.savingDates.set(false);
+        this.showDatesDialog.set(false);
+        this.expenses.update(list => list.map(x => x.id === updated.id ? updated : x));
+        this.messageService.add({ severity: 'success', summary: 'Dates updated' });
+      },
+      error: (err) => {
+        this.savingDates.set(false);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Could not update dates',
+          detail: err.error?.detail || 'Try again',
+        });
+      },
+    });
   }
 
   onPayFileSelected(event: Event) {
@@ -919,6 +1017,13 @@ export class Expenses {
     return (
       this.permissions().includes('expenses.edit') &&
       (!(expense.category && expense.category.trim()) || !expense.consultation_id)
+    );
+  }
+
+  canEditDates(expense: Expense) {
+    return (
+      (expense.status === 'approved' || expense.status === 'paid') &&
+      this.permissions().includes('expenses.edit')
     );
   }
 

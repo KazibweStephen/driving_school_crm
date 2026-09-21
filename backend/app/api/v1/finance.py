@@ -28,7 +28,9 @@ from app.schemas.company import (
     ExpenseCategoryCreate,
     ExpenseCategoryRead,
     ExpenseCategoryUpdate,
+    ExpenseApprove,
     ExpenseCreate,
+    ExpenseDatesUpdate,
     ExpenseRead,
     ExpenseUpdate,
     HoFundingCreate,
@@ -43,6 +45,21 @@ from app.utils.tenant import resolve_assigned_branch_ids, resolve_branch_ids
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/finance", tags=["finance"])
+
+
+def _resolve_action_date(value: datetime | None, fallback: datetime | None) -> datetime:
+    """Normalize a user-supplied action date, falling back to the expense's
+    document date so late-filed expenses do not distort the current day's
+    end-of-day report. Future dates are rejected."""
+    resolved = value or fallback or now_local()
+    if resolved.tzinfo is None:
+        resolved = resolved.replace(tzinfo=BUSINESS_TZ)
+    if resolved > now_local():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Date cannot be in the future",
+        )
+    return resolved
 
 
 async def _expense_read(db: AsyncSession, e) -> ExpenseRead:
@@ -338,6 +355,7 @@ class ExpenseReject(BaseModel):
 @router.post("/expenses/{expense_id}/approve", response_model=ExpenseRead)
 async def approve_expense(
     expense_id: uuid.UUID,
+    data: ExpenseApprove | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("expenses.approve")),
 ):
@@ -357,7 +375,9 @@ async def approve_expense(
 
     expense.status = ExpenseStatus.APPROVED
     expense.approved_by = current_user.phone
-    expense.approved_at = now_local()
+    expense.approved_at = _resolve_action_date(
+        data.approved_at if data else None, expense.expense_date
+    )
     expense.rejection_reason = None
     await db.flush()
     await db.refresh(expense)
@@ -435,18 +455,9 @@ async def mark_expense_paid(
 
     expense.status = ExpenseStatus.PAID
     expense.paid_by = current_user.phone
-    if data and data.paid_at is not None:
-        paid_at = data.paid_at
-        if paid_at.tzinfo is None:
-            paid_at = paid_at.replace(tzinfo=BUSINESS_TZ)
-        if paid_at > now_local():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Paid date cannot be in the future",
-            )
-        expense.paid_at = paid_at
-    else:
-        expense.paid_at = now_local()
+    expense.paid_at = _resolve_action_date(
+        data.paid_at if data else None, expense.expense_date
+    )
     expense.paid_charges = charges
     if data and data.receipt_url is not None:
         expense.receipt_url = data.receipt_url
@@ -457,6 +468,34 @@ async def mark_expense_paid(
         from app.services.permit import apply_permit_expense_effects
         await apply_permit_expense_effects(db, expense)
 
+    return await _expense_read(db, expense)
+
+
+@router.patch("/expenses/{expense_id}/dates", response_model=ExpenseRead)
+async def update_expense_dates(
+    expense_id: uuid.UUID,
+    data: ExpenseDatesUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.edit")),
+):
+    """Edit the approval and/or payment dates of an expense after the fact.
+
+    This lets late-filed expenses be pinned to the correct day so their
+    approval/payment does not distort the current day's end-of-day report.
+    """
+    expense = await finance_service.get_expense(
+        db, expense_id, company_id=current_user.company_id, current_user_role=current_user.role
+    )
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+
+    if data.approved_at is not None:
+        expense.approved_at = _resolve_action_date(data.approved_at, expense.expense_date)
+    if data.paid_at is not None:
+        expense.paid_at = _resolve_action_date(data.paid_at, expense.expense_date)
+
+    await db.flush()
+    await db.refresh(expense)
     return await _expense_read(db, expense)
 
 

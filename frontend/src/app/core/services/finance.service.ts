@@ -360,8 +360,8 @@ export class FinanceService {
     return this.http.patch<Expense>(`${this.base}/expenses/${id}`, data);
   }
 
-  approveExpense(id: string): Observable<Expense> {
-    return this.http.post<Expense>(`${this.base}/expenses/${id}/approve`, {});
+  approveExpense(id: string, body?: { approved_at?: string }): Observable<Expense> {
+    return this.http.post<Expense>(`${this.base}/expenses/${id}/approve`, body ?? {});
   }
 
   rejectExpense(id: string, reason: string): Observable<Expense> {
@@ -370,6 +370,10 @@ export class FinanceService {
 
   markExpensePaid(id: string, body?: { charges?: number; receipt_url?: string; paid_at?: string }): Observable<Expense> {
     return this.http.post<Expense>(`${this.base}/expenses/${id}/mark-paid`, body ?? {});
+  }
+
+  updateExpenseDates(id: string, body: { approved_at?: string; paid_at?: string }): Observable<Expense> {
+    return this.http.patch<Expense>(`${this.base}/expenses/${id}/dates`, body);
   }
 
   deleteExpense(id: string): Observable<void> {

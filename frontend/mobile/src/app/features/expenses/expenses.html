@@ -136,7 +136,7 @@
                 label="Approve"
                 size="small"
                 severity="success"
-                (click)="approve(e)"
+                (click)="openApprove(e)"
                 data-testid="approve-expense"
               />
             }
@@ -164,6 +164,16 @@
                 severity="secondary"
                 (click)="deleteExpense(e)"
                 data-testid="delete-expense"
+              />
+            }
+            @if (canEditDates(e)) {
+              <p-button
+                label="Edit Dates"
+                size="small"
+                severity="secondary"
+                icon="pi pi-calendar"
+                (click)="openEditDates(e)"
+                data-testid="edit-dates"
               />
             }
             @if (canEdit(e)) {
@@ -485,20 +495,18 @@
             data-testid="pay-charges"
           />
         </div>
-        @if (canBackdate()) {
-          <div>
-            <label class="mb-1 block text-xs font-medium text-slate-600">Paid date</label>
-            <p-datepicker
-              [ngModel]="payDateObject()"
-              (ngModelChange)="onPayDateChange($event)"
-              dateFormat="dd/mm/yy"
-              appendTo="body"
-              class="w-full"
-              data-testid="pay-date"
-            />
-            <p class="mt-1 text-xs text-slate-400">Backdate to reflect the payment on an earlier day's report.</p>
-          </div>
-        }
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Paid date</label>
+          <p-datepicker
+            [ngModel]="payDateObject()"
+            (ngModelChange)="onPayDateChange($event)"
+            dateFormat="dd/mm/yy"
+            appendTo="body"
+            class="w-full"
+            data-testid="pay-date"
+          />
+          <p class="mt-1 text-xs text-slate-400">Defaults to the expense document date so late-filed expenses land on the right day's report.</p>
+        </div>
         <div>
           <label class="mb-1 block text-xs font-medium text-slate-600">Receipt</label>
           <input
@@ -522,6 +530,84 @@
       </div>
     </div>
   </div>
+}
+
+@if (showApproveDialog()) {
+  @if (approvingExpense(); as e) {
+    <div class="fixed inset-0 z-50 flex items-end bg-black/40" data-testid="expense-approve-dialog">
+      <div class="w-full rounded-t-2xl bg-white p-4">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-base font-semibold">Approve Expense</h2>
+          <button type="button" class="text-slate-400" (click)="showApproveDialog.set(false)"><span class="pi pi-times"></span></button>
+        </div>
+        <div class="space-y-3">
+          <p class="text-sm text-slate-600">
+            Approve <span class="font-semibold">{{ money(e.amount) }}</span> — {{ e.description || e.category || 'Untitled' }}?
+          </p>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">Approval date</label>
+            <p-datepicker
+              [ngModel]="approveDateObject()"
+              (ngModelChange)="onApproveDateChange($event)"
+              dateFormat="dd/mm/yy"
+              appendTo="body"
+              class="w-full"
+              data-testid="approve-date"
+            />
+            <p class="mt-1 text-xs text-slate-400">Defaults to the expense document date.</p>
+          </div>
+        </div>
+        <div class="flex gap-2 pt-3">
+          <button type="button" class="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-medium text-slate-600" (click)="showApproveDialog.set(false)">Cancel</button>
+          <button type="button" class="flex-1 rounded-lg bg-green-600 p-2 text-sm font-medium text-white" [disabled]="approving()" (click)="submitApprove()" data-testid="confirm-approve">Approve</button>
+        </div>
+      </div>
+    </div>
+  }
+}
+
+@if (showDatesDialog()) {
+  @if (datesExpense(); as e) {
+    <div class="fixed inset-0 z-50 flex items-end bg-black/40" data-testid="expense-dates-dialog">
+      <div class="w-full rounded-t-2xl bg-white p-4">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-base font-semibold">Edit Approval / Payment Dates</h2>
+          <button type="button" class="text-slate-400" (click)="showDatesDialog.set(false)"><span class="pi pi-times"></span></button>
+        </div>
+        <div class="space-y-3">
+          <p class="text-sm text-slate-600">
+            {{ e.description || e.category || 'Untitled' }} — set the correct dates so this expense affects the right day's report.
+          </p>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">Approval date</label>
+            <p-datepicker
+              [ngModel]="editApprovalDateObject()"
+              (ngModelChange)="onEditApprovalDateChange($event)"
+              dateFormat="dd/mm/yy"
+              appendTo="body"
+              class="w-full"
+              data-testid="edit-approval-date"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">Payment date</label>
+            <p-datepicker
+              [ngModel]="editPaymentDateObject()"
+              (ngModelChange)="onEditPaymentDateChange($event)"
+              dateFormat="dd/mm/yy"
+              appendTo="body"
+              class="w-full"
+              data-testid="edit-payment-date"
+            />
+          </div>
+        </div>
+        <div class="flex gap-2 pt-3">
+          <button type="button" class="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-medium text-slate-600" (click)="showDatesDialog.set(false)">Cancel</button>
+          <button type="button" class="flex-1 rounded-lg bg-blue-600 p-2 text-sm font-medium text-white" [disabled]="savingDates()" (click)="submitEditDates()" data-testid="confirm-dates">Save</button>
+        </div>
+      </div>
+    </div>
+  }
 }
 
 @if (showEditDialog()) {

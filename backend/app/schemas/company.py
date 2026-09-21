@@ -172,6 +172,15 @@ class MarkExpensePaid(BaseModel):
     paid_at: datetime | None = None
 
 
+class ExpenseApprove(BaseModel):
+    approved_at: datetime | None = None
+
+
+class ExpenseDatesUpdate(BaseModel):
+    approved_at: datetime | None = None
+    paid_at: datetime | None = None
+
+
 class ExpenseRead(BaseModel):
     id: uuid.UUID
     branch_id: uuid.UUID

@@ -45,6 +45,60 @@ test.describe('Expenses Workflow', () => {
     await expect(page.locator('table').first().getByText('Vehicle Maintenance').first()).toBeVisible();
   });
 
+  test('approve dialog exposes an editable approval date defaulting to the document date', async ({ page }) => {
+    const token = await page.evaluate(
+      async ({ phone, pin }) => {
+        const res = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, pin }),
+        });
+        return (await res.json()).access_token;
+      },
+      { phone: SUPER_PHONE, pin: SUPER_PIN },
+    );
+
+    const desc = `e2e approve date ${Date.now()}`;
+    const created = await page.evaluate(
+      async ({ token, branchId, desc }) => {
+        const res = await fetch('/api/v1/finance/expenses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({
+            branch_id: branchId,
+            amount: 15000,
+            description: desc,
+            category: 'Vehicle Maintenance',
+            expense_date: '2026-09-15T00:00:00',
+          }),
+        });
+        return (await res.json()) as { id: string };
+      },
+      { token, branchId: BRANCH_ID, desc },
+    );
+
+    await page.goto('/expenses');
+    const row = page.locator('table tbody tr', { hasText: desc }).first();
+    await expect(row).toBeVisible({ timeout: 10000 });
+
+    await row.locator('button').first().click();
+    const dialog = page.locator('.p-dialog-mask');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await expect(dialog.getByText('Approval Date')).toBeVisible();
+    await expect(dialog.locator('p-datepicker input').first()).toHaveValue('2026-09-15');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+    await page.evaluate(
+      async ({ token, id }) => {
+        await fetch(`/api/v1/finance/expenses/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+      },
+      { token, id: created.id },
+    );
+  });
+
   test('full approve / reject / pay workflow is enforced', async ({ page }) => {
     const token = await page.evaluate(
       async ({ phone, pin }) => {

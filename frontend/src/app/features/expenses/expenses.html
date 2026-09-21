@@ -114,7 +114,7 @@
         <td>
           <div class="flex gap-1">
             @if (e.status === 'pending') {
-              <p-button *appHasPermission="'expenses.approve'" icon="pi pi-check" severity="success" rounded="true" pTooltip="Approve" (onClick)="confirmApprove(e)" />
+              <p-button *appHasPermission="'expenses.approve'" icon="pi pi-check" severity="success" rounded="true" pTooltip="Approve" (onClick)="openApprove(e)" />
               <p-button *appHasPermission="'expenses.reject'" icon="pi pi-times" severity="danger" rounded="true" pTooltip="Reject" (onClick)="confirmReject(e)" />
               <p-button *appHasPermission="'expenses.delete'" icon="pi pi-trash" severity="secondary" rounded="true" pTooltip="Delete" (onClick)="confirmDelete(e)" />
             }
@@ -123,6 +123,9 @@
             }
             @if (e.status === 'rejected') {
               <p-button *appHasPermission="'expenses.manage'" icon="pi pi-trash" severity="secondary" rounded="true" pTooltip="Delete rejected" (onClick)="confirmDelete(e)" />
+            }
+            @if (e.status === 'approved' || e.status === 'paid') {
+              <p-button *appHasPermission="'expenses.edit'" icon="pi pi-calendar" severity="secondary" rounded="true" pTooltip="Edit approval / payment dates" (onClick)="openEditDates(e)" />
             }
             @if (!e.category || !e.consultation_id) {
               <p-button *appHasPermission="'expenses.edit'" icon="pi pi-pencil" severity="secondary" rounded="true" pTooltip="Add missing category / client" (onClick)="openEdit(e)" />
@@ -358,14 +361,12 @@
       <p-inputNumber [(ngModel)]="payCharges" [min]="0" [max]="999999" mode="decimal"
         [maxFractionDigits]="2" styleClass="w-full" inputStyleClass="w-full" />
     </div>
-    @if (canBackdate()) {
-      <div>
-        <label class="mb-1 block text-sm font-medium text-gray-700">Paid Date</label>
-        <p-datepicker [(ngModel)]="payDate" dateFormat="yy-mm-dd" [showIcon]="true" styleClass="w-full" appendTo="body"
-          [maxDate]="today" />
-        <p class="mt-1 text-xs text-gray-400">Backdate to reflect the payment on an earlier day's end-of-day report.</p>
-      </div>
-    }
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700">Paid Date</label>
+      <p-datepicker [(ngModel)]="payDate" dateFormat="yy-mm-dd" [showIcon]="true" styleClass="w-full" appendTo="body"
+        [maxDate]="today" />
+      <p class="mt-1 text-xs text-gray-400">Defaults to the expense document date so late-filed expenses land on the right day's end-of-day report.</p>
+    </div>
     <div>
       <label class="mb-1 block text-sm font-medium text-gray-700">Receipt</label>
       <input type="file" class="w-full" accept=".heic,.heif,.pdf,.png,.jpg,.jpeg,.webp,.bmp,.gif" (change)="onPayReceiptSelected($event)" />
@@ -380,6 +381,67 @@
   <ng-template pTemplate="footer">
     <p-button label="Cancel" severity="secondary" (onClick)="showPayDialog.set(false)" />
     <p-button label="Pay" [disabled]="payingUpload()" [loading]="payingUpload()" (onClick)="submitPayment()" />
+  </ng-template>
+</p-dialog>
+
+<p-dialog
+  [(visible)]="showApproveDialog"
+  header="Approve Expense"
+  [modal]="true"
+  [style]="{ width: '440px' }"
+  [draggable]="false"
+  [resizable]="false"
+  appendTo="body"
+>
+  @if (approvingExpense(); as e) {
+    <div class="flex flex-col gap-3 pt-2">
+      <p class="text-sm text-gray-600">
+        Approve <span class="font-medium">{{ currencyService.symbol() }} {{ e.amount }}</span>
+        — {{ e.description || e.category || 'Untitled' }}?
+      </p>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Approval Date</label>
+        <p-datepicker [(ngModel)]="approveDate" dateFormat="yy-mm-dd" [showIcon]="true" styleClass="w-full" appendTo="body"
+          [maxDate]="today" />
+        <p class="mt-1 text-xs text-gray-400">Defaults to the expense document date so late-filed expenses land on the right day's report.</p>
+      </div>
+    </div>
+  }
+  <ng-template pTemplate="footer">
+    <p-button label="Cancel" severity="secondary" (onClick)="showApproveDialog.set(false)" />
+    <p-button label="Approve" severity="success" [disabled]="approving()" [loading]="approving()" (onClick)="submitApprove()" />
+  </ng-template>
+</p-dialog>
+
+<p-dialog
+  [(visible)]="showDatesDialog"
+  header="Edit Approval / Payment Dates"
+  [modal]="true"
+  [style]="{ width: '440px' }"
+  [draggable]="false"
+  [resizable]="false"
+  appendTo="body"
+>
+  @if (datesExpense(); as e) {
+    <div class="flex flex-col gap-3 pt-2">
+      <p class="text-sm text-gray-600">
+        {{ e.description || e.category || 'Untitled' }} — set the correct dates so this expense affects the right day's end-of-day report.
+      </p>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Approval Date</label>
+        <p-datepicker [(ngModel)]="editApprovalDate" dateFormat="yy-mm-dd" [showIcon]="true" [showClear]="true"
+          styleClass="w-full" appendTo="body" [maxDate]="today" />
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Payment Date</label>
+        <p-datepicker [(ngModel)]="editPaymentDate" dateFormat="yy-mm-dd" [showIcon]="true" [showClear]="true"
+          styleClass="w-full" appendTo="body" [maxDate]="today" />
+      </div>
+    </div>
+  }
+  <ng-template pTemplate="footer">
+    <p-button label="Cancel" severity="secondary" (onClick)="showDatesDialog.set(false)" />
+    <p-button label="Save" [disabled]="savingDates()" [loading]="savingDates()" (onClick)="submitEditDates()" />
   </ng-template>
 </p-dialog>
 

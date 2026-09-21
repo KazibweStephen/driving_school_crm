@@ -63,6 +63,15 @@ export class ExpensesCmp implements OnInit {
   payReceiptFile = signal<File | null>(null);
   payingUpload = signal(false);
   payDate = signal<Date | null>(null);
+  showApproveDialog = signal(false);
+  approvingExpense = signal<Expense | null>(null);
+  approveDate = signal<Date | null>(null);
+  approving = signal(false);
+  showDatesDialog = signal(false);
+  datesExpense = signal<Expense | null>(null);
+  editApprovalDate = signal<Date | null>(null);
+  editPaymentDate = signal<Date | null>(null);
+  savingDates = signal(false);
 
   // Permit-stage navigation context (query params: consultation_id, cart_item_id, category, back)
   routeConsultationId = signal<string>('');
@@ -521,14 +530,10 @@ export class ExpensesCmp implements OnInit {
     }
   }
 
-  confirmApprove(e: Expense) {
-    this.confirmationService.confirm({
-      message: `Approve expense "${e.description || e.category || 'Untitled'}" for ${this.currencyService.symbol()} ${e.amount}?`,
-      header: 'Approve Expense',
-      icon: 'pi pi-check-circle',
-      acceptButtonStyleClass: 'p-button-success',
-      accept: () => this.approve(e.id),
-    });
+  openApprove(e: Expense) {
+    this.approvingExpense.set(e);
+    this.approveDate.set(this.docDate(e));
+    this.showApproveDialog.set(true);
   }
 
   confirmReject(e: Expense) {
@@ -547,15 +552,28 @@ export class ExpensesCmp implements OnInit {
     });
   }
 
-  async approve(id: string) {
+  private docDate(e: Expense): Date {
+    const d = e.expense_date ? new Date(e.expense_date) : new Date();
+    return Number.isNaN(d.getTime()) ? this.toLocalDateOnly(new Date()) : this.toLocalDateOnly(d);
+  }
+
+  async submitApprove() {
+    const e = this.approvingExpense();
+    if (!e) return;
+    this.approving.set(true);
     try {
-      const updated = await this.financeService.approveExpense(id).toPromise();
+      const ad = this.approveDate();
+      const approved_at = ad ? toLocalDateStr(ad) : undefined;
+      const updated = await this.financeService.approveExpense(e.id, { approved_at }).toPromise();
       if (updated) {
-        this.expenses.update(list => list.map(x => x.id === id ? updated : x));
+        this.expenses.update(list => list.map(x => x.id === e.id ? updated : x));
+        this.showApproveDialog.set(false);
         this.messageService.add({ severity: 'success', summary: 'Approved', detail: 'Expense approved' });
       }
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to approve expense' });
+    } catch (err: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: err?.error?.detail || 'Failed to approve expense' });
+    } finally {
+      this.approving.set(false);
     }
   }
 
@@ -579,8 +597,42 @@ export class ExpensesCmp implements OnInit {
     this.payingExpense.set(e);
     this.payCharges.set(e.charges ?? 0);
     this.payReceiptFile.set(null);
-    this.payDate.set(e.paid_at ? new Date(e.paid_at) : this.toLocalDateOnly(new Date()));
+    this.payDate.set(e.paid_at ? this.toLocalDateOnly(new Date(e.paid_at)) : this.docDate(e));
     this.showPayDialog.set(true);
+  }
+
+  openEditDates(e: Expense) {
+    this.datesExpense.set(e);
+    this.editApprovalDate.set(e.approved_at ? this.toLocalDateOnly(new Date(e.approved_at)) : null);
+    this.editPaymentDate.set(e.paid_at ? this.toLocalDateOnly(new Date(e.paid_at)) : null);
+    this.showDatesDialog.set(true);
+  }
+
+  async submitEditDates() {
+    const e = this.datesExpense();
+    if (!e) return;
+    const payload: { approved_at?: string; paid_at?: string } = {};
+    const ad = this.editApprovalDate();
+    const pd = this.editPaymentDate();
+    if (ad) payload.approved_at = toLocalDateStr(ad);
+    if (pd) payload.paid_at = toLocalDateStr(pd);
+    if (!Object.keys(payload).length) {
+      this.messageService.add({ severity: 'warn', summary: 'Nothing to update', detail: 'Set an approval or payment date.' });
+      return;
+    }
+    this.savingDates.set(true);
+    try {
+      const updated = await this.financeService.updateExpenseDates(e.id, payload).toPromise();
+      if (updated) {
+        this.expenses.update(list => list.map(x => x.id === e.id ? updated : x));
+        this.showDatesDialog.set(false);
+        this.messageService.add({ severity: 'success', summary: 'Dates updated', detail: 'Approval / payment dates saved' });
+      }
+    } catch (err: any) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: err?.error?.detail || 'Failed to update dates' });
+    } finally {
+      this.savingDates.set(false);
+    }
   }
 
   private toLocalDateOnly(d: Date): Date {

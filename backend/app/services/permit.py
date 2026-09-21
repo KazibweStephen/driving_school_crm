@@ -16,6 +16,7 @@ from app.models.payment import Payment
 from app.models.permit import PermitAuditLog, PermitProgress
 from app.models.product import Package, Product
 from app.models.user import User, UserRole
+from app.services.expected_expense import cart_item_expected_amount
 from app.utils.timezones import BUSINESS_TZ, today_local
 
 
@@ -267,6 +268,7 @@ async def list_permit_trackers(
     status: str | None = None,
     page: int = 1,
     page_size: int = 20,
+    sort_by: str = "created_desc",
 ) -> tuple[list, int]:
     """List cart items that require permit processing with their payment progress."""
     query = (
@@ -300,20 +302,34 @@ async def list_permit_trackers(
     count = await db.execute(select(func.count()).select_from(query.subquery()))
     total = int(count.scalar() or 0)
 
+    def _order_cols():
+        if sort_by == "document_date_asc":
+            return (Consultation.document_date.asc().nulls_last(), Consultation.created_at.asc())
+        if sort_by == "document_date_desc":
+            return (Consultation.document_date.desc().nulls_last(), Consultation.created_at.desc())
+        return (CartItem.created_at.desc(),)
+
     if status:
         # Status is computed in Python from progress + expense kinds + paid
         # ratio, so it cannot be pushed into SQL. Fetch ALL matching rows,
         # compute statuses, then filter + paginate in Python — otherwise
         # matches beyond the current DB page vanish and total is wrong.
-        rows = (await db.execute(query.order_by(CartItem.created_at.desc()))).scalars().all()
+        rows = (await db.execute(query.order_by(*_order_cols()))).scalars().all()
         trackers = await _build_permit_trackers(db, rows)
+        if sort_by == "document_date_asc":
+            trackers.sort(key=lambda t: ((t["document_date"] or date.max), str(t["cart_item_id"])))
+        elif sort_by == "document_date_desc":
+            trackers.sort(
+                key=lambda t: ((t["document_date"] or date.min), str(t["cart_item_id"])),
+                reverse=True,
+            )
         filtered = [t for t in trackers if t["status"] == status]
         total = len(filtered)
         start = (page - 1) * page_size
         return filtered[start:start + page_size], total
 
     query = (
-        query.order_by(CartItem.created_at.desc())
+        query.order_by(*_order_cols())
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
@@ -412,6 +428,7 @@ async def _build_permit_trackers(
             "consultation_id": cons.id,
             "client_name": _display_name(cons),
             "client_phone": cons.phone or "—",
+            "document_date": cons.document_date,
             "branch_id": cons.branch_id,
             "branch_name": cons.branch.name if cons.branch else None,
             "product_id": ci.product_id,
@@ -764,6 +781,78 @@ async def _learner_permit_payment_date(
     return best
 
 
+async def _qualifying_installment_date(
+    db: AsyncSession, ci: CartItem, effective_total: float
+) -> date | None:
+    """The document date of the payment whose cumulative total first reached
+    learners-permit eligibility (>= 50% of the effective total)."""
+    if effective_total <= 0:
+        return None
+    target = Decimal(str(effective_total * 0.5))
+    rows = (
+        (
+            await db.execute(
+                select(Payment)
+                .where(
+                    Payment.consultation_id == ci.consultation_id,
+                    Payment.product_id == ci.product_id,
+                    Payment.cancelled_at.is_(None),
+                )
+                .order_by(Payment.document_date.asc().nulls_last(), Payment.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    cumulative = Decimal("0")
+    for p in rows:
+        cumulative += Decimal(str(p.total_paid or 0))
+        if cumulative >= target:
+            if p.document_date is not None:
+                return p.document_date
+            if p.created_at is not None:
+                return p.created_at.astimezone(BUSINESS_TZ).date()
+            return None
+    return None
+
+
+async def _police_booking_date(
+    db: AsyncSession, consultation_id: uuid.UUID
+) -> date | None:
+    """Earliest dated/paid Police Booking expense on a consultation."""
+    rows = (
+        await db.execute(
+            select(Expense).where(Expense.consultation_id == consultation_id)
+        )
+    ).scalars().all()
+    best: date | None = None
+    for e in rows:
+        if (e.category or "").strip().lower() != "police booking":
+            continue
+        if e.paid_at is not None:
+            d = e.paid_at.astimezone(BUSINESS_TZ).date()
+        elif e.expense_date is not None:
+            d = e.expense_date.astimezone(BUSINESS_TZ).date()
+        else:
+            continue
+        if best is None or d < best:
+            best = d
+    return best
+
+
+def _capped_default_date(
+    base: date | None, days: int, cap_to_today: bool = True
+) -> date | None:
+    """base + days, capped to today when that lands in the future."""
+    if base is None:
+        return None
+    candidate = base + timedelta(days=days)
+    if not cap_to_today:
+        return candidate
+    today = today_local()
+    return candidate if candidate < today else today
+
+
 async def default_permit_expense_date(
     db: AsyncSession,
     consultation_id: uuid.UUID | None,
@@ -772,11 +861,15 @@ async def default_permit_expense_date(
 ) -> date | None:
     """Default document date for a permit-processing expense.
 
-    - Learner permit payment: the client's first payment date, but only when the
-      client has reached learners-permit eligibility (>= 50% paid, or the
-      eligibility was overridden). Otherwise ``None`` (fall back to today).
-    - Test / permit stages: the learners-permit issue date if captured, else the
-      31st day after the learner-permit payment date. Otherwise ``None``.
+    - Learner permit payment: the date of the payment/installment whose
+      cumulative amount first made the client eligible for a learners permit
+      (>= 50% paid, or the eligibility was overridden) — falling back to the
+      client's first payment date. ``None`` when not yet eligible.
+    - Test Booking / Police Booking / IOV Fees: 31 days after that learner
+      payment date (fallback: the learner-permit expense payment date).
+    - Permit Payment: 7 days after the client's earliest Police Booking date,
+      else the test-stage defaults.
+    Date candidates landing in the future are capped to today.
     """
     kind = categorize_permit_expense(category)
     if kind is None or consultation_id is None:
@@ -784,34 +877,47 @@ async def default_permit_expense_date(
     ci = await _permit_cart_item(db, consultation_id, cart_item_id)
     if ci is None:
         return None
-    if kind == "learner":
+
+    async def _is_eligible() -> bool:
         progress = (
             await db.execute(
                 select(PermitProgress).where(PermitProgress.cart_item_id == ci.id)
             )
         ).scalar_one_or_none()
-        eligible = bool(progress and progress.eligibility_overridden)
-        if not eligible:
-            effective = await _effective_total_for_cart_item(db, ci)
-            paid = await _paid_for_cart_item(db, ci)
-            eligible = effective > 0 and (paid / effective) >= 0.5
-        if not eligible:
-            return None
+        if progress and progress.eligibility_overridden:
+            return True
+        effective = await _effective_total_for_cart_item(db, ci)
+        paid = await _paid_for_cart_item(db, ci)
+        return effective > 0 and (paid / effective) >= 0.5
+
+    async def _learner_default() -> date | None:
+        effective = await _effective_total_for_cart_item(db, ci)
+        qualifying = await _qualifying_installment_date(db, ci, effective)
+        if qualifying:
+            return qualifying
         return await _first_payment_date(db, ci.consultation_id, ci.product_id)
-    # test / permit stages
-    progress = (
-        await db.execute(
-            select(PermitProgress).where(PermitProgress.cart_item_id == ci.id)
-        )
-    ).scalar_one_or_none()
-    if progress and progress.got_learners_permit_date:
-        return progress.got_learners_permit_date
-    learner_pay = await _learner_permit_payment_date(db, ci.consultation_id)
-    if learner_pay:
-        candidate = learner_pay + timedelta(days=31)
-        today = today_local()
-        return candidate if candidate < today else today
-    return None
+
+    if kind == "learner":
+        if not await _is_eligible():
+            return None
+        return await _learner_default()
+
+    if kind == "test":
+        effective = await _effective_total_for_cart_item(db, ci)
+        qualifying = await _qualifying_installment_date(db, ci, effective)
+        base = qualifying
+        if base is None:
+            base = await _learner_permit_payment_date(db, ci.consultation_id)
+        return _capped_default_date(base, 31, cap_to_today=True)
+
+    # permit stage
+    police = await _police_booking_date(db, ci.consultation_id)
+    if police:
+        return _capped_default_date(police, 7, cap_to_today=True)
+    effective = await _effective_total_for_cart_item(db, ci)
+    qualifying = await _qualifying_installment_date(db, ci, effective)
+    base = qualifying or await _learner_permit_payment_date(db, ci.consultation_id)
+    return _capped_default_date(base, 31, cap_to_today=True)
 
 
 # ── Expense → permit auto-marking ──────────────────────────────────
@@ -1043,6 +1149,21 @@ async def list_permit_expense_checklist(
     if cons is None:
         raise HTTPException(status_code=404, detail="Client not found")
 
+    # Resolve the package + company (super users carry no company_id claim).
+    pkg = None
+    if ci.package_id:
+        pkg = (
+            await db.execute(select(Package).where(Package.id == ci.package_id))
+        ).scalar_one_or_none()
+    effective_cid = company_id
+    if effective_cid is None:
+        effective_cid = pkg.company_id if pkg and pkg.company_id else None
+    if effective_cid is None and cons.branch_id is not None:
+        br = (
+            await db.execute(select(Branch).where(Branch.id == cons.branch_id))
+        ).scalar_one_or_none()
+        effective_cid = br.company_id if br else None
+
     exp_rows = (
         await db.execute(
             select(Expense)
@@ -1065,6 +1186,9 @@ async def list_permit_expense_checklist(
             status = e.status.value if hasattr(e.status, "value") else e.status
         account = await _resolve_expense_account(db, cons.branch_id, name, company_id)
         default_date = await default_permit_expense_date(db, cons.id, name, ci.id)
+        expected_amount = None
+        if effective_cid is not None:
+            expected_amount = await cart_item_expected_amount(db, ci.id, name, effective_cid)
         items.append({
             "category_code": code,
             "category_name": name,
@@ -1072,6 +1196,7 @@ async def list_permit_expense_checklist(
             "expense_id": e.id if e is not None else None,
             "status": status,
             "amount": float(e.amount) if e is not None else None,
+            "expected_amount": expected_amount,
             "expense_date": (
                 e.expense_date.astimezone(BUSINESS_TZ).date()
                 if e is not None and e.expense_date is not None else None
@@ -1084,10 +1209,24 @@ async def list_permit_expense_checklist(
             "is_paid": status == "paid",
         })
 
+    effective_total = await _effective_total_for_cart_item(db, ci)
+    paid_total = await _paid_for_cart_item(db, ci)
+    paid_ratio = float(paid_total / effective_total) if effective_total > 0 else 0.0
+    progress = (
+        await db.execute(
+            select(PermitProgress).where(PermitProgress.cart_item_id == ci.id)
+        )
+    ).scalar_one_or_none()
+    qualifying = paid_ratio >= 0.5 or bool(progress and progress.eligibility_overridden)
+
     return {
         "cart_item_id": ci.id,
         "consultation_id": cons.id,
         "client_name": _display_name(cons),
         "branch_id": cons.branch_id,
+        "package_id": ci.package_id,
+        "package_name": pkg.name if pkg else None,
+        "paid_ratio": paid_ratio,
+        "qualifying": qualifying,
         "items": items,
     }

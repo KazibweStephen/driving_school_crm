@@ -1530,80 +1530,6 @@
             @for (ci of trainableCartItems(); track ci.id) {
               @if (ci.requires_permit_processing) {
                 @let pp = permitForCartItem(ci.id);
-                <!-- Permit Expense Checklist -->
-                <div class="rounded-lg border bg-white p-3 mb-4" data-testid="permit-expense-checklist">
-                  <div class="mb-2 flex flex-wrap items-center justify-between gap-1">
-                    <h4 class="text-sm font-semibold text-gray-800">Permit Expenses — {{ productName(ci) }}</h4>
-                    <span class="text-xs text-gray-400">File and pay each stage expense from here</span>
-                  </div>
-                  <div class="space-y-2">
-                    @for (item of permitExpensesFor(ci.id); track item.category_code) {
-                      <div class="rounded-lg border bg-gray-50 p-3" [attr.data-testid]="'permit-expense-' + item.category_code">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                          <div class="flex items-center gap-2">
-                            <span class="text-sm font-medium text-gray-800">{{ item.category_name }}</span>
-                            <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ permitExpenseStatusClass(item.status) }}">
-                              {{ permitExpenseStatusLabel(item.status) }}
-                            </span>
-                          </div>
-                          @if (item.status) {
-                            <span class="text-sm font-semibold text-gray-700">{{ item.amount | number:'1.0-0' }}</span>
-                          }
-                        </div>
-
-                        @if (item.status === 'rejected' && item.rejection_reason) {
-                          <div class="mt-1 text-xs text-red-600">Declined: {{ item.rejection_reason }}</div>
-                        }
-
-                        @if (item.can_file) {
-                          <div class="mt-2 flex flex-wrap items-end gap-2">
-                            <div>
-                              <label class="mb-1 block text-[11px] font-medium text-gray-500">Amount</label>
-                              <p-inputNumber [(ngModel)]="item.draft_amount" [min]="0" styleClass="w-32" inputStyleClass="w-full" placeholder="0" />
-                            </div>
-                            <div>
-                              <label class="mb-1 block text-[11px] font-medium text-gray-500">Date</label>
-                              <p-datepicker [(ngModel)]="item.draft_date" dateFormat="dd/mm/yy" styleClass="w-40" appendTo="body" />
-                            </div>
-                            @if (canCreateExpense()) {
-                              <p-button label="File Expense" icon="pi pi-plus" size="small"
-                                        (onClick)="filePermitExpense(ci, item)" [loading]="loading()"
-                                        [attr.data-testid]="'file-' + item.category_code" />
-                            }
-                          </div>
-                        } @else {
-                          <div class="mt-2 flex flex-wrap items-center gap-2">
-                            @if (item.status === 'pending') {
-                              @if (canApproveExpense()) {
-                                <p-button label="Approve" icon="pi pi-check" size="small" severity="success"
-                                          (onClick)="approvePermitExpense(ci, item)" [loading]="loading()"
-                                          [attr.data-testid]="'approve-' + item.category_code" />
-                              }
-                              @if (canRejectExpense()) {
-                                <p-button label="Decline" icon="pi pi-times" size="small" severity="danger"
-                                          (onClick)="openPermitExpenseReject(ci, item)"
-                                          [attr.data-testid]="'decline-' + item.category_code" />
-                              }
-                            }
-                            @if (item.status === 'approved') {
-                              @if (canPayExpense()) {
-                                <p-button label="Pay" icon="pi pi-wallet" size="small"
-                                          (onClick)="payPermitExpense(ci, item)" [loading]="loading()"
-                                          [attr.data-testid]="'pay-' + item.category_code" />
-                              }
-                            }
-                            @if (item.status === 'paid') {
-                              <span class="text-xs text-emerald-600"><i class="pi pi-check-circle mr-1"></i>Paid — no action needed</span>
-                            }
-                          </div>
-                        }
-                      </div>
-                    }
-                    @if (permitExpensesFor(ci.id).length === 0) {
-                      <div class="py-2 text-xs text-gray-400">No permit expenses to file.</div>
-                    }
-                  </div>
-                </div>
                 @if (pp) {
                 <div class="rounded-lg border bg-gray-50 p-3 mb-4">
                   <h3 class="text-md font-bold text-gray-900 mb-3">Permit Processing — {{ productName(ci) }}{{ packageName(ci) ? ' (' + packageName(ci) + ')' : '' }}</h3>
@@ -1660,6 +1586,104 @@
                 </div>
                 }
               }
+            }
+            @let activeCheck = activePermitChecklist();
+            @let activeCi = activePermitCartItem();
+            @if (activeCheck && activeCi) {
+              <div class="rounded-lg border bg-white p-3 mb-4" data-testid="permit-expense-checklist">
+                <div class="mb-2 flex flex-wrap items-center justify-between gap-1">
+                  <h4 class="text-sm font-semibold text-gray-800">Permit Expenses</h4>
+                  <span class="text-xs text-gray-400">File and pay each stage expense from here</span>
+                </div>
+                <div class="mb-3">
+                  <label class="mb-1 block text-[11px] font-medium text-gray-500">Package being paid for</label>
+                  @if (permitPackageOptions().length > 1) {
+                    <div class="flex flex-wrap items-center gap-2">
+                      <p-select [(ngModel)]="selectedPermitPackage" [options]="permitPackageOptions()"
+                                optionLabel="label" optionValue="value" styleClass="w-full max-w-xs"
+                                appendTo="body" placeholder="Select package" data-testid="permit-package-select" />
+                      @if (activeCheck.qualifying) {
+                        <span class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Qualifying for learners permit</span>
+                      }
+                    </div>
+                  } @else {
+                    <p class="text-sm font-medium text-gray-800">{{ activeCheck.package_name || productName(activeCi) }}</p>
+                    @if (activeCheck.qualifying) {
+                      <span class="mt-1 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Qualifying for learners permit</span>
+                    }
+                  }
+                  <p class="mt-1 text-xs text-gray-400">
+                    {{ (activeCheck.paid_ratio * 100) | number:'1.0-0' }}% paid · {{ activeCheck.client_name }}
+                  </p>
+                </div>
+                <div class="space-y-2">
+                  @for (item of activeCheck.items; track item.category_code) {
+                    <div class="rounded-lg border bg-gray-50 p-3" [attr.data-testid]="'permit-expense-' + item.category_code">
+                      <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                          <span class="text-sm font-medium text-gray-800">{{ item.category_name }}</span>
+                          <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ permitExpenseStatusClass(item.status) }}">
+                            {{ permitExpenseStatusLabel(item.status) }}
+                          </span>
+                        </div>
+                        @if (item.status) {
+                          <span class="text-sm font-semibold text-gray-700">{{ item.amount | number:'1.0-0' }}</span>
+                        }
+                      </div>
+
+                      @if (item.status === 'rejected' && item.rejection_reason) {
+                        <div class="mt-1 text-xs text-red-600">Declined: {{ item.rejection_reason }}</div>
+                      }
+
+                      @if (item.can_file) {
+                        <div class="mt-2 flex flex-wrap items-end gap-2">
+                          <div>
+                            <label class="mb-1 block text-[11px] font-medium text-gray-500">Amount</label>
+                            <p-inputNumber [(ngModel)]="item.draft_amount" [min]="0" styleClass="w-32" inputStyleClass="w-full" placeholder="0" />
+                          </div>
+                          <div>
+                            <label class="mb-1 block text-[11px] font-medium text-gray-500">Date</label>
+                            <p-datepicker [(ngModel)]="item.draft_date" dateFormat="dd/mm/yy" styleClass="w-40" appendTo="body" />
+                          </div>
+                          @if (canCreateExpense()) {
+                            <p-button label="File Expense" icon="pi pi-plus" size="small"
+                                      (onClick)="filePermitExpense(activeCi, item)" [loading]="loading()"
+                                      [attr.data-testid]="'file-' + item.category_code" />
+                          }
+                        </div>
+                      } @else {
+                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                          @if (item.status === 'pending') {
+                            @if (canApproveExpense()) {
+                              <p-button label="Approve" icon="pi pi-check" size="small" severity="success"
+                                        (onClick)="approvePermitExpense(activeCi, item)" [loading]="loading()"
+                                        [attr.data-testid]="'approve-' + item.category_code" />
+                            }
+                            @if (canRejectExpense()) {
+                              <p-button label="Decline" icon="pi pi-times" size="small" severity="danger"
+                                        (onClick)="openPermitExpenseReject(activeCi, item)"
+                                        [attr.data-testid]="'decline-' + item.category_code" />
+                            }
+                          }
+                          @if (item.status === 'approved') {
+                            @if (canPayExpense()) {
+                              <p-button label="Pay" icon="pi pi-wallet" size="small"
+                                        (onClick)="payPermitExpense(activeCi, item)" [loading]="loading()"
+                                        [attr.data-testid]="'pay-' + item.category_code" />
+                            }
+                          }
+                          @if (item.status === 'paid') {
+                            <span class="text-xs text-emerald-600"><i class="pi pi-check-circle mr-1"></i>Paid — no action needed</span>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                  @if (activeCheck.items.length === 0) {
+                    <div class="py-2 text-xs text-gray-400">No permit expenses to file.</div>
+                  }
+                </div>
+              </div>
             }
           } @else {
             <div class="py-8 text-center text-gray-400">No permit processing yet.</div>

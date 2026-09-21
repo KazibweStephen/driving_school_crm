@@ -71,6 +71,7 @@ class PermitExpenseChecklistItem(BaseModel):
     expense_id: uuid.UUID | None = None
     status: str | None = None
     amount: float | None = None
+    expected_amount: float | None = None
     expense_date: date | None = None
     default_date: date | None = None
     rejection_reason: str | None = None
@@ -85,6 +86,10 @@ class PermitExpenseChecklistResponse(BaseModel):
     consultation_id: uuid.UUID
     client_name: str
     branch_id: uuid.UUID | None
+    package_id: str | None = None
+    package_name: str | None = None
+    paid_ratio: float = 0.0
+    qualifying: bool = False
     items: list[PermitExpenseChecklistItem]
 
 
@@ -106,6 +111,7 @@ class PermitTrackerRead(BaseModel):
     consultation_id: uuid.UUID
     client_name: str
     client_phone: str
+    document_date: date | None = None
     branch_id: uuid.UUID | None
     branch_name: str | None
     product_id: str

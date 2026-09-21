@@ -174,6 +174,7 @@ async def list_permit_trackers(
     status: str | None = Query(None, pattern="^(eligible|not_qualified|learners_active|due_for_testing|test_ready|waiting_for_permit|permit_paid|permit_received|learner_pending_approval|learner_pending_payment|learner_paid|test_pending_approval|test_pending_payment|permit_pending_approval|permit_pending_payment)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("created_desc", pattern="^(created_desc|document_date_asc|document_date_desc)$"),
 ):
     parsed_branch_ids = None
     if branch_ids:
@@ -181,7 +182,7 @@ async def list_permit_trackers(
     trackers, total = await permit_service.list_permit_trackers(
         db, current_user.company_id, current_user.role,
         branch_ids=parsed_branch_ids, search=search, status=status,
-        page=page, page_size=page_size,
+        page=page, page_size=page_size, sort_by=sort_by,
     )
     total_pages = max(1, (total + page_size - 1) // page_size) if total else 1
     return PermitTrackerListResponse(

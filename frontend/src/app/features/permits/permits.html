@@ -61,6 +61,19 @@
     <ng-template pTemplate="header">
       <tr>
         <th><span class="whitespace-nowrap">Client</span></th>
+        <th>
+          <button type="button" class="inline-flex items-center gap-1 whitespace-nowrap text-left hover:text-blue-600"
+                  (click)="toggleDocDateSort()" data-testid="sort-document-date" title="Sort by document date">
+            <span>Document Date</span>
+            @if (sortBy === 'document_date_desc') {
+              <i class="pi pi-sort-amount-down" style="font-size: 0.7rem"></i>
+            } @else if (sortBy === 'document_date_asc') {
+              <i class="pi pi-sort-amount-up-alt" style="font-size: 0.7rem"></i>
+            } @else {
+              <i class="pi pi-sort-alt" style="font-size: 0.7rem"></i>
+            }
+          </button>
+        </th>
         <th><span class="whitespace-nowrap">Product/Package</span></th>
         <th>Branch</th>
         <th>Status</th>
@@ -77,6 +90,9 @@
             <span class="font-medium">{{ t.client_name }}</span>
             <span class="text-xs text-gray-400">{{ t.client_phone }}</span>
           </div>
+        </td>
+        <td class="text-sm whitespace-nowrap" data-testid="tracker-document-date">
+          {{ t.document_date ? (t.document_date | date:'dd/MM/yy') : '—' }}
         </td>
         <td class="text-sm">
           <span class="font-medium">{{ t.product_name }}</span>
@@ -118,7 +134,7 @@
     </ng-template>
     <ng-template pTemplate="emptymessage">
       <tr>
-        <td colspan="8" class="text-center text-gray-500 py-4">No permit trackers found</td>
+        <td colspan="9" class="text-center text-gray-500 py-4">No permit trackers found</td>
       </tr>
     </ng-template>
   </p-table>

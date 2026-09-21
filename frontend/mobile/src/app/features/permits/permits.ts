@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal, ViewChild } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -28,6 +29,7 @@ interface StatusOption {
 @Component({
   selector: 'app-permits',
   imports: [
+    CommonModule,
     FormsModule,
     ButtonModule,
     InputTextModule,
@@ -59,6 +61,7 @@ export class PermitsList {
 
   search = '';
   status = '';
+  sortBy = '';
   branches = signal<BranchInfo[]>([]);
   selectedBranchIds = signal<string[]>([]);
 
@@ -120,8 +123,15 @@ export class PermitsList {
   clearFilters() {
     this.search = '';
     this.status = '';
+    this.sortBy = '';
     this.page.set(1);
     this.loadTrackers();
+  }
+
+  toggleDocDateSort() {
+    this.sortBy = this.sortBy === '' ? 'document_date_desc'
+      : this.sortBy === 'document_date_desc' ? 'document_date_asc' : '';
+    this.applyFilters();
   }
 
   loadTrackers() {
@@ -131,6 +141,7 @@ export class PermitsList {
       .listPermitTrackers({
         search: this.search || undefined,
         status: this.status || undefined,
+        sort_by: this.sortBy || undefined,
         branch_ids: branchIds.length ? branchIds : undefined,
         page: this.page(),
         page_size: this.pageSize,

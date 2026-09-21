@@ -7,6 +7,7 @@ export interface PermitTracker {
   consultation_id: string;
   client_name: string;
   client_phone: string;
+  document_date: string | null;
   branch_id: string;
   branch_name: string;
   product_id: string;
@@ -125,11 +126,13 @@ export class PermitService {
     status?: string;
     page?: number;
     page_size?: number;
+    sort_by?: string;
   }) {
     let p = new HttpParams();
     if (params.search) p = p.set('search', params.search);
     if (params.branch_ids?.length) p = p.set('branch_ids', params.branch_ids.join(','));
     if (params.status) p = p.set('status', params.status);
+    if (params.sort_by) p = p.set('sort_by', params.sort_by);
     if (params.page != null) p = p.set('page', String(params.page));
     if (params.page_size != null) p = p.set('page_size', String(params.page_size));
     return this.http.get<PermitTrackerListResponse>('/api/v1/permits/', { params: p });

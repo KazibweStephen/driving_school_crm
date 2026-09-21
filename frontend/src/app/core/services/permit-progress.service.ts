@@ -46,6 +46,7 @@ export interface PermitTracker {
   consultation_id: string;
   client_name: string;
   client_phone: string;
+  document_date: string | null;
   branch_id: string | null;
   branch_name: string | null;
   product_id: string;
@@ -121,6 +122,7 @@ export interface PermitTrackerParams {
   status?: string;
   page?: number;
   page_size?: number;
+  sort_by?: string;
 }
 
 export interface PermitNotificationItem {
@@ -148,6 +150,7 @@ export interface PermitExpenseChecklistItem {
   expense_id: string | null;
   status: string | null;
   amount: number | null;
+  expected_amount: number | null;
   expense_date: string | null;
   default_date: string | null;
   rejection_reason: string | null;
@@ -164,6 +167,10 @@ export interface PermitExpenseChecklistResponse {
   consultation_id: string;
   client_name: string;
   branch_id: string | null;
+  package_id: string | null;
+  package_name: string | null;
+  paid_ratio: number;
+  qualifying: boolean;
   items: PermitExpenseChecklistItem[];
 }
 
@@ -184,6 +191,7 @@ export class PermitProgressService {
     if (params.search) hp = hp.set('search', params.search);
     if (params.branch_ids) hp = hp.set('branch_ids', params.branch_ids);
     if (params.status) hp = hp.set('status', params.status);
+    if (params.sort_by) hp = hp.set('sort_by', params.sort_by);
     if (params.page) hp = hp.set('page', String(params.page));
     if (params.page_size) hp = hp.set('page_size', String(params.page_size));
     return this.http.get<PermitTrackerListResponse>('/api/v1/permits/', { params: hp });

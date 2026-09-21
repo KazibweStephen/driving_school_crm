@@ -25,7 +25,7 @@ import { PaymentService, PaymentRead } from '../../core/services/payment.service
 import { AuthService } from '../../core/auth/auth.service';
 import { CurrencyService } from '../../core/services/currency.service';
 import { TrainingService, TrainingSession, TrainingSummary, Skill, SkillCreate } from '../../core/services/training.service';
-import { PermitProgressService, PermitProgress, PermitTracker, PermitExpenseChecklistItem } from '../../core/services/permit-progress.service';
+import { PermitProgressService, PermitProgress, PermitTracker, PermitExpenseChecklistItem, PermitExpenseChecklistResponse } from '../../core/services/permit-progress.service';
 import { PermitStagesDialog } from '../permits/permit-stages-dialog';
 import { OrderListModule } from 'primeng/orderlist';
 import { LessonPlanService, LessonPlanTemplate, ClientLessonPlan, ClientLesson, ClientLessonUpdate } from '../../core/services/lesson-plan.service';
@@ -793,6 +793,7 @@ export class ClientProfile implements OnInit {
       consultation_id: this.consultation()?.id ?? '',
       client_name: this.fullName(this.consultation() ?? ({} as any)),
       client_phone: this.consultation()?.phone ?? '',
+      document_date: this.consultation()?.document_date ?? null,
       branch_id: this.consultation()?.branch_id ?? null,
       branch_name: '',
       product_id: ci.product_id ?? '',
@@ -933,7 +934,8 @@ export class ClientProfile implements OnInit {
 
   // ── Permit Expense Checklist ───────────────────────────────
 
-  permitExpenses = signal<Map<string, PermitExpenseChecklistItem[]>>(new Map());
+  permitExpenses = signal<Map<string, PermitExpenseChecklistResponse>>(new Map());
+  selectedPermitPackage = signal<string>('');
   permitRejectTarget = signal<{ cartItemId: string; item: PermitExpenseChecklistItem } | null>(null);
   permitRejectReason = signal<string>('');
 
@@ -942,19 +944,51 @@ export class ClientProfile implements OnInit {
   canRejectExpense(): boolean { return this.authService.hasPermission('expenses.reject'); }
   canPayExpense(): boolean { return this.authService.hasPermission('expenses.pay'); }
 
+  permitPackageOptions = computed(() => {
+    return Array.from(this.permitExpenses().entries()).map(([cartItemId, res]) => ({
+      label: res.package_name || `Permit package (${cartItemId.slice(0, 8)})`,
+      value: cartItemId,
+      qualifying: res.qualifying,
+    }));
+  });
+
+  activePermitPackageId(): string {
+    const sel = this.selectedPermitPackage();
+    if (sel && this.permitExpenses().has(sel)) return sel;
+    const entries = Array.from(this.permitExpenses().entries());
+    if (!entries.length) return '';
+    const qualifying = entries.find(([, r]) => r.qualifying);
+    return (qualifying || entries[0])[0];
+  }
+
+  activePermitChecklist(): PermitExpenseChecklistResponse | null {
+    const id = this.activePermitPackageId();
+    return id ? (this.permitExpenses().get(id) || null) : null;
+  }
+
+  activePermitCartItem(): CartItemRead | null {
+    const id = this.activePermitPackageId();
+    if (!id) return null;
+    return this.trainableCartItems().find(ci => ci.id === id) || null;
+  }
+
+  isQualifyingPermitPackage(cartItemId: string): boolean {
+    return !!this.permitExpenses().get(cartItemId)?.qualifying;
+  }
+
   async loadPermitExpenses() {
     const items = this.trainableCartItems();
-    const map = new Map<string, PermitExpenseChecklistItem[]>();
+    const map = new Map<string, PermitExpenseChecklistResponse>();
     for (const ci of items) {
       if (!ci.requires_permit_processing) continue;
       try {
         const res = await this.permitProgressService.getPermitExpenses(ci.id).toPromise();
         if (res) {
           for (const it of res.items) {
-            it.draft_amount = it.can_file ? null : it.amount;
+            it.draft_amount = it.can_file ? (it.expected_amount ?? null) : it.amount;
             it.draft_date = it.default_date ? new Date(it.default_date) : null;
           }
-          map.set(ci.id, res.items);
+          map.set(ci.id, res);
         }
       } catch { /* skip */ }
     }
@@ -962,7 +996,7 @@ export class ClientProfile implements OnInit {
   }
 
   permitExpensesFor(cartItemId: string): PermitExpenseChecklistItem[] {
-    return this.permitExpenses().get(cartItemId) || [];
+    return this.permitExpenses().get(cartItemId)?.items || [];
   }
 
   permitExpenseStatusLabel(status: string | null): string {

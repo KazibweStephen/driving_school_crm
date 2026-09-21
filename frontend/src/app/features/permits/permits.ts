@@ -39,6 +39,7 @@ export class PermitsCmp implements OnInit {
   pageSize = 20;
   search = '';
   status = '';
+  sortBy = '';
   branches: BranchInfo[] = [];
   selectedBranchIds: string[] = [];
 
@@ -102,9 +103,16 @@ export class PermitsCmp implements OnInit {
   clearFilters() {
     this.search = '';
     this.status = '';
+    this.sortBy = '';
     this.selectedBranchIds = this.branches.map(b => b.id);
     this.page = 1;
     this.loadTrackers();
+  }
+
+  toggleDocDateSort() {
+    this.sortBy = this.sortBy === '' ? 'document_date_desc'
+      : this.sortBy === 'document_date_desc' ? 'document_date_asc' : '';
+    this.applyFilters();
   }
 
   setStatusFilter(value: string) {
@@ -122,6 +130,7 @@ export class PermitsCmp implements OnInit {
         search: this.search || undefined,
         branch_ids,
         status: this.status || undefined,
+        sort_by: this.sortBy || undefined,
         page: this.page,
         page_size: this.pageSize,
       }).toPromise();

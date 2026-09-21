@@ -92,6 +92,23 @@
   <div>
     <div class="flex items-center justify-between px-1">
       <span class="text-xs font-medium text-slate-500">{{ total() }} tracker(s)</span>
+      <button
+        type="button"
+        class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600"
+        (click)="toggleDocDateSort()"
+        data-testid="sort-document-date"
+      >
+        @if (sortBy === 'document_date_desc') {
+          <i class="pi pi-sort-amount-down"></i>
+          <span>Date ↓</span>
+        } @else if (sortBy === 'document_date_asc') {
+          <i class="pi pi-sort-amount-up-alt"></i>
+          <span>Date ↑</span>
+        } @else {
+          <i class="pi pi-sort-alt"></i>
+          <span>Sort by date</span>
+        }
+      </button>
     </div>
     <div class="mt-2 space-y-2" data-testid="trackers-list">
       @for (t of trackers(); track t.cart_item_id) {
@@ -105,6 +122,11 @@
             <div class="min-w-0 flex-1">
               <div class="text-sm font-semibold text-slate-800">{{ t.client_name }}</div>
               <div class="text-xs text-slate-500">{{ t.client_phone }}</div>
+              @if (t.document_date) {
+                <div class="text-[10px] text-slate-400" data-testid="tracker-document-date">
+                  Doc {{ t.document_date | date:'dd/MM/yy' }}
+                </div>
+              }
             </div>
             <span class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium" [class]="statusClass(t.status)">
               {{ statusLabel(t.status) }}

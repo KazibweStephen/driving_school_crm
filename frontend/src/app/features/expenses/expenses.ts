@@ -52,6 +52,12 @@ export class ExpensesCmp implements OnInit {
   pageSize = 20;
   filterStatus = signal<string>('');
   filterBranch = signal<string>('');
+  filterCategory = signal<string>('');
+  filterDateFrom = signal<Date | null>(null);
+  filterDateTo = signal<Date | null>(null);
+  categoryFilterOptions = computed(() =>
+    this.categories().map(c => ({ label: c.name, value: c.name }))
+  );
   receiptFile = signal<File | null>(null);
   uploading = signal(false);
   showRejectDialog = signal(false);
@@ -69,6 +75,7 @@ export class ExpensesCmp implements OnInit {
   approving = signal(false);
   showDatesDialog = signal(false);
   datesExpense = signal<Expense | null>(null);
+  editExpenseDate = signal<Date | null>(null);
   editApprovalDate = signal<Date | null>(null);
   editPaymentDate = signal<Date | null>(null);
   savingDates = signal(false);
@@ -423,7 +430,11 @@ export class ExpensesCmp implements OnInit {
         branch_id: this.filterBranch() || undefined,
         status: this.filterStatus() || undefined,
         consultation_id: inContext ? this.routeConsultationId() : undefined,
-        category: inContext ? (this.routeCategory || undefined) : undefined,
+        category: inContext
+          ? (this.routeCategory || undefined)
+          : (this.filterCategory() || undefined),
+        date_from: this.dateParam(this.filterDateFrom()),
+        date_to: this.dateParam(this.filterDateTo()),
         page: this.page,
         page_size: this.pageSize,
       }).toPromise();
@@ -442,6 +453,24 @@ export class ExpensesCmp implements OnInit {
     this.page = Math.floor(event.first / event.rows) + 1;
     this.pageSize = event.rows;
     this.loadExpenses();
+  }
+
+  dateParam(d: Date | null): string | undefined {
+    return d ? toLocalDateStr(d) : undefined;
+  }
+
+  resetAndLoad() {
+    this.page = 1;
+    this.loadExpenses();
+  }
+
+  clearFilters() {
+    this.filterBranch.set('');
+    this.filterStatus.set('');
+    this.filterCategory.set('');
+    this.filterDateFrom.set(null);
+    this.filterDateTo.set(null);
+    this.resetAndLoad();
   }
 
   onBranchChangeInDialog() {
@@ -601,8 +630,34 @@ export class ExpensesCmp implements OnInit {
     this.showPayDialog.set(true);
   }
 
+  // Date edits are available to the respective people: document date to
+  // expenses.edit, approval date to the approver (or expenses.approve), and
+  // payment date to the payer (or expenses.pay).
+  canEditExpenseDate(): boolean {
+    return this.authService.hasPermission('expenses.edit');
+  }
+
+  canEditApprovalDate(e: Expense | null): boolean {
+    if (!e) return false;
+    return this.authService.hasPermission('expenses.approve')
+      || (!!e.approved_by && e.approved_by === this.authService.currentUser());
+  }
+
+  canEditPaymentDate(e: Expense | null): boolean {
+    if (!e) return false;
+    return this.authService.hasPermission('expenses.pay')
+      || (!!e.paid_by && e.paid_by === this.authService.currentUser());
+  }
+
+  canEditDates(e: Expense): boolean {
+    return this.canEditExpenseDate()
+      || this.canEditApprovalDate(e)
+      || this.canEditPaymentDate(e);
+  }
+
   openEditDates(e: Expense) {
     this.datesExpense.set(e);
+    this.editExpenseDate.set(this.docDate(e));
     this.editApprovalDate.set(e.approved_at ? this.toLocalDateOnly(new Date(e.approved_at)) : null);
     this.editPaymentDate.set(e.paid_at ? this.toLocalDateOnly(new Date(e.paid_at)) : null);
     this.showDatesDialog.set(true);
@@ -611,13 +666,15 @@ export class ExpensesCmp implements OnInit {
   async submitEditDates() {
     const e = this.datesExpense();
     if (!e) return;
-    const payload: { approved_at?: string; paid_at?: string } = {};
+    const payload: { expense_date?: string; approved_at?: string; paid_at?: string } = {};
+    const dd = this.editExpenseDate();
     const ad = this.editApprovalDate();
     const pd = this.editPaymentDate();
-    if (ad) payload.approved_at = toLocalDateStr(ad);
-    if (pd) payload.paid_at = toLocalDateStr(pd);
+    if (dd && this.canEditExpenseDate()) payload.expense_date = toLocalDateStr(dd);
+    if (ad && this.canEditApprovalDate(e)) payload.approved_at = toLocalDateStr(ad);
+    if (pd && this.canEditPaymentDate(e)) payload.paid_at = toLocalDateStr(pd);
     if (!Object.keys(payload).length) {
-      this.messageService.add({ severity: 'warn', summary: 'Nothing to update', detail: 'Set an approval or payment date.' });
+      this.messageService.add({ severity: 'warn', summary: 'Nothing to update', detail: 'Change a date you are allowed to edit.' });
       return;
     }
     this.savingDates.set(true);
@@ -626,7 +683,7 @@ export class ExpensesCmp implements OnInit {
       if (updated) {
         this.expenses.update(list => list.map(x => x.id === e.id ? updated : x));
         this.showDatesDialog.set(false);
-        this.messageService.add({ severity: 'success', summary: 'Dates updated', detail: 'Approval / payment dates saved' });
+        this.messageService.add({ severity: 'success', summary: 'Dates updated', detail: 'Expense dates saved' });
       }
     } catch (err: any) {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: err?.error?.detail || 'Failed to update dates' });

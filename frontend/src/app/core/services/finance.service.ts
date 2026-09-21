@@ -339,6 +339,8 @@ export class FinanceService {
     cart_item_id?: string;
     category?: string;
     category_not?: string;
+    date_from?: string;
+    date_to?: string;
   }): Observable<ExpenseListResponse> {
     let p = new HttpParams();
     if (params?.branch_id) p = p.set('branch_id', params.branch_id);
@@ -349,6 +351,8 @@ export class FinanceService {
     if (params?.cart_item_id) p = p.set('cart_item_id', params.cart_item_id);
     if (params?.category) p = p.set('category', params.category);
     if (params?.category_not) p = p.set('category_not', params.category_not);
+    if (params?.date_from) p = p.set('date_from', params.date_from);
+    if (params?.date_to) p = p.set('date_to', params.date_to);
     return this.http.get<ExpenseListResponse>(`${this.base}/expenses`, { params: p });
   }
 
@@ -372,7 +376,7 @@ export class FinanceService {
     return this.http.post<Expense>(`${this.base}/expenses/${id}/mark-paid`, body ?? {});
   }
 
-  updateExpenseDates(id: string, body: { approved_at?: string; paid_at?: string }): Observable<Expense> {
+  updateExpenseDates(id: string, body: { expense_date?: string; approved_at?: string; paid_at?: string }): Observable<Expense> {
     return this.http.patch<Expense>(`${this.base}/expenses/${id}/dates`, body);
   }
 

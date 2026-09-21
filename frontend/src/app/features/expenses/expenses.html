@@ -38,7 +38,10 @@
   <div class="mb-4 flex flex-wrap items-center gap-2">
     <p-select [(ngModel)]="filterBranch" [options]="branches()" optionLabel="name" optionValue="id"
       placeholder="All Branches" [showClear]="true" styleClass="w-56" appendTo="body"
-      (onChange)="loadExpenses()" />
+      (onChange)="resetAndLoad()" />
+    <p-select [(ngModel)]="filterCategory" [options]="categoryFilterOptions()" optionLabel="label" optionValue="value"
+      placeholder="All Categories" [showClear]="true" [filter]="true" filterBy="label" styleClass="w-56"
+      appendTo="body" (onChange)="resetAndLoad()" data-testid="expense-filter-category" />
     <p-select [(ngModel)]="filterStatus" [options]="[
       { label: 'All Status', value: '' },
       { label: 'Pending', value: 'pending' },
@@ -46,7 +49,17 @@
       { label: 'Rejected', value: 'rejected' },
       { label: 'Paid', value: 'paid' },
     ]" optionLabel="label" optionValue="value" styleClass="w-44" appendTo="body"
-      (onChange)="loadExpenses()" />
+      (onChange)="resetAndLoad()" />
+    <span class="flex items-center gap-1">
+      <p-datepicker [(ngModel)]="filterDateFrom" placeholder="From" [showClear]="true" styleClass="w-40"
+        appendTo="body" (onSelect)="resetAndLoad()" (onClear)="resetAndLoad()" data-testid="expense-filter-from" />
+      <span class="text-gray-400">–</span>
+      <p-datepicker [(ngModel)]="filterDateTo" placeholder="To" [showClear]="true" styleClass="w-40"
+        appendTo="body" (onSelect)="resetAndLoad()" (onClear)="resetAndLoad()" data-testid="expense-filter-to" />
+    </span>
+    @if (filterBranch() || filterStatus() || filterCategory() || filterDateFrom() || filterDateTo()) {
+      <p-button label="Clear" icon="pi pi-filter-slash" severity="secondary" [text]="true" (onClick)="clearFilters()" />
+    }
   </div>
 
   <p-table [value]="expenses()" [loading]="loading()" [paginator]="true" [rows]="pageSize"
@@ -124,8 +137,8 @@
             @if (e.status === 'rejected') {
               <p-button *appHasPermission="'expenses.manage'" icon="pi pi-trash" severity="secondary" rounded="true" pTooltip="Delete rejected" (onClick)="confirmDelete(e)" />
             }
-            @if (e.status === 'approved' || e.status === 'paid') {
-              <p-button *appHasPermission="'expenses.edit'" icon="pi pi-calendar" severity="secondary" rounded="true" pTooltip="Edit approval / payment dates" (onClick)="openEditDates(e)" />
+            @if (canEditDates(e)) {
+              <p-button icon="pi pi-calendar" severity="secondary" rounded="true" pTooltip="Edit expense dates" (onClick)="openEditDates(e)" data-testid="edit-dates" />
             }
             @if (!e.category || !e.consultation_id) {
               <p-button *appHasPermission="'expenses.edit'" icon="pi pi-pencil" severity="secondary" rounded="true" pTooltip="Add missing category / client" (onClick)="openEdit(e)" />
@@ -415,7 +428,7 @@
 
 <p-dialog
   [(visible)]="showDatesDialog"
-  header="Edit Approval / Payment Dates"
+  header="Edit Expense Dates"
   [modal]="true"
   [style]="{ width: '440px' }"
   [draggable]="false"
@@ -427,21 +440,36 @@
       <p class="text-sm text-gray-600">
         {{ e.description || e.category || 'Untitled' }} — set the correct dates so this expense affects the right day's end-of-day report.
       </p>
-      <div>
-        <label class="mb-1 block text-sm font-medium text-gray-700">Approval Date</label>
-        <p-datepicker [(ngModel)]="editApprovalDate" dateFormat="yy-mm-dd" [showIcon]="true" [showClear]="true"
-          styleClass="w-full" appendTo="body" [maxDate]="today" />
-      </div>
-      <div>
-        <label class="mb-1 block text-sm font-medium text-gray-700">Payment Date</label>
-        <p-datepicker [(ngModel)]="editPaymentDate" dateFormat="yy-mm-dd" [showIcon]="true" [showClear]="true"
-          styleClass="w-full" appendTo="body" [maxDate]="today" />
-      </div>
+      @if (canEditExpenseDate()) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Document Date</label>
+          <p-datepicker [(ngModel)]="editExpenseDate" dateFormat="yy-mm-dd" [showIcon]="true" styleClass="w-full"
+            appendTo="body" [maxDate]="today" data-testid="edit-document-date" />
+        </div>
+      }
+      @if (canEditApprovalDate(e)) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Approval Date</label>
+          <p-datepicker [(ngModel)]="editApprovalDate" dateFormat="yy-mm-dd" [showIcon]="true" [showClear]="true"
+            styleClass="w-full" appendTo="body" [maxDate]="today" data-testid="edit-approval-date" />
+        </div>
+      }
+      @if (canEditPaymentDate(e)) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Payment Date</label>
+          <p-datepicker [(ngModel)]="editPaymentDate" dateFormat="yy-mm-dd" [showIcon]="true" [showClear]="true"
+            styleClass="w-full" appendTo="body" [maxDate]="today" data-testid="edit-payment-date" />
+        </div>
+      }
+      <p class="text-xs text-gray-500">
+        Permit-stage expenses (Learner Permit Payment, Test Booking, Police Booking, IOV Fees, Permit Payment)
+        cannot be dated earlier than the client's first payment.
+      </p>
     </div>
   }
   <ng-template pTemplate="footer">
     <p-button label="Cancel" severity="secondary" (onClick)="showDatesDialog.set(false)" />
-    <p-button label="Save" [disabled]="savingDates()" [loading]="savingDates()" (onClick)="submitEditDates()" />
+    <p-button label="Save" [disabled]="savingDates()" [loading]="savingDates()" (onClick)="submitEditDates()" data-testid="confirm-dates" />
   </ng-template>
 </p-dialog>
 

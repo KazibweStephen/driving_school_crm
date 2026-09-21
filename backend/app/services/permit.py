@@ -16,7 +16,7 @@ from app.models.payment import Payment
 from app.models.permit import PermitAuditLog, PermitProgress
 from app.models.product import Package, Product
 from app.models.user import User, UserRole
-from app.utils.timezones import today_local
+from app.utils.timezones import BUSINESS_TZ, today_local
 
 
 async def _verify_cart_item_company(
@@ -633,6 +633,185 @@ async def _paid_for_cart_item(db: AsyncSession, ci: CartItem) -> float:
     )
     total = sum((Decimal(r[0]) for r in rows.all()), Decimal("0"))
     return float(total)
+
+
+# ── Permit expense date helpers ────────────────────────────────────
+
+# Only these exact categories are treated as permit-processing milestones
+# (broader keyword matching in categorize_permit_expense is for status only).
+_PERMIT_CATEGORY_NAMES = {
+    "learner permit payment",
+    "test booking",
+    "police booking",
+    "iov fees",
+    "permit payment",
+}
+
+
+def is_permit_processing_category(category: str | None) -> bool:
+    if not category:
+        return False
+    return category.strip().lower() in _PERMIT_CATEGORY_NAMES
+
+
+async def _first_payment_date(
+    db: AsyncSession,
+    consultation_id: uuid.UUID,
+    product_id: str | None = None,
+) -> date | None:
+    query = select(Payment).where(
+        Payment.consultation_id == consultation_id,
+        Payment.cancelled_at.is_(None),
+    )
+    if product_id:
+        query = query.where(Payment.product_id == product_id)
+    query = query.order_by(
+        Payment.document_date.asc().nulls_last(), Payment.created_at.asc()
+    ).limit(1)
+    payment = (await db.execute(query)).scalar_one_or_none()
+    if payment is None:
+        return None
+    if payment.document_date is not None:
+        return payment.document_date
+    if payment.created_at is not None:
+        return payment.created_at.astimezone(BUSINESS_TZ).date()
+    return None
+
+
+async def _permit_cart_item(
+    db: AsyncSession,
+    consultation_id: uuid.UUID | None,
+    cart_item_id: uuid.UUID | None = None,
+) -> CartItem | None:
+    if cart_item_id:
+        return (
+            await db.execute(
+                select(CartItem).where(
+                    CartItem.id == cart_item_id,
+                    CartItem.requires_permit_processing.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+    if consultation_id is None:
+        return None
+    return (
+        await db.execute(
+            select(CartItem)
+            .where(
+                CartItem.consultation_id == consultation_id,
+                CartItem.requires_permit_processing.is_(True),
+            )
+            .order_by(CartItem.created_at.asc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+async def permit_date_floor(
+    db: AsyncSession,
+    consultation_id: uuid.UUID | None,
+    category: str | None,
+    cart_item_id: uuid.UUID | None = None,
+) -> date | None:
+    """Earliest permitted day for a permit-processing expense's dates: the first
+    payment date of the linked permit cart item. ``None`` for non-permit
+    expenses (no constraint)."""
+    if consultation_id is None or not is_permit_processing_category(category):
+        return None
+    ci = await _permit_cart_item(db, consultation_id, cart_item_id)
+    if ci is None:
+        return None
+    return await _first_payment_date(db, ci.consultation_id, ci.product_id)
+
+
+async def _effective_total_for_cart_item(db: AsyncSession, ci: CartItem) -> float:
+    total = 0.0
+    if ci.package_id:
+        price = (
+            await db.execute(select(Package.price).where(Package.id == ci.package_id))
+        ).scalar_one_or_none()
+        total = float(price) if price is not None else 0.0
+    discount = (
+        await db.execute(
+            select(func.coalesce(func.sum(CartItemDiscount.applied_amount), 0)).where(
+                CartItemDiscount.cart_item_id == ci.id
+            )
+        )
+    ).scalar() or 0
+    return max(0.0, total - float(discount))
+
+
+async def _learner_permit_payment_date(
+    db: AsyncSession, consultation_id: uuid.UUID
+) -> date | None:
+    rows = (
+        await db.execute(
+            select(Expense).where(Expense.consultation_id == consultation_id)
+        )
+    ).scalars().all()
+    best: date | None = None
+    for e in rows:
+        if categorize_permit_expense(e.category) != "learner":
+            continue
+        if e.paid_at is not None:
+            d = e.paid_at.astimezone(BUSINESS_TZ).date()
+        elif e.expense_date is not None:
+            d = e.expense_date.astimezone(BUSINESS_TZ).date()
+        else:
+            continue
+        if best is None or d < best:
+            best = d
+    return best
+
+
+async def default_permit_expense_date(
+    db: AsyncSession,
+    consultation_id: uuid.UUID | None,
+    category: str | None,
+    cart_item_id: uuid.UUID | None = None,
+) -> date | None:
+    """Default document date for a permit-processing expense.
+
+    - Learner permit payment: the client's first payment date, but only when the
+      client has reached learners-permit eligibility (>= 50% paid, or the
+      eligibility was overridden). Otherwise ``None`` (fall back to today).
+    - Test / permit stages: the learners-permit issue date if captured, else the
+      31st day after the learner-permit payment date. Otherwise ``None``.
+    """
+    kind = categorize_permit_expense(category)
+    if kind is None or consultation_id is None:
+        return None
+    ci = await _permit_cart_item(db, consultation_id, cart_item_id)
+    if ci is None:
+        return None
+    if kind == "learner":
+        progress = (
+            await db.execute(
+                select(PermitProgress).where(PermitProgress.cart_item_id == ci.id)
+            )
+        ).scalar_one_or_none()
+        eligible = bool(progress and progress.eligibility_overridden)
+        if not eligible:
+            effective = await _effective_total_for_cart_item(db, ci)
+            paid = await _paid_for_cart_item(db, ci)
+            eligible = effective > 0 and (paid / effective) >= 0.5
+        if not eligible:
+            return None
+        return await _first_payment_date(db, ci.consultation_id, ci.product_id)
+    # test / permit stages
+    progress = (
+        await db.execute(
+            select(PermitProgress).where(PermitProgress.cart_item_id == ci.id)
+        )
+    ).scalar_one_or_none()
+    if progress and progress.got_learners_permit_date:
+        return progress.got_learners_permit_date
+    learner_pay = await _learner_permit_payment_date(db, ci.consultation_id)
+    if learner_pay:
+        candidate = learner_pay + timedelta(days=31)
+        today = today_local()
+        return candidate if candidate < today else today
+    return None
 
 
 # ── Expense → permit auto-marking ──────────────────────────────────

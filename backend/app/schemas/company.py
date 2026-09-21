@@ -177,6 +177,7 @@ class ExpenseApprove(BaseModel):
 
 
 class ExpenseDatesUpdate(BaseModel):
+    expense_date: datetime | None = None
     approved_at: datetime | None = None
     paid_at: datetime | None = None
 

@@ -28,7 +28,7 @@ from app.models.consultation import Consultation
 from app.models.payment import Installment, InstallmentStatus, Payment
 from app.models.user import UserRole
 from app.services.notification import on_installment_overdue, on_expense_approved
-from app.utils.timezones import today_local, now_local
+from app.utils.timezones import BUSINESS_TZ, at_business_tz, today_local, now_local
 
 
 # ── Expenses ──
@@ -91,6 +91,8 @@ async def list_expenses(
     category_not: str | None = None,
     consultation_id: uuid.UUID | None = None,
     cart_item_id: uuid.UUID | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> tuple[list[Expense], int]:
     query = select(Expense).options(
         selectinload(Expense.created_by_user),
@@ -123,6 +125,14 @@ async def list_expenses(
     if cart_item_id:
         query = query.where(Expense.cart_item_id == cart_item_id)
         count_query = count_query.where(Expense.cart_item_id == cart_item_id)
+    if date_from is not None:
+        d_from = func.date(at_business_tz(Expense.expense_date)) >= date_from
+        query = query.where(d_from)
+        count_query = count_query.where(d_from)
+    if date_to is not None:
+        d_to = func.date(at_business_tz(Expense.expense_date)) <= date_to
+        query = query.where(d_to)
+        count_query = count_query.where(d_to)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
@@ -257,6 +267,41 @@ async def create_expense(
                         f"({expected}). Amount + charges = {float(amount) + float(charges or 0.0)}."
                     ),
                 )
+    resolved_expense_date = expense_date
+    if consultation_id and category:
+        from app.services.permit import (
+            default_permit_expense_date,
+            is_permit_processing_category,
+            permit_date_floor,
+        )
+        if is_permit_processing_category(category):
+            if resolved_expense_date is None:
+                resolved_expense_date = await default_permit_expense_date(
+                    db, consultation_id, category, cart_item_id
+                )
+            if resolved_expense_date is not None:
+                floor = await permit_date_floor(db, consultation_id, category, cart_item_id)
+                if floor is not None:
+                    if isinstance(resolved_expense_date, datetime):
+                        day = resolved_expense_date.astimezone(BUSINESS_TZ).date()
+                    else:
+                        day = resolved_expense_date
+                    if day < floor:
+                        from fastapi import HTTPException
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"{category} cannot be dated earlier than the client's "
+                                f"first payment date ({floor.isoformat()})."
+                            ),
+                        )
+    if resolved_expense_date is not None and not isinstance(resolved_expense_date, datetime):
+        resolved_expense_date = datetime(
+            resolved_expense_date.year,
+            resolved_expense_date.month,
+            resolved_expense_date.day,
+            tzinfo=BUSINESS_TZ,
+        )
     expense = Expense(
         branch_id=branch_id,
         amount=amount,
@@ -268,7 +313,7 @@ async def create_expense(
         cart_item_id=cart_item_id,
         mileage=mileage,
         vehicle_id=vehicle_id,
-        expense_date=expense_date or now_local(),
+        expense_date=resolved_expense_date or now_local(),
         status=ExpenseStatus(status),
         receipt_url=receipt_url,
         created_by_phone=created_by_phone,

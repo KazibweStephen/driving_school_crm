@@ -99,6 +99,59 @@ test.describe('Expenses Workflow', () => {
     );
   });
 
+  test('filters the list by category', async ({ page }) => {
+    const token = await page.evaluate(
+      async ({ phone, pin }) => {
+        const res = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, pin }),
+        });
+        return (await res.json()).access_token;
+      },
+      { phone: SUPER_PHONE, pin: SUPER_PIN },
+    );
+
+    const desc = `e2e filter category ${Date.now()}`;
+    const created = await page.evaluate(
+      async ({ token, branchId, desc }) => {
+        const res = await fetch('/api/v1/finance/expenses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({
+            branch_id: branchId,
+            amount: 9000,
+            description: desc,
+            category: 'Vehicle Maintenance',
+          }),
+        });
+        return (await res.json()) as { id: string };
+      },
+      { token, branchId: BRANCH_ID, desc },
+    );
+
+    await page.goto('/expenses');
+    await expect(page.locator('h1')).toContainText('Expenses', { timeout: 10000 });
+
+    await page.locator('[data-testid="expense-filter-category"] [role="combobox"]').first().click();
+    await page.waitForTimeout(300);
+    await page.locator('.p-select-option:has-text("Vehicle Maintenance")').first().click();
+
+    const row = page.locator('table tbody tr', { hasText: desc }).first();
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('table').first().getByText('Vehicle Maintenance').first()).toBeVisible();
+
+    await page.evaluate(
+      async ({ token, id }) => {
+        await fetch(`/api/v1/finance/expenses/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+      },
+      { token, id: created.id },
+    );
+  });
+
   test('full approve / reject / pay workflow is enforced', async ({ page }) => {
     const token = await page.evaluate(
       async ({ phone, pin }) => {

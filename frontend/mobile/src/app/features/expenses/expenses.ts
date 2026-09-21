@@ -73,6 +73,21 @@ export class Expenses {
   pageSize = 20;
 
   statusFilter = signal<StatusFilter>('');
+  categoryFilter = signal<string>('');
+  dateFromFilter = signal<string>('');
+  dateToFilter = signal<string>('');
+  dateFromFilterObject = computed(() =>
+    this.dateFromFilter() ? new Date(this.dateFromFilter() + 'T00:00:00') : null,
+  );
+  dateToFilterObject = computed(() =>
+    this.dateToFilter() ? new Date(this.dateToFilter() + 'T00:00:00') : null,
+  );
+  categoryFilterOptions = computed(() =>
+    this.categories().map((c) => ({ label: c.name, value: c.name })),
+  );
+  hasActiveFilters = computed(() =>
+    !!this.statusFilter() || !!this.categoryFilter() || !!this.dateFromFilter() || !!this.dateToFilter(),
+  );
   branches = signal<BranchInfo[]>([]);
   branchId = signal<string | null>(null);
   tab = signal<ExpenseTab>('expenses');
@@ -116,8 +131,12 @@ export class Expenses {
   // edit dates dialog state (approval + payment dates)
   showDatesDialog = signal(false);
   datesExpense = signal<Expense | null>(null);
+  editExpenseDate = signal<string | null>(null);
   editApprovalDate = signal<string | null>(null);
   editPaymentDate = signal<string | null>(null);
+  editExpenseDateObject = computed(() =>
+    this.editExpenseDate() ? new Date(this.editExpenseDate() + 'T00:00:00') : null,
+  );
   editApprovalDateObject = computed(() =>
     this.editApprovalDate() ? new Date(this.editApprovalDate() + 'T00:00:00') : null,
   );
@@ -479,9 +498,15 @@ export class Expenses {
       .getExpenses({
         branch_id: this.branchId(),
         status: isSms ? 'paid' : (this.statusFilter() || null),
-        category: isSms ? SMS_CATEGORY : (inContext && this.routeCategory ? this.routeCategory : null),
+        category: isSms
+          ? SMS_CATEGORY
+          : inContext && this.routeCategory
+            ? this.routeCategory
+            : (this.categoryFilter() || null),
         category_not: isSms ? null : SMS_CATEGORY,
         consultation_id: inContext ? this.routeConsultationId() : null,
+        date_from: this.dateFromFilter() || null,
+        date_to: this.dateToFilter() || null,
         page: this.page(),
         page_size: this.pageSize,
       })
@@ -537,6 +562,33 @@ export class Expenses {
 
   setBranchId(value: string | null) {
     this.branchId.set(value);
+    this.page.set(1);
+    this.loadExpenses();
+  }
+
+  setCategoryFilter(value: string) {
+    this.categoryFilter.set(value || '');
+    this.page.set(1);
+    this.loadExpenses();
+  }
+
+  onDateFromFilter(date: Date | null) {
+    this.dateFromFilter.set(date ? toISODate(date) : '');
+    this.page.set(1);
+    this.loadExpenses();
+  }
+
+  onDateToFilter(date: Date | null) {
+    this.dateToFilter.set(date ? toISODate(date) : '');
+    this.page.set(1);
+    this.loadExpenses();
+  }
+
+  clearFilters() {
+    this.statusFilter.set('');
+    this.categoryFilter.set('');
+    this.dateFromFilter.set('');
+    this.dateToFilter.set('');
     this.page.set(1);
     this.loadExpenses();
   }
@@ -781,9 +833,14 @@ export class Expenses {
 
   openEditDates(expense: Expense) {
     this.datesExpense.set(expense);
+    this.editExpenseDate.set(this.docDateISO(expense));
     this.editApprovalDate.set(expense.approved_at ? toISODate(new Date(expense.approved_at)) : null);
     this.editPaymentDate.set(expense.paid_at ? toISODate(new Date(expense.paid_at)) : null);
     this.showDatesDialog.set(true);
+  }
+
+  onEditExpenseDateChange(date: Date | null) {
+    this.editExpenseDate.set(date ? toISODate(date) : null);
   }
 
   onEditApprovalDateChange(date: Date | null) {
@@ -797,11 +854,12 @@ export class Expenses {
   submitEditDates() {
     const expense = this.datesExpense();
     if (!expense) return;
-    const payload: { approved_at?: string; paid_at?: string } = {};
-    if (this.editApprovalDate()) payload.approved_at = this.editApprovalDate()!;
-    if (this.editPaymentDate()) payload.paid_at = this.editPaymentDate()!;
+    const payload: { expense_date?: string; approved_at?: string; paid_at?: string } = {};
+    if (this.editExpenseDate() && this.canEditExpenseDate()) payload.expense_date = this.editExpenseDate()!;
+    if (this.editApprovalDate() && this.canEditApprovalDate(expense)) payload.approved_at = this.editApprovalDate()!;
+    if (this.editPaymentDate() && this.canEditPaymentDate(expense)) payload.paid_at = this.editPaymentDate()!;
     if (!Object.keys(payload).length) {
-      this.messageService.add({ severity: 'warn', summary: 'Set an approval or payment date' });
+      this.messageService.add({ severity: 'warn', summary: 'Change a date you are allowed to edit' });
       return;
     }
     this.savingDates.set(true);
@@ -1020,10 +1078,31 @@ export class Expenses {
     );
   }
 
+  canEditExpenseDate(): boolean {
+    return this.permissions().includes('expenses.edit');
+  }
+
+  canEditApprovalDate(expense: Expense | null): boolean {
+    if (!expense) return false;
+    return (
+      this.permissions().includes('expenses.approve') ||
+      (!!expense.approved_by && expense.approved_by === this.auth.currentUserPhone())
+    );
+  }
+
+  canEditPaymentDate(expense: Expense | null): boolean {
+    if (!expense) return false;
+    return (
+      this.permissions().includes('expenses.pay') ||
+      (!!expense.paid_by && expense.paid_by === this.auth.currentUserPhone())
+    );
+  }
+
   canEditDates(expense: Expense) {
     return (
-      (expense.status === 'approved' || expense.status === 'paid') &&
-      this.permissions().includes('expenses.edit')
+      this.canEditExpenseDate() ||
+      this.canEditApprovalDate(expense) ||
+      this.canEditPaymentDate(expense)
     );
   }
 

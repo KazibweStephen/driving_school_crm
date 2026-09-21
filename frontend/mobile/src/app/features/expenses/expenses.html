@@ -80,6 +80,58 @@
       }
     </div>
 
+    @if (tab() === 'expenses') {
+      <div class="flex flex-col gap-2">
+        <p-select
+          [options]="categoryFilterOptions()"
+          optionLabel="label"
+          optionValue="value"
+          [ngModel]="categoryFilter()"
+          (ngModelChange)="setCategoryFilter($event)"
+          [showClear]="true"
+          [filter]="true"
+          filterBy="label"
+          placeholder="All categories"
+          appendTo="body"
+          styleClass="w-full"
+          data-testid="category-filter"
+        />
+        <div class="flex items-center gap-2">
+          <p-datepicker
+            [ngModel]="dateFromFilterObject()"
+            (ngModelChange)="onDateFromFilter($event)"
+            placeholder="From"
+            dateFormat="yy-mm-dd"
+            [showClear]="true"
+            appendTo="body"
+            styleClass="w-full"
+            data-testid="date-from-filter"
+          />
+          <span class="text-slate-400">–</span>
+          <p-datepicker
+            [ngModel]="dateToFilterObject()"
+            (ngModelChange)="onDateToFilter($event)"
+            placeholder="To"
+            dateFormat="yy-mm-dd"
+            [showClear]="true"
+            appendTo="body"
+            styleClass="w-full"
+            data-testid="date-to-filter"
+          />
+        </div>
+        @if (hasActiveFilters()) {
+          <button
+            type="button"
+            class="self-start text-xs font-medium text-slate-500 underline"
+            (click)="clearFilters()"
+            data-testid="clear-filters"
+          >
+            Clear filters
+          </button>
+        }
+      </div>
+    }
+
     @if (canCreate() && tab() === 'expenses') {
       <p-button
         label="New expense"
@@ -571,35 +623,55 @@
     <div class="fixed inset-0 z-50 flex items-end bg-black/40" data-testid="expense-dates-dialog">
       <div class="w-full rounded-t-2xl bg-white p-4">
         <div class="mb-3 flex items-center justify-between">
-          <h2 class="text-base font-semibold">Edit Approval / Payment Dates</h2>
+          <h2 class="text-base font-semibold">Edit Expense Dates</h2>
           <button type="button" class="text-slate-400" (click)="showDatesDialog.set(false)"><span class="pi pi-times"></span></button>
         </div>
         <div class="space-y-3">
           <p class="text-sm text-slate-600">
             {{ e.description || e.category || 'Untitled' }} — set the correct dates so this expense affects the right day's report.
           </p>
-          <div>
-            <label class="mb-1 block text-xs font-medium text-slate-600">Approval date</label>
-            <p-datepicker
-              [ngModel]="editApprovalDateObject()"
-              (ngModelChange)="onEditApprovalDateChange($event)"
-              dateFormat="dd/mm/yy"
-              appendTo="body"
-              class="w-full"
-              data-testid="edit-approval-date"
-            />
-          </div>
-          <div>
-            <label class="mb-1 block text-xs font-medium text-slate-600">Payment date</label>
-            <p-datepicker
-              [ngModel]="editPaymentDateObject()"
-              (ngModelChange)="onEditPaymentDateChange($event)"
-              dateFormat="dd/mm/yy"
-              appendTo="body"
-              class="w-full"
-              data-testid="edit-payment-date"
-            />
-          </div>
+          @if (canEditExpenseDate()) {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Document date</label>
+              <p-datepicker
+                [ngModel]="editExpenseDateObject()"
+                (ngModelChange)="onEditExpenseDateChange($event)"
+                dateFormat="dd/mm/yy"
+                appendTo="body"
+                class="w-full"
+                data-testid="edit-document-date"
+              />
+            </div>
+          }
+          @if (canEditApprovalDate(e)) {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Approval date</label>
+              <p-datepicker
+                [ngModel]="editApprovalDateObject()"
+                (ngModelChange)="onEditApprovalDateChange($event)"
+                dateFormat="dd/mm/yy"
+                appendTo="body"
+                class="w-full"
+                data-testid="edit-approval-date"
+              />
+            </div>
+          }
+          @if (canEditPaymentDate(e)) {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Payment date</label>
+              <p-datepicker
+                [ngModel]="editPaymentDateObject()"
+                (ngModelChange)="onEditPaymentDateChange($event)"
+                dateFormat="dd/mm/yy"
+                appendTo="body"
+                class="w-full"
+                data-testid="edit-payment-date"
+              />
+            </div>
+          }
+          <p class="text-xs text-slate-400">
+            Permit-stage expenses cannot be dated earlier than the client's first payment.
+          </p>
         </div>
         <div class="flex gap-2 pt-3">
           <button type="button" class="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-medium text-slate-600" (click)="showDatesDialog.set(false)">Cancel</button>

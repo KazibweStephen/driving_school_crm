@@ -106,6 +106,8 @@ export class ExpenseService {
     category_not?: string | null;
     consultation_id?: string | null;
     cart_item_id?: string | null;
+    date_from?: string | null;
+    date_to?: string | null;
     page?: number;
     page_size?: number;
   }) {
@@ -116,6 +118,8 @@ export class ExpenseService {
     if (params?.category_not) httpParams = httpParams.set('category_not', params.category_not);
     if (params?.consultation_id) httpParams = httpParams.set('consultation_id', params.consultation_id);
     if (params?.cart_item_id) httpParams = httpParams.set('cart_item_id', params.cart_item_id);
+    if (params?.date_from) httpParams = httpParams.set('date_from', params.date_from);
+    if (params?.date_to) httpParams = httpParams.set('date_to', params.date_to);
     if (params?.page != null) httpParams = httpParams.set('page', String(params.page));
     if (params?.page_size != null) httpParams = httpParams.set('page_size', String(params.page_size));
     return this.http.get<ExpenseListResponse>('/api/v1/finance/expenses', { params: httpParams });
@@ -141,7 +145,7 @@ export class ExpenseService {
     return this.http.post<Expense>(`/api/v1/finance/expenses/${id}/mark-paid`, body ?? {});
   }
 
-  updateExpenseDates(id: string, body: { approved_at?: string; paid_at?: string }) {
+  updateExpenseDates(id: string, body: { expense_date?: string; approved_at?: string; paid_at?: string }) {
     return this.http.patch<Expense>(`/api/v1/finance/expenses/${id}/dates`, body);
   }
 

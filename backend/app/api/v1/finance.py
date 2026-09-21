@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_permission
+from app.api.deps import get_current_user, require_permission
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.company import BorrowStatus, CollectionStatus, Company, ExpenseStatus, TransferStatus
@@ -214,6 +214,8 @@ async def list_expenses(
     category_not: str | None = Query(None),
     consultation_id: uuid.UUID | None = Query(None, description="Filter to expenses attached to this consultation"),
     cart_item_id: uuid.UUID | None = Query(None, description="Filter to expenses attached to this cart item"),
+    date_from: date | None = Query(None, description="Filter by expense document date (inclusive)"),
+    date_to: date | None = Query(None, description="Filter by expense document date (inclusive)"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -234,6 +236,8 @@ async def list_expenses(
         category=category, category_not=category_not,
         consultation_id=consultation_id,
         cart_item_id=cart_item_id,
+        date_from=date_from,
+        date_to=date_to,
     )
 
     items = []
@@ -375,8 +379,8 @@ async def approve_expense(
 
     expense.status = ExpenseStatus.APPROVED
     expense.approved_by = current_user.phone
-    expense.approved_at = _resolve_action_date(
-        data.approved_at if data else None, expense.expense_date
+    expense.approved_at = await _assert_permit_floor(
+        db, expense, data.approved_at if data else None
     )
     expense.rejection_reason = None
     await db.flush()
@@ -455,8 +459,8 @@ async def mark_expense_paid(
 
     expense.status = ExpenseStatus.PAID
     expense.paid_by = current_user.phone
-    expense.paid_at = _resolve_action_date(
-        data.paid_at if data else None, expense.expense_date
+    expense.paid_at = await _assert_permit_floor(
+        db, expense, data.paid_at if data else None
     )
     expense.paid_charges = charges
     if data and data.receipt_url is not None:
@@ -476,12 +480,18 @@ async def update_expense_dates(
     expense_id: uuid.UUID,
     data: ExpenseDatesUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("expenses.edit")),
+    current_user: User = Depends(get_current_user),
 ):
-    """Edit the approval and/or payment dates of an expense after the fact.
+    """Edit the document, approval and/or payment dates of an expense.
 
-    This lets late-filed expenses be pinned to the correct day so their
-    approval/payment does not distort the current day's end-of-day report.
+    The respective dates are editable by the respective people:
+    - document date  → anyone with `expenses.edit`
+    - approval date  → the approver, or anyone with `expenses.approve`
+    - payment date   → the payer, or anyone with `expenses.pay`
+
+    For permit-processing expenses (Learner Permit Payment, Test Booking,
+    Police Booking, IOV Fees, Permit Payment) none of the dates may fall before
+    the client's first payment date.
     """
     expense = await finance_service.get_expense(
         db, expense_id, company_id=current_user.company_id, current_user_role=current_user.role
@@ -490,13 +500,79 @@ async def update_expense_dates(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
 
     if data.approved_at is not None:
-        expense.approved_at = _resolve_action_date(data.approved_at, expense.expense_date)
+        allowed = (
+            expense.approved_by == current_user.phone
+            or await has_permission(db, current_user, "expenses.approve")
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permission denied: expenses.approve",
+            )
     if data.paid_at is not None:
-        expense.paid_at = _resolve_action_date(data.paid_at, expense.expense_date)
+        allowed = (
+            expense.paid_by == current_user.phone
+            or await has_permission(db, current_user, "expenses.pay")
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permission denied: expenses.pay",
+            )
+    if data.expense_date is not None and not await has_permission(
+        db, current_user, "expenses.edit"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied: expenses.edit",
+        )
+
+    from app.services.permit import permit_date_floor
+    floor = await permit_date_floor(
+        db, expense.consultation_id, expense.category, expense.cart_item_id
+    )
+
+    def _check_floor(value: datetime) -> datetime:
+        resolved = _resolve_action_date(value, expense.expense_date)
+        if floor is not None and resolved.astimezone(BUSINESS_TZ).date() < floor:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"{expense.category} cannot be dated earlier than the client's "
+                    f"first payment date ({floor.isoformat()})."
+                ),
+            )
+        return resolved
+
+    if data.expense_date is not None:
+        expense.expense_date = _check_floor(data.expense_date)
+    if data.approved_at is not None:
+        expense.approved_at = _check_floor(data.approved_at)
+    if data.paid_at is not None:
+        expense.paid_at = _check_floor(data.paid_at)
 
     await db.flush()
     await db.refresh(expense)
     return await _expense_read(db, expense)
+
+
+async def _assert_permit_floor(db: AsyncSession, expense, value: datetime) -> datetime:
+    """Resolve an action/document date, then reject any permit-processing
+    expense date that falls before the client's first payment date."""
+    resolved = _resolve_action_date(value, expense.expense_date)
+    from app.services.permit import permit_date_floor
+    floor = await permit_date_floor(
+        db, expense.consultation_id, expense.category, expense.cart_item_id
+    )
+    if floor is not None and resolved.astimezone(BUSINESS_TZ).date() < floor:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"{expense.category} cannot be dated earlier than the client's "
+                f"first payment date ({floor.isoformat()})."
+            ),
+        )
+    return resolved
 
 
 @router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)

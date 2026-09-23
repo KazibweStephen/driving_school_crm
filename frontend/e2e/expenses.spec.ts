@@ -81,7 +81,7 @@ test.describe('Expenses Workflow', () => {
     const row = page.locator('table tbody tr', { hasText: desc }).first();
     await expect(row).toBeVisible({ timeout: 10000 });
 
-    await row.locator('button').first().click();
+    await row.locator('button').nth(1).click();
     const dialog = page.locator('.p-dialog-mask');
     await expect(dialog).toBeVisible({ timeout: 5000 });
     await expect(dialog.getByText('Approval Date')).toBeVisible();

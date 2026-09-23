@@ -56,8 +56,10 @@ export interface BranchTransfer {
   status: 'initiated' | 'received' | 'cancelled';
   initiated_by?: string;
   initiated_at: string;
+  transfer_date?: string;
   received_by?: string;
   received_at?: string;
+  received_date?: string;
   from_branch_name?: string;
   to_branch_name?: string;
   initiated_by_name?: string;
@@ -198,6 +200,8 @@ export interface EndOfDaySummary {
   cash_from_new_sales: number;
   cash_from_collections: number;
   cash_expenses: number;
+  transfers_received: number;
+  transfers_sent: number;
   cash_in: number;
   cash_out: number;
   net_cash: number;
@@ -219,6 +223,8 @@ export interface EndOfDayReport {
   cash_from_new_sales: number;
   cash_from_collections: number;
   cash_expenses: number;
+  transfers_received: number;
+  transfers_sent: number;
   cash_in: number;
   cash_out: number;
   net_cash: number;
@@ -249,6 +255,10 @@ export class FinanceService {
 
   myBranches(): Observable<Branch[]> {
     return this.http.get<Branch[]>('/api/v1/companies/my-branches');
+  }
+
+  listBranches(companyId: string): Observable<Branch[]> {
+    return this.http.get<Branch[]>(`/api/v1/companies/${companyId}/branches`);
   }
 
   getCompany(id: string): Observable<CompanyInfo> {
@@ -303,12 +313,16 @@ export class FinanceService {
     payment_amounts?: { payment_id: string; amount: number }[];
     payment_ids?: string[];
     receipt_url?: string;
+    transfer_date?: string;
   }): Observable<BranchTransfer> {
     return this.http.post<BranchTransfer>(`${this.base}/transfers`, data);
   }
 
-  receiveTransfer(id: string, receiptUrl?: string): Observable<BranchTransfer> {
-    return this.http.post<BranchTransfer>(`${this.base}/transfers/${id}/receive`, { receipt_url: receiptUrl });
+  receiveTransfer(id: string, receiptUrl?: string, receivedDate?: string): Observable<BranchTransfer> {
+    return this.http.post<BranchTransfer>(`${this.base}/transfers/${id}/receive`, {
+      receipt_url: receiptUrl,
+      received_date: receivedDate,
+    });
   }
 
   cancelTransfer(id: string): Observable<BranchTransfer> {

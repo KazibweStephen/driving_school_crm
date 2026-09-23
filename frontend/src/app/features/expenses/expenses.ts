@@ -15,7 +15,7 @@ import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { DatePickerModule } from 'primeng/datepicker';
 import { ConfirmationService, MessageService } from 'primeng/api';
-import { FinanceService, Expense, ExpenseCreate, ExpenseCategory, UnremittedClientPayment } from '../../core/services/finance.service';
+import { FinanceService, Expense, ExpenseCreate, ExpenseUpdate, ExpenseCategory, UnremittedClientPayment } from '../../core/services/finance.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
 import { toLocalDateStr } from '../../shared/utils/date.utils';
@@ -25,6 +25,7 @@ import { CurrencyService } from '../../core/services/currency.service';
 import { UserDisplayCmp } from '../../shared/components/user-display';
 import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
 import { AuthService } from '../../core/auth/auth.service';
+import { UserService } from '../../core/services/user.service';
 
 @Component({
   selector: 'app-expenses',
@@ -44,6 +45,7 @@ export class ExpensesCmp implements OnInit {
   vehicleOptions = computed(() =>
     this.vehicles().map(v => ({ id: v.id, label: `${v.plate_number} · ${v.transmission}` }))
   );
+  instructors = signal<{ id: string; label: string }[]>([]);
   loading = signal(false);
   showDialog = signal(false);
   editing = signal<Expense | null>(null);
@@ -111,6 +113,21 @@ export class ExpensesCmp implements OnInit {
   });
   selectedCategory(): { label: string; value: string; requires_client: boolean } | null {
     return this.categoryOptions().find(c => c.value === this.form.category) ?? null;
+  }
+
+  selectedCategoryRequiresUser(): boolean {
+    if (this.hasCartExpenseTypes()) return false;
+    const cat = this.categories().find(c => c.name === this.form.category);
+    return !!cat?.requires_user;
+  }
+
+  editCategoryRequiresUser(): boolean {
+    const cat = this.categories().find(c => c.name === this.editCategory());
+    return !!cat?.requires_user;
+  }
+
+  isFuel(): boolean {
+    return this.form.category === 'Fuel';
   }
 
   selectedCategoryAccount(): string {
@@ -182,8 +199,16 @@ export class ExpensesCmp implements OnInit {
   clientResults = signal<ClientInfo[]>([]);
   clientSearching = signal(false);
   clientQuery = signal('');
+  clientPostedTotal = signal(0);
+  clientPostedCount = signal(0);
+  clientPostedLoading = signal(false);
 
-  // Edit dialog — only fills MISSING category and client (allowed even on paid expenses)
+  // Details dialog
+  showDetailsDialog = signal(false);
+  detailsExpense = signal<Expense | null>(null);
+
+  // Edit dialog — fills MISSING category & client; lets rights-holders also
+  // edit instructor/vehicle/mileage/amount/charges/description on Fuel expenses.
   showEditDialog = signal(false);
   editingExpense = signal<Expense | null>(null);
   editCategory = signal('');
@@ -194,6 +219,14 @@ export class ExpensesCmp implements OnInit {
   editClientQuery = signal('');
   editHadCategory = false;
   editHadClient = false;
+  editVehicleId = signal('');
+  editInstructorId = signal('');
+  editMileage = signal<number | null>(null);
+  editAmount = signal(0);
+  editCharges = signal(0);
+  editDescription = signal('');
+  editPostedTotal = signal(0);
+  editPostedCount = signal(0);
 
   canBackdate(): boolean {
     return this.authService.currentUserCanBackdate();
@@ -211,7 +244,21 @@ export class ExpensesCmp implements OnInit {
     const needsClient = !this.editHadClient;
     if (needsCategory && !this.editCategory()) return false;
     if (needsCategory && this.editCategory() === '__other__' && !this.editOtherDetail().trim()) return false;
-    return needsCategory || needsClient;
+    if (needsCategory || needsClient) return true;
+    // If category/client already set, allow saving when a fillable field changed.
+    return this.fieldsChanged();
+  }
+
+  fieldsChanged(): boolean {
+    const e = this.editingExpense();
+    if (!e) return false;
+    if (this.editAmount() !== (e.amount ?? 0)) return true;
+    if (this.editCharges() !== (e.charges ?? 0)) return true;
+    if ((this.editDescription() || '') !== (e.description || '')) return true;
+    if ((this.editVehicleId() || '') !== (e.vehicle_id || '')) return true;
+    if ((this.editInstructorId() || '') !== (e.instructor_id || '')) return true;
+    if (this.editMileage() !== (e.mileage ?? null)) return true;
+    return false;
   }
 
   permitCartItems = signal<CartItemRead[]>([]);
@@ -246,6 +293,7 @@ export class ExpensesCmp implements OnInit {
     category: '',
     otherDetail: '',
     vehicle_id: '',
+    instructor_id: '',
     mileage: null as number | null,
     consultation_id: '',
     cart_item_id: '',
@@ -270,6 +318,7 @@ export class ExpensesCmp implements OnInit {
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public currencyService: CurrencyService,
+    private userService: UserService,
     private route: ActivatedRoute,
     private router: Router,
     private authService: AuthService,
@@ -279,6 +328,7 @@ export class ExpensesCmp implements OnInit {
     this.loadBranches();
     this.loadExpenses();
     this.loadCategories();
+    this.loadInstructors();
     this.route.queryParams.subscribe((params: any) => {
       const cid = params['consultation_id'];
       if (!cid) return;
@@ -319,6 +369,7 @@ export class ExpensesCmp implements OnInit {
       category: '',
       otherDetail: '',
       vehicle_id: '',
+      instructor_id: '',
       mileage: null,
       consultation_id: '',
       cart_item_id: '',
@@ -326,6 +377,8 @@ export class ExpensesCmp implements OnInit {
     };
     this.clientResults.set([]);
     this.clientQuery.set('');
+    this.clientPostedTotal.set(0);
+    this.clientPostedCount.set(0);
     this.receiptFile.set(null);
     this.vehicles.set([]);
     this.permitCartItems.set([]);
@@ -380,6 +433,7 @@ export class ExpensesCmp implements OnInit {
       this.form.cart_item_id = this.routeCartItem() || '';
       this.clientQuery.set(this.contextClientLabel());
       this.loadPermitCartItems(this.prefillForm.consultation_id);
+      this.loadClientPostedTotal(this.prefillForm.consultation_id);
       if (this.form.cart_item_id) this.onCartItemChange(this.form.cart_item_id);
     }
     this.loadVehiclesForBranch();
@@ -408,6 +462,42 @@ export class ExpensesCmp implements OnInit {
       },
       error: () => {},
     });
+  }
+
+  loadInstructors() {
+    this.userService.list({ role: 'instructor', status: 'active', page_size: 100 }).subscribe({
+      next: (res) => {
+        this.instructors.set((res?.users || []).map(u => ({
+          id: u.phone,
+          label: `${u.name || u.first_name || u.phone} · ${u.phone}`,
+        })));
+      },
+      error: () => this.instructors.set([]),
+    });
+  }
+
+  async loadClientPostedTotal(consultationId: string) {
+    if (!consultationId) {
+      this.clientPostedTotal.set(0);
+      this.clientPostedCount.set(0);
+      return;
+    }
+    this.clientPostedLoading.set(true);
+    try {
+      const res = await this.financeService.listExpenses({
+        consultation_id: consultationId,
+        page: 1,
+        page_size: 100,
+      }).toPromise();
+      const items = res?.items || [];
+      this.clientPostedCount.set(items.length);
+      this.clientPostedTotal.set(items.reduce((sum, e) => sum + (e.amount || 0) + (e.charges || 0), 0));
+    } catch {
+      this.clientPostedTotal.set(0);
+      this.clientPostedCount.set(0);
+    } finally {
+      this.clientPostedLoading.set(false);
+    }
   }
 
   private loadBranches() {
@@ -536,6 +626,7 @@ export class ExpensesCmp implements OnInit {
         category,
         mileage: f.mileage ?? undefined,
         vehicle_id: f.vehicle_id || undefined,
+        instructor_id: f.instructor_id || undefined,
         consultation_id: f.consultation_id || undefined,
         cart_item_id: f.cart_item_id || undefined,
         expense_date: f.expense_date instanceof Date
@@ -663,6 +754,11 @@ export class ExpensesCmp implements OnInit {
     this.showDatesDialog.set(true);
   }
 
+  openDetails(e: Expense) {
+    this.detailsExpense.set(e);
+    this.showDetailsDialog.set(true);
+  }
+
   async submitEditDates() {
     const e = this.datesExpense();
     if (!e) return;
@@ -743,9 +839,35 @@ export class ExpensesCmp implements OnInit {
     this.editClientLabel.set(e.client_name || '');
     this.editClientQuery.set('');
     this.editClientResults.set([]);
+    this.editVehicleId.set(e.vehicle_id || '');
+    this.editInstructorId.set(e.instructor_id || '');
+    this.editMileage.set(e.mileage ?? null);
+    this.editAmount.set(e.amount ?? 0);
+    this.editCharges.set(e.charges ?? 0);
+    this.editDescription.set(e.description || '');
+    this.editPostedTotal.set(0);
+    this.editPostedCount.set(0);
     this.editHadCategory = !!(e.category && e.category.trim());
     this.editHadClient = !!e.consultation_id;
+    if (e.consultation_id) this.loadClientPostedTotalForEdit(e.consultation_id);
     this.showEditDialog.set(true);
+  }
+
+  async loadClientPostedTotalForEdit(consultationId: string) {
+    if (!consultationId) return;
+    try {
+      const res = await this.financeService.listExpenses({
+        consultation_id: consultationId,
+        page: 1,
+        page_size: 100,
+      }).toPromise();
+      const items = res?.items || [];
+      this.editPostedCount.set(items.length);
+      this.editPostedTotal.set(items.reduce((sum, x) => sum + (x.amount || 0) + (x.charges || 0), 0));
+    } catch {
+      this.editPostedTotal.set(0);
+      this.editPostedCount.set(0);
+    }
   }
 
   onEditCategoryChange() {
@@ -774,6 +896,7 @@ export class ExpensesCmp implements OnInit {
     this.editingExpense.update(e => e ? { ...e, consultation_id: c.latest_consultation_id || '' } : e);
     this.editClientLabel.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
     this.editClientResults.set([]);
+    if (c.latest_consultation_id) this.loadClientPostedTotalForEdit(c.latest_consultation_id);
   }
 
   async saveEdit() {
@@ -781,15 +904,21 @@ export class ExpensesCmp implements OnInit {
     if (!e) return;
     this.loading.set(true);
     try {
-      const payload: { consultation_id?: string; category?: string } = {};
+      const payload: ExpenseUpdate = {};
       if (!this.editHadClient && e.consultation_id) payload.consultation_id = e.consultation_id;
       if (!this.editHadCategory) {
         const cat = this.editCategory();
         if (cat === '__other__') payload.category = this.editOtherDetail().trim();
         else if (cat) payload.category = cat;
       }
+      if (this.editAmount() !== (e.amount ?? 0)) payload.amount = this.editAmount();
+      if (this.editCharges() !== (e.charges ?? 0)) payload.charges = this.editCharges();
+      if ((this.editDescription() || '') !== (e.description || '')) payload.description = this.editDescription();
+      if ((this.editVehicleId() || '') !== (e.vehicle_id || '')) payload.vehicle_id = this.editVehicleId() || undefined;
+      if ((this.editInstructorId() || '') !== (e.instructor_id || '')) payload.instructor_id = this.editInstructorId() || undefined;
+      if (this.editMileage() !== (e.mileage ?? null)) payload.mileage = this.editMileage() ?? undefined;
       if (!Object.keys(payload).length) {
-        this.messageService.add({ severity: 'warn', summary: 'Nothing to update', detail: 'Nothing to update — both category and client are already set.' });
+        this.messageService.add({ severity: 'warn', summary: 'Nothing to update', detail: 'No changes were made.' });
         this.loading.set(false);
         return;
       }
@@ -872,6 +1001,7 @@ export class ExpensesCmp implements OnInit {
     this.cartExpenseTypes.set([]);
     this.clientQuery.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
     this.clientResults.set([]);
+    this.loadClientPostedTotal(this.form.consultation_id || '');
     if (!c.latest_consultation_id) {
       this.permitCartItems.set([]);
       this.messageService.add({ severity: 'warn', summary: 'No consultation', detail: 'This client has no consultation to attach' });
@@ -887,6 +1017,8 @@ export class ExpensesCmp implements OnInit {
     this.permitCartItems.set([]);
     this.clientQuery.set('');
     this.clientResults.set([]);
+    this.clientPostedTotal.set(0);
+    this.clientPostedCount.set(0);
   }
 
   onCartItemChange(itemId: string) {

@@ -9,7 +9,7 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
 import { DialogModule } from 'primeng/dialog';
 import { AuthService } from '../../core/auth/auth.service';
-import { ExpenseService, Expense, ExpenseCreatePayload, UnremittedClientPayment, ExpenseCategory } from '../../core/services/expense.service';
+import { ExpenseService, Expense, ExpenseCreatePayload, ExpenseUpdatePayload, UnremittedClientPayment, ExpenseCategory } from '../../core/services/expense.service';
 import { PaymentService, BranchInfo } from '../../core/services/payment.service';
 import { CatalogService, Vehicle } from '../../core/services/catalog.service';
 import { ConsultationService } from '../../core/services/consultation.service';
@@ -145,7 +145,7 @@ export class Expenses {
   );
   savingDates = signal(false);
 
-  // edit dialog state — adds MISSING category + client (allowed even on paid expenses)
+  // edit dialog state — edits missing category + client AND (with rights) full fuel details
   showEditDialog = signal(false);
   editingExpense = signal<Expense | null>(null);
   editHadCategory = false;
@@ -156,6 +156,12 @@ export class Expenses {
   editClientQuery = signal('');
   editClientResults = signal<any[]>([]);
   editClientSearching = signal(false);
+  editVehicleId = signal<string | null>(null);
+  editInstructorId = signal<string | null>(null);
+  editMileage = signal<number | null>(null);
+  editAmount = signal(0);
+  editCharges = signal(0);
+  editDescription = signal('');
 
   editCategoryOptions = computed(() => {
     const opts = this.categories().map((c) => ({ label: c.name, value: c.name }));
@@ -169,7 +175,20 @@ export class Expenses {
     const needsClient = !this.editHadClient;
     if (needsCategory && !this.editCategory()) return false;
     if (needsCategory && this.editCategory() === 'Other' && !this.editOtherDetail().trim()) return false;
-    return needsCategory || needsClient;
+    if (needsCategory || needsClient) return true;
+    return this.editFieldsChanged();
+  }
+
+  editFieldsChanged(): boolean {
+    const e = this.editingExpense();
+    if (!e) return false;
+    if (this.editAmount() !== (e.amount ?? 0)) return true;
+    if (this.editCharges() !== (e.charges ?? 0)) return true;
+    if ((this.editDescription() || '') !== (e.description || '')) return true;
+    if ((this.editVehicleId() || '') !== (e.vehicle_id || '')) return true;
+    if ((this.editInstructorId() || '') !== (e.instructor_id || '')) return true;
+    if (this.editMileage() !== (e.mileage ?? null)) return true;
+    return false;
   }
 
   vehicles = signal<Vehicle[]>([]);
@@ -182,6 +201,13 @@ export class Expenses {
     })),
   );
 
+  instructors = signal<{ label: string; value: string }[]>([]);
+  instructorId = signal<string | null>(null);
+
+  // details dialog state
+  showDetailsDialog = signal(false);
+  detailsExpense = signal<Expense | null>(null);
+
   categoriesMeta = new Map<string, string>();
   clientAccountAvailable = signal(0);
   clientAccountLoading = signal(false);
@@ -192,10 +218,48 @@ export class Expenses {
 
   // client-linked expense support (categories with requires_client)
   requiresClientCategories = new Set<string>();
+  requiresUserCategories = new Set<string>();
+
+  categoryRequiresUser(): boolean {
+    return this.requiresUserCategories.has(this.category());
+  }
+
+  isFuel(): boolean {
+    return this.category() === 'Fuel';
+  }
+
+  editCategoryRequiresUser(): boolean {
+    return this.requiresUserCategories.has(this.editCategory());
+  }
   consultationId = signal<string | null>(null);
   cartItemId = signal<string | null>(null);
   selectedClientLabel = signal('');
   selectedClientAvailable = signal<number | null>(null);
+  clientPostedTotal = signal(0);
+  clientPostedCount = signal(0);
+
+  loadClientPostedTotal(consultationId: string | null) {
+    if (!consultationId) {
+      this.clientPostedTotal.set(0);
+      this.clientPostedCount.set(0);
+      return;
+    }
+    this.expenseService.getExpenses({
+      consultation_id: consultationId,
+      page: 1,
+      page_size: 100,
+    }).subscribe({
+      next: (res) => {
+        const items = res?.items ?? [];
+        this.clientPostedCount.set(items.length);
+        this.clientPostedTotal.set(items.reduce((sum, x) => sum + (x.amount || 0) + (x.charges || 0), 0));
+      },
+      error: () => {
+        this.clientPostedTotal.set(0);
+        this.clientPostedCount.set(0);
+      },
+    });
+  }
 
   permitCartItems = signal<{ id: string; product_id: string; package_id: string | null; product_name?: string | null; package_name?: string | null; requires_permit_processing: boolean }[]>([]);
   cartExpenseTypes = signal<{ category: string; amount: number; already_paid: boolean }[]>([]);
@@ -341,14 +405,17 @@ export class Expenses {
         const meta = new Map<string, string>();
         const clientAcc = new Set<string>();
         const clientReq = new Set<string>();
+        const userReq = new Set<string>();
         for (const c of res.items ?? []) {
           meta.set(c.name, c.account || 'petty_cash');
           if ((c.account || 'petty_cash') === 'client_accounts') clientAcc.add(c.name);
           if (c.requires_client) clientReq.add(c.name);
+          if (c.requires_user) userReq.add(c.name);
         }
         this.categoriesMeta = meta;
         this.accountCategories = clientAcc;
         this.requiresClientCategories = clientReq;
+        this.requiresUserCategories = userReq;
         this.categories.set((res.items ?? []).filter((c) => c.is_active));
         this.contextReadyCategories = true;
         this.doTryOpenCreate();
@@ -373,6 +440,7 @@ export class Expenses {
     this.selectedClientAvailable.set(p.amount ?? 0);
     this.clientAccountSearch.set('');
     this.applyClientAccountPaymentFilter();
+    this.loadClientPostedTotal(p.consultation_id);
     if (p.consultation_id) this.loadPermitCartItems(p.consultation_id);
   }
 
@@ -385,6 +453,7 @@ export class Expenses {
     this.permitCartItems.set([]);
     this.cartExpenseTypes.set([]);
     this.cartExpenseTypeLoading.set(false);
+    this.loadClientPostedTotal(null);
     this.applyClientAccountPaymentFilter();
   }
 
@@ -614,6 +683,8 @@ export class Expenses {
     this.selectedFile = null;
     this.vehicleId.set(null);
     this.mileage.set(null);
+    this.instructorId.set(null);
+    this.instructors.set([]);
     this.vehicles.set([]);
     if (this.branches().length > 0 && !this.branchId()) {
       this.branchId.set(this.branches()[0].id);
@@ -627,6 +698,7 @@ export class Expenses {
     this.cartExpenseTypeLoading.set(false);
     this.clearClient();
     this.loadVehiclesForBranch();
+    this.loadInstructors();
     this.loadClientAccountDetail();
     this.step.set('create');
   }
@@ -755,15 +827,16 @@ export class Expenses {
       return;
     }
     this.submitting.set(true);
-    const isFuel = this.category() === 'Fuel';
+    const fuel = this.category() === 'Fuel' || this.categoryRequiresUser();
     const payload: ExpenseCreatePayload = {
       branch_id: branchId,
       amount,
       charges: this.charges() || 0,
       description: this.description() || undefined,
       category: this.category() || undefined,
-      vehicle_id: isFuel ? (this.vehicleId() ?? undefined) : undefined,
-      mileage: isFuel ? (this.mileage() ?? undefined) : undefined,
+      vehicle_id: this.category() === 'Fuel' ? (this.vehicleId() ?? undefined) : undefined,
+      instructor_id: fuel ? (this.instructorId() ?? undefined) : undefined,
+      mileage: this.category() === 'Fuel' ? (this.mileage() ?? undefined) : undefined,
       consultation_id: this.consultationId() ?? undefined,
       cart_item_id: this.cartItemId() ?? undefined,
       expense_date: this.expenseDate(),
@@ -959,7 +1032,35 @@ export class Expenses {
     this.editClientLabel.set(expense.client_name || '');
     this.editClientQuery.set('');
     this.editClientResults.set([]);
+    this.editVehicleId.set(expense.vehicle_id || null);
+    this.editInstructorId.set(expense.instructor_id || null);
+    this.editMileage.set(expense.mileage ?? null);
+    this.editAmount.set(expense.amount ?? 0);
+    this.editCharges.set(expense.charges ?? 0);
+    this.editDescription.set(expense.description || '');
+    this.loadInstructors();
     this.showEditDialog.set(true);
+  }
+
+  loadInstructors() {
+    this.catalog.listInstructors().subscribe({
+      next: (res) => {
+        const users = res?.users ?? [];
+        this.instructors.set(
+          this.currentInstructorsFromResponse(users),
+        );
+      },
+      error: () => {},
+    });
+  }
+
+  private currentInstructorsFromResponse(users: any[]): { label: string; value: string }[] {
+    return users
+      .filter((u) => u.role === 'instructor' && u.status === 'active')
+      .map((u) => ({
+        label: `${u.first_name ?? ''}${u.last_name ? ' ' + u.last_name : ''} · ${u.phone}`.trim(),
+        value: u.phone,
+      }));
   }
 
   searchEditClient(q: string) {
@@ -988,18 +1089,43 @@ export class Expenses {
     this.editClientResults.set([]);
   }
 
+  openDetails(expense: Expense) {
+    this.detailsExpense.set(expense);
+    this.showDetailsDialog.set(true);
+  }
+
+  viewReceipt(e: Expense) {
+    if (!e.receipt_url) return;
+    this.expenseService.downloadReceipt(e.receipt_url).subscribe({
+      next: (res) => {
+        const url = URL.createObjectURL(res);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Could not open receipt' });
+      },
+    });
+  }
+
   saveEdit() {
     const e = this.editingExpense();
     if (!e) return;
-    const payload: { category?: string; consultation_id?: string } = {};
+    const payload: ExpenseUpdatePayload = {};
     if (!this.editHadClient && e.consultation_id) payload.consultation_id = e.consultation_id;
     if (!this.editHadCategory) {
       const cat = this.editCategory();
       if (cat === 'Other') payload.category = this.editOtherDetail().trim();
       else if (cat) payload.category = cat;
     }
+    if (this.editAmount() !== (e.amount ?? 0)) payload.amount = this.editAmount();
+    if (this.editCharges() !== (e.charges ?? 0)) payload.charges = this.editCharges();
+    if ((this.editDescription() || '') !== (e.description || '')) payload.description = this.editDescription();
+    if ((this.editVehicleId() || '') !== (e.vehicle_id || '')) payload.vehicle_id = this.editVehicleId() || undefined;
+    if ((this.editInstructorId() || '') !== (e.instructor_id || '')) payload.instructor_id = this.editInstructorId() || undefined;
+    if (this.editMileage() !== (e.mileage ?? null)) payload.mileage = this.editMileage() ?? undefined;
     if (!Object.keys(payload).length) {
-      this.messageService.add({ severity: 'warn', summary: 'Nothing to add' });
+      this.messageService.add({ severity: 'warn', summary: 'Nothing to update' });
       return;
     }
     this.loading.set(true);
@@ -1072,10 +1198,7 @@ export class Expenses {
   }
 
   canEdit(expense: Expense) {
-    return (
-      this.permissions().includes('expenses.edit') &&
-      (!(expense.category && expense.category.trim()) || !expense.consultation_id)
-    );
+    return this.permissions().includes('expenses.edit');
   }
 
   canEditExpenseDate(): boolean {

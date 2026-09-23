@@ -54,7 +54,11 @@ async def create_user(
         current_user_role=current_user.role,
     )
     await db.flush()
-    await db.refresh(user, attribute_names=["branch_assignments"])
+    # Re-fetch with eager-loaded branch_assignments.branch so branch_names
+    # does not lazy-load outside of a greenlet during model_validate.
+    user = await user_service.get_user_by_phone(db, data.phone)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     target_company_id = data.company_id or current_user.company_id
     if target_company_id:
         await on_user_created(
@@ -153,7 +157,7 @@ async def update_user(
         current_user_role=current_user.role,
     )
     await db.flush()
-    await db.refresh(updated, attribute_names=["branch_assignments"])
+    updated = await user_service.get_user_by_phone(db, phone)
     return UserRead.model_validate(updated)
 
 

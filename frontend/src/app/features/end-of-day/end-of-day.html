@@ -36,6 +36,14 @@
             <div class="text-xs font-semibold uppercase tracking-wide text-red-500">Expenses Paid</div>
             <div class="mt-1 text-xl font-bold text-red-800">-{{ currencyService.symbol() }} {{ formatAmount(s.cash_expenses) }}</div>
           </div>
+          <div class="rounded-xl border border-teal-100 bg-teal-50 p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-teal-500">Transfers Received</div>
+            <div class="mt-1 text-xl font-bold text-teal-800">{{ currencyService.symbol() }} {{ formatAmount(s.transfers_received) }}</div>
+          </div>
+          <div class="rounded-xl border border-pink-100 bg-pink-50 p-4">
+            <div class="text-xs font-semibold uppercase tracking-wide text-pink-500">Transfers Sent</div>
+            <div class="mt-1 text-xl font-bold text-pink-800">-{{ currencyService.symbol() }} {{ formatAmount(s.transfers_sent) }}</div>
+          </div>
           <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
             <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Opening Cash</div>
             <div class="mt-1 text-xl font-bold text-gray-800">{{ currencyService.symbol() }} {{ formatAmount(s.opening_cash) }}</div>
@@ -170,6 +178,7 @@
                 <div>Opening: {{ currencyService.symbol() }} {{ formatAmount(rep.opening_cash) }}</div>
                 <div>New Sales: {{ currencyService.symbol() }} {{ formatAmount(rep.cash_from_new_sales) }}</div>
                 <div>Collections: {{ currencyService.symbol() }} {{ formatAmount(rep.cash_from_collections) }}</div>
+                <div>Transfers Received: {{ currencyService.symbol() }} {{ formatAmount(rep.transfers_received) }} · Sent: {{ currencyService.symbol() }} {{ formatAmount(rep.transfers_sent) }}</div>
                 <div class="font-bold" [class.text-red-700]="rep.reasons?.includes('expenses')">Expenses entered: {{ currencyService.symbol() }} {{ formatAmount(rep.total_expenses) }} · logged {{ currencyService.symbol() }} {{ formatAmount(rep.cash_expenses) }}</div>
                 <div>Expected: {{ currencyService.symbol() }} {{ formatAmount(rep.expected_cash_at_hand) }}</div>
                 <div>Cash At Hand: {{ currencyService.symbol() }} {{ formatAmount(rep.cash_at_hand) }}</div>

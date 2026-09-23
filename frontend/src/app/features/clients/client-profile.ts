@@ -999,6 +999,12 @@ export class ClientProfile implements OnInit {
     return this.permitExpenses().get(cartItemId)?.items || [];
   }
 
+  permitPostedTotal(cartItemId: string): number {
+    return this.permitExpensesFor(cartItemId)
+      .filter(i => i.status === 'pending' || i.status === 'approved' || i.status === 'paid' || i.status === 'rejected')
+      .reduce((sum, i) => sum + (i.amount || 0), 0);
+  }
+
   permitExpenseStatusLabel(status: string | null): string {
     switch (status) {
       case 'pending': return 'Pending Approval';

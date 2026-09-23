@@ -13,6 +13,10 @@ export interface Expense {
   category?: string;
   mileage?: number;
   vehicle_id?: string;
+  vehicle_name?: string;
+  vehicle_plate_number?: string;
+  instructor_id?: string;
+  instructor_name?: string;
   consultation_id?: string;
   cart_item_id?: string;
   client_name?: string;
@@ -36,6 +40,7 @@ export interface ExpenseCreate {
   category?: string;
   mileage?: number;
   vehicle_id?: string;
+  instructor_id?: string;
   consultation_id?: string;
   cart_item_id?: string;
   expense_date?: string | Date;
@@ -49,6 +54,7 @@ export interface ExpenseCategory {
   name: string;
   code: string;
   requires_client: boolean;
+  requires_user: boolean;
   is_operating: boolean;
   account: string;
   sort_order: number;
@@ -60,6 +66,7 @@ export interface ExpenseCategoryCreate {
   name: string;
   code?: string;
   requires_client?: boolean;
+  requires_user?: boolean;
   is_operating?: boolean;
   account?: string;
   sort_order?: number;
@@ -81,6 +88,13 @@ export interface ExpenseUpdate {
   receipt_url?: string;
   consultation_id?: string;
   category?: string;
+  charges?: number;
+  paid_charges?: number;
+  mileage?: number;
+  vehicle_id?: string;
+  instructor_id?: string;
+  description?: string;
+  amount?: number;
 }
 
 export interface ExpenseListResponse {
@@ -106,8 +120,10 @@ export interface BranchTransfer {
   status: 'initiated' | 'received' | 'cancelled';
   initiated_by?: string;
   initiated_at: string;
+  transfer_date?: string;
   received_by?: string;
   received_at?: string;
+  received_date?: string;
   cancelled_by?: string;
   cancelled_at?: string;
   from_branch_name?: string;
@@ -133,6 +149,7 @@ export interface BranchTransferCreate {
   method?: string;
   reference?: string;
   receipt_url?: string;
+  transfer_date?: string;
 }
 
 export interface BranchTransferListResponse {
@@ -270,6 +287,8 @@ export interface EndOfDaySummary {
   cash_from_new_sales: number;
   cash_from_collections: number;
   cash_expenses: number;
+  transfers_received: number;
+  transfers_sent: number;
   cash_in: number;
   cash_out: number;
   net_cash: number;
@@ -291,6 +310,8 @@ export interface EndOfDayReport {
   cash_from_new_sales: number;
   cash_from_collections: number;
   cash_expenses: number;
+  transfers_received: number;
+  transfers_sent: number;
   cash_in: number;
   cash_out: number;
   net_cash: number;
@@ -419,8 +440,11 @@ export class FinanceService {
     return this.http.post<BranchTransfer>(`${this.base}/transfers`, data);
   }
 
-  receiveTransfer(id: string, receiptUrl?: string): Observable<BranchTransfer> {
-    return this.http.post<BranchTransfer>(`${this.base}/transfers/${id}/receive`, { receipt_url: receiptUrl });
+  receiveTransfer(id: string, receiptUrl?: string, receivedDate?: string): Observable<BranchTransfer> {
+    return this.http.post<BranchTransfer>(`${this.base}/transfers/${id}/receive`, {
+      receipt_url: receiptUrl,
+      received_date: receivedDate,
+    });
   }
 
   uploadTransferReceipt(file: File): Observable<{ url: string }> {

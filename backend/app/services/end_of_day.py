@@ -14,7 +14,13 @@ from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.models.company import Branch, Expense, ExpenseStatus
+from app.models.company import (
+    Branch,
+    BranchTransfer,
+    Expense,
+    ExpenseStatus,
+    TransferStatus,
+)
 from app.models.consultation import Consultation
 from app.models.end_of_day import EndOfDayReport
 from app.models.payment import Payment
@@ -96,6 +102,24 @@ async def compute_summary(
         )
     )
 
+    # Transfers: money arriving at the branch counts on its received_date,
+    # money leaving the branch counts on its transfer_date (initiated date),
+    # both only when not cancelled. Received transfers only count once RCVED.
+    transfers_received_q = (
+        select(func.coalesce(func.sum(BranchTransfer.amount), Decimal("0"))).where(
+            BranchTransfer.to_branch_id == branch_id,
+            BranchTransfer.status == TransferStatus.RECEIVED,
+            BranchTransfer.received_date == day,
+        )
+    )
+    transfers_sent_q = (
+        select(func.coalesce(func.sum(BranchTransfer.amount), Decimal("0"))).where(
+            BranchTransfer.from_branch_id == branch_id,
+            BranchTransfer.status != TransferStatus.CANCELLED,
+            BranchTransfer.transfer_date == day,
+        )
+    )
+
     consultations_q = (
         select(func.count(Consultation.id)).where(
             Consultation.document_date == day,
@@ -124,8 +148,10 @@ async def compute_summary(
     cash_from_new_sales = await _one(new_sales_q)
     cash_from_collections = await _one(collections_q)
     cash_expenses = await _one(expenses_q)
-    cash_in = cash_from_new_sales + cash_from_collections
-    cash_out = cash_expenses
+    transfers_received = await _one(transfers_received_q)
+    transfers_sent = await _one(transfers_sent_q)
+    cash_in = cash_from_new_sales + cash_from_collections + transfers_received
+    cash_out = cash_expenses + transfers_sent
     net_cash = cash_in - cash_out
     opening_cash = await get_previous_closing(db, branch_id, day)
     expected_cash_at_hand = opening_cash + net_cash
@@ -138,6 +164,8 @@ async def compute_summary(
         cash_from_new_sales=float(cash_from_new_sales),
         cash_from_collections=float(cash_from_collections),
         cash_expenses=float(cash_expenses),
+        transfers_received=float(transfers_received),
+        transfers_sent=float(transfers_sent),
         cash_in=float(cash_in),
         cash_out=float(cash_out),
         net_cash=float(net_cash),
@@ -222,6 +250,8 @@ async def upsert_report(
     report.cash_from_new_sales = Decimal(str(summary.cash_from_new_sales))
     report.cash_from_collections = Decimal(str(summary.cash_from_collections))
     report.cash_expenses = system_expenses
+    report.transfers_received = Decimal(str(summary.transfers_received))
+    report.transfers_sent = Decimal(str(summary.transfers_sent))
     report.cash_in = Decimal(str(summary.cash_in))
     report.cash_out = Decimal(str(summary.cash_out))
     report.net_cash = Decimal(str(summary.net_cash))
@@ -268,6 +298,8 @@ async def reverify_report(
     report.cash_from_new_sales = Decimal(str(summary.cash_from_new_sales))
     report.cash_from_collections = Decimal(str(summary.cash_from_collections))
     report.cash_expenses = system_expenses
+    report.transfers_received = Decimal(str(summary.transfers_received))
+    report.transfers_sent = Decimal(str(summary.transfers_sent))
     report.cash_in = Decimal(str(summary.cash_in))
     report.cash_out = Decimal(str(summary.cash_out))
     report.net_cash = Decimal(str(summary.net_cash))

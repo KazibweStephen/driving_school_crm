@@ -258,11 +258,11 @@ export class Users implements OnInit {
         summary: 'Created',
         detail: 'User created successfully',
       });
-    } catch {
+    } catch (err: any) {
       this.messageService.add({
         severity: 'error',
         summary: 'Error',
-        detail: 'Failed to create user',
+        detail: err?.error?.detail || 'Failed to create user',
       });
     } finally {
       this.loading.set(false);

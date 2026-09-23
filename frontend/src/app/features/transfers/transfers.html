@@ -71,12 +71,12 @@
           <div class="flex flex-col gap-1">
             <div class="flex flex-col">
               <span class="font-medium text-gray-700">{{ t.initiated_by_name || t.initiated_by || '—' }}</span>
-              <span class="text-xs text-gray-400">Sent {{ formatDateTime(t.initiated_at) }}</span>
+              <span class="text-xs text-gray-400">Sent {{ formatDateTime(t.initiated_at) }}@if (t.transfer_date) { · Date {{ t.transfer_date }} }</span>
             </div>
             @if (t.status === 'received') {
               <div class="flex flex-col border-t pt-1">
                 <span class="font-medium text-green-700">{{ t.received_by_name || t.received_by || '—' }}</span>
-                <span class="text-xs text-gray-400">Received {{ formatDateTime(t.received_at) }}</span>
+                <span class="text-xs text-gray-400">Received {{ formatDateTime(t.received_at) }}@if (t.received_date) { · Date {{ t.received_date }} }</span>
               </div>
             }
             @if (t.status === 'cancelled') {
@@ -118,18 +118,24 @@
   <div class="flex flex-col gap-4">
     <div class="flex flex-col gap-1">
       <label class="text-sm font-medium text-gray-700">From Branch</label>
-      <p-select [(ngModel)]="newTransfer.from_branch_id" [options]="branches" optionLabel="name" optionValue="id"
+      <p-select [(ngModel)]="newTransfer.from_branch_id" [options]="allBranches.length ? allBranches : branches" optionLabel="name" optionValue="id"
         placeholder="Select branch" styleClass="w-full" appendTo="body" />
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-sm font-medium text-gray-700">To Branch</label>
-      <p-select [(ngModel)]="newTransfer.to_branch_id" [options]="branches" optionLabel="name" optionValue="id"
+      <p-select [(ngModel)]="newTransfer.to_branch_id" [options]="allBranches.length ? allBranches : branches" optionLabel="name" optionValue="id"
         placeholder="Select branch" styleClass="w-full" appendTo="body" />
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-sm font-medium text-gray-700">Amount</label>
       <p-inputNumber [(ngModel)]="newTransfer.amount" mode="currency" currency="TZS" locale="en-US"
         styleClass="w-full" [min]="1" />
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">Transfer Date</label>
+      <p-datepicker [(ngModel)]="newTransfer.transfer_date" dateFormat="yy-mm-dd"
+        [maxDate]="today" styleClass="w-full" appendTo="body" />
+      <span class="text-xs text-gray-400">Defaults to today. You can back-date transfers.</span>
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-sm font-medium text-gray-700">Reason</label>
@@ -150,6 +156,39 @@
     <div class="flex justify-end gap-2 pt-2">
       <p-button label="Cancel" severity="secondary" (onClick)="showCreateDialog.set(false)" />
       <p-button label="Initiate" icon="pi pi-check" [loading]="saving()" (onClick)="createTransfer()" />
+    </div>
+  </div>
+</p-dialog>
+
+<p-dialog header="Receive Transfer" [modal]="true" [(visible)]="showReceiveDialog"
+  [style]="{ width: '420px' }" appendTo="body" [closable]="false">
+  <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">From</label>
+      <div class="text-sm font-medium text-gray-900">{{ branchName((receiveTarget() || { from_branch_id: '' }).from_branch_id) }}</div>
+      <div class="text-sm text-gray-500">Amount: <span class="font-bold">{{ formatAmount((receiveTarget() || { amount: 0 }).amount) }}</span></div>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">Received Date</label>
+      <p-datepicker [(ngModel)]="receiveDate" dateFormat="yy-mm-dd"
+        [minDate]="receiveMinDate()" [maxDate]="today" styleClass="w-full" appendTo="body" />
+      <span class="text-xs text-gray-400">Defaults to the transfer date. Cannot be earlier than the transfer date.</span>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label class="text-sm font-medium text-gray-700">Receipt (optional)</label>
+      <div class="flex items-center gap-2">
+        <p-fileUpload mode="basic" chooseLabel="{{ receiveReceiptFile?.name || 'Choose file' }}"
+          [chooseIcon]="receiveReceiptFile ? 'pi pi-check' : 'pi pi-upload'"
+          accept="image/*,.pdf" [auto]="false" (onSelect)="onReceiveReceiptSelected($event)" />
+        @if (receiveReceiptFile) {
+          <button pButton icon="pi pi-times" class="p-button-sm p-button-text"
+            (click)="clearReceiveReceipt()"></button>
+        }
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <p-button label="Cancel" severity="secondary" (onClick)="showReceiveDialog.set(false)" />
+      <p-button label="Confirm" icon="pi pi-check" severity="success" [loading]="receiving()" (onClick)="receive()" />
     </div>
   </div>
 </p-dialog>

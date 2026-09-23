@@ -145,6 +145,7 @@ class ExpenseCreate(BaseModel):
     cart_item_id: uuid.UUID | None = None
     mileage: int | None = None
     vehicle_id: uuid.UUID | None = None
+    instructor_id: str | None = None
     expense_date: datetime | None = None
     status: str | None = "pending"
     receipt_url: str | None = None
@@ -160,10 +161,16 @@ class ExpenseUpdate(BaseModel):
     rejection_reason: str | None = None
     receipt_url: str | None = None
     vehicle_id: uuid.UUID | None = None
+    instructor_id: str | None = None
     consultation_id: uuid.UUID | None = None
     category: str | None = None
     charges: float | None = None
     paid_charges: float | None = None
+    mileage: int | None = None
+    vehicle_id: uuid.UUID | None = None
+    instructor_id: str | None = None
+    description: str | None = None
+    amount: float | None = None
 
 
 class MarkExpensePaid(BaseModel):
@@ -197,6 +204,10 @@ class ExpenseRead(BaseModel):
     client_name: str | None = None
     mileage: int | None = None
     vehicle_id: uuid.UUID | None = None
+    vehicle_name: str | None = None
+    vehicle_plate_number: str | None = None
+    instructor_id: str | None = None
+    instructor_name: str | None = None
     status: str | None = None
     approved_by: str | None = None
     approved_at: datetime | None = None
@@ -330,6 +341,7 @@ class BranchTransferCreate(BaseModel):
     payment_id: uuid.UUID | None = None
     payment_ids: list[uuid.UUID] | None = None
     payment_amounts: list["TransferPaymentAmount"] | None = None
+    transfer_date: date | None = None
 
 
 class TransferPaymentAmount(BaseModel):
@@ -352,6 +364,7 @@ class HoFundingCreate(BaseModel):
 
 class TransferReceiveRequest(BaseModel):
     receipt_url: str | None = None
+    received_date: date | None = None
 class TransferPaymentLinkRead(BaseModel):
     payment_id: uuid.UUID
     amount: Decimal
@@ -379,9 +392,11 @@ class BranchTransferRead(BaseModel):
     initiated_by: str | None = None
     initiated_by_name: str | None = None
     initiated_at: datetime
+    transfer_date: date | None = None
     received_by: str | None = None
     received_by_name: str | None = None
     received_at: datetime | None = None
+    received_date: date | None = None
     cancelled_by: str | None = None
     cancelled_by_name: str | None = None
     cancelled_at: datetime | None = None
@@ -398,6 +413,7 @@ class ExpenseCategoryCreate(BaseModel):
     name: str
     code: str
     requires_client: bool = False
+    requires_user: bool = False
     is_operating: bool = True
     account: str = "petty_cash"
     sort_order: int = 0
@@ -408,6 +424,7 @@ class ExpenseCategoryUpdate(BaseModel):
     name: str | None = None
     code: str | None = None
     requires_client: bool | None = None
+    requires_user: bool | None = None
     is_operating: bool | None = None
     account: str | None = None
     sort_order: int | None = None
@@ -419,6 +436,7 @@ class ExpenseCategoryRead(BaseModel):
     name: str
     code: str
     requires_client: bool
+    requires_user: bool
     is_operating: bool
     account: str | None = None
     sort_order: int

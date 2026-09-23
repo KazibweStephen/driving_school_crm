@@ -232,6 +232,9 @@ class Expense(Base):
     vehicle_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    instructor_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.phone"), nullable=True
+    )
     status: Mapped[ExpenseStatus] = mapped_column(
         Enum(ExpenseStatus, values_callable=lambda x: [e.value for e in x]),
         default=ExpenseStatus.PENDING, nullable=False,
@@ -272,6 +275,11 @@ class Expense(Base):
     paid_by_user: Mapped["User | None"] = relationship(
         "User", foreign_keys=[paid_by], uselist=False
     )
+    instructor_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[instructor_id], uselist=False,
+        primaryjoin="Expense.instructor_id == User.phone",
+    )
+    vehicle: Mapped["Vehicle | None"] = relationship("Vehicle")
 
 
 class Sale(Base):
@@ -412,11 +420,17 @@ class BranchTransfer(Base):
     initiated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    transfer_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, index=True
+    )
     received_by: Mapped[str | None] = mapped_column(
         ForeignKey("users.phone"), nullable=True
     )
     received_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    received_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, index=True
     )
     cancelled_by: Mapped[str | None] = mapped_column(
         ForeignKey("users.phone"), nullable=True
@@ -475,6 +489,7 @@ class ExpenseCategory(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     code: Mapped[str] = mapped_column(String(100), nullable=False)
     requires_client: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    requires_user: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_operating: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     account: Mapped[str] = mapped_column(
         String(20), default=TransferPool.PETTY_CASH.value, nullable=False

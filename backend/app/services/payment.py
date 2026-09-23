@@ -920,6 +920,7 @@ async def _sync_branch_transfer_for_payment(
         consultation_id=payment.consultation_id,
         payment_id=payment.id,
         initiated_by=payment.created_by_phone,
+        transfer_date=today_local(),
     )
     db.add(transfer)
     await db.flush()

@@ -156,6 +156,13 @@
                   <span class="pi pi-user"></span> {{ e.client_name }}
                 </div>
               }
+              @if (e.vehicle_plate_number || e.instructor_name) {
+                <div class="mt-0.5 text-xs text-slate-500">
+                  @if (e.vehicle_plate_number) { <span class="pi pi-car"></span> {{ e.vehicle_plate_number }} }
+                  @if (e.vehicle_plate_number && e.instructor_name) { · }
+                  @if (e.instructor_name) { <span class="pi pi-user"></span> {{ e.instructor_name }} }
+                </div>
+              }
               @if (e.branch_name) {
                 <div class="mt-0.5 text-xs text-slate-400">
                   <span class="pi pi-map-marker"></span> {{ e.branch_name }}
@@ -189,39 +196,16 @@
 
           <div class="mt-3 flex flex-wrap gap-2">
             @if (canApprove(e)) {
-              <p-button
-                label="Approve"
-                size="small"
-                severity="success"
-                (click)="openApprove(e)"
-                data-testid="approve-expense"
-              />
+              <p-button label="Approve" size="small" severity="success" (click)="openApprove(e)" data-testid="approve-expense" />
             }
             @if (canReject(e)) {
-              <p-button
-                label="Reject"
-                size="small"
-                severity="danger"
-                (click)="reject(e)"
-                data-testid="reject-expense"
-              />
+              <p-button label="Reject" size="small" severity="danger" (click)="reject(e)" data-testid="reject-expense" />
             }
             @if (canPay(e)) {
-              <p-button
-                label="Pay"
-                size="small"
-                (click)="openPay(e)"
-                data-testid="pay-expense"
-              />
+              <p-button label="Pay" size="small" (click)="openPay(e)" data-testid="pay-expense" />
             }
             @if (canDelete(e)) {
-              <p-button
-                label="Delete"
-                size="small"
-                severity="secondary"
-                (click)="deleteExpense(e)"
-                data-testid="delete-expense"
-              />
+              <p-button label="Delete" size="small" severity="secondary" (click)="deleteExpense(e)" data-testid="delete-expense" />
             }
             @if (canEditDates(e)) {
               <p-button
@@ -235,7 +219,7 @@
             }
             @if (canEdit(e)) {
               <p-button
-                label="Add Category/Client"
+                label="Edit"
                 size="small"
                 severity="secondary"
                 icon="pi pi-pencil"
@@ -243,6 +227,14 @@
                 data-testid="edit-expense"
               />
             }
+            <p-button
+              label="Details"
+              size="small"
+              severity="secondary"
+              icon="pi pi-eye"
+              (click)="openDetails(e)"
+              data-testid="view-details"
+            />
           </div>
         </div>
       }
@@ -326,6 +318,11 @@
                   @if (selectedClientAvailable() != null) {
                     <div class="mt-0.5 text-xs" [class.text-red-600]="!clientFundsOk()" [class.text-blue-700]="clientFundsOk()">
                       Available: {{ money(selectedClientAvailable()!) }} @if (!clientFundsOk()) { — insufficient for this amount }
+                    </div>
+                  }
+                  @if (consultationId() && clientPostedCount() > 0) {
+                    <div class="mt-0.5 text-xs text-slate-500" data-testid="client-posted-total">
+                      Already posted: {{ money(clientPostedTotal()) }} ({{ clientPostedCount() }} expense{{ clientPostedCount() === 1 ? '' : 's' }})
                     </div>
                   }
                 </div>
@@ -477,6 +474,26 @@
               [ngModel]="mileage()"
               (ngModelChange)="mileage.set($event ?? null)"
               data-testid="expense-mileage"
+            />
+          </div>
+        }
+
+        @if (category() === 'Fuel' || categoryRequiresUser()) {
+          <div>
+            <label class="mb-1 block text-sm font-medium text-slate-700">User</label>
+            <p-select
+              [options]="instructors()"
+              optionLabel="label"
+              optionValue="value"
+              [ngModel]="instructorId()"
+              (ngModelChange)="instructorId.set($event)"
+              placeholder="Select user"
+              appendTo="body"
+              [showClear]="true"
+              [filter]="true"
+              filterPlaceholder="Search..."
+              class="w-full"
+              data-testid="expense-instructor"
             />
           </div>
         }
@@ -687,6 +704,64 @@
   }
 }
 
+@if (showDetailsDialog()) {
+  @if (detailsExpense(); as e) {
+    <div class="fixed inset-0 z-50 flex items-end bg-black/40" data-testid="expense-details-dialog">
+      <div class="w-full max-h-[85vh] overflow-auto rounded-t-2xl bg-white p-4">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-base font-semibold">Expense Details</h2>
+          <button type="button" class="text-slate-400" (click)="showDetailsDialog.set(false)"><span class="pi pi-times"></span></button>
+        </div>
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Category</span><span class="font-medium">{{ e.category || '—' }}</span></div>
+          <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Amount</span><span class="font-medium">{{ money(e.amount) }}</span></div>
+          @if ((e.charges || 0) > 0) {
+            <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Charges</span><span class="font-medium">{{ money(e.charges) }}</span></div>
+          }
+          @if ((e.paid_charges ?? 0) > 0) {
+            <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Paid charges</span><span class="font-medium">{{ money(e.paid_charges ?? 0) }}</span></div>
+          }
+          <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Date</span><span class="font-medium">{{ e.expense_date }}</span></div>
+          @if (e.client_name) {
+            <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Client</span><span class="font-medium text-blue-600">{{ e.client_name }}</span></div>
+          }
+          @if (e.vehicle_plate_number || e.vehicle_name) {
+            <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Vehicle</span><span class="font-medium">{{ e.vehicle_plate_number || e.vehicle_name || '—' }}</span></div>
+          }
+          @if (e.instructor_name) {
+            <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Instructor</span><span class="font-medium">{{ e.instructor_name }}</span></div>
+          }
+          @if (e.mileage != null) {
+            <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Mileage</span><span class="font-medium">{{ e.mileage }} km</span></div>
+          }
+          @if (e.description) {
+            <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Description</span><span class="font-medium text-right ml-4">{{ e.description }}</span></div>
+          }
+          <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Branch</span><span class="font-medium">{{ e.branch_name || '—' }}</span></div>
+          <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Status</span><span class="font-medium capitalize">{{ e.status }}</span></div>
+          <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Requested by</span><span class="font-medium">{{ e.created_by_name || e.created_by_phone || '—' }}</span></div>
+          @if (e.approved_by) {
+            <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Approved by</span><span class="font-medium">{{ e.approved_by_name || e.approved_by }}{{ e.approved_at ? ' · ' + e.approved_at : '' }}</span></div>
+          }
+          @if (e.paid_by) {
+            <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Paid by</span><span class="font-medium">{{ e.paid_by_name || e.paid_by }}{{ e.paid_at ? ' · ' + e.paid_at : '' }}</span></div>
+          }
+          @if (e.rejection_reason) {
+            <div class="flex justify-between border-b border-slate-100 py-1"><span class="text-slate-500">Rejection reason</span><span class="font-medium text-red-600">{{ e.rejection_reason }}</span></div>
+          }
+          @if (e.receipt_url) {
+            <div class="flex justify-between border-b border-slate-100 py-1">
+              <span class="text-slate-500">Receipt</span>
+              <button type="button" class="font-medium text-blue-600 underline" (click)="viewReceipt(e)">View receipt</button>
+            </div>
+          }
+        </div>
+        <button type="button" class="mt-4 w-full rounded-lg bg-blue-600 p-2 text-sm font-medium text-white" (click)="showDetailsDialog.set(false)">Close</button>
+      </div>
+    </div>
+  }
+}
+
 @if (showEditDialog()) {
   @if (editingExpense(); as e) {
     <div class="fixed inset-0 z-50 flex items-end bg-black/40" data-testid="expense-edit-dialog">
@@ -697,11 +772,11 @@
         </div>
         <div class="space-y-3">
           <div class="text-sm text-slate-600">
-            <span class="font-semibold">{{ money(e.amount) }}</span> — only missing fields can be added.
+            <span class="font-semibold">{{ money(e.amount) }}</span> — edit the fields below where you have rights.
           </div>
           @if (editHadCategory && editHadClient) {
             <div class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
-              <span class="pi pi-check-circle mr-1"></span>Both category and client are already set — nothing to add.
+              <span class="pi pi-check-circle mr-1"></span>Category and client are already set. Further edits below need <b>expenses.edit</b> rights.
             </div>
           }
           @if (!editHadCategory) {
@@ -765,9 +840,81 @@
               }
             </div>
           }
+          @if ((e.category || '').toLowerCase() === 'fuel' || editCategory().toLowerCase() === 'fuel') {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Vehicle</label>
+              <p-select
+                [options]="vehicleOptions()"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="editVehicleId()"
+                (ngModelChange)="editVehicleId.set($event)"
+                placeholder="Select vehicle"
+                appendTo="body"
+                class="w-full"
+                data-testid="edit-vehicle"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Mileage (km)</label>
+              <input
+                type="number"
+                min="0"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                [ngModel]="editMileage()"
+                (ngModelChange)="editMileage.set($event ?? null)"
+                data-testid="edit-mileage"
+              />
+            </div>
+          }
+          @if ((e.category || '').toLowerCase() === 'fuel' || editCategory().toLowerCase() === 'fuel' || editCategoryRequiresUser()) {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">User</label>
+              <p-select
+                [options]="instructors()"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="editInstructorId()"
+                (ngModelChange)="editInstructorId.set($event)"
+                placeholder="Select user"
+                appendTo="body"
+                [showClear]="true"
+                [filter]="true"
+                filterPlaceholder="Search..."
+                class="w-full"
+                data-testid="edit-instructor"
+              />
+            </div>
+          }
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">Amount</label>
+            <input
+              type="number"
+              min="0"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              [ngModel]="editAmount()"
+              (ngModelChange)="editAmount.set($event ?? 0)"
+              data-testid="edit-amount"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">Charges</label>
+            <input
+              type="number"
+              min="0"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              [ngModel]="editCharges()"
+              (ngModelChange)="editCharges.set($event ?? 0)"
+              data-testid="edit-charges"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">Description</label>
+            <input pInputText [(ngModel)]="editDescription" class="w-full" data-testid="edit-description" />
+          </div>
           <div class="flex gap-2 pt-1">
             <button type="button" class="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-medium text-slate-600" (click)="showEditDialog.set(false)">Cancel</button>
-            <button type="button" class="flex-1 rounded-lg bg-blue-600 p-2 text-sm font-medium text-white" [disabled]="!editCanSave()" (click)="saveEdit()" data-testid="confirm-edit">Add</button>
+            <button type="button" class="flex-1 rounded-lg bg-blue-600 p-2 text-sm font-medium text-white" [disabled]="!editCanSave()" (click)="saveEdit()" data-testid="confirm-edit">Save</button>
           </div>
         </div>
       </div>

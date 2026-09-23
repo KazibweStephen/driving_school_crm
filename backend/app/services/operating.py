@@ -1,5 +1,7 @@
 import uuid
 from datetime import datetime, timezone
+
+from app.utils.timezones import today_local
 from decimal import Decimal
 
 from sqlalchemy import select, func, and_
@@ -219,6 +221,8 @@ async def fund_branch(
         method=TransferMethod(method) if method else TransferMethod.CASH,
         received_by=initiated_by,
         received_at=datetime.now(timezone.utc),
+        transfer_date=today_local(),
+        received_date=today_local(),
         status=TransferStatus.RECEIVED,
         initiated_by=initiated_by,
     )

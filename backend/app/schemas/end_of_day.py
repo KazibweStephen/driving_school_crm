@@ -11,6 +11,8 @@ class EndOfDaySummary(BaseModel):
     cash_from_new_sales: float = 0
     cash_from_collections: float = 0
     cash_expenses: float = 0
+    transfers_received: float = 0
+    transfers_sent: float = 0
     cash_in: float = 0
     cash_out: float = 0
     net_cash: float = 0
@@ -35,6 +37,8 @@ class EndOfDayReportRead(BaseModel):
     cash_from_new_sales: Decimal = Decimal("0")
     cash_from_collections: Decimal = Decimal("0")
     cash_expenses: Decimal = Decimal("0")
+    transfers_received: Decimal = Decimal("0")
+    transfers_sent: Decimal = Decimal("0")
     cash_in: Decimal = Decimal("0")
     cash_out: Decimal = Decimal("0")
     net_cash: Decimal = Decimal("0")

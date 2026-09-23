@@ -5,6 +5,7 @@ import { CardModule } from 'primeng/card';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { DialogModule } from 'primeng/dialog';
+import { DatePickerModule } from 'primeng/datepicker';
 import { FileUploadModule } from 'primeng/fileupload';
 import { InputTextModule } from 'primeng/inputtext';
 import { InputNumberModule } from 'primeng/inputnumber';
@@ -17,6 +18,7 @@ import { TooltipModule } from 'primeng/tooltip';
 import { AuthService } from '../../core/auth/auth.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { FinanceService, BranchTransfer, TransferSummary } from '../../core/services/finance.service';
+import { toLocalDateStr } from '../../shared/utils/date.utils';
 
 interface DirectionOption {
   label: string;
@@ -26,7 +28,8 @@ interface DirectionOption {
 @Component({
   selector: 'app-transfers',
   imports: [
-    FormsModule, ButtonModule, CardModule, ConfirmDialogModule, DialogModule, FileUploadModule,
+    FormsModule, ButtonModule, CardModule, ConfirmDialogModule, DialogModule,
+    DatePickerModule, FileUploadModule,
     InputTextModule, InputNumberModule, MultiSelectModule, SelectModule, TableModule, TagModule,
     ToastModule, TooltipModule,
   ],
@@ -50,26 +53,38 @@ export class TransfersCmp implements OnInit {
   pageSize = 20;
 
   branches: Branch[] = [];
+  allBranches: Branch[] = [];
   selectedBranchIds: string[] = [];
   direction = 'all';
   statusFilter: string | null = null;
 
   showCreateDialog = signal(false);
   saving = signal(false);
-  newTransfer: { from_branch_id: string; to_branch_id: string; amount: number | null; reason: string } = {
+  newTransfer: { from_branch_id: string; to_branch_id: string; amount: number | null; reason: string; transfer_date: string | Date } = {
     from_branch_id: '',
     to_branch_id: '',
     amount: null,
     reason: '',
+    transfer_date: new Date(),
   };
   receiptFile: File | null = null;
   uploadingReceipt = signal(false);
+
+  showReceiveDialog = signal(false);
+  receiveTarget = signal<BranchTransfer | null>(null);
+  receiveDate = signal<string | Date>(new Date());
+  receiving = signal(false);
+  receiveReceiptFile: File | null = null;
 
   directionOptions: DirectionOption[] = [
     { label: 'All', value: 'all' },
     { label: 'Incoming', value: 'incoming' },
     { label: 'Outgoing', value: 'outgoing' },
   ];
+
+  get today(): Date {
+    return new Date();
+  }
 
   statusOptions = [
     { label: 'Initiated', value: 'initiated' },
@@ -96,13 +111,20 @@ export class TransfersCmp implements OnInit {
       const res = await this.companyService.myBranches().toPromise();
       this.branches = res || [];
       this.selectedBranchIds = this.branches.map(b => b.id);
+      const companyId = this.authService.currentUserCompanyId();
+      if (companyId) {
+        const all = await this.companyService.listBranches(companyId).toPromise();
+        this.allBranches = all || [];
+      }
     } catch {
       this.branches = [];
     }
   }
 
   branchName(id: string): string {
-    return this.branches.find(b => b.id === id)?.name || id.substring(0, 8);
+    return this.allBranches.find(b => b.id === id)?.name
+      || this.branches.find(b => b.id === id)?.name
+      || id.substring(0, 8);
   }
 
   async loadTransfers() {
@@ -156,11 +178,18 @@ export class TransfersCmp implements OnInit {
   }
 
   openCreateDialog() {
+    const from = this.branches[0]?.id || this.allBranches[0]?.id || '';
+    const to = this.allBranches.find(b => b.id !== from)?.id
+      || this.branches[1]?.id
+      || this.allBranches[0]?.id
+      || this.branches[0]?.id
+      || '';
     this.newTransfer = {
-      from_branch_id: this.branches[0]?.id || '',
-      to_branch_id: this.branches[1]?.id || this.branches[0]?.id || '',
+      from_branch_id: from,
+      to_branch_id: to,
       amount: null,
       reason: '',
+      transfer_date: new Date(),
     };
     this.receiptFile = null;
     this.showCreateDialog.set(true);
@@ -172,6 +201,14 @@ export class TransfersCmp implements OnInit {
 
   clearReceipt() {
     this.receiptFile = null;
+  }
+
+  onReceiveReceiptSelected(event: any) {
+    this.receiveReceiptFile = event?.files?.[0] || event?.currentFiles?.[0] || null;
+  }
+
+  clearReceiveReceipt() {
+    this.receiveReceiptFile = null;
   }
 
   async createTransfer() {
@@ -201,6 +238,9 @@ export class TransfersCmp implements OnInit {
         amount: this.newTransfer.amount,
         reason: this.newTransfer.reason || undefined,
         receipt_url,
+        transfer_date: this.newTransfer.transfer_date instanceof Date
+          ? toLocalDateStr(this.newTransfer.transfer_date)
+          : this.newTransfer.transfer_date,
       }).toPromise();
       this.showCreateDialog.set(false);
       this.receiptFile = null;
@@ -216,24 +256,43 @@ export class TransfersCmp implements OnInit {
   }
 
   confirmReceive(t: BranchTransfer) {
-    this.confirmationService.confirm({
-      message: `Confirm receipt of ${this.formatAmount(t.amount)} from ${this.branchName(t.from_branch_id)}?`,
-      header: 'Receive Transfer',
-      icon: 'pi pi-arrow-down-left',
-      acceptButtonStyleClass: 'p-button-success',
-      accept: () => this.receive(t),
-    });
+    this.receiveTarget.set(t);
+    this.receiveDate.set(t.transfer_date ? new Date(t.transfer_date + 'T00:00:00') : new Date());
+    this.receiveReceiptFile = null;
+    this.showReceiveDialog.set(true);
   }
 
-  async receive(t: BranchTransfer) {
+  async receive() {
+    const t = this.receiveTarget();
+    if (!t) return;
+    this.receiving.set(true);
     try {
-      await this.financeService.receiveTransfer(t.id).toPromise();
+      let receipt_url: string | undefined;
+      if (this.receiveReceiptFile) {
+        const up = await this.financeService.uploadTransferReceipt(this.receiveReceiptFile).toPromise();
+        receipt_url = up?.url;
+      }
+      await this.financeService.receiveTransfer(
+        t.id,
+        receipt_url,
+        this.receiveDate() instanceof Date ? toLocalDateStr(this.receiveDate() as Date) : (this.receiveDate() as string),
+      ).toPromise();
+      this.showReceiveDialog.set(false);
       await this.loadTransfers();
       await this.loadSummary();
       this.messageService.add({ severity: 'success', summary: 'Received', detail: 'Transfer received' });
     } catch (e: any) {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to receive transfer' });
+    } finally {
+      this.receiving.set(false);
     }
+  }
+
+  receiveMinDate(): Date {
+    const t = this.receiveTarget();
+    if (t?.transfer_date) return new Date(t.transfer_date + 'T00:00:00');
+    if (t?.initiated_at) return new Date(t.initiated_at);
+    return new Date(2020, 0, 1);
   }
 
   confirmCancel(t: BranchTransfer) {

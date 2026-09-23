@@ -87,6 +87,13 @@
           @if (e.client_name) {
             <br><span class="text-xs text-blue-600"><i class="pi pi-user mr-1"></i>{{ e.client_name }}</span>
           }
+          @if (e.vehicle_plate_number || e.instructor_name) {
+            <br><span class="text-xs text-gray-500">
+              @if (e.vehicle_plate_number) { <i class="pi pi-car mr-0.5"></i>{{ e.vehicle_plate_number }} }
+              @if (e.vehicle_plate_number && e.instructor_name) { · }
+              @if (e.instructor_name) { <i class="pi pi-user mr-0.5"></i>{{ e.instructor_name }} }
+            </span>
+          }
           @if (e.description) {
             <br><span class="text-xs text-gray-400">{{ e.description }}</span>
           }
@@ -126,6 +133,7 @@
         </td>
         <td>
           <div class="flex gap-1">
+            <p-button *appHasPermission="'expenses.view'" icon="pi pi-eye" severity="secondary" rounded="true" pTooltip="View details" (onClick)="openDetails(e)" data-testid="expense-details" />
             @if (e.status === 'pending') {
               <p-button *appHasPermission="'expenses.approve'" icon="pi pi-check" severity="success" rounded="true" pTooltip="Approve" (onClick)="openApprove(e)" />
               <p-button *appHasPermission="'expenses.reject'" icon="pi pi-times" severity="danger" rounded="true" pTooltip="Reject" (onClick)="confirmReject(e)" />
@@ -140,9 +148,7 @@
             @if (canEditDates(e)) {
               <p-button icon="pi pi-calendar" severity="secondary" rounded="true" pTooltip="Edit expense dates" (onClick)="openEditDates(e)" data-testid="edit-dates" />
             }
-            @if (!e.category || !e.consultation_id) {
-              <p-button *appHasPermission="'expenses.edit'" icon="pi pi-pencil" severity="secondary" rounded="true" pTooltip="Add missing category / client" (onClick)="openEdit(e)" />
-            }
+            <p-button *appHasPermission="'expenses.edit'" icon="pi pi-pencil" severity="secondary" rounded="true" pTooltip="Edit expense" (onClick)="openEdit(e)" data-testid="edit-expense" />
           </div>
         </td>
       </tr>
@@ -229,6 +235,14 @@
         }
       </div>
     }
+    @if (form.consultation_id && clientPostedCount() > 0) {
+      <div class="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600" data-testid="client-posted-total">
+        <span class="pi pi-info-circle mr-1"></span>
+        Already posted from this client:
+        <span class="font-semibold">{{ currencyService.symbol() }} {{ clientPostedTotal().toLocaleString() }}</span>
+        ({{ clientPostedCount() }} expense{{ clientPostedCount() === 1 ? '' : 's' }})
+      </div>
+    }
     @if (form.consultation_id && permitCartItems().length > 0) {
       <div>
         <label class="mb-1 block text-sm font-medium text-gray-700">Cart Item *</label>
@@ -288,7 +302,7 @@
       <p-inputNumber [(ngModel)]="form.charges" [min]="0" [max]="999999" mode="decimal"
         [maxFractionDigits]="2" styleClass="w-full" inputStyleClass="w-full" />
     </div>
-    @if (form.category === 'Fuel') {
+    @if (isFuel()) {
       <div>
         <label class="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
         <p-select [(ngModel)]="form.vehicle_id" [options]="vehicleOptions()" optionLabel="label" optionValue="id"
@@ -297,6 +311,13 @@
       <div>
         <label class="mb-1 block text-sm font-medium text-gray-700">Mileage (km)</label>
         <p-inputNumber [(ngModel)]="form.mileage" [min]="0" [max]="999999" [useGrouping]="false" styleClass="w-full" inputStyleClass="w-full" />
+      </div>
+    }
+    @if (isFuel() || selectedCategoryRequiresUser()) {
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">User</label>
+        <p-select [(ngModel)]="form.instructor_id" [options]="instructors()" optionLabel="label" optionValue="id"
+          placeholder="Select user" styleClass="w-full" appendTo="body" [showClear]="true" [filter]="true" filterPlaceholder="Search..." />
       </div>
     }
     <div>
@@ -486,11 +507,11 @@
     <div class="flex flex-col gap-3 pt-2">
       <p class="text-sm text-gray-600">
         <span class="font-medium">{{ currencyService.symbol() }} {{ e.amount }}</span>
-        <span> — only the fields that are missing below can be added.</span>
+        — edit the fields below, where you have rights.
       </p>
       @if (editHadCategory && editHadClient) {
         <p class="text-sm text-amber-700">
-          <i class="pi pi-check-circle mr-1"></i>Both category and client are already set — nothing to add.
+          <i class="pi pi-check-circle mr-1"></i>Both category and client are already set.
         </p>
       }
       @if (!editHadCategory) {
@@ -536,12 +557,114 @@
           }
         </div>
       }
+      @if ((!editHadClient || editHadCategory) && e.consultation_id && editPostedCount() > 0) {
+        <p class="text-xs text-slate-500" data-testid="edit-client-posted-total">
+          <span class="pi pi-info-circle mr-1"></span>Already posted from this client:
+          <span class="font-semibold">{{ currencyService.symbol() }} {{ editPostedTotal().toLocaleString() }}</span>
+          ({{ editPostedCount() }} expense{{ editPostedCount() === 1 ? '' : 's' }})
+        </p>
+      }
+      @if ((e.category || '').toLowerCase() === 'fuel' || editCategory().toLowerCase() === 'fuel') {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
+          <p-select [(ngModel)]="editVehicleId" [options]="vehicleOptions()" optionLabel="label" optionValue="id"
+            placeholder="Select vehicle" styleClass="w-full" appendTo="body" [filter]="true" filterPlaceholder="Search..." />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Mileage (km)</label>
+          <p-inputNumber [(ngModel)]="editMileage" [min]="0" [max]="999999" [useGrouping]="false" styleClass="w-full" inputStyleClass="w-full" />
+        </div>
+      }
+      @if ((e.category || '').toLowerCase() === 'fuel' || editCategory().toLowerCase() === 'fuel' || editCategoryRequiresUser()) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">User</label>
+          <p-select [(ngModel)]="editInstructorId" [options]="instructors()" optionLabel="label" optionValue="id"
+            placeholder="Select user" styleClass="w-full" appendTo="body" [showClear]="true" [filter]="true" filterPlaceholder="Search..." />
+        </div>
+      }
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Amount</label>
+        <p-inputNumber [(ngModel)]="editAmount" [min]="0" [max]="999999" mode="decimal"
+          [maxFractionDigits]="2" styleClass="w-full" inputStyleClass="w-full" data-testid="edit-amount" />
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Charges</label>
+        <p-inputNumber [(ngModel)]="editCharges" [min]="0" [max]="999999" mode="decimal"
+          [maxFractionDigits]="2" styleClass="w-full" inputStyleClass="w-full" />
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Description</label>
+        <textarea pTextarea [(ngModel)]="editDescription" class="w-full" rows="2"></textarea>
+      </div>
     </div>
     <ng-template pTemplate="footer">
       <p-button label="Cancel" severity="secondary" (onClick)="showEditDialog.set(false)" />
-      <p-button label="Add" [disabled]="!editCanSave()" (onClick)="saveEdit()" />
+      <p-button label="Save" [disabled]="!editCanSave()" (onClick)="saveEdit()" data-testid="confirm-edit" />
     </ng-template>
   }
+</p-dialog>
+
+<p-dialog
+  [(visible)]="showDetailsDialog"
+  header="Expense Details"
+  [modal]="true"
+  [style]="{ width: '520px' }"
+  [draggable]="false"
+  [resizable]="false"
+  appendTo="body"
+>
+  @if (detailsExpense(); as e) {
+    <div class="space-y-2 pt-1 text-sm">
+      <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Category</span><span class="font-medium">{{ e.category || '—' }}</span></div>
+      <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Amount</span><span class="font-medium">{{ currencyService.symbol() }} {{ e.amount.toFixed(2) }}</span></div>
+      @if ((e.charges || 0) > 0) {
+        <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Charges</span><span class="font-medium">{{ currencyService.symbol() }} {{ (e.charges || 0).toFixed(2) }}</span></div>
+      }
+      @if ((e.paid_charges ?? 0) > 0) {
+        <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Paid charges</span><span class="font-medium">{{ currencyService.symbol() }} {{ (e.paid_charges ?? 0).toFixed(2) }}</span></div>
+      }
+      <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Expense date</span><span class="font-medium">{{ formatDate(e.expense_date) }}</span></div>
+      @if (e.client_name) {
+        <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Client</span><span class="font-medium text-blue-600">{{ e.client_name }}</span></div>
+      }
+      @if (e.vehicle_plate_number || e.vehicle_name) {
+        <div class="flex justify-between py-1 border-b border-slate-100">
+          <span class="text-slate-500">Vehicle</span>
+          <span class="font-medium">{{ e.vehicle_plate_number || e.vehicle_name || '—' }}{{ e.vehicle_plate_number && e.vehicle_name && e.vehicle_plate_number !== e.vehicle_name ? ' (' + e.vehicle_name + ')' : '' }}</span>
+        </div>
+      }
+      @if (e.instructor_name) {
+        <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Instructor</span><span class="font-medium">{{ e.instructor_name }}</span></div>
+      }
+      @if (e.mileage != null) {
+        <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Mileage</span><span class="font-medium">{{ e.mileage }} km</span></div>
+      }
+      @if (e.description) {
+        <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Description</span><span class="font-medium text-right ml-4">{{ e.description }}</span></div>
+      }
+      <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Branch</span><span class="font-medium">{{ e.branch_name || '—' }}</span></div>
+      <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Status</span><span class="font-medium capitalize">{{ e.status }}</span></div>
+      <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Requested by</span><span class="font-medium"><app-user-display [phone]="e.created_by_phone" /></span></div>
+      @if (e.approved_by) {
+        <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Approved by</span><span class="font-medium"><app-user-display [phone]="e.approved_by" /> @if (e.approved_at) { ({{ formatDate(e.approved_at) }}) }</span></div>
+      }
+      @if (e.paid_by) {
+        <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Paid by</span><span class="font-medium"><app-user-display [phone]="e.paid_by" /> @if (e.paid_at) { ({{ formatDate(e.paid_at) }}) }</span></div>
+      }
+      @if (e.rejection_reason) {
+        <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500">Rejection reason</span><span class="font-medium text-red-600">{{ e.rejection_reason }}</span></div>
+      }
+      @if (e.receipt_url) {
+        <div class="flex justify-between py-1 border-b border-slate-100">
+          <span class="text-slate-500">Receipt</span>
+          <button pButton link="true" class="text-xs text-blue-600 underline p-0" (click)="viewReceipt(e)"><i class="pi pi-paperclip mr-1"></i>View receipt</button>
+        </div>
+      }
+    </div>
+  }
+  <ng-template pTemplate="footer">
+    <p-button label="Close" severity="secondary" (onClick)="showDetailsDialog.set(false)" />
+  </ng-template>
 </p-dialog>
 
 <p-confirmDialog></p-confirmDialog>

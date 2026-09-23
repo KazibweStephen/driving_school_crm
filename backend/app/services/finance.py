@@ -100,6 +100,8 @@ async def list_expenses(
         selectinload(Expense.paid_by_user),
         selectinload(Expense.consultation),
         selectinload(Expense.branch),
+        selectinload(Expense.instructor_user),
+        selectinload(Expense.vehicle),
     )
     count_query = select(func.count(Expense.id))
 
@@ -185,6 +187,7 @@ async def create_expense(
     cart_item_id: uuid.UUID | None = None,
     mileage: int | None = None,
     vehicle_id: uuid.UUID | None = None,
+    instructor_id: str | None = None,
     expense_date: datetime | None = None,
     status: str = "pending",
     receipt_url: str | None = None,
@@ -313,6 +316,7 @@ async def create_expense(
         cart_item_id=cart_item_id,
         mileage=mileage,
         vehicle_id=vehicle_id,
+        instructor_id=instructor_id,
         expense_date=resolved_expense_date or now_local(),
         status=ExpenseStatus(status),
         receipt_url=receipt_url,
@@ -342,6 +346,8 @@ async def get_expense(
         selectinload(Expense.approved_by_user),
         selectinload(Expense.paid_by_user),
         selectinload(Expense.branch),
+        selectinload(Expense.instructor_user),
+        selectinload(Expense.vehicle),
     ).where(Expense.id == expense_id)
     if company_id is not None:
         query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
@@ -363,6 +369,11 @@ async def update_expense(
     category: str | None = None,
     charges: float | None = None,
     paid_charges: float | None = None,
+    mileage: int | None = None,
+    vehicle_id: uuid.UUID | None = None,
+    instructor_id: str | None = None,
+    description: str | None = None,
+    amount: float | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
 ) -> Expense | None:
@@ -375,6 +386,8 @@ async def update_expense(
         selectinload(Expense.paid_by_user),
         selectinload(Expense.consultation),
         selectinload(Expense.branch),
+        selectinload(Expense.instructor_user),
+        selectinload(Expense.vehicle),
     )
     result = await db.execute(query)
     expense = result.scalar_one_or_none()
@@ -410,6 +423,16 @@ async def update_expense(
         expense.charges = charges
     if paid_charges is not None:
         expense.paid_charges = paid_charges
+    if mileage is not None:
+        expense.mileage = mileage
+    if vehicle_id is not None:
+        expense.vehicle_id = vehicle_id
+    if instructor_id is not None:
+        expense.instructor_id = instructor_id
+    if description is not None:
+        expense.description = description
+    if amount is not None:
+        expense.amount = amount
 
     await db.flush()
     await db.refresh(expense)
@@ -947,6 +970,7 @@ async def create_branch_transfer(
     initiated_by: str | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
+    transfer_date: date | None = None,
 ) -> BranchTransfer:
     if from_branch_id == to_branch_id:
         from fastapi import HTTPException
@@ -958,11 +982,13 @@ async def create_branch_transfer(
         raise HTTPException(status_code=404, detail="Branch not found")
     if not _transfer_role_privileged(current_user_role):
         assigned = await _user_assigned_branch_ids(db, initiated_by, company_id)
-        if not assigned or {from_branch_id, to_branch_id} - assigned:
+        # A user can only send money FROM a branch they are assigned to, but may
+        # send it to any branch in the company (single-branch users included).
+        if not assigned or from_branch_id not in assigned:
             from fastapi import HTTPException
             raise HTTPException(
                 status_code=403,
-                detail="You can only transfer money between branches you are assigned to",
+                detail="You can only send money from branches you are assigned to",
             )
     if pool:
         available = await pool_available(db, from_branch_id, pool)
@@ -972,6 +998,11 @@ async def create_branch_transfer(
                 status_code=400,
                 detail=f"Amount exceeds available {TransferPool(pool).value.replace('_', ' ')} cash in this branch. Available: {available}.",
             )
+    if transfer_date is None:
+        transfer_date = today_local()
+    if transfer_date > today_local():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Transfer date cannot be in the future")
     transfer = BranchTransfer(
         from_branch_id=from_branch_id,
         to_branch_id=to_branch_id,
@@ -984,6 +1015,7 @@ async def create_branch_transfer(
         consultation_id=consultation_id,
         payment_id=payment_id,
         initiated_by=initiated_by,
+        transfer_date=transfer_date,
     )
     db.add(transfer)
     await db.flush()
@@ -1147,6 +1179,7 @@ async def receive_branch_transfer(
     receipt_url: str | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
+    received_date: date | None = None,
 ) -> BranchTransfer | None:
     transfer = await _get_transfer_scoped(db, transfer_id, company_id, current_user_role)
     if not transfer:
@@ -1168,9 +1201,24 @@ async def receive_branch_transfer(
                 status_code=403,
                 detail="You can only receive money at branches you are assigned to",
             )
+    # Receive date defaults to the transfer's date, cannot precede it, and
+    # cannot be in the future.
+    base_date = transfer.transfer_date or transfer.initiated_at.astimezone(BUSINESS_TZ).date()
+    if received_date is None:
+        received_date = base_date
+    if received_date < base_date:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail="Received date cannot be earlier than the transfer date",
+        )
+    if received_date > today_local():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Received date cannot be in the future")
     transfer.status = TransferStatus.RECEIVED
     transfer.received_by = received_by
     transfer.received_at = datetime.now(timezone.utc)
+    transfer.received_date = received_date
     if receipt_url:
         transfer.receipt_url = receipt_url
     await db.flush()
@@ -1653,7 +1701,7 @@ async def get_finance_summary(
 
 
 DEFAULT_EXPENSE_CATEGORIES = [
-    {"name": "Fuel", "code": "fuel", "requires_client": False, "is_operating": True, "account": "petty_cash", "sort_order": 1},
+    {"name": "Fuel", "code": "fuel", "requires_client": False, "requires_user": True, "is_operating": True, "account": "petty_cash", "sort_order": 1},
     {"name": "Permit Payment", "code": "permit_payment", "requires_client": True, "is_operating": False, "account": "client_accounts", "sort_order": 10},
     {"name": "Learner Permit Payment", "code": "learner_permit_payment", "requires_client": True, "is_operating": False, "account": "client_accounts", "sort_order": 11},
     {"name": "Vehicle Maintenance", "code": "vehicle_maintenance", "requires_client": False, "is_operating": True, "account": "petty_cash", "sort_order": 20},
@@ -1708,6 +1756,7 @@ async def create_expense_category(
     name: str,
     code: str,
     requires_client: bool = False,
+    requires_user: bool = False,
     is_operating: bool = True,
     account: str = "petty_cash",
     sort_order: int = 0,
@@ -1728,7 +1777,8 @@ async def create_expense_category(
         raise HTTPException(status_code=409, detail="Category code already exists")
     cat = ExpenseCategory(
         company_id=company_id, name=name, code=code,
-        requires_client=requires_client, is_operating=is_operating,
+        requires_client=requires_client, requires_user=requires_user,
+        is_operating=is_operating,
         account=account, sort_order=sort_order, is_active=is_active,
     )
     db.add(cat)

@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
+import { DatePickerModule } from 'primeng/datepicker';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { DialogModule } from 'primeng/dialog';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -20,7 +21,7 @@ import {
   BranchCashPosition,
 } from '../../core/services/finance.service';
 import { LoadingOverlay } from '../../shared/loading-overlay/loading-overlay';
-import { formatMoney } from '../../shared/format';
+import { formatMoney, toISODate } from '../../shared/format';
 
 type Direction = 'all' | 'incoming' | 'outgoing';
 
@@ -29,6 +30,7 @@ type Direction = 'all' | 'incoming' | 'outgoing';
   imports: [
     CommonModule, FormsModule, RouterLink, ButtonModule, InputTextModule,
     SelectModule, InputNumberModule, DialogModule, ConfirmDialogModule, ToastModule, LoadingOverlay,
+    DatePickerModule,
   ],
   providers: [MessageService, ConfirmationService],
   templateUrl: './transfers.html',
@@ -46,6 +48,7 @@ export class Transfers implements OnInit {
   direction = signal<Direction>('all');
 
   branches = signal<Branch[]>([]);
+  allBranches = signal<Branch[]>([]);
   headOfficeId = '';
   positions = signal<BranchCashPosition[]>([]);
 
@@ -59,6 +62,7 @@ export class Transfers implements OnInit {
     reference: '',
     amount: 0,
     reason: '',
+    transfer_date: new Date(),
   };
   sendAmountInput: number | null = null;
   unremitted = signal<UnremittedClientPayment[]>([]);
@@ -73,6 +77,10 @@ export class Transfers implements OnInit {
   fundClients = signal<HoFundingClient[]>([]);
   fundSearch = signal('');
   selectedFunding = signal<HoFundingClient[]>([]);
+  showReceive = signal(false);
+  receiveSaving = signal(false);
+  receiveTarget = signal<BranchTransfer | null>(null);
+  receiveDate = signal<Date>(new Date());
   fundAmounts: Record<string, number> = {};
 
   methodOptions = [
@@ -101,6 +109,12 @@ export class Transfers implements OnInit {
     }
     const companyId = this.auth.currentUserCompanyId();
     if (companyId) {
+      try {
+        const all = await this.finance.listBranches(companyId).toPromise();
+        this.allBranches.set(all ?? []);
+      } catch {
+        this.allBranches.set([]);
+      }
       try {
         const c = await this.finance.getCompany(companyId).toPromise();
         this.headOfficeId = c?.head_office_branch_id || '';
@@ -133,6 +147,14 @@ export class Transfers implements OnInit {
     return formatMoney(Number(value || 0), this.currency());
   }
 
+  onTransferDateChange(d: Date) {
+    if (d) this.sendForm.transfer_date = d;
+  }
+
+  onReceiveDateChange(d: Date) {
+    if (d) this.receiveDate.set(d);
+  }
+
   datetime(value?: string): string {
     return value ? new Date(value).toLocaleString() : '';
   }
@@ -150,7 +172,9 @@ export class Transfers implements OnInit {
   }
 
   branchName(id: string): string {
-    return this.branches().find((b) => b.id === id)?.name || (id || '').substring(0, 8);
+    return this.allBranches().find((b) => b.id === id)?.name
+      || this.branches().find((b) => b.id === id)?.name
+      || (id || '').substring(0, 8);
   }
 
   canReceive(t: BranchTransfer): boolean {
@@ -168,15 +192,23 @@ export class Transfers implements OnInit {
 
   openSend() {
     const branches = this.branches();
+    const all = this.allBranches();
+    const from = branches[0]?.id || all[0]?.id || '';
+    const to = this.headOfficeId
+      || all.find((b) => b.id !== from)?.id
+      || branches.find((b) => b.id !== branches[0]?.id)?.id
+      || all[0]?.id
+      || '';
     this.loadPositions();
     this.sendForm = {
-      from_branch_id: branches[0]?.id || '',
-      to_branch_id: this.headOfficeId || branches.find((b) => b.id !== branches[0]?.id)?.id || '',
+      from_branch_id: from,
+      to_branch_id: to,
       pool: 'petty_cash',
       method: 'cash',
       reference: '',
       amount: 0,
       reason: '',
+      transfer_date: new Date(),
     };
     this.sendAmountInput = null;
     this.receiptFile = null;
@@ -318,6 +350,7 @@ export class Transfers implements OnInit {
         reference: this.sendForm.reference || undefined,
         payment_amounts: payment_amounts.length ? payment_amounts : undefined,
         receipt_url,
+        transfer_date: toISODate(this.sendForm.transfer_date),
       }).toPromise();
       this.showSend.set(false);
       this.msg.add({ severity: 'success', summary: 'Sent', detail: 'Transfer initiated' });
@@ -331,7 +364,7 @@ export class Transfers implements OnInit {
 
   openFund() {
     this.loadPositions();
-    this.fundToBranchId = branchesToFunding(this.branches(), this.headOfficeId);
+    this.fundToBranchId = branchesToFunding(this.allBranches().length ? this.allBranches() : this.branches(), this.headOfficeId);
     this.fundClients.set([]);
     this.fundSearch.set('');
     this.selectedFunding.set([]);
@@ -422,19 +455,41 @@ export class Transfers implements OnInit {
   }
 
   confirmReceive(t: BranchTransfer) {
-    this.confirm.confirm({
-      message: `Receive ${this.money(t.amount)} from ${t.from_branch_name || this.branchName(t.from_branch_id)}?`,
-      header: 'Accept Transfer',
-      accept: async () => {
-        try {
-          await this.finance.receiveTransfer(t.id).toPromise();
-          this.msg.add({ severity: 'success', summary: 'Received', detail: 'Transfer received' });
-          this.load();
-        } catch (e: any) {
-          this.msg.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to receive transfer' });
-        }
-      },
-    });
+    const defaultDate = t.transfer_date ? new Date(t.transfer_date + 'T00:00:00') : new Date();
+    this.receiveTarget.set(t);
+    this.receiveDate.set(defaultDate);
+    this.showReceive.set(true);
+  }
+
+  minReceiveDate(): Date {
+    const t = this.receiveTarget();
+    if (t?.transfer_date) return new Date(t.transfer_date + 'T00:00:00');
+    if (t?.initiated_at) return new Date(t.initiated_at);
+    return new Date(2020, 0, 1);
+  }
+
+  get today(): Date {
+    return new Date();
+  }
+
+  async submitReceive() {
+    const t = this.receiveTarget();
+    if (!t) return;
+    this.receiveSaving.set(true);
+    try {
+      await this.finance.receiveTransfer(
+        t.id,
+        undefined,
+        toISODate(this.receiveDate()),
+      ).toPromise();
+      this.showReceive.set(false);
+      this.msg.add({ severity: 'success', summary: 'Received', detail: 'Transfer received' });
+      this.load();
+    } catch (e: any) {
+      this.msg.add({ severity: 'error', summary: 'Error', detail: e?.error?.detail || 'Failed to receive transfer' });
+    } finally {
+      this.receiveSaving.set(false);
+    }
   }
 
   confirmCancel(t: BranchTransfer) {

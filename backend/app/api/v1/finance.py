@@ -81,6 +81,9 @@ async def _expense_read(db: AsyncSession, e) -> ExpenseRead:
         "created_by_name": e.created_by_user.name if e.created_by_user else None,
         "approved_by_name": e.approved_by_user.name if e.approved_by_user else None,
         "paid_by_name": e.paid_by_user.name if e.paid_by_user else None,
+        "instructor_name": e.instructor_user.name if e.instructor_user else None,
+        "vehicle_name": e.vehicle.name if e.vehicle else None,
+        "vehicle_plate_number": e.vehicle.plate_number if e.vehicle else None,
         "client_name": client_name,
         "branch_name": branch_name,
     })
@@ -285,6 +288,7 @@ async def create_expense(
         cart_item_id=data.cart_item_id,
         mileage=data.mileage,
         vehicle_id=data.vehicle_id,
+        instructor_id=data.instructor_id,
         expense_date=data.expense_date,
         status=data.status or "pending",
         receipt_url=data.receipt_url,
@@ -324,6 +328,13 @@ async def update_expense(
         receipt_url=data.receipt_url,
         consultation_id=data.consultation_id,
         category=data.category,
+        charges=data.charges,
+        paid_charges=data.paid_charges,
+        mileage=data.mileage,
+        vehicle_id=data.vehicle_id,
+        instructor_id=data.instructor_id,
+        description=data.description,
+        amount=data.amount,
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
     if not expense:
@@ -867,6 +878,7 @@ async def create_branch_transfer(
         ),
         initiated_by=current_user.phone,
         company_id=current_user.company_id, current_user_role=current_user.role,
+        transfer_date=data.transfer_date,
     )
     transfer = await finance_service.get_branch_transfer(
         db, transfer.id,
@@ -945,6 +957,7 @@ async def receive_branch_transfer(
         db, transfer_id, received_by=current_user.phone,
         receipt_url=data.receipt_url if data else None,
         company_id=current_user.company_id, current_user_role=current_user.role,
+        received_date=data.received_date if data else None,
     )
     if not transfer:
         raise HTTPException(
@@ -1035,6 +1048,7 @@ async def create_expense_category(
 ):
     return ExpenseCategoryRead.model_validate(await finance_service.create_expense_category(
         db, name=data.name, code=data.code, requires_client=data.requires_client,
+        requires_user=data.requires_user,
         is_operating=data.is_operating, account=data.account, sort_order=data.sort_order,
         is_active=data.is_active, company_id=current_user.company_id,
     ))
@@ -1050,6 +1064,7 @@ async def update_expense_category(
     cat = await finance_service.update_expense_category(
         db, category_id, company_id=current_user.company_id,
         name=data.name, code=data.code, requires_client=data.requires_client,
+        requires_user=data.requires_user,
         is_operating=data.is_operating, account=data.account,
         sort_order=data.sort_order, is_active=data.is_active,
     )

@@ -1614,6 +1614,9 @@
                   }
                   <p class="mt-1 text-xs text-gray-400">
                     {{ (activeCheck.paid_ratio * 100) | number:'1.0-0' }}% paid · {{ activeCheck.client_name }}
+                    @if (permitPostedTotal(activeCi.id) > 0) {
+                      · <span class="pi pi-info-circle mr-0.5"></span>posted {{ permitPostedTotal(activeCi.id) | number:'1.0-0' }} so far
+                    }
                   </p>
                 </div>
                 <div class="space-y-2">

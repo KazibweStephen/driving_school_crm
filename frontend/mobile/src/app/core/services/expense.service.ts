@@ -14,6 +14,10 @@ export interface Expense {
   category: string | null;
   mileage: number | null;
   vehicle_id: string | null;
+  vehicle_name?: string | null;
+  vehicle_plate_number?: string | null;
+  instructor_id: string | null;
+  instructor_name?: string | null;
   consultation_id: string | null;
   cart_item_id: string | null;
   client_name?: string | null;
@@ -47,11 +51,23 @@ export interface ExpenseCreatePayload {
   category?: string;
   mileage?: number;
   vehicle_id?: string;
+  instructor_id?: string;
   consultation_id?: string;
   cart_item_id?: string;
   expense_date?: string;
   status?: string;
   receipt_url?: string;
+}
+
+export interface ExpenseUpdatePayload {
+  category?: string;
+  consultation_id?: string;
+  amount?: number;
+  charges?: number;
+  description?: string;
+  mileage?: number | null;
+  vehicle_id?: string;
+  instructor_id?: string;
 }
 
 export interface ClientAccountPool {
@@ -88,6 +104,7 @@ export interface ExpenseCategory {
   name: string;
   code: string;
   requires_client: boolean;
+  requires_user: boolean;
   is_operating: boolean;
   account: string;
   sort_order: number;
@@ -129,7 +146,7 @@ export class ExpenseService {
     return this.http.post<Expense>('/api/v1/finance/expenses', payload);
   }
 
-  updateExpense(id: string, data: { category?: string; consultation_id?: string }) {
+  updateExpense(id: string, data: ExpenseUpdatePayload) {
     return this.http.patch<Expense>(`/api/v1/finance/expenses/${id}`, data);
   }
 
@@ -157,6 +174,12 @@ export class ExpenseService {
     const formData = new FormData();
     formData.append('file', file);
     return this.http.post<{ url: string }>('/api/v1/finance/expenses/upload-receipt', formData);
+  }
+
+  downloadReceipt(filename: string) {
+    return this.http.get(`/api/v1/finance/expenses/receipts/${encodeURIComponent(filename)}`, {
+      responseType: 'blob',
+    });
   }
 
   getClientAccountAvailable(branchId: string): Observable<number> {

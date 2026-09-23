@@ -48,6 +48,14 @@
             <div class="text-[11px] font-semibold uppercase tracking-wide text-red-500">Expenses</div>
             <div class="mt-0.5 text-base font-bold text-red-800">-{{ money(s.cash_expenses) }}</div>
           </div>
+          <div class="rounded-xl border border-teal-100 bg-teal-50 p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-teal-500">Transfers In</div>
+            <div class="mt-0.5 text-base font-bold text-teal-800">{{ money(s.transfers_received) }}</div>
+          </div>
+          <div class="rounded-xl border border-pink-100 bg-pink-50 p-3">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-pink-500">Transfers Out</div>
+            <div class="mt-0.5 text-base font-bold text-pink-800">-{{ money(s.transfers_sent) }}</div>
+          </div>
           <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Opening</div>
             <div class="mt-0.5 text-base font-bold text-slate-800">{{ money(s.opening_cash) }}</div>
@@ -215,6 +223,7 @@
               <span>Opening: {{ money(rep.opening_cash) }}</span>
               <span>New Sales: {{ money(rep.cash_from_new_sales) }}</span>
               <span>Collections: {{ money(rep.cash_from_collections) }}</span>
+              <span>Transfers In: {{ money(rep.transfers_received) }} · Out: {{ money(rep.transfers_sent) }}</span>
               <span [class.font-bold]="rep.reasons?.includes('expenses')" [class.text-red-700]="rep.reasons?.includes('expenses')">Expenses entered: {{ money(rep.total_expenses) }} · logged {{ money(rep.cash_expenses) }}</span>
               <span>Expected: {{ money(rep.expected_cash_at_hand) }}</span>
               <span>Cash At Hand: {{ money(rep.cash_at_hand) }}</span>

@@ -105,6 +105,7 @@ export interface ExpenseCategory {
   code: string;
   requires_client: boolean;
   requires_user: boolean;
+  requires_vehicle: boolean;
   is_operating: boolean;
   account: string;
   sort_order: number;

@@ -219,9 +219,14 @@ export class Expenses {
   // client-linked expense support (categories with requires_client)
   requiresClientCategories = new Set<string>();
   requiresUserCategories = new Set<string>();
+  requiresVehicleCategories = new Set<string>();
 
   categoryRequiresUser(): boolean {
     return this.requiresUserCategories.has(this.category());
+  }
+
+  categoryRequiresVehicle(): boolean {
+    return this.requiresVehicleCategories.has(this.category());
   }
 
   isFuel(): boolean {
@@ -231,6 +236,11 @@ export class Expenses {
   editCategoryRequiresUser(): boolean {
     return this.requiresUserCategories.has(this.editCategory());
   }
+
+  editCategoryRequiresVehicle(): boolean {
+    return this.requiresVehicleCategories.has(this.editCategory());
+  }
+
   consultationId = signal<string | null>(null);
   cartItemId = signal<string | null>(null);
   selectedClientLabel = signal('');
@@ -406,16 +416,17 @@ export class Expenses {
         const clientAcc = new Set<string>();
         const clientReq = new Set<string>();
         const userReq = new Set<string>();
+        const vehicleReq = new Set<string>();
         for (const c of res.items ?? []) {
           meta.set(c.name, c.account || 'petty_cash');
           if ((c.account || 'petty_cash') === 'client_accounts') clientAcc.add(c.name);
           if (c.requires_client) clientReq.add(c.name);
           if (c.requires_user) userReq.add(c.name);
+          if (c.requires_vehicle) vehicleReq.add(c.name);
         }
         this.categoriesMeta = meta;
-        this.accountCategories = clientAcc;
-        this.requiresClientCategories = clientReq;
         this.requiresUserCategories = userReq;
+        this.requiresVehicleCategories = vehicleReq;
         this.categories.set((res.items ?? []).filter((c) => c.is_active));
         this.contextReadyCategories = true;
         this.doTryOpenCreate();
@@ -834,9 +845,9 @@ export class Expenses {
       charges: this.charges() || 0,
       description: this.description() || undefined,
       category: this.category() || undefined,
-      vehicle_id: this.category() === 'Fuel' ? (this.vehicleId() ?? undefined) : undefined,
+      vehicle_id: this.isFuel() || this.categoryRequiresVehicle() ? (this.vehicleId() ?? undefined) : undefined,
       instructor_id: fuel ? (this.instructorId() ?? undefined) : undefined,
-      mileage: this.category() === 'Fuel' ? (this.mileage() ?? undefined) : undefined,
+      mileage: this.isFuel() || this.categoryRequiresVehicle() ? (this.mileage() ?? undefined) : undefined,
       consultation_id: this.consultationId() ?? undefined,
       cart_item_id: this.cartItemId() ?? undefined,
       expense_date: this.expenseDate(),

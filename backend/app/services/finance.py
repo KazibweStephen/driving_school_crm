@@ -1701,7 +1701,7 @@ async def get_finance_summary(
 
 
 DEFAULT_EXPENSE_CATEGORIES = [
-    {"name": "Fuel", "code": "fuel", "requires_client": False, "requires_user": True, "is_operating": True, "account": "petty_cash", "sort_order": 1},
+    {"name": "Fuel", "code": "fuel", "requires_client": False, "requires_user": True, "requires_vehicle": True, "is_operating": True, "account": "petty_cash", "sort_order": 1},
     {"name": "Permit Payment", "code": "permit_payment", "requires_client": True, "is_operating": False, "account": "client_accounts", "sort_order": 10},
     {"name": "Learner Permit Payment", "code": "learner_permit_payment", "requires_client": True, "is_operating": False, "account": "client_accounts", "sort_order": 11},
     {"name": "Vehicle Maintenance", "code": "vehicle_maintenance", "requires_client": False, "is_operating": True, "account": "petty_cash", "sort_order": 20},
@@ -1757,6 +1757,7 @@ async def create_expense_category(
     code: str,
     requires_client: bool = False,
     requires_user: bool = False,
+    requires_vehicle: bool = False,
     is_operating: bool = True,
     account: str = "petty_cash",
     sort_order: int = 0,
@@ -1778,6 +1779,7 @@ async def create_expense_category(
     cat = ExpenseCategory(
         company_id=company_id, name=name, code=code,
         requires_client=requires_client, requires_user=requires_user,
+        requires_vehicle=requires_vehicle,
         is_operating=is_operating,
         account=account, sort_order=sort_order, is_active=is_active,
     )

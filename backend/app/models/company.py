@@ -490,6 +490,7 @@ class ExpenseCategory(Base):
     code: Mapped[str] = mapped_column(String(100), nullable=False)
     requires_client: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     requires_user: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    requires_vehicle: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_operating: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     account: Mapped[str] = mapped_column(
         String(20), default=TransferPool.PETTY_CASH.value, nullable=False

@@ -1048,7 +1048,7 @@ async def create_expense_category(
 ):
     return ExpenseCategoryRead.model_validate(await finance_service.create_expense_category(
         db, name=data.name, code=data.code, requires_client=data.requires_client,
-        requires_user=data.requires_user,
+        requires_user=data.requires_user, requires_vehicle=data.requires_vehicle,
         is_operating=data.is_operating, account=data.account, sort_order=data.sort_order,
         is_active=data.is_active, company_id=current_user.company_id,
     ))
@@ -1064,7 +1064,7 @@ async def update_expense_category(
     cat = await finance_service.update_expense_category(
         db, category_id, company_id=current_user.company_id,
         name=data.name, code=data.code, requires_client=data.requires_client,
-        requires_user=data.requires_user,
+        requires_user=data.requires_user, requires_vehicle=data.requires_vehicle,
         is_operating=data.is_operating, account=data.account,
         sort_order=data.sort_order, is_active=data.is_active,
     )

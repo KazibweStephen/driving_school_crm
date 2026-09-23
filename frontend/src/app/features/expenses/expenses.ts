@@ -126,6 +126,17 @@ export class ExpensesCmp implements OnInit {
     return !!cat?.requires_user;
   }
 
+  selectedCategoryRequiresVehicle(): boolean {
+    if (this.hasCartExpenseTypes() && !this.isFuel()) return false;
+    const cat = this.categories().find(c => c.name === this.form.category);
+    return !!cat?.requires_vehicle;
+  }
+
+  editCategoryRequiresVehicle(): boolean {
+    const cat = this.categories().find(c => c.name === this.editCategory());
+    return !!cat?.requires_vehicle;
+  }
+
   isFuel(): boolean {
     return this.form.category === 'Fuel';
   }

@@ -414,6 +414,7 @@ class ExpenseCategoryCreate(BaseModel):
     code: str
     requires_client: bool = False
     requires_user: bool = False
+    requires_vehicle: bool = False
     is_operating: bool = True
     account: str = "petty_cash"
     sort_order: int = 0
@@ -425,6 +426,7 @@ class ExpenseCategoryUpdate(BaseModel):
     code: str | None = None
     requires_client: bool | None = None
     requires_user: bool | None = None
+    requires_vehicle: bool | None = None
     is_operating: bool | None = None
     account: str | None = None
     sort_order: int | None = None
@@ -437,6 +439,7 @@ class ExpenseCategoryRead(BaseModel):
     code: str
     requires_client: bool
     requires_user: bool
+    requires_vehicle: bool
     is_operating: bool
     account: str | None = None
     sort_order: int

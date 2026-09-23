@@ -302,7 +302,7 @@
       <p-inputNumber [(ngModel)]="form.charges" [min]="0" [max]="999999" mode="decimal"
         [maxFractionDigits]="2" styleClass="w-full" inputStyleClass="w-full" />
     </div>
-    @if (isFuel()) {
+    @if (isFuel() || selectedCategoryRequiresVehicle()) {
       <div>
         <label class="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
         <p-select [(ngModel)]="form.vehicle_id" [options]="vehicleOptions()" optionLabel="label" optionValue="id"
@@ -564,7 +564,7 @@
           ({{ editPostedCount() }} expense{{ editPostedCount() === 1 ? '' : 's' }})
         </p>
       }
-      @if ((e.category || '').toLowerCase() === 'fuel' || editCategory().toLowerCase() === 'fuel') {
+      @if ((e.category || '').toLowerCase() === 'fuel' || editCategory().toLowerCase() === 'fuel' || editCategoryRequiresVehicle()) {
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
           <p-select [(ngModel)]="editVehicleId" [options]="vehicleOptions()" optionLabel="label" optionValue="id"

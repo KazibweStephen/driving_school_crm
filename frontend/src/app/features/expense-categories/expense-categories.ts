@@ -44,6 +44,7 @@ export class ExpenseCategoriesCmp implements OnInit {
     code: '',
     requires_client: false,
     requires_user: false,
+    requires_vehicle: false,
     is_operating: true,
     account: 'petty_cash',
     sort_order: 0,
@@ -96,7 +97,7 @@ export class ExpenseCategoriesCmp implements OnInit {
 
   openCreate() {
     this.editing.set(null);
-    this.form.set({ name: '', code: '', requires_client: false, requires_user: false, is_operating: true, account: 'petty_cash', sort_order: 0, is_active: true });
+    this.form.set({ name: '', code: '', requires_client: false, requires_user: false, requires_vehicle: false, is_operating: true, account: 'petty_cash', sort_order: 0, is_active: true });
     this.showDialog.set(true);
   }
 
@@ -107,6 +108,7 @@ export class ExpenseCategoriesCmp implements OnInit {
       code: c.code,
       requires_client: c.requires_client,
       requires_user: c.requires_user,
+      requires_vehicle: c.requires_vehicle,
       is_operating: c.is_operating,
       account: c.account || 'petty_cash',
       sort_order: c.sort_order,
@@ -132,6 +134,7 @@ export class ExpenseCategoriesCmp implements OnInit {
           code: f.code.trim() || slugify(f.name),
           requires_client: f.requires_client,
           requires_user: f.requires_user,
+          requires_vehicle: f.requires_vehicle,
           is_operating: f.is_operating,
           account: f.account,
           sort_order: f.sort_order,
@@ -144,6 +147,7 @@ export class ExpenseCategoriesCmp implements OnInit {
           code: f.code.trim() || slugify(f.name),
           requires_client: f.requires_client,
           requires_user: f.requires_user,
+          requires_vehicle: f.requires_vehicle,
           is_operating: f.is_operating,
           account: f.account,
           sort_order: f.sort_order,

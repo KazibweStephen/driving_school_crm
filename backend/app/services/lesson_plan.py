@@ -1271,8 +1271,15 @@ async def move_lesson(
     db: AsyncSession,
     lesson: ClientLesson,
     new_day_number: int,
+    shift_subsequent: bool = False,
 ) -> list[ClientLesson]:
-    """Move a lesson to a new day, shifting other lessons automatically."""
+    """Move a lesson to a new day, shifting other lessons automatically.
+
+    Forward move: lessons between old+1 and new compact down by 1 (close the
+    hole left behind). When shift_subsequent is True, the tail AFTER new also
+    shifts forward by the same delta — the whole plan is delayed, preserving
+    the subsequent lessons' relative spacing (user-confirmed stretch-forward).
+    """
     plan_id = lesson.lesson_plan_id
     old_day = lesson.day_number
 
@@ -1283,7 +1290,7 @@ async def move_lesson(
         return list(result.scalars().all())
 
     if new_day_number > old_day:
-        # Shift lessons between old+1 and new_day down by 1
+        # Shift lessons between old+1 and new_day down by 1 (close the hole left behind)
         await db.execute(
             update(ClientLesson)
             .where(ClientLesson.lesson_plan_id == plan_id)
@@ -1291,6 +1298,17 @@ async def move_lesson(
             .where(ClientLesson.day_number <= new_day_number)
             .values(day_number=ClientLesson.day_number - 1)
         )
+        # Stretch the tail forward by the same delta: every lesson AFTER new_day is
+        # delayed too, keeping their relative spacing. (User-confirmed contract:
+        # "shift ALL subsequent lessons forward by the same delta".)
+        if shift_subsequent:
+            delta = new_day_number - old_day
+            await db.execute(
+                update(ClientLesson)
+                .where(ClientLesson.lesson_plan_id == plan_id)
+                .where(ClientLesson.day_number > new_day_number)
+                .values(day_number=ClientLesson.day_number + delta)
+            )
     else:
         # Shift lessons between new_day and old-1 up by 1
         await db.execute(

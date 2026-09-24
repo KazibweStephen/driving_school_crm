@@ -769,6 +769,7 @@ async def skip_lesson(
 async def move_lesson(
     lesson_id: str,
     new_day_number: int,
+    shift_subsequent: bool = Query(True, description="Stretch the tail AFTER the new day forward by the same delta (delay the whole plan). User-confirmed. Send false to keep the old execute compact-only behaviour."),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("lesson_plans.edit")),
 ):
@@ -779,7 +780,7 @@ async def move_lesson(
     lesson = await lesson_service.get_client_lesson_by_id(db, lid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
-    lessons = await lesson_service.move_lesson(db, lesson, new_day_number)
+    lessons = await lesson_service.move_lesson(db, lesson, new_day_number, shift_subsequent=shift_subsequent)
     return [ClientLessonRead.model_validate(l) for l in lessons]
 
 

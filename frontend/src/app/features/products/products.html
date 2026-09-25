@@ -509,6 +509,16 @@
                 <label class="mb-1 block text-xs text-gray-500">Permit Processing Duration (Days)</label>
                 <p-inputNumber [(ngModel)]="packageForm.permit_processing_duration_days" [min]="0" styleClass="w-full" />
               </div>
+              <div class="ml-6 mb-2">
+                <label class="mb-1 block text-xs text-gray-500">Learners Permit Eligibility (Amount paid — blank = 50% of price)</label>
+                <p-inputNumber [(ngModel)]="packageForm.learners_permit_eligibility_amount" [min]="0" mode="decimal" styleClass="w-full"
+                  inputId="learners_permit_eligibility_amount" />
+              </div>
+              <div class="ml-6 mb-2">
+                <label class="mb-1 block text-xs text-gray-500">Test Eligibility (Amount paid — blank = 100% of price)</label>
+                <p-inputNumber [(ngModel)]="packageForm.test_eligibility_amount" [min]="0" mode="decimal" styleClass="w-full"
+                  inputId="test_eligibility_amount" />
+              </div>
             }
           </div>
 
@@ -697,6 +707,26 @@
                   [(ngModel)]="packageForm.permit_processing_duration_days"
                   [min]="0"
                   styleClass="w-full"
+                />
+              </div>
+              <div class="ml-6 mb-2">
+                <label class="mb-1 block text-xs text-gray-500">Learners Permit Eligibility (Amount paid — blank = 50% of price)</label>
+                <p-inputNumber
+                  [(ngModel)]="packageForm.learners_permit_eligibility_amount"
+                  [min]="0"
+                  mode="decimal"
+                  styleClass="w-full"
+                  inputId="edit_learners_permit_eligibility_amount"
+                />
+              </div>
+              <div class="ml-6 mb-2">
+                <label class="mb-1 block text-xs text-gray-500">Test Eligibility (Amount paid — blank = 100% of price)</label>
+                <p-inputNumber
+                  [(ngModel)]="packageForm.test_eligibility_amount"
+                  [min]="0"
+                  mode="decimal"
+                  styleClass="w-full"
+                  inputId="edit_test_eligibility_amount"
                 />
               </div>
             }

@@ -8,9 +8,10 @@ import { InputTextModule } from 'primeng/inputtext';
 import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
 import { TagModule } from 'primeng/tag';
+import { InputNumberModule } from 'primeng/inputnumber';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
-import { PermitAuditLog, PermitProgress, PermitProgressService, PermitTracker } from '../../core/services/permit-progress.service';
+import { PermitAuditLog, PermitProgress, PermitProgressService, PermitPromise, PermitTracker } from '../../core/services/permit-progress.service';
 
 interface StageDef {
   key: string;
@@ -22,7 +23,7 @@ interface StageDef {
   selector: 'app-permit-stages-dialog',
   imports: [
     CommonModule, FormsModule, ButtonModule, DialogModule, InputTextModule,
-    DatePickerModule, SelectModule, TagModule, ToastModule,
+    DatePickerModule, SelectModule, TagModule, ToastModule, InputNumberModule,
   ],
   templateUrl: './permit-stages-dialog.html',
 })
@@ -34,6 +35,7 @@ export class PermitStagesDialog {
   tracker: PermitTracker | null = null;
   progress: PermitProgress | null = null;
   auditLogs = signal<PermitAuditLog[]>([]);
+  promises = signal<PermitPromise[]>([]);
   saving = signal(false);
 
   // Eligibility override
@@ -47,6 +49,11 @@ export class PermitStagesDialog {
   learnersDueDate: Date | null = null;
   learnersExpiryDate: Date | null = null;
   permitReceivedDate: Date | null = null;
+
+  // Permit promise (expected receipt date / promised amount)
+  promiseDate: Date | null = null;
+  promiseAmount: number | null = null;
+  promiseNotes = '';
 
   stages: StageDef[] = [
     { key: 'not_qualified', label: 'Not Qualified', desc: 'Client has not yet qualified. A Learner\'s Permit application requires at least 50% of the package paid.' },
@@ -119,15 +126,32 @@ export class PermitStagesDialog {
     return !!this.tracker?.permit_expense_paid;
   }
 
+  // Eligibility: package-configured amount, else smart default (50% for learner, 100% for test)
+  get learnersPermitEligibilityAmount(): number {
+    return this.tracker?.learners_permit_eligibility_amount
+      ?? (this.tracker ? Math.round((this.tracker.total_amount ?? 0) * 0.5) : 0);
+  }
+
+  get testEligibilityAmount(): number {
+    return this.tracker?.test_eligibility_amount ?? this.tracker?.total_amount ?? 0;
+  }
+
+  get learnerQualifiedByPayment(): boolean {
+    if (!this.tracker) return false;
+    const threshold = this.learnersPermitEligibilityAmount;
+    if (threshold === 0) return true;
+    return this.tracker.total_paid >= threshold;
+  }
+
   get isPaidRatioEligible(): boolean {
-    return !!this.tracker && this.tracker.paid_ratio >= 0.5;
+    return this.learnerQualifiedByPayment;
   }
 
   get eligiblePending(): boolean {
     // Either they already qualify by payment or the testing/permit expense is
     // already paid — an admin just needs to add the corresponding date.
     return !!this.tracker && (
-      this.tracker.paid_ratio >= 0.5 ||
+      this.learnerQualifiedByPayment ||
       this.tracker.learner_expense_paid ||
       this.tracker.testing_expense_paid ||
       this.tracker.permit_expense_paid
@@ -218,6 +242,9 @@ export class PermitStagesDialog {
     this.tracker = tracker;
     this.overrideEligible = true;
     this.overrideReason = '';
+    this.promiseDate = null;
+    this.promiseAmount = null;
+    this.promiseNotes = '';
     this.visible.set(true);
     this.loadProgress();
   }
@@ -242,6 +269,8 @@ export class PermitStagesDialog {
       }
       const logs = await this.permitService.getAuditLogs(this.tracker.cart_item_id).toPromise();
       this.auditLogs.set(logs || []);
+      const promises = await this.permitService.getPermitPromises(this.tracker.cart_item_id).toPromise();
+      this.promises.set(promises || []);
     } catch {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load permit progress' });
     }
@@ -354,6 +383,57 @@ export class PermitStagesDialog {
     });
   }
 
+  async savePromise() {
+    if (!this.tracker) return;
+    if (!this.promiseDate) {
+      this.messageService.add({ severity: 'warn', summary: 'Date required', detail: 'Please choose the promised date' });
+      return;
+    }
+    this.saving.set(true);
+    try {
+      await this.permitService.addPermitPromise(this.tracker.cart_item_id, {
+        promised_date: this.localIso(this.promiseDate),
+        amount: this.promiseAmount ?? null,
+        notes: this.promiseNotes.trim() || null,
+      }).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Promise recorded' });
+      this.promiseDate = null;
+      this.promiseAmount = null;
+      this.promiseNotes = '';
+      this.changed.emit();
+      await this.loadProgress();
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to record promise' });
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  async removePromise(promiseId: string) {
+    if (!this.tracker) return;
+    this.saving.set(true);
+    try {
+      await this.permitService.deletePermitPromise(this.tracker.cart_item_id, promiseId).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Removed', detail: 'Promise removed' });
+      this.changed.emit();
+      await this.loadProgress();
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to remove promise' });
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  promiseLabel(p: PermitPromise): string {
+    const date = p.promised_date ? new Date(p.promised_date) : null;
+    const dateStr = date && !isNaN(date.getTime())
+      ? date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : 'No date';
+    const amountStr = p.amount ? ` · ${Number(p.amount).toLocaleString()} UGX` : '';
+    const notesStr = p.notes ? ` · ${p.notes}` : '';
+    return `${dateStr}${amountStr}${notesStr}`;
+  }
+
   auditLabel(field: string): string {
     const map: Record<string, string> = {
       got_learners_permit_date: 'Learner\'s permit issue date',
@@ -367,6 +447,7 @@ export class PermitStagesDialog {
       waiting_for_permit: 'Waiting for permit',
       eligibility: 'Eligibility',
       notes: 'Notes',
+      permit_promise: 'Permit promise',
     };
     return map[field] || field;
   }

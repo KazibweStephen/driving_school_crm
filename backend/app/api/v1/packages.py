@@ -153,6 +153,8 @@ async def create_package_with_rate(
             permit_processing_duration_days=data.permit_processing_duration_days,
             is_extension=data.is_extension,
             extension_days=data.extension_days,
+            learners_permit_eligibility_amount=data.learners_permit_eligibility_amount,
+            test_eligibility_amount=data.test_eligibility_amount,
             rate_total_amount=data.rate_total_amount,
             rate_converter_pct=data.rate_converter_pct,
             rate_primary_recommender_pct=data.rate_primary_recommender_pct,
@@ -193,6 +195,10 @@ async def create_package(
         driving_training_duration_days=data.driving_training_duration_days,
         theory_training_hours=data.theory_training_hours,
         permit_processing_duration_days=data.permit_processing_duration_days,
+        is_extension=data.is_extension,
+        extension_days=data.extension_days,
+        learners_permit_eligibility_amount=data.learners_permit_eligibility_amount,
+        test_eligibility_amount=data.test_eligibility_amount,
     )
     # Eager-load commission rates so PackageRead can validate without lazy-loading.
     pkg = await product_service.get_package_by_id(db, pkg.id, company_id=current_user.company_id)
@@ -233,6 +239,8 @@ async def update_package(
         driving_training_duration_days=data.driving_training_duration_days,
         theory_training_hours=data.theory_training_hours,
         permit_processing_duration_days=data.permit_processing_duration_days,
+        learners_permit_eligibility_amount=data.learners_permit_eligibility_amount,
+        test_eligibility_amount=data.test_eligibility_amount,
     )
     # Eager-load commission rates so PackageRead can validate without lazy-loading.
     updated = await product_service.get_package_by_id(db, updated.id, company_id=current_user.company_id)
@@ -323,6 +331,8 @@ async def update_package_with_rate(
             driving_training_duration_days=data.driving_training_duration_days,
             theory_training_hours=data.theory_training_hours,
             permit_processing_duration_days=data.permit_processing_duration_days,
+            learners_permit_eligibility_amount=data.learners_permit_eligibility_amount,
+            test_eligibility_amount=data.test_eligibility_amount,
             rate_total_amount=data.rate_total_amount,
             rate_converter_pct=data.rate_converter_pct,
             rate_primary_recommender_pct=data.rate_primary_recommender_pct,

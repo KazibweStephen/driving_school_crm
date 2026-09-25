@@ -181,6 +181,8 @@ async def bulk_onboard_clients(
                 cart_item.driving_training_duration_days = package.driving_training_duration_days
                 cart_item.theory_training_hours = package.theory_training_hours
                 cart_item.permit_processing_duration_days = package.permit_processing_duration_days
+                cart_item.learners_permit_eligibility_amount = package.learners_permit_eligibility_amount
+                cart_item.test_eligibility_amount = package.test_eligibility_amount
             db.add(cart_item)
             await db.flush()
 
@@ -846,6 +848,8 @@ async def _apply_package_corrections(
                 cart_item.driving_training_duration_days = package.driving_training_duration_days
                 cart_item.theory_training_hours = package.theory_training_hours
                 cart_item.permit_processing_duration_days = package.permit_processing_duration_days
+                cart_item.learners_permit_eligibility_amount = package.learners_permit_eligibility_amount
+                cart_item.test_eligibility_amount = package.test_eligibility_amount
         else:
             cart_item.requires_driving_training = False
             cart_item.requires_theory_training = False
@@ -853,6 +857,8 @@ async def _apply_package_corrections(
             cart_item.driving_training_duration_days = None
             cart_item.theory_training_hours = None
             cart_item.permit_processing_duration_days = None
+            cart_item.learners_permit_eligibility_amount = None
+            cart_item.test_eligibility_amount = None
 
         await _recompute_cart_item(db, consultation, cart_item)
         updated += 1

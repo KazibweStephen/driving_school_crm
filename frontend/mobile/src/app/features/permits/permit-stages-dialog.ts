@@ -7,11 +7,13 @@ import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
+import { InputNumberModule } from 'primeng/inputnumber';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 import {
   PermitAuditLog,
   PermitProgress,
+  PermitPromise,
   PermitService,
   PermitTracker,
 } from '../../core/services/permit.service';
@@ -26,7 +28,7 @@ interface StageDef {
   selector: 'app-permit-stages-dialog',
   imports: [
     CommonModule, FormsModule, ButtonModule, DialogModule, InputTextModule,
-    DatePickerModule, SelectModule, ToastModule,
+    DatePickerModule, SelectModule, ToastModule, InputNumberModule,
   ],
   providers: [MessageService],
   templateUrl: './permit-stages-dialog.html',
@@ -39,6 +41,7 @@ export class PermitStagesDialog {
   tracker: PermitTracker | null = null;
   progress: PermitProgress | null = null;
   auditLogs = signal<PermitAuditLog[]>([]);
+  promises = signal<PermitPromise[]>([]);
   saving = signal(false);
 
   overrideEligible = true;
@@ -50,6 +53,10 @@ export class PermitStagesDialog {
   learnersDueDate: Date | null = null;
   learnersExpiryDate: Date | null = null;
   permitReceivedDate: Date | null = null;
+
+  promiseDate: Date | null = null;
+  promiseAmount: number | null = null;
+  promiseNotes = '';
 
   stages: StageDef[] = [
     { key: 'not_qualified', label: 'Not Qualified', desc: 'A learner\'s permit requires at least 50% of the package paid.' },
@@ -90,8 +97,25 @@ export class PermitStagesDialog {
     return this.stages.findIndex(s => s.key === this.status);
   }
 
+  get learnersPermitEligibilityAmount(): number {
+    return this.tracker?.learners_permit_eligibility_amount
+      ?? (this.tracker ? Math.round((this.tracker.total_amount ?? 0) * 0.5) : 0);
+  }
+
+  get testEligibilityAmount(): number {
+    return this.tracker?.test_eligibility_amount ?? this.tracker?.total_amount ?? 0;
+  }
+
+  get learnerQualifiedByPayment(): boolean {
+    if (!this.tracker) return false;
+    const threshold = this.tracker.learners_permit_eligibility_amount
+      ?? Math.round((this.tracker.total_amount ?? 0) * 0.5);
+    if (threshold === 0) return true;
+    return this.tracker.total_paid >= threshold;
+  }
+
   get isPaidRatioEligible(): boolean {
-    return !!this.tracker && this.tracker.paid_ratio >= 0.5;
+    return this.learnerQualifiedByPayment;
   }
 
   get learnerExpensePaid(): boolean {
@@ -204,6 +228,9 @@ export class PermitStagesDialog {
     this.tracker = tracker;
     this.overrideEligible = true;
     this.overrideReason = '';
+    this.promiseDate = null;
+    this.promiseAmount = null;
+    this.promiseNotes = '';
     this.visible.set(true);
     this.loadProgress();
   }
@@ -228,6 +255,8 @@ export class PermitStagesDialog {
       }
       const logs = await this.permitService.getAuditLogs(this.tracker.cart_item_id).toPromise();
       this.auditLogs.set(logs || []);
+      const promises = await this.permitService.getPermitPromises(this.tracker.cart_item_id).toPromise();
+      this.promises.set(promises || []);
     } catch {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load permit progress' });
     }
@@ -335,6 +364,57 @@ export class PermitStagesDialog {
     });
   }
 
+  async savePromise() {
+    if (!this.tracker) return;
+    if (!this.promiseDate) {
+      this.messageService.add({ severity: 'warn', summary: 'Date required', detail: 'Please choose the promised date' });
+      return;
+    }
+    this.saving.set(true);
+    try {
+      await this.permitService.addPermitPromise(this.tracker.cart_item_id, {
+        promised_date: this.localIso(this.promiseDate),
+        amount: this.promiseAmount ?? null,
+        notes: this.promiseNotes.trim() || null,
+      }).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Promise recorded' });
+      this.promiseDate = null;
+      this.promiseAmount = null;
+      this.promiseNotes = '';
+      this.changed.emit();
+      await this.loadProgress();
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to record promise' });
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  async removePromise(promiseId: string) {
+    if (!this.tracker) return;
+    this.saving.set(true);
+    try {
+      await this.permitService.deletePermitPromise(this.tracker.cart_item_id, promiseId).toPromise();
+      this.messageService.add({ severity: 'success', summary: 'Removed', detail: 'Promise removed' });
+      this.changed.emit();
+      await this.loadProgress();
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to remove promise' });
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  promiseLabel(p: PermitPromise): string {
+    const date = p.promised_date ? new Date(p.promised_date) : null;
+    const dateStr = date && !isNaN(date.getTime())
+      ? date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : 'No date';
+    const amountStr = p.amount ? ` · ${Number(p.amount).toLocaleString()} UGX` : '';
+    const notesStr = p.notes ? ` · ${p.notes}` : '';
+    return `${dateStr}${amountStr}${notesStr}`;
+  }
+
   auditLabel(field: string): string {
     const map: Record<string, string> = {
       got_learners_permit_date: 'Learner\'s permit issue date',
@@ -348,6 +428,7 @@ export class PermitStagesDialog {
       waiting_for_permit: 'Waiting for permit',
       eligibility: 'Eligibility',
       notes: 'Notes',
+      permit_promise: 'Permit promise',
     };
     return map[field] || field;
   }

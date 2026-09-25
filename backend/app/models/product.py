@@ -62,6 +62,14 @@ class Package(Base):
     permit_processing_duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_extension: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     extension_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Permit eligibility thresholds. NULL = fall back to the smart defaults
+    # (learners permit: 50% of package price; test-ready: 100% of package price).
+    learners_permit_eligibility_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    test_eligibility_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
     status: Mapped[EntityStatus] = mapped_column(
         Enum(EntityStatus), default=EntityStatus.ACTIVE, nullable=False
     )

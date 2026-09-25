@@ -96,7 +96,6 @@
                 <p-checkbox [binary]="true" [ngModel]="isAllSelected()" (onChange)="toggleSelectAll()" />
               </th>
             }
-            <th>Name</th><th>Phone</th><th>Location</th><th>Branch</th><th>Status</th><th>Stage</th>
             <th>
               <button type="button" (click)="toggleDocDateSort()" data-testid="sort-sales-document-date" title="Sort by document date" class="inline-flex items-center gap-1 text-left">
                 Doc Date
@@ -109,6 +108,7 @@
                 }
               </button>
             </th>
+            <th>Name</th><th>Phone</th><th>Location</th><th>Branch</th><th>Status</th><th>Stage</th>
             <th>Actions</th>
           </tr>
         </ng-template>
@@ -119,13 +119,13 @@
                 <p-checkbox [binary]="true" [ngModel]="selectedIds().has(c.id)" (onChange)="toggleSelect(c.id)" />
               </td>
             }
+            <td class="text-sm text-gray-500" data-testid="sales-document-date">{{ (c.document_date | date: 'mediumDate') ?? '—' }}</td>
             <td class="font-medium"><a [routerLink]="['/consultations', c.id]" class="text-blue-600 hover:text-blue-800 hover:underline">{{ fullName(c) }}</a></td>
             <td class="text-sm text-gray-600">{{ c.phone }}</td>
             <td class="text-sm text-gray-500">{{ c.location || '—' }}</td>
             <td class="text-sm text-gray-500">{{ c.branch_name || '—' }}</td>
             <td><p-tag [value]="c.status" [severity]="statusSeverity(c.status)" /></td>
             <td class="text-sm text-gray-500">{{ stageLabel(c) }}</td>
-            <td class="text-sm text-gray-500" data-testid="sales-document-date">{{ (c.document_date | date: 'mediumDate') ?? '—' }}</td>
             <td>
               <div class="flex items-center gap-1">
                 <p-button icon="pi pi-eye" severity="secondary" [routerLink]="['/consultations', c.id]" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="View" />

@@ -29,6 +29,8 @@ export interface Package {
   permit_processing_duration_days: number | null;
   is_extension: boolean;
   extension_days: number | null;
+  learners_permit_eligibility_amount?: number | null;
+  test_eligibility_amount?: number | null;
   status: string;
   created_by_phone: string | null;
   created_at: string;
@@ -159,6 +161,8 @@ export interface PackageCreate {
   permit_processing_duration_days?: number | null;
   is_extension?: boolean;
   extension_days?: number | null;
+  learners_permit_eligibility_amount?: number | null;
+  test_eligibility_amount?: number | null;
 }
 
 export interface PackageUpdate {
@@ -174,6 +178,8 @@ export interface PackageUpdate {
   permit_processing_duration_days?: number | null;
   is_extension?: boolean;
   extension_days?: number | null;
+  learners_permit_eligibility_amount?: number | null;
+  test_eligibility_amount?: number | null;
 }
 
 export interface PackageWithRateUpdate extends PackageUpdate {

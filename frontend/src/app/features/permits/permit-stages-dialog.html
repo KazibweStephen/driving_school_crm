@@ -29,6 +29,19 @@
       }
     </div>
 
+    <!-- Eligibility overview -->
+    <div class="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <span class="font-medium text-gray-700"><i class="pi pi-credit-card mr-1"></i>Eligibility</span>
+        <span class="text-xs text-gray-400">Configure on the product package (web)</span>
+      </div>
+      <div class="mt-1 grid grid-cols-1 gap-1 text-xs text-gray-600 sm:grid-cols-3">
+        <span>Learners permit: <b>{{ learnersPermitEligibilityAmount | number }}</b> paid <b>{{ tracker.total_paid | number }}</b> — {{ learnerQualifiedByPayment ? 'qualified' : 'not yet' }}</span>
+        <span>Test eligibility: <b>{{ testEligibilityAmount | number }}</b> paid <b>{{ tracker.total_paid | number }}</b> — {{ tracker.total_paid >= testEligibilityAmount ? 'ready' : 'pending' }}</span>
+        <span>Expected permit: {{ (tracker.expecting_permit_on_date | date: 'mediumDate') ?? 'not promised' }}{{ tracker.delayed_days ? ' · delayed ' + tracker.delayed_days + 'd' : '' }}</span>
+      </div>
+    </div>
+
     <!-- Already-paid expense flags -->
     @if (tracker.learner_expense_paid && !progress?.got_learners_permit_date) {
       <div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -280,6 +293,40 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- Promised permit dates -->
+    <div class="mt-4 rounded-xl border border-gray-200 p-4">
+      <h3 class="mb-2 text-sm font-semibold text-gray-800"><i class="pi pi-ticket mr-1"></i>Promised Permit Date</h3>
+      <p class="mb-3 text-xs text-gray-500">The latest promise drives the expected permit date and the delay shown in the tracker.</p>
+      <div class="mb-3 flex flex-wrap items-end gap-2">
+        <label class="block text-sm">
+          <span class="mb-1 block text-xs font-medium text-gray-500">Promised date</span>
+          <p-datepicker [(ngModel)]="promiseDate" dateFormat="dd/mm/yy" appendTo="body" styleClass="w-full" />
+        </label>
+        <label class="block text-sm">
+          <span class="mb-1 block text-xs font-medium text-gray-500">Amount (UGX)</span>
+          <p-inputNumber [(ngModel)]="promiseAmount" [min]="0" mode="decimal" inputId="promise-amount" />
+        </label>
+        <label class="block flex-1 text-sm">
+          <span class="mb-1 block text-xs font-medium text-gray-500">Notes</span>
+          <input pInputText [(ngModel)]="promiseNotes" placeholder="e.g. promised by customer care" class="w-full" />
+        </label>
+        <p-button label="Add Promise" icon="pi pi-plus" [loading]="saving()" (onClick)="savePromise()" />
+      </div>
+      @if (promises().length) {
+        <ul class="space-y-2">
+          @for (p of promises(); track p.id) {
+            <li class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 p-2 text-sm">
+              <span class="text-gray-700">{{ promiseLabel(p) }}</span>
+              <p-button icon="pi pi-trash" severity="danger" styleClass="p-button-sm p-button-rounded p-button-text"
+                [loading]="saving()" (onClick)="removePromise(p.id)" />
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="text-sm text-gray-400">No promises recorded yet.</p>
+      }
     </div>
 
     <!-- Audit trail -->

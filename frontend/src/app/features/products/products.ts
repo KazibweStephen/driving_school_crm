@@ -90,6 +90,8 @@ export class Products implements OnInit {
     driving_training_duration_days: null as number | null,
     theory_training_hours: null as number | null,
     permit_processing_duration_days: null as number | null,
+    learners_permit_eligibility_amount: null as number | null,
+    test_eligibility_amount: null as number | null,
   };
 
   statuses = [
@@ -333,6 +335,8 @@ export class Products implements OnInit {
       driving_training_duration_days: null,
       theory_training_hours: null,
       permit_processing_duration_days: null,
+      learners_permit_eligibility_amount: null,
+      test_eligibility_amount: null,
     };
     this.rateForm = {
       total_amount: null,
@@ -388,6 +392,8 @@ export class Products implements OnInit {
           driving_training_duration_days: this.packageForm.driving_training_duration_days,
           theory_training_hours: this.packageForm.theory_training_hours,
           permit_processing_duration_days: this.packageForm.permit_processing_duration_days,
+          learners_permit_eligibility_amount: this.packageForm.learners_permit_eligibility_amount,
+          test_eligibility_amount: this.packageForm.test_eligibility_amount,
           rate_total_amount: this.rateForm.total_amount ?? undefined,
           rate_converter_pct: this.rateForm.converter_pct || undefined,
           rate_primary_recommender_pct: this.rateForm.primary_recommender_pct || undefined,
@@ -407,6 +413,8 @@ export class Products implements OnInit {
         driving_training_duration_days: null,
         theory_training_hours: null,
         permit_processing_duration_days: null,
+        learners_permit_eligibility_amount: null,
+        test_eligibility_amount: null,
       };
       await this.loadProducts();
       this.messageService.add({
@@ -439,6 +447,14 @@ export class Products implements OnInit {
       driving_training_duration_days: pkg.driving_training_duration_days,
       theory_training_hours: pkg.theory_training_hours,
       permit_processing_duration_days: pkg.permit_processing_duration_days,
+      learners_permit_eligibility_amount:
+        pkg.learners_permit_eligibility_amount !== undefined && pkg.learners_permit_eligibility_amount !== null
+          ? Number(pkg.learners_permit_eligibility_amount)
+          : null,
+      test_eligibility_amount:
+        pkg.test_eligibility_amount !== undefined && pkg.test_eligibility_amount !== null
+          ? Number(pkg.test_eligibility_amount)
+          : null,
     };
 
     if (pkg.commission_rate) {
@@ -500,6 +516,8 @@ export class Products implements OnInit {
         driving_training_duration_days: this.packageForm.driving_training_duration_days,
         theory_training_hours: this.packageForm.theory_training_hours,
         permit_processing_duration_days: this.packageForm.permit_processing_duration_days,
+        learners_permit_eligibility_amount: this.packageForm.learners_permit_eligibility_amount,
+        test_eligibility_amount: this.packageForm.test_eligibility_amount,
       };
 
       if (hadRate && !hasRate) {

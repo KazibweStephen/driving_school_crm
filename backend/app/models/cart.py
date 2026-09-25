@@ -59,6 +59,13 @@ class CartItem(Base):
     driving_training_duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     theory_training_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     permit_processing_duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Permit eligibility thresholds inherited from Package at creation (NULL = use defaults)
+    learners_permit_eligibility_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    test_eligibility_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
     # Fuel budget snapshot inherited from Package's active fuel rate at creation
     fuel_rate_per_session: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     # Expected-expense snapshot captured at conversion (keeps already-spent packages stable)
@@ -91,6 +98,9 @@ class CartItem(Base):
     )
     permit_progress: Mapped["PermitProgress | None"] = relationship(
         "PermitProgress", back_populates="cart_item", uselist=False, cascade="all, delete-orphan"
+    )
+    permit_promises: Mapped[list["PermitPromise"]] = relationship(
+        "PermitPromise", back_populates="cart_item", cascade="all, delete-orphan"
     )
     discount_links: Mapped[list["CartItemDiscount"]] = relationship(
         "CartItemDiscount", back_populates="cart_item", cascade="all, delete-orphan"

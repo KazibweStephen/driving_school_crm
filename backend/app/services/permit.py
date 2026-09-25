@@ -13,7 +13,7 @@ from app.models.company import Branch, Expense, ExpenseCategory
 from app.models.consultation import Consultation
 from app.models.discount import CartItemDiscount
 from app.models.payment import Payment
-from app.models.permit import PermitAuditLog, PermitProgress
+from app.models.permit import PermitAuditLog, PermitPromise, PermitProgress
 from app.models.product import Package, Product
 from app.models.user import User, UserRole
 from app.services.expected_expense import cart_item_expected_amount
@@ -402,14 +402,44 @@ async def _build_permit_trackers(
             select(Product.id, Product.name).where(Product.id.in_([uuid.UUID(p) for p in product_ids]))
         )
         products = {str(pid): name for pid, name in prods.all()}
-    packages: dict[str, str] = {}
+    packages: dict[str, tuple] = {}
     if package_ids:
         pkgs = await db.execute(
-            select(Package.id, Package.name, Package.price).where(
+            select(
+                Package.id, Package.name, Package.price,
+                Package.learners_permit_eligibility_amount, Package.test_eligibility_amount,
+            ).where(
                 Package.id.in_([uuid.UUID(p) for p in package_ids])
             )
         )
-        packages = {str(pid): (name, float(price)) for pid, name, price in pkgs.all()}
+        packages = {
+            str(pid): (
+                name,
+                float(price),
+                (float(lea) if lea is not None else None, float(te) if te is not None else None),
+            )
+            for pid, name, price, lea, te in pkgs.all()
+        }
+
+    # Permit promises per cart item (drives expecting_permit_on_date/delayed_days)
+    promise_map: dict[uuid.UUID, list[dict]] = {}
+    if rows:
+        pr_rows = await db.execute(
+            select(PermitPromise)
+            .where(PermitPromise.cart_item_id.in_([ci.id for ci in rows]))
+            .order_by(PermitPromise.created_at)
+        )
+        for pr in pr_rows.scalars().all():
+            promise_map.setdefault(pr.cart_item_id, []).append({
+                "id": pr.id,
+                "cart_item_id": pr.cart_item_id,
+                "promised_date": pr.promised_date,
+                "amount": float(pr.amount) if pr.amount is not None else None,
+                "notes": pr.notes,
+                "created_by_phone": pr.created_by_phone,
+                "created_at": pr.created_at,
+                "updated_at": pr.updated_at,
+            })
 
     trackers: list[dict] = []
     for ci in rows:
@@ -422,6 +452,17 @@ async def _build_permit_trackers(
         total_paid = await _paid_for_cart_item(db, ci)
         balance = max(0.0, effective_total - total_paid)
         ratio = (total_paid / effective_total) if effective_total > 0 else 0.0
+        # Eligibility thresholds: cart-item snapshot wins; fall back to the
+        # package's current values; NULL everywhere means use the smart defaults.
+        package_el = package_info[2] if package_info else (None, None)
+        learner_el = (
+            float(ci.learners_permit_eligibility_amount)
+            if ci.learners_permit_eligibility_amount is not None else package_el[0]
+        )
+        test_el = (
+            float(ci.test_eligibility_amount)
+            if ci.test_eligibility_amount is not None else package_el[1]
+        )
 
         tracker = {
             "cart_item_id": ci.id,
@@ -440,6 +481,9 @@ async def _build_permit_trackers(
             "total_paid": total_paid,
             "balance": balance,
             "paid_ratio": ratio,
+            "learners_permit_eligibility_amount": learner_el,
+            "test_eligibility_amount": test_el,
+            "promises": promise_map.get(ci.id, []),
             "start_date": pp.start_date if pp else None,
             "got_learners_permit_date": pp.got_learners_permit_date if pp else None,
             "learners_due_date": pp.learners_due_date if pp else None,
@@ -483,8 +527,6 @@ def compute_tracker_status(t: dict) -> str:
         if pstat == "approved":
             return "permit_pending_payment"
         return "waiting_for_permit"
-    if t.get("test_ready"):
-        return "test_ready"
     if not t.get("got_learners_permit_date"):
         lstat = t.get("learner_expense_status")
         if lstat == "pending":
@@ -495,13 +537,25 @@ def compute_tracker_status(t: dict) -> str:
             return "learner_paid"
         if t.get("eligibility_overridden"):
             return "eligible"
-        return "eligible" if (t.get("paid_ratio") or 0) >= 0.5 else "not_qualified"
+        learner_threshold = t.get("learners_permit_eligibility_amount")
+        if learner_threshold is None:
+            learner_threshold = t.get("total_amount", 0) * 0.5
+        return "eligible" if t.get("total_paid", 0) >= learner_threshold else "not_qualified"
     if t.get("learners_due_date") and t["learners_due_date"] <= today_local():
         tstat = t.get("testing_expense_status")
         if tstat == "pending":
             return "test_pending_approval"
         if tstat == "approved":
             return "test_pending_payment"
+        test_threshold = t.get("test_eligibility_amount")
+        if test_threshold is None:
+            test_threshold = t.get("total_amount", 0)
+        if (
+            t.get("test_ready")
+            or t.get("eligibility_overridden")
+            or t.get("total_paid", 0) >= test_threshold
+        ):
+            return "test_ready"
         return "due_for_testing"
     return "learners_active"
 
@@ -592,10 +646,51 @@ async def list_permit_notifications(
                 if prev_created is None or exp_created > prev_created:
                     expense_kinds_created.setdefault(key, {})[kind] = exp_created
 
+    # Package price + eligibility thresholds per cart item, and applied discounts,
+    # so the minimal tracker dict can still compute status thresholds.
+    package_ids = {ci.package_id for ci in rows if ci.package_id}
+    packages: dict[str, tuple] = {}
+    if package_ids:
+        pkgs = await db.execute(
+            select(
+                Package.id, Package.name, Package.price,
+                Package.learners_permit_eligibility_amount, Package.test_eligibility_amount,
+            ).where(Package.id.in_([uuid.UUID(p) for p in package_ids]))
+        )
+        packages = {
+            str(pid): (
+                float(price),
+                (float(lea) if lea is not None else None, float(te) if te is not None else None),
+            )
+            for pid, _name, price, lea, te in pkgs.all()
+        }
+    discount_map: dict[uuid.UUID, float] = {}
+    ci_ids = [ci.id for ci in rows]
+    if ci_ids:
+        disc_rows = await db.execute(
+            select(CartItemDiscount.cart_item_id, func.sum(CartItemDiscount.applied_amount))
+            .where(CartItemDiscount.cart_item_id.in_(ci_ids))
+            .group_by(CartItemDiscount.cart_item_id)
+        )
+        for cid, amount in disc_rows.all():
+            discount_map[cid] = float(amount or 0)
+
     items: list[dict] = []
     for ci in rows:
         cons = ci.consultation
         pp = progress_map.get(ci.id)
+        pkg_info = packages.get(ci.package_id) if ci.package_id else None
+        price = pkg_info[0] if pkg_info else 0.0
+        effective_total = max(0.0, price - discount_map.get(ci.id, 0.0))
+        pkg_el = pkg_info[1] if pkg_info else (None, None)
+        learner_el = (
+            float(ci.learners_permit_eligibility_amount)
+            if ci.learners_permit_eligibility_amount is not None else pkg_el[0]
+        )
+        test_el = (
+            float(ci.test_eligibility_amount)
+            if ci.test_eligibility_amount is not None else pkg_el[1]
+        )
         tracker = {
             "permit_received_date": pp.permit_received_date if pp else None,
             "permit_paid": bool(pp.permit_paid) if pp else False,
@@ -605,7 +700,10 @@ async def list_permit_notifications(
             "got_learners_permit_date": pp.got_learners_permit_date if pp else None,
             "eligibility_overridden": bool(pp.eligibility_overridden) if pp else False,
             "learners_due_date": pp.learners_due_date if pp else None,
-            "paid_ratio": 0.0,
+            "total_amount": effective_total,
+            "total_paid": 0.0,
+            "learners_permit_eligibility_amount": learner_el,
+            "test_eligibility_amount": test_el,
         }
         kinds = expense_kinds_status.get(ci.id) or expense_kinds_status.get(cons.id) or {}
         tracker["learner_expense_status"] = kinds.get("learner")
@@ -785,10 +883,14 @@ async def _qualifying_installment_date(
     db: AsyncSession, ci: CartItem, effective_total: float
 ) -> date | None:
     """The document date of the payment whose cumulative total first reached
-    learners-permit eligibility (>= 50% of the effective total)."""
+    learners-permit eligibility (the cart item's configured eligibility amount,
+    else 50% of the effective total)."""
     if effective_total <= 0:
         return None
-    target = Decimal(str(effective_total * 0.5))
+    if ci.learners_permit_eligibility_amount is not None:
+        target = Decimal(str(ci.learners_permit_eligibility_amount))
+    else:
+        target = Decimal(str(effective_total * 0.5))
     rows = (
         (
             await db.execute(
@@ -888,6 +990,8 @@ async def default_permit_expense_date(
             return True
         effective = await _effective_total_for_cart_item(db, ci)
         paid = await _paid_for_cart_item(db, ci)
+        if ci.learners_permit_eligibility_amount is not None:
+            return effective > 0 and paid >= Decimal(str(ci.learners_permit_eligibility_amount))
         return effective > 0 and (paid / effective) >= 0.5
 
     async def _learner_default() -> date | None:
@@ -1217,7 +1321,20 @@ async def list_permit_expense_checklist(
             select(PermitProgress).where(PermitProgress.cart_item_id == ci.id)
         )
     ).scalar_one_or_none()
-    qualifying = paid_ratio >= 0.5 or bool(progress and progress.eligibility_overridden)
+    learner_el = (
+        float(ci.learners_permit_eligibility_amount)
+        if ci.learners_permit_eligibility_amount is not None else None
+    )
+    test_el = (
+        float(ci.test_eligibility_amount)
+        if ci.test_eligibility_amount is not None else None
+    )
+    if learner_el is not None:
+        qualifying = paid_total >= Decimal(str(learner_el)) or bool(
+            progress and progress.eligibility_overridden
+        )
+    else:
+        qualifying = paid_ratio >= 0.5 or bool(progress and progress.eligibility_overridden)
 
     return {
         "cart_item_id": ci.id,
@@ -1227,6 +1344,140 @@ async def list_permit_expense_checklist(
         "package_id": ci.package_id,
         "package_name": pkg.name if pkg else None,
         "paid_ratio": paid_ratio,
+        "learners_permit_eligibility_amount": learner_el,
+        "test_eligibility_amount": test_el,
         "qualifying": qualifying,
         "items": items,
     }
+
+
+# ── Permit promises ─────────────────────────────────────────────────
+
+async def list_permit_promises(
+    db: AsyncSession,
+    cart_item_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> list[PermitPromise]:
+    if not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
+        raise HTTPException(status_code=404, detail="Cart item not found")
+    rows = (
+        await db.execute(
+            select(PermitPromise)
+            .where(PermitPromise.cart_item_id == cart_item_id)
+            .order_by(PermitPromise.created_at.desc())
+        )
+    ).scalars().all()
+    return list(rows)
+
+
+async def _sync_expectation_from_promises(
+    db: AsyncSession, ci: CartItem, changed_by: str, changed_by_name: str | None,
+    audit_log: str | None = None,
+) -> None:
+    """Point PermitProgress.expecting_permit_on_date / delayed_days at the most
+    recently created promise. Creates a bare progress row if none exists."""
+    promise = (
+        await db.execute(
+            select(PermitPromise)
+            .where(PermitPromise.cart_item_id == ci.id)
+            .order_by(PermitPromise.created_at.desc(), PermitPromise.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    progress = (
+        await db.execute(
+            select(PermitProgress).where(PermitProgress.cart_item_id == ci.id)
+        )
+    ).scalar_one_or_none()
+    if progress is None:
+        progress = PermitProgress(cart_item_id=ci.id)
+        db.add(progress)
+        await db.flush()
+
+    expecting = promise.promised_date if promise else None
+    delayed = None
+    if expecting is not None:
+        days = (today_local() - expecting).days
+        if days > 0:
+            delayed = days
+    progress.expecting_permit_on_date = expecting
+    progress.delayed_days = delayed
+    if audit_log:
+        await add_audit_log(
+            db, progress, "permit_promise", None, audit_log,
+            changed_by=changed_by, changed_by_name=changed_by_name,
+        )
+
+
+async def create_permit_promise(
+    db: AsyncSession,
+    cart_item_id: uuid.UUID,
+    promised_date: date | None,
+    amount: Decimal | None,
+    notes: str | None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+    changed_by: str | None = None,
+    changed_by_name: str | None = None,
+) -> PermitPromise:
+    ci = (
+        await db.execute(
+            select(CartItem).where(CartItem.id == cart_item_id)
+        )
+    ).scalar_one_or_none()
+    if ci is None:
+        raise HTTPException(status_code=404, detail="Cart item not found")
+    if not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
+        raise HTTPException(status_code=404, detail="Cart item not found")
+    if promised_date is None and notes is None:
+        raise HTTPException(status_code=400, detail="Provide at least a promised date or notes")
+    promise = PermitPromise(
+        cart_item_id=cart_item_id,
+        promised_date=promised_date,
+        amount=amount,
+        notes=notes,
+        created_by_phone=changed_by,
+    )
+    db.add(promise)
+    await db.flush()
+    await _sync_expectation_from_promises(
+        db, ci, changed_by or "", changed_by_name,
+        audit_log=f"promise {promised_date.isoformat() if promised_date else '—'} added",
+    )
+    await db.refresh(promise)
+    return promise
+
+
+async def delete_permit_promise(
+    db: AsyncSession,
+    cart_item_id: uuid.UUID,
+    promise_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+    changed_by: str | None = None,
+    changed_by_name: str | None = None,
+) -> None:
+    if not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
+        raise HTTPException(status_code=404, detail="Cart item not found")
+    promise = (
+        await db.execute(
+            select(PermitPromise).where(
+                PermitPromise.id == promise_id,
+                PermitPromise.cart_item_id == cart_item_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if promise is None:
+        raise HTTPException(status_code=404, detail="Promise not found")
+    removed_label = (
+        f"promise {promise.promised_date.isoformat() if promise.promised_date else '—'} removed"
+    )
+    ci = (
+        await db.execute(
+            select(CartItem).where(CartItem.id == cart_item_id)
+        )
+    ).scalar_one()
+    await db.delete(promise)
+    await db.flush()
+    await _sync_expectation_from_promises(db, ci, changed_by or "", changed_by_name, audit_log=removed_label)

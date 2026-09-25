@@ -16,6 +16,8 @@ from app.schemas.permit import (
     PermitAuditLogRead,
     PermitExpenseRecordCreate,
     PermitExpenseChecklistResponse,
+    PermitPromiseCreate,
+    PermitPromiseRead,
 )
 from app.services import permit as permit_service
 from app.services.permit import categorize_permit_expense, apply_permit_expense_effects
@@ -145,6 +147,67 @@ async def get_permit_expenses(
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return data
+
+
+# ── Permit promises (drives expecting_permit_on_date / delayed_days) ─
+
+@router.get("/{cart_item_id}/permit-promises", response_model=list[PermitPromiseRead])
+async def list_permit_promises(
+    cart_item_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("training.view")),
+):
+    try:
+        cid = uuid.UUID(cart_item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid cart item ID")
+    promises = await permit_service.list_permit_promises(
+        db, cid, company_id=current_user.company_id, current_user_role=current_user.role
+    )
+    return [PermitPromiseRead.model_validate(p) for p in promises]
+
+
+@router.post("/{cart_item_id}/permit-promises", response_model=PermitPromiseRead)
+async def create_permit_promise(
+    cart_item_id: str,
+    data: PermitPromiseCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("training.edit")),
+):
+    try:
+        cid = uuid.UUID(cart_item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid cart item ID")
+    promise = await permit_service.create_permit_promise(
+        db, cid,
+        promised_date=data.promised_date,
+        amount=data.amount,
+        notes=data.notes,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+        changed_by=current_user.phone,
+        changed_by_name=(current_user.first_name or "") + " " + (current_user.last_name or ""),
+    )
+    return PermitPromiseRead.model_validate(promise)
+
+
+@router.delete("/{cart_item_id}/permit-promises/{promise_id}", status_code=204)
+async def delete_permit_promise(
+    cart_item_id: str,
+    promise_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("training.edit")),
+):
+    try:
+        cid = uuid.UUID(cart_item_id)
+        pid = uuid.UUID(promise_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID")
+    await permit_service.delete_permit_promise(
+        db, cid, pid,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+        changed_by=current_user.phone,
+        changed_by_name=(current_user.first_name or "") + " " + (current_user.last_name or ""),
+    )
 
 
 # ── Permit-tracker list endpoint ────────────────────────────────────

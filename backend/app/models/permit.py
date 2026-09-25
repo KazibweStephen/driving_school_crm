@@ -1,7 +1,8 @@
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -46,6 +47,30 @@ class PermitProgress(Base):
     audit_logs: Mapped[list["PermitAuditLog"]] = relationship(
         "PermitAuditLog", back_populates="progress", cascade="all, delete-orphan"
     )
+
+
+class PermitPromise(Base):
+    """A date at which a staff member promised the client their permit would
+    arrive. The most recent promise drives ``expecting_permit_on_date`` /
+    ``delayed_days`` on the client's PermitProgress."""
+    __tablename__ = "permit_promises"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    cart_item_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cart_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    promised_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_phone: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    cart_item: Mapped["CartItem"] = relationship("CartItem", back_populates="permit_promises")
 
 
 class PermitAuditLog(Base):

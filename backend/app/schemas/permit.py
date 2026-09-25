@@ -1,9 +1,29 @@
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, Field, computed_field
 
 from app.utils.timezones import today_local
+
+
+class PermitPromiseCreate(BaseModel):
+    promised_date: date | None = None
+    amount: float | None = Field(None, ge=0)
+    notes: str | None = Field(None, max_length=2000)
+
+
+class PermitPromiseRead(BaseModel):
+    id: uuid.UUID
+    cart_item_id: uuid.UUID
+    promised_date: date | None = None
+    amount: Decimal | None = None
+    notes: str | None = None
+    created_by_phone: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class PermitProgressUpdate(BaseModel):
@@ -89,6 +109,8 @@ class PermitExpenseChecklistResponse(BaseModel):
     package_id: str | None = None
     package_name: str | None = None
     paid_ratio: float = 0.0
+    learners_permit_eligibility_amount: float | None = None
+    test_eligibility_amount: float | None = None
     qualifying: bool = False
     items: list[PermitExpenseChecklistItem]
 
@@ -123,6 +145,9 @@ class PermitTrackerRead(BaseModel):
     total_paid: float
     balance: float
     paid_ratio: float
+    learners_permit_eligibility_amount: float | None = None
+    test_eligibility_amount: float | None = None
+    promises: list[PermitPromiseRead] = Field(default_factory=list)
 
     start_date: date | None
     got_learners_permit_date: date | None
@@ -160,8 +185,6 @@ class PermitTrackerRead(BaseModel):
             if self.permit_expense_status == "approved":
                 return "permit_pending_payment"
             return "waiting_for_permit"
-        if self.test_ready:
-            return "test_ready"
         if not self.got_learners_permit_date:
             if self.learner_expense_status == "pending":
                 return "learner_pending_approval"
@@ -171,12 +194,24 @@ class PermitTrackerRead(BaseModel):
                 return "learner_paid"
             if self.eligibility_overridden:
                 return "eligible"
-            return "eligible" if self.paid_ratio >= 0.5 else "not_qualified"
+            learner_threshold = (
+                self.learners_permit_eligibility_amount
+                if self.learners_permit_eligibility_amount is not None
+                else self.total_amount * 0.5
+            )
+            return "eligible" if self.total_paid >= learner_threshold else "not_qualified"
         if self.learners_due_date and self.learners_due_date <= today_local():
             if self.testing_expense_status == "pending":
                 return "test_pending_approval"
             if self.testing_expense_status == "approved":
                 return "test_pending_payment"
+            test_threshold = (
+                self.test_eligibility_amount
+                if self.test_eligibility_amount is not None
+                else self.total_amount
+            )
+            if self.test_ready or self.eligibility_overridden or self.total_paid >= test_threshold:
+                return "test_ready"
             return "due_for_testing"
         return "learners_active"
 

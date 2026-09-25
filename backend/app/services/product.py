@@ -144,6 +144,9 @@ async def create_package_with_rate(
     permit_processing_duration_days: int | None = None,
     is_extension: bool = False,
     extension_days: int | None = None,
+    # Permit eligibility thresholds (NULL = smart defaults)
+    learners_permit_eligibility_amount: Decimal | None = None,
+    test_eligibility_amount: Decimal | None = None,
     # Commission rate fields (optional)
     rate_total_amount: Decimal | None = None,
     rate_converter_pct: Decimal | None = None,
@@ -166,6 +169,10 @@ async def create_package_with_rate(
         driving_training_duration_days=driving_training_duration_days,
         theory_training_hours=theory_training_hours,
         permit_processing_duration_days=permit_processing_duration_days,
+        is_extension=is_extension,
+        extension_days=extension_days,
+        learners_permit_eligibility_amount=learners_permit_eligibility_amount,
+        test_eligibility_amount=test_eligibility_amount,
     )
     # Optionally create a commission rate
     if rate_total_amount is not None and rate_converter_pct is not None and company_id and rate_active_from:
@@ -201,6 +208,10 @@ async def create_package(
     driving_training_duration_days: int | None = None,
     theory_training_hours: int | None = None,
     permit_processing_duration_days: int | None = None,
+    is_extension: bool = False,
+    extension_days: int | None = None,
+    learners_permit_eligibility_amount: Decimal | None = None,
+    test_eligibility_amount: Decimal | None = None,
 ) -> Package:
     pkg = Package(
         product_id=product_id,
@@ -214,6 +225,10 @@ async def create_package(
         driving_training_duration_days=driving_training_duration_days,
         theory_training_hours=theory_training_hours,
         permit_processing_duration_days=permit_processing_duration_days,
+        is_extension=is_extension,
+        extension_days=extension_days,
+        learners_permit_eligibility_amount=learners_permit_eligibility_amount,
+        test_eligibility_amount=test_eligibility_amount,
     )
     db.add(pkg)
     await db.flush()
@@ -250,6 +265,8 @@ async def update_package(
     driving_training_duration_days: int | None = None,
     theory_training_hours: int | None = None,
     permit_processing_duration_days: int | None = None,
+    learners_permit_eligibility_amount: Decimal | None = None,
+    test_eligibility_amount: Decimal | None = None,
 ) -> Package:
     if name is not None:
         pkg.name = name
@@ -271,6 +288,10 @@ async def update_package(
         pkg.theory_training_hours = theory_training_hours
     if permit_processing_duration_days is not None:
         pkg.permit_processing_duration_days = permit_processing_duration_days
+    if learners_permit_eligibility_amount is not None:
+        pkg.learners_permit_eligibility_amount = learners_permit_eligibility_amount
+    if test_eligibility_amount is not None:
+        pkg.test_eligibility_amount = test_eligibility_amount
     await db.flush()
     await db.refresh(pkg)
     return pkg
@@ -357,6 +378,8 @@ async def update_package_with_rate(
     driving_training_duration_days: int | None = None,
     theory_training_hours: int | None = None,
     permit_processing_duration_days: int | None = None,
+    learners_permit_eligibility_amount: Decimal | None = None,
+    test_eligibility_amount: Decimal | None = None,
     rate_total_amount: Decimal | None = None,
     rate_converter_pct: Decimal | None = None,
     rate_primary_recommender_pct: Decimal | None = None,
@@ -378,6 +401,8 @@ async def update_package_with_rate(
         driving_training_duration_days=driving_training_duration_days,
         theory_training_hours=theory_training_hours,
         permit_processing_duration_days=permit_processing_duration_days,
+        learners_permit_eligibility_amount=learners_permit_eligibility_amount,
+        test_eligibility_amount=test_eligibility_amount,
     )
 
     if clear_rate:

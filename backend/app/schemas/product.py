@@ -35,6 +35,9 @@ class PackageCreate(BaseModel):
     permit_processing_duration_days: int | None = None
     is_extension: bool = False
     extension_days: int | None = None
+    # Permit eligibility thresholds (NULL = smart defaults: 50%/100% of price)
+    learners_permit_eligibility_amount: Decimal | None = Field(None, ge=0, decimal_places=2)
+    test_eligibility_amount: Decimal | None = Field(None, ge=0, decimal_places=2)
 
 
 class PackageUpdate(BaseModel):
@@ -50,6 +53,8 @@ class PackageUpdate(BaseModel):
     permit_processing_duration_days: int | None = None
     is_extension: bool | None = None
     extension_days: int | None = None
+    learners_permit_eligibility_amount: Decimal | None = Field(None, ge=0, decimal_places=2)
+    test_eligibility_amount: Decimal | None = Field(None, ge=0, decimal_places=2)
 
 
 class PackageWithRateCreate(PackageCreate):
@@ -101,6 +106,8 @@ class PackageRead(BaseModel):
     permit_processing_duration_days: int | None
     is_extension: bool
     extension_days: int | None
+    learners_permit_eligibility_amount: Decimal | None = None
+    test_eligibility_amount: Decimal | None = None
     status: EntityStatus
     created_by_phone: str | None
     created_at: datetime

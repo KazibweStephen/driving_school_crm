@@ -16,6 +16,8 @@ export interface CartItemRead {
   driving_training_duration_days: number | null;
   theory_training_hours: number | null;
   permit_processing_duration_days: number | null;
+  learners_permit_eligibility_amount?: number | null;
+  test_eligibility_amount?: number | null;
   product_name?: string | null;
   package_name?: string | null;
   created_at: string;

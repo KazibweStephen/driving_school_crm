@@ -58,6 +58,9 @@ export interface PermitTracker {
   total_paid: number;
   balance: number;
   paid_ratio: number;
+  learners_permit_eligibility_amount: number | null;
+  test_eligibility_amount: number | null;
+  promises: PermitPromise[];
   start_date: string | null;
   got_learners_permit_date: string | null;
   learners_due_date: string | null;
@@ -106,6 +109,23 @@ export interface PermitAuditLog {
   changed_by_name: string | null;
   reason: string | null;
   created_at: string;
+}
+
+export interface PermitPromise {
+  id: string;
+  cart_item_id: string;
+  promised_date: string | null;
+  amount: number | null;
+  notes: string | null;
+  created_by_phone: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PermitPromiseCreate {
+  promised_date?: string | null;
+  amount?: number | null;
+  notes?: string | null;
 }
 
 export interface PermitTrackerListResponse {
@@ -231,5 +251,17 @@ export class PermitProgressService {
     return this.http.get<PermitExpenseChecklistResponse>(
       `/api/v1/cart-items/${cartItemId}/permit-expenses`
     );
+  }
+
+  getPermitPromises(cartItemId: string) {
+    return this.http.get<PermitPromise[]>(`/api/v1/cart-items/${cartItemId}/permit-promises`);
+  }
+
+  addPermitPromise(cartItemId: string, data: PermitPromiseCreate) {
+    return this.http.post<PermitPromise>(`/api/v1/cart-items/${cartItemId}/permit-promises`, data);
+  }
+
+  deletePermitPromise(cartItemId: string, promiseId: string) {
+    return this.http.delete<void>(`/api/v1/cart-items/${cartItemId}/permit-promises/${promiseId}`);
   }
 }

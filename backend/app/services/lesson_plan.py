@@ -1263,20 +1263,29 @@ async def update_client_lesson(
     if fuel_cost is not None:
         lesson.fuel_cost = Decimal(fuel_cost)
     # Stretch-forward contract (mirrors /move shift_subsequent): when a forward
-    # reschedule/cancel carries shift_subsequent=True, every OTHER lesson in the
+    # reschedule/skip carries shift_subsequent=True, every OTHER lesson in the
     # plan scheduled on/after the OLD date also shifts forward by the same date
-    # delta — the whole tail is delayed, preserving relative spacing.
+    # delta — the whole tail is delayed, preserving relative spacing. The school
+    # only trains on week days, so any shifted lesson that lands on Sat/Sun is
+    # bumped forward to the next Monday.
     if shift_subsequent is True and _old_date is not None and scheduled_date is not None:
         if scheduled_date > _old_date:
             _delta = (scheduled_date - _old_date).days
             if _delta > 0:
-                await db.execute(
-                    update(ClientLesson)
-                    .where(ClientLesson.lesson_plan_id == lesson.lesson_plan_id)
-                    .where(ClientLesson.id != lesson.id)
-                    .where(ClientLesson.scheduled_date >= _old_date)
-                    .values(scheduled_date=ClientLesson.scheduled_date + timedelta(days=_delta))
-                )
+                _tail = (
+                    await db.execute(
+                        select(ClientLesson).where(
+                            ClientLesson.lesson_plan_id == lesson.lesson_plan_id,
+                            ClientLesson.id != lesson.id,
+                            ClientLesson.scheduled_date >= _old_date,
+                        )
+                    )
+                ).scalars().all()
+                for _l in _tail:
+                    _nd = _l.scheduled_date + timedelta(days=_delta)
+                    if _nd.weekday() >= 5:
+                        _nd += timedelta(days=7 - _nd.weekday())
+                    _l.scheduled_date = _nd
     await db.flush()
     await db.refresh(lesson)
     # Recompute plan completion counters whenever a lesson status may have changed

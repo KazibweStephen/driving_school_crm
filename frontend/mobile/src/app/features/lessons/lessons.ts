@@ -95,7 +95,7 @@ export class Lessons implements OnInit {
   // reschedule / cancel
   showReschedule = signal(false);
   rescheduleLesson = signal<WeeklyScheduleEntry | null>(null);
-  cancelMode = signal(false);
+  skipMode = signal(false);
   rsDate = signal('');
   rsStart = signal('');
   rsEnd = signal('');
@@ -210,7 +210,7 @@ export class Lessons implements OnInit {
   }
 
   openReschedule(slot: WeeklyScheduleEntry) {
-    this.cancelMode.set(false);
+    this.skipMode.set(false);
     this.rescheduleLesson.set(slot);
     this.shiftOnMove.set(true);
     this.rsDate.set(slot.scheduled_date || '');
@@ -219,23 +219,29 @@ export class Lessons implements OnInit {
     this.showReschedule.set(true);
   }
 
-  openCancel(slot: WeeklyScheduleEntry) {
-    this.cancelMode.set(true);
+  // Skip = mark the missed occurrence `skipped` and move it forward to the next
+  // week day, stretching the tail (shift_subsequent) so later practical lessons
+  // stay on week days only.
+  openSkip(slot: WeeklyScheduleEntry) {
+    this.skipMode.set(true);
     this.rescheduleLesson.set(slot);
     this.shiftOnMove.set(true);
     this.rsStart.set((slot.scheduled_start_time || '').slice(0, 5));
     this.rsEnd.set((slot.scheduled_end_time || '').slice(0, 5));
-    if (slot.scheduled_date) {
-      this.rsDate.set(toISODate(addDays(new Date(slot.scheduled_date + 'T00:00:00'), 1)));
-    } else {
-      this.rsDate.set('');
+    const base = slot.scheduled_date
+      ? new Date(slot.scheduled_date + 'T00:00:00')
+      : new Date();
+    let target = addDays(base, 1);
+    while (target.getDay() === 0 || target.getDay() === 6) {
+      target = addDays(target, 1);
     }
+    this.rsDate.set(toISODate(target));
     this.showReschedule.set(true);
   }
 
   dismissReschedule() {
     this.showReschedule.set(false);
-    this.cancelMode.set(false);
+    this.skipMode.set(false);
   }
 
   submitReschedule() {
@@ -245,15 +251,16 @@ export class Lessons implements OnInit {
       this.messageService.add({ severity: 'error', summary: 'Select a date' });
       return;
     }
-    const cancelled = this.cancelMode();
+    const skipped = this.skipMode();
     this.saving.set(true);
     // Stretch-forward contract (backend PATCH shift_subsequent): when ON (default), the
-    // WHOLE tail scheduled on/after the original date shifts forward by the same delta.
+    // WHOLE tail scheduled on/after the original date shifts forward by the same delta,
+    // landing each shifted lesson on a week day.
     const body: Partial<LessonUpdateBody> = {
       scheduled_date: this.rsDate(),
       shift_subsequent: this.shiftOnMove(),
     };
-    if (cancelled) body.status = 'cancelled';
+    if (skipped) body.status = 'skipped';
     if (this.rsStart()) body.scheduled_start_time = this.rsStart() + ':00';
     if (this.rsEnd()) body.scheduled_end_time = this.rsEnd() + ':00';
     this.lessonService.updateLesson(lesson.lesson_id, body).subscribe({
@@ -262,7 +269,7 @@ export class Lessons implements OnInit {
         this.dismissReschedule();
         this.messageService.add({
           severity: 'success',
-          summary: cancelled ? 'Lesson cancelled & rescheduled' : 'Lesson rescheduled',
+          summary: skipped ? 'Lesson skipped & moved' : 'Lesson rescheduled',
         });
         this.load();
       },

@@ -110,10 +110,10 @@
                 ><span class="pi pi-calendar"></span> Move</button>
                 <button
                   type="button"
-                  class="flex-1 rounded-lg border border-red-200 bg-red-50 p-2 text-xs font-medium text-red-700"
-                  (click)="openCancel(slot)"
-                  data-testid="cancel-lesson"
-                ><span class="pi pi-times-circle"></span> Cancel</button>
+                  class="flex-1 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-medium text-amber-700"
+                  (click)="openSkip(slot)"
+                  data-testid="skip-lesson"
+                ><span class="pi pi-ban"></span> Skip</button>
                 <button
                   type="button"
                   class="flex-1 rounded-lg border border-slate-200 p-2 text-xs font-medium text-red-600"
@@ -178,12 +178,12 @@
   <div class="fixed inset-0 z-50 flex items-end bg-black/40" data-testid="reschedule-dialog">
     <div class="w-full rounded-t-2xl bg-white p-4">
       <div class="mb-3 flex items-center justify-between">
-        <h2 class="text-base font-semibold">{{ cancelMode() ? 'Cancel lesson' : 'Move lesson' }}</h2>
+        <h2 class="text-base font-semibold">{{ skipMode() ? 'Skip lesson' : 'Move lesson' }}</h2>
         <button type="button" class="text-slate-400" (click)="dismissReschedule()"><span class="pi pi-times"></span></button>
       </div>
-      @if (cancelMode()) {
+      @if (skipMode()) {
         <div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          This lesson will be marked <span class="font-semibold">cancelled</span> and pushed forward to the chosen date. With the checkbox below on, every subsequent lesson shifts forward too.
+          This lesson will be marked <span class="font-semibold">skipped</span> and pushed forward to a <span class="font-semibold">week day</span>. With the checkbox below on, subsequent lessons shift forward too — the school only trains on week days.
         </div>
       }
       <div class="space-y-3">
@@ -233,7 +233,7 @@
         </div>
         <div class="flex gap-2 pt-1">
           <button type="button" class="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-medium text-slate-600" (click)="dismissReschedule()">Cancel</button>
-          <button type="button" class="flex-1 rounded-lg bg-blue-600 p-2 text-sm font-medium text-white" [disabled]="saving()" (click)="submitReschedule()" data-testid="confirm-reschedule">{{ cancelMode() ? 'Confirm cancel' : 'Save' }}</button>
+          <button type="button" class="flex-1 rounded-lg bg-blue-600 p-2 text-sm font-medium text-white" [disabled]="saving()" (click)="submitReschedule()" data-testid="confirm-reschedule">{{ skipMode() ? 'Confirm skip' : 'Save' }}</button>
         </div>
       </div>
     </div>

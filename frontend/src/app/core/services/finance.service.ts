@@ -32,6 +32,14 @@ export interface Expense {
   created_at: string;
 }
 
+export interface ClientAccountBalance {
+  consultation_id: string;
+  client_paid: number;
+  posted: number;
+  remitted: number;
+  remaining: number;
+}
+
 export interface ExpenseCreate {
   branch_id: string;
   amount: number;
@@ -380,6 +388,13 @@ export class FinanceService {
     if (params?.date_from) p = p.set('date_from', params.date_from);
     if (params?.date_to) p = p.set('date_to', params.date_to);
     return this.http.get<ExpenseListResponse>(`${this.base}/expenses`, { params: p });
+  }
+
+  /** Per-client expense-account tracking: paid in − posted − remitted. */
+  getClientAccountBalance(consultationId: string): Observable<ClientAccountBalance> {
+    return this.http.get<ClientAccountBalance>(`${this.base}/expenses/client-account-balance`, {
+      params: new HttpParams().set('consultation_id', consultationId),
+    });
   }
 
   createExpense(data: ExpenseCreate): Observable<Expense> {

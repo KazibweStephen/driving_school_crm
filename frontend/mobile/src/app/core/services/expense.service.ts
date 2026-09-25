@@ -153,6 +153,19 @@ export class ExpenseService {
     return this.http.patch<Expense>(`/api/v1/finance/expenses/${id}`, data);
   }
 
+  /** Per-client expense-account tracking: paid in − posted − remitted. */
+  getClientAccountBalance(consultationId: string) {
+    return this.http.get<{
+      consultation_id: string;
+      client_paid: number;
+      posted: number;
+      remitted: number;
+      remaining: number;
+    }>(`/api/v1/finance/expenses/client-account-balance`, {
+      params: new HttpParams().set('consultation_id', consultationId),
+    });
+  }
+
   approveExpense(id: string, body?: { approved_at?: string }) {
     return this.http.post<Expense>(`/api/v1/finance/expenses/${id}/approve`, body ?? {});
   }

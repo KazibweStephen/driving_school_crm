@@ -178,6 +178,8 @@ export class Expenses {
   editDescription = signal('');
   editCartItems = signal<any[]>([]);
   editCartItemId = signal<string | null>(null);
+  /** Per-client expense-account tracking (paid in − posted − remitted). */
+  editClientBalance = signal<any | null>(null);
   editCartItemOptions = computed(() =>
     this.editCartItems().map((ci: any) => ({
       label: ci.package_name || ci.product_name || `Cart item (${String(ci.id).slice(0, 8)})`,
@@ -193,11 +195,12 @@ export class Expenses {
   editCanSave(): boolean {
     const e = this.editingExpense();
     if (!e) return false;
-    const needsCategory = !this.editHadCategory;
-    const needsClient = !this.editHadClient;
-    if (needsCategory && !this.editCategory()) return false;
-    if (needsCategory && this.editCategory() === 'Other' && !this.editOtherDetail().trim()) return false;
-    if (needsCategory || needsClient) return true;
+    const cat = this.editCategory();
+    if (!cat) return false;
+    if (cat === 'Other' && !this.editOtherDetail().trim()) return false;
+    const newCat = cat === 'Other' ? this.editOtherDetail().trim() : cat;
+    if (newCat !== (e.category || '')) return true;
+    if (!this.editHadClient && e.consultation_id) return true;
     return this.editFieldsChanged();
   }
 
@@ -304,11 +307,14 @@ export class Expenses {
   selectedClientAvailable = signal<number | null>(null);
   clientPostedTotal = signal(0);
   clientPostedCount = signal(0);
+  /** Per-client expense-account tracking (paid in − posted − remitted). */
+  clientAccountBalance = signal<any | null>(null);
 
   loadClientPostedTotal(consultationId: string | null) {
     if (!consultationId) {
       this.clientPostedTotal.set(0);
       this.clientPostedCount.set(0);
+      this.clientAccountBalance.set(null);
       return;
     }
     this.expenseService.getExpenses({
@@ -325,6 +331,10 @@ export class Expenses {
         this.clientPostedTotal.set(0);
         this.clientPostedCount.set(0);
       },
+    });
+    this.expenseService.getClientAccountBalance(consultationId).subscribe({
+      next: (bal) => this.clientAccountBalance.set(bal ?? null),
+      error: () => this.clientAccountBalance.set(null),
     });
   }
 
@@ -801,11 +811,11 @@ export class Expenses {
     return match.amount;
   }
 
-  private loadVehiclesForBranch() {
-    const branchId = this.branchId();
+  private loadVehiclesForBranch(branchIdArg?: string) {
+    const branchId = branchIdArg || this.branchId();
     if (!branchId) return;
     this.vehicles.set([]);
-    this.vehicleId.set(null);
+    if (!branchIdArg) this.vehicleId.set(null);
     this.catalog.listVehicles().subscribe({
       next: (vehicles) => {
         this.vehicles.set(
@@ -880,6 +890,18 @@ export class Expenses {
     if (this.needsClient() && !this.consultationId()) {
       this.messageService.add({ severity: 'warn', summary: 'Select a client for this expense' });
       return;
+    }
+    // Per-client cap: never post more from a client's account than is left.
+    if (this.isClientAccountCategory() && this.consultationId() && this.clientAccountBalance()) {
+      const bal = this.clientAccountBalance()!;
+      if (amount + (this.charges() || 0) > bal.remaining + 0.001) {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Exceeds client account',
+          detail: `Only ${this.money(bal.remaining)} is left on this client's expense account (paid ${this.money(bal.client_paid)} − posted ${this.money(bal.posted)} − remitted ${this.money(bal.remitted)}).`,
+        });
+        return;
+      }
     }
     if (this.isPermitCategory() && this.permitCartItems().length > 0 && !this.cartItemId()) {
       this.messageService.add({ severity: 'warn', summary: 'Select the cart item for this expense' });
@@ -1214,8 +1236,10 @@ export class Expenses {
     this.editingExpense.set(expense);
     this.editHadCategory = !!(expense.category && expense.category.trim());
     this.editHadClient = !!expense.consultation_id;
-    this.editCategory.set('');
-    this.editOtherDetail.set('');
+    // Category is always editable; a custom (non-list) category maps to Other.
+    const knownCategory = !!this.categories().find(c => c.name === expense.category);
+    this.editCategory.set(expense.category && knownCategory ? expense.category : (expense.category ? 'Other' : ''));
+    this.editOtherDetail.set(expense.category && !knownCategory ? expense.category : '');
     this.editClientLabel.set(expense.client_name || '');
     this.editClientQuery.set('');
     this.editClientResults.set([]);
@@ -1227,9 +1251,25 @@ export class Expenses {
     this.editDescription.set(expense.description || '');
     this.editCartItems.set([]);
     this.editCartItemId.set(expense.cart_item_id || null);
-    if (expense.consultation_id) this.loadEditCartItems(expense.consultation_id);
+    if (expense.consultation_id) {
+      this.loadEditCartItems(expense.consultation_id);
+      this.loadEditClientAccountBalance(expense.consultation_id);
+    } else {
+      this.editClientBalance.set(null);
+    }
+    this.loadVehiclesForBranch(expense.branch_id);
     this.loadInstructors();
     this.showEditDialog.set(true);
+  }
+
+  private async loadEditClientAccountBalance(consultationId: string) {
+    if (!consultationId) return;
+    try {
+      const bal = await this.expenseService.getClientAccountBalance(consultationId).toPromise();
+      this.editClientBalance.set(bal ?? null);
+    } catch {
+      this.editClientBalance.set(null);
+    }
   }
 
   private loadEditCartItems(consultationId: string) {
@@ -1288,7 +1328,10 @@ export class Expenses {
     this.editClientResults.set([]);
     this.editCartItemId.set(null);
     this.editCartItems.set([]);
-    if (c.latest_consultation_id) this.loadEditCartItems(c.latest_consultation_id);
+    if (c.latest_consultation_id) {
+      this.loadEditCartItems(c.latest_consultation_id);
+      this.loadEditClientAccountBalance(c.latest_consultation_id);
+    }
   }
 
   openDetails(expense: Expense) {
@@ -1315,11 +1358,9 @@ export class Expenses {
     if (!e) return;
     const payload: ExpenseUpdatePayload = {};
     if (!this.editHadClient && e.consultation_id) payload.consultation_id = e.consultation_id;
-    if (!this.editHadCategory) {
-      const cat = this.editCategory();
-      if (cat === 'Other') payload.category = this.editOtherDetail().trim();
-      else if (cat) payload.category = cat;
-    }
+    const cat = this.editCategory();
+    const newCat = cat === 'Other' ? this.editOtherDetail().trim() : cat;
+    if (newCat && newCat !== (e.category || '')) payload.category = newCat;
     if (this.editAmount() !== (e.amount ?? 0)) payload.amount = this.editAmount();
     if (this.editCharges() !== (e.charges ?? 0)) payload.charges = this.editCharges();
     if ((this.editDescription() || '') !== (e.description || '')) payload.description = this.editDescription();

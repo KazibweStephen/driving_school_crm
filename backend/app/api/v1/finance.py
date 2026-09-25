@@ -256,6 +256,17 @@ async def list_expenses(
     }
 
 
+@router.get("/expenses/client-account-balance", response_model=dict)
+async def get_client_account_balance(
+    consultation_id: uuid.UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("expenses.view")),
+):
+    """Per-client expense-account tracking: paid in − posted − remitted, so
+    the UI can show what's left before posting another client-account expense."""
+    return await finance_service.client_expense_account_balance(db, consultation_id)
+
+
 @router.get("/expenses/notifications", response_model=dict)
 async def list_expense_notifications(
     limit: int = Query(20, ge=1, le=100),

@@ -270,6 +270,26 @@
         ({{ clientPostedCount() }} expense{{ clientPostedCount() === 1 ? '' : 's' }})
       </div>
     }
+    @if (form.consultation_id && clientAccountBalance(); as bal) {
+      <div class="rounded border px-3 py-2 text-xs"
+        [class.border-teal-200]="bal.remaining >= (form.amount ?? 0) + (form.charges || 0)"
+        [class.bg-teal-50]="bal.remaining >= (form.amount ?? 0) + (form.charges || 0)"
+        [class.text-teal-800]="bal.remaining >= (form.amount ?? 0) + (form.charges || 0)"
+        [class.border-red-300]="bal.remaining < (form.amount ?? 0) + (form.charges || 0)"
+        [class.bg-red-50]="bal.remaining < (form.amount ?? 0) + (form.charges || 0)"
+        [class.text-red-700]="bal.remaining < (form.amount ?? 0) + (form.charges || 0)"
+        data-testid="client-account-balance">
+        <span class="pi pi-wallet mr-1"></span>
+        Client's expense account: paid in
+        <span class="font-semibold">{{ currencyService.symbol() }} {{ bal.client_paid.toLocaleString() }}</span>
+        · posted <span class="font-semibold">{{ currencyService.symbol() }} {{ bal.posted.toLocaleString() }}</span>
+        · remitted <span class="font-semibold">{{ currencyService.symbol() }} {{ bal.remitted.toLocaleString() }}</span>
+        → remaining <span class="font-semibold">{{ currencyService.symbol() }} {{ bal.remaining.toLocaleString() }}</span>
+        @if (bal.remaining < (form.amount ?? 0) + (form.charges || 0)) {
+          <span class="block mt-1 font-medium">Amount exceeds what is left on this client's account — reduce it or collect more from the client first.</span>
+        }
+      </div>
+    }
     @if (form.consultation_id && permitCartItems().length > 0) {
       <div>
         <label class="mb-1 block text-sm font-medium text-gray-700">Cart Item *</label>
@@ -607,24 +627,23 @@
         <span class="font-medium">{{ currencyService.symbol() }} {{ e.amount }}</span>
         — edit the fields below, where you have rights.
       </p>
-      @if (editHadCategory && editHadClient) {
-        <p class="text-sm text-amber-700">
-          <i class="pi pi-check-circle mr-1"></i>Both category and client are already set.
+      @if (editHadClient) {
+        <p class="text-sm text-blue-700">
+          <i class="pi pi-user mr-1"></i>Client attached: {{ editClientLabel() || e.client_name }}
         </p>
       }
-      @if (!editHadCategory) {
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Category</label>
+        <p-select [(ngModel)]="editCategory" [options]="editCategoryOptions()" optionLabel="label" optionValue="value"
+          placeholder="Select category" styleClass="w-full" appendTo="body" [filter]="true" filterPlaceholder="Search..."
+          (onChange)="onEditCategoryChange()" />
+        <p class="mt-1 text-xs text-gray-400">Changing the category re-points the expense to that category's cash pool.</p>
+      </div>
+      @if (editCategory() === '__other__') {
         <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700">Category</label>
-          <p-select [(ngModel)]="editCategory" [options]="editCategoryOptions()" optionLabel="label" optionValue="value"
-            placeholder="Select category" styleClass="w-full" appendTo="body" [filter]="true" filterPlaceholder="Search..."
-            (onChange)="onEditCategoryChange()" />
+          <label class="mb-1 block text-sm font-medium text-gray-700">Other Detail *</label>
+          <input pInputText [(ngModel)]="editOtherDetail" class="w-full" placeholder="Specify category" />
         </div>
-        @if (editCategory() === '__other__') {
-          <div>
-            <label class="mb-1 block text-sm font-medium text-gray-700">Other Detail *</label>
-            <input pInputText [(ngModel)]="editOtherDetail" class="w-full" placeholder="Specify category" />
-          </div>
-        }
       }
       @if (editShowClientSearch()) {
         <div>
@@ -654,6 +673,15 @@
             <div class="mt-1 text-xs text-blue-600"><i class="pi pi-user mr-1"></i>{{ editClientLabel() }}</div>
           }
         </div>
+      }
+      @if (editClientBalance(); as bal) {
+        <p class="text-xs text-teal-800" data-testid="edit-client-balance">
+          <span class="pi pi-wallet mr-1"></span>Client's expense account remaining:
+          <span class="font-semibold">{{ currencyService.symbol() }} {{ bal.remaining.toLocaleString() }}</span>
+          (paid {{ currencyService.symbol() }} {{ bal.client_paid.toLocaleString() }} − posted
+          {{ currencyService.symbol() }} {{ bal.posted.toLocaleString() }} − remitted
+          {{ currencyService.symbol() }} {{ bal.remitted.toLocaleString() }})
+        </p>
       }
       @if (editShowCartItem()) {
         <div>

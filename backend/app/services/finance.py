@@ -62,6 +62,84 @@ async def _is_once_per_cart_item_category(
     return low in expected
 
 
+async def client_expense_account_balance(
+    db: AsyncSession,
+    consultation_id: uuid.UUID,
+    exclude_expense_id: uuid.UUID | None = None,
+) -> dict:
+    """Track the money a client has on the expense account, to avoid double
+    posting: paid in by the client − already-posted client-account expenses
+    (pending/approved/paid) − already remitted to head office."""
+    paid = float(
+        (
+            await db.execute(
+                select(func.coalesce(func.sum(Payment.total_paid), 0)).where(
+                    Payment.consultation_id == consultation_id,
+                    Payment.cancelled_at.is_(None),
+                )
+            )
+        ).scalar()
+        or 0
+    )
+    posted_q = select(
+        func.coalesce(
+            func.sum(Expense.amount + func.coalesce(Expense.paid_charges, Expense.charges, 0)),
+            0,
+        )
+    ).where(
+        Expense.consultation_id == consultation_id,
+        Expense.account == TransferPool.CLIENT_ACCOUNTS.value,
+        Expense.status.in_(
+            [ExpenseStatus.PENDING, ExpenseStatus.APPROVED, ExpenseStatus.PAID]
+        ),
+    )
+    if exclude_expense_id is not None:
+        posted_q = posted_q.where(Expense.id != exclude_expense_id)
+    posted = float((await db.execute(posted_q)).scalar() or 0)
+    remitted = float(
+        (
+            await db.execute(
+                select(func.coalesce(func.sum(TransferPaymentLink.amount), 0))
+                .join(BranchTransfer, TransferPaymentLink.transfer_id == BranchTransfer.id)
+                .join(Payment, TransferPaymentLink.payment_id == Payment.id)
+                .where(
+                    Payment.consultation_id == consultation_id,
+                    BranchTransfer.cancelled_at.is_(None),
+                )
+            )
+        ).scalar()
+        or 0
+    )
+    return {
+        "consultation_id": str(consultation_id),
+        "client_paid": round(paid, 2),
+        "posted": round(posted, 2),
+        "remitted": round(remitted, 2),
+        "remaining": round(paid - posted - remitted, 2),
+    }
+
+
+async def _assert_client_expense_cap(
+    db: AsyncSession,
+    consultation_id: uuid.UUID,
+    additional: float,
+    exclude_expense_id: uuid.UUID | None = None,
+) -> None:
+    """Block posting more from a client's account than the client has left —
+    the anti-double-posting guard for client-account expenses."""
+    bal = await client_expense_account_balance(db, consultation_id, exclude_expense_id)
+    if float(additional) > bal["remaining"] + 0.001:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Amount exceeds this client's remaining expense-account balance "
+                f"{bal['remaining']:,.2f} (paid {bal['client_paid']:,.2f} − already posted "
+                f"{bal['posted']:,.2f} − remitted {bal['remitted']:,.2f})."
+            ),
+        )
+
+
 async def _expected_amount_for(
     db: AsyncSession,
     cart_item_id: uuid.UUID,
@@ -280,6 +358,12 @@ async def create_expense(
                     f"Available: {available}. Fund the client account first."
                 ),
             )
+        # Per-client tracking: never post more from a client's account than
+        # the client has left (paid in − already posted − remitted).
+        if consultation_id is not None:
+            await _assert_client_expense_cap(
+                db, consultation_id, float(amount) + float(charges or 0)
+            )
     # Prevent duplicate expenses per cart item: when a cart_item_id is linked,
     # block if an expense for the same cart_item + category already exists AND
     # the category is a "one-time per cart item" type — i.e. a permit milestone
@@ -462,10 +546,49 @@ async def update_expense(
         expense.consultation_id = consultation_id
     if cart_item_id is not None and expense.cart_item_id is None:
         expense.cart_item_id = cart_item_id
+    category_changed = False
     if category is not None:
         cat = category.strip()
-        if cat and not (expense.category or "").strip():
+        if cat and cat != (expense.category or "").strip():
+            # Same once-per-cart-item duplicate guard as creation.
+            if expense.cart_item_id and await _is_once_per_cart_item_category(
+                db, expense.cart_item_id, cat, company_id
+            ):
+                norm = func.lower(func.replace(Expense.category, " ", ""))
+                existing = (
+                    await db.execute(
+                        select(Expense.id).where(
+                            Expense.cart_item_id == expense.cart_item_id,
+                            Expense.consultation_id == expense.consultation_id,
+                            Expense.id != expense.id,
+                            norm == cat.lower().replace(" ", ""),
+                        ).limit(1)
+                    )
+                ).scalar_one_or_none()
+                if existing:
+                    from fastapi import HTTPException
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"An expense for category '{cat}' already exists for this cart item.",
+                    )
             expense.category = cat
+            category_changed = True
+            # The category decides the pool — re-resolve the stored account.
+            branch = (
+                await db.execute(select(Branch).where(Branch.id == expense.branch_id))
+            ).scalar_one_or_none()
+            cat_company = company_id or (branch.company_id if branch else None)
+            if cat_company is not None:
+                match = (
+                    await db.execute(
+                        select(ExpenseCategory).where(
+                            ExpenseCategory.company_id == cat_company,
+                            ExpenseCategory.name == cat,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if match is not None:
+                    expense.account = match.account or "petty_cash"
     if charges is not None:
         expense.charges = charges
     if paid_charges is not None:
@@ -480,6 +603,23 @@ async def update_expense(
         expense.description = description
     if amount is not None:
         expense.amount = amount
+
+    # Re-check the per-client cap when the post could have grown: amount /
+    # category / client / cart-item / charges changed on a client-account
+    # expense linked to a client.
+    if (
+        amount is not None or category_changed or consultation_id is not None
+        or cart_item_id is not None or charges is not None
+    ) and expense.account == TransferPool.CLIENT_ACCOUNTS.value and expense.consultation_id is not None:
+        effective_charges = (
+            expense.paid_charges if expense.paid_charges is not None else (expense.charges or 0)
+        )
+        await _assert_client_expense_cap(
+            db,
+            expense.consultation_id,
+            float(expense.amount or 0) + float(effective_charges or 0),
+            exclude_expense_id=expense.id,
+        )
 
     await db.flush()
     await db.refresh(expense)

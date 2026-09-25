@@ -15,7 +15,7 @@ import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { DatePickerModule } from 'primeng/datepicker';
 import { ConfirmationService, MessageService } from 'primeng/api';
-import { FinanceService, Expense, ExpenseCreate, ExpenseUpdate, ExpenseCategory, UnremittedClientPayment } from '../../core/services/finance.service';
+import { FinanceService, Expense, ExpenseCreate, ExpenseUpdate, ExpenseCategory, UnremittedClientPayment, ClientAccountBalance } from '../../core/services/finance.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
 import { toLocalDateStr } from '../../shared/utils/date.utils';
@@ -226,6 +226,8 @@ export class ExpensesCmp implements OnInit {
   clientPostedTotal = signal(0);
   clientPostedCount = signal(0);
   clientPostedLoading = signal(false);
+  /** Per-client expense-account tracking (paid in − posted − remitted). */
+  clientAccountBalance = signal<ClientAccountBalance | null>(null);
 
   // Details dialog
   showDetailsDialog = signal(false);
@@ -253,6 +255,8 @@ export class ExpensesCmp implements OnInit {
   editPostedCount = signal(0);
   editCartItems = signal<CartItemRead[]>([]);
   editCartItemId = signal('');
+  /** Per-client expense-account tracking (paid in − posted − remitted). */
+  editClientBalance = signal<ClientAccountBalance | null>(null);
 
   /** The category that drives entity pickers in the edit dialog: the newly
    * picked one when filling a missing category, else the expense's own. */
@@ -312,12 +316,13 @@ export class ExpensesCmp implements OnInit {
   editCanSave(): boolean {
     const e = this.editingExpense();
     if (!e) return false;
-    const needsCategory = !this.editHadCategory;
-    const needsClient = !this.editHadClient;
-    if (needsCategory && !this.editCategory()) return false;
-    if (needsCategory && this.editCategory() === '__other__' && !this.editOtherDetail().trim()) return false;
-    if (needsCategory || needsClient) return true;
-    // If category/client already set, allow saving when a fillable field changed.
+    const cat = this.editCategory();
+    if (!cat) return false;
+    if (cat === '__other__' && !this.editOtherDetail().trim()) return false;
+    const newCat = cat === '__other__' ? this.editOtherDetail().trim() : cat;
+    if (newCat !== (e.category || '')) return true;
+    if (!this.editHadClient && e.consultation_id) return true;
+    // Otherwise allow saving when a fillable field changed.
     return this.fieldsChanged();
   }
 
@@ -553,6 +558,7 @@ export class ExpensesCmp implements OnInit {
     if (!consultationId) {
       this.clientPostedTotal.set(0);
       this.clientPostedCount.set(0);
+      this.clientAccountBalance.set(null);
       return;
     }
     this.clientPostedLoading.set(true);
@@ -570,6 +576,12 @@ export class ExpensesCmp implements OnInit {
       this.clientPostedCount.set(0);
     } finally {
       this.clientPostedLoading.set(false);
+    }
+    try {
+      const bal = await this.financeService.getClientAccountBalance(consultationId).toPromise();
+      this.clientAccountBalance.set(bal ?? null);
+    } catch {
+      this.clientAccountBalance.set(null);
     }
   }
 
@@ -1016,8 +1028,10 @@ export class ExpensesCmp implements OnInit {
 
   openEdit(e: Expense) {
     this.editingExpense.set(e);
-    this.editCategory.set('');
-    this.editOtherDetail.set('');
+    // Category is always editable; a custom (non-list) category maps to Other.
+    const knownCategory = !!this.categories().find(c => c.name === e.category);
+    this.editCategory.set(e.category && knownCategory ? e.category : (e.category ? '__other__' : ''));
+    this.editOtherDetail.set(e.category && !knownCategory ? e.category : '');
     this.editClientLabel.set(e.client_name || '');
     this.editClientQuery.set('');
     this.editClientResults.set([]);
@@ -1036,7 +1050,11 @@ export class ExpensesCmp implements OnInit {
     if (e.consultation_id) {
       this.loadClientPostedTotalForEdit(e.consultation_id);
       this.loadEditCartItems(e.consultation_id);
+      this.loadEditClientAccountBalance(e.consultation_id);
+    } else {
+      this.editClientBalance.set(null);
     }
+    this.loadVehiclesForBranch(e.branch_id);
     this.showEditDialog.set(true);
   }
 
@@ -1046,6 +1064,16 @@ export class ExpensesCmp implements OnInit {
       next: (items) => this.editCartItems.set(items || []),
       error: () => this.editCartItems.set([]),
     });
+  }
+
+  async loadEditClientAccountBalance(consultationId: string) {
+    if (!consultationId) return;
+    try {
+      const bal = await this.financeService.getClientAccountBalance(consultationId).toPromise();
+      this.editClientBalance.set(bal ?? null);
+    } catch {
+      this.editClientBalance.set(null);
+    }
   }
 
   async loadClientPostedTotalForEdit(consultationId: string) {
@@ -1096,6 +1124,7 @@ export class ExpensesCmp implements OnInit {
     if (c.latest_consultation_id) {
       this.loadClientPostedTotalForEdit(c.latest_consultation_id);
       this.loadEditCartItems(c.latest_consultation_id);
+      this.loadEditClientAccountBalance(c.latest_consultation_id);
     }
   }
 
@@ -1106,11 +1135,9 @@ export class ExpensesCmp implements OnInit {
     try {
       const payload: ExpenseUpdate = {};
       if (!this.editHadClient && e.consultation_id) payload.consultation_id = e.consultation_id;
-      if (!this.editHadCategory) {
-        const cat = this.editCategory();
-        if (cat === '__other__') payload.category = this.editOtherDetail().trim();
-        else if (cat) payload.category = cat;
-      }
+      const cat = this.editCategory();
+      const newCat = cat === '__other__' ? this.editOtherDetail().trim() : cat;
+      if (newCat && newCat !== (e.category || '')) payload.category = newCat;
       if (this.editAmount() !== (e.amount ?? 0)) payload.amount = this.editAmount();
       if (this.editCharges() !== (e.charges ?? 0)) payload.charges = this.editCharges();
       if ((this.editDescription() || '') !== (e.description || '')) payload.description = this.editDescription();
@@ -1162,6 +1189,11 @@ export class ExpensesCmp implements OnInit {
     if (this.form.category === '__other__' && !this.form.otherDetail.trim()) return false;
     if (this.selectedCategory()?.requires_client && !this.form.consultation_id) return false;
     if (this.isClientAccountCategory() && !this.canFundFromClientAccount()) return false;
+    // Per-client cap: never post more from a client's account than is left.
+    if (this.isClientAccountCategory() && this.form.consultation_id) {
+      const bal = this.clientAccountBalance();
+      if (bal && (this.form.amount ?? 0) + (this.form.charges || 0) > bal.remaining + 0.001) return false;
+    }
     if ((this.isFuel() || this.selectedCategoryRequiresVehicle()) && !this.form.vehicle_id) return false;
     // Require cart item for permit-related categories when the selected
     // client has permit-processing cart items (tagged-expense flow).
@@ -1259,11 +1291,12 @@ export class ExpensesCmp implements OnInit {
     });
   }
 
-  loadVehiclesForBranch() {
-    if (!this.form.branch_id) return;
+  loadVehiclesForBranch(branchId?: string) {
+    const bid = branchId || this.form.branch_id;
+    if (!bid) return;
     this.vehicleService.list({ status: 'available' }).subscribe({
       next: (vehicles) => {
-        this.vehicles.set(vehicles.filter(v => v.branch_ids?.includes(this.form.branch_id)));
+        this.vehicles.set(vehicles.filter(v => v.branch_ids?.includes(bid)));
       },
     });
   }

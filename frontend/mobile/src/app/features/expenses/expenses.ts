@@ -119,6 +119,19 @@ export class Expenses {
   payDateObject = computed(() =>
     this.payDate() ? new Date(this.payDate() + 'T00:00:00') : null,
   );
+  // Category-less pay block: the pay sheet itself collects the missing
+  // category plus the entity the category is tagged with (client/user/vehicle).
+  payCategory = signal('');
+  payOtherDetail = signal('');
+  payClientQuery = signal('');
+  payClientLabel = signal('');
+  payClientResults = signal<any[]>([]);
+  payClientSearching = signal(false);
+  payConsultationId = signal('');
+  payInstructorId = signal<string | null>(null);
+  payVehicleId = signal<string | null>(null);
+  payCartItems = signal<any[]>([]);
+  payCartItemId = signal<string | null>(null);
 
   // approve dialog state
   showApproveDialog = signal(false);
@@ -163,6 +176,14 @@ export class Expenses {
   editAmount = signal(0);
   editCharges = signal(0);
   editDescription = signal('');
+  editCartItems = signal<any[]>([]);
+  editCartItemId = signal<string | null>(null);
+  editCartItemOptions = computed(() =>
+    this.editCartItems().map((ci: any) => ({
+      label: ci.package_name || ci.product_name || `Cart item (${String(ci.id).slice(0, 8)})`,
+      value: ci.id,
+    }))
+  );
 
   editCategoryOptions = computed(() => {
     const opts = this.categories().map((c) => ({ label: c.name, value: c.name }));
@@ -189,7 +210,42 @@ export class Expenses {
     if ((this.editVehicleId() || '') !== (e.vehicle_id || '')) return true;
     if ((this.editInstructorId() || '') !== (e.instructor_id || '')) return true;
     if (this.editMileage() !== (e.mileage ?? null)) return true;
+    if (this.editCartItemId() && this.editCartItemId() !== (e.cart_item_id || '')) return true;
     return false;
+  }
+
+  /** The category that drives entity pickers in the edit sheet: the newly
+   * picked one when filling a missing category, else the expense's own. */
+  editEffectiveCategoryName(): string {
+    return this.editCategory() || this.editingExpense()?.category || '';
+  }
+
+  /** Client search only when the category is marked requires_client (or is a
+   * client-account category); requires_user / requires_vehicle categories get
+   * the user / vehicle pickers instead. */
+  editShowClientSearch(): boolean {
+    if (this.editHadClient) return false;
+    const name = this.editEffectiveCategoryName();
+    return this.requiresClientCategories.has(name) || this.accountCategories.has(name);
+  }
+
+  editShowUserSelect(): boolean {
+    const e = this.editingExpense();
+    const fuel = (e?.category || '').toLowerCase() === 'fuel' || this.editCategory().toLowerCase() === 'fuel';
+    return fuel || this.requiresUserCategories.has(this.editEffectiveCategoryName());
+  }
+
+  editShowVehicleSelect(): boolean {
+    const e = this.editingExpense();
+    const fuel = (e?.category || '').toLowerCase() === 'fuel' || this.editCategory().toLowerCase() === 'fuel';
+    return fuel || this.requiresVehicleCategories.has(this.editEffectiveCategoryName());
+  }
+
+  /** Cart-item attach: category requires a client and the expense has a
+   * client linked but no cart item yet. */
+  editShowCartItem(): boolean {
+    const e = this.editingExpense();
+    return this.requiresClientCategories.has(this.editEffectiveCategoryName()) && !!e?.consultation_id;
   }
 
   vehicles = signal<Vehicle[]>([]);
@@ -426,6 +482,8 @@ export class Expenses {
           if (c.requires_vehicle) vehicleReq.add(c.name);
         }
         this.categoriesMeta = meta;
+        this.accountCategories = clientAcc;
+        this.requiresClientCategories = clientReq;
         this.requiresUserCategories = userReq;
         this.requiresVehicleCategories = vehicleReq;
         this.categories.set((res.items ?? []).filter((c) => c.is_active));
@@ -914,7 +972,96 @@ export class Expenses {
     this.payReceiptUrl.set(null);
     this.paySelectedFile = null;
     this.payDate.set(expense.paid_at ? toISODate(new Date(expense.paid_at)) : this.docDateISO(expense));
+    // category-less pay block state
+    this.payCategory.set('');
+    this.payOtherDetail.set('');
+    this.payClientQuery.set('');
+    this.payClientLabel.set(expense.client_name || '');
+    this.payClientResults.set([]);
+    this.payConsultationId.set(expense.consultation_id || '');
+    this.payInstructorId.set(expense.instructor_id || null);
+    this.payVehicleId.set(expense.vehicle_id || null);
+    this.payCartItems.set([]);
+    this.payCartItemId.set(expense.cart_item_id || null);
+    if (expense.consultation_id) this.loadPayCartItems(expense.consultation_id);
     this.showPayDialog.set(true);
+  }
+
+  /** Paying is blocked until a category is set; the pay sheet collects it. */
+  payNeedsCategory(): boolean {
+    return !((this.payingExpense()?.category || '').trim());
+  }
+
+  payShowClientSearch(): boolean {
+    const name = this.payCategory();
+    return this.payNeedsCategory() && (this.requiresClientCategories.has(name) || this.accountCategories.has(name));
+  }
+
+  payShowUserSelect(): boolean {
+    return this.payNeedsCategory() && this.requiresUserCategories.has(this.payCategory());
+  }
+
+  payShowVehicleSelect(): boolean {
+    return this.payNeedsCategory() && this.requiresVehicleCategories.has(this.payCategory());
+  }
+
+  payShowCartItem(): boolean {
+    return this.payNeedsCategory() && this.requiresClientCategories.has(this.payCategory()) && !!this.payConsultationId();
+  }
+
+  payCartItemOptions = computed(() =>
+    this.payCartItems().map((ci: any) => ({
+      label: ci.package_name || ci.product_name || `Cart item (${String(ci.id).slice(0, 8)})`,
+      value: ci.id,
+    }))
+  );
+
+  private loadPayCartItems(consultationId: string) {
+    if (!consultationId) return;
+    this.consultationService.get(consultationId).subscribe({
+      next: (c) => this.payCartItems.set(c?.cart_items ?? []),
+      error: () => this.payCartItems.set([]),
+    });
+  }
+
+  searchPayClient(q: string) {
+    this.payClientQuery.set(q);
+    const search = (q || '').trim();
+    if (search.length < 2) {
+      this.payClientResults.set([]);
+      return;
+    }
+    this.payClientSearching.set(true);
+    this.consultationService.clientSearch(search).subscribe({
+      next: (res) => {
+        this.payClientResults.set(res ?? []);
+        this.payClientSearching.set(false);
+      },
+      error: () => {
+        this.payClientResults.set([]);
+        this.payClientSearching.set(false);
+      },
+    });
+  }
+
+  selectPayClient(c: any) {
+    this.payConsultationId.set(c.latest_consultation_id || '');
+    this.payClientLabel.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
+    this.payClientResults.set([]);
+    this.payCartItemId.set(null);
+    this.payCartItems.set([]);
+    if (c.latest_consultation_id) this.loadPayCartItems(c.latest_consultation_id);
+  }
+
+  payCanSubmit(): boolean {
+    if (!this.payNeedsCategory()) return true;
+    const cat = this.payCategory();
+    if (!cat) return false;
+    if (cat === 'Other' && !this.payOtherDetail().trim()) return false;
+    if (this.payShowClientSearch() && !this.payConsultationId()) return false;
+    if (this.payShowUserSelect() && !this.payInstructorId()) return false;
+    if (this.payShowVehicleSelect() && !this.payVehicleId()) return false;
+    return true;
   }
 
   openEditDates(expense: Expense) {
@@ -977,8 +1124,35 @@ export class Expenses {
 
   submitPayment() {
     const expense = this.payingExpense();
-    if (!expense) return;
+    if (!expense || !this.payCanSubmit()) return;
     this.loading.set(true);
+    // Category-less expenses must be categorized first — apply the category
+    // and the entity tagged on it (client/user/vehicle) before paying.
+    if (this.payNeedsCategory()) {
+      const patch: ExpenseUpdatePayload = {
+        category: this.payCategory() === 'Other' ? this.payOtherDetail().trim() : this.payCategory(),
+      };
+      if (this.payConsultationId()) patch.consultation_id = this.payConsultationId();
+      if (this.payCartItemId()) patch.cart_item_id = this.payCartItemId()!;
+      if (this.payInstructorId()) patch.instructor_id = this.payInstructorId()!;
+      if (this.payVehicleId()) patch.vehicle_id = this.payVehicleId()!;
+      this.expenseService.updateExpense(expense.id, patch).subscribe({
+        next: () => this.proceedPay(expense),
+        error: (err) => {
+          this.loading.set(false);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Could not save category',
+            detail: err.error?.detail || 'Try again',
+          });
+        },
+      });
+      return;
+    }
+    this.proceedPay(expense);
+  }
+
+  private proceedPay(expense: Expense) {
     if (this.paySelectedFile) {
       this.expenseService.uploadReceipt(this.paySelectedFile).subscribe({
         next: (res) => this.doPay(expense, this.payCharges() || 0, res.url),
@@ -1051,8 +1225,19 @@ export class Expenses {
     this.editAmount.set(expense.amount ?? 0);
     this.editCharges.set(expense.charges ?? 0);
     this.editDescription.set(expense.description || '');
+    this.editCartItems.set([]);
+    this.editCartItemId.set(expense.cart_item_id || null);
+    if (expense.consultation_id) this.loadEditCartItems(expense.consultation_id);
     this.loadInstructors();
     this.showEditDialog.set(true);
+  }
+
+  private loadEditCartItems(consultationId: string) {
+    if (!consultationId) return;
+    this.consultationService.get(consultationId).subscribe({
+      next: (c) => this.editCartItems.set(c?.cart_items ?? []),
+      error: () => this.editCartItems.set([]),
+    });
   }
 
   loadInstructors() {
@@ -1101,6 +1286,9 @@ export class Expenses {
     this.editingExpense.update(e => e ? { ...e, consultation_id: c.latest_consultation_id || '' } : e);
     this.editClientLabel.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
     this.editClientResults.set([]);
+    this.editCartItemId.set(null);
+    this.editCartItems.set([]);
+    if (c.latest_consultation_id) this.loadEditCartItems(c.latest_consultation_id);
   }
 
   openDetails(expense: Expense) {
@@ -1138,6 +1326,8 @@ export class Expenses {
     if ((this.editVehicleId() || '') !== (e.vehicle_id || '')) payload.vehicle_id = this.editVehicleId() || undefined;
     if ((this.editInstructorId() || '') !== (e.instructor_id || '')) payload.instructor_id = this.editInstructorId() || undefined;
     if (this.editMileage() !== (e.mileage ?? null)) payload.mileage = this.editMileage() ?? undefined;
+    const newCartItem = this.editCartItemId();
+    if (newCartItem && newCartItem !== (e.cart_item_id || '')) payload.cart_item_id = newCartItem;
     if (!Object.keys(payload).length) {
       this.messageService.add({ severity: 'warn', summary: 'Nothing to update' });
       return;

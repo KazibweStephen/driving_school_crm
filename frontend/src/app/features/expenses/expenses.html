@@ -417,6 +417,77 @@
         + charges <span class="font-medium">{{ currencyService.symbol() }} {{ payingExpense()?.charges }}</span>
       }?
     </p>
+    @if (payNeedsCategory()) {
+      <div class="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <i class="pi pi-exclamation-triangle mr-1"></i>This expense has no category. Add one before paying —
+        the category decides which entity (client, user or vehicle) must be attached.
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700">Category *</label>
+        <p-select [(ngModel)]="payCategory" [options]="editCategoryOptions()" optionLabel="label" optionValue="value"
+          placeholder="Select category" styleClass="w-full" appendTo="body" [filter]="true" filterPlaceholder="Search..."
+          (onChange)="onPayCategoryChange()" data-testid="pay-category" />
+      </div>
+      @if (payCategory() === '__other__') {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Other Detail *</label>
+          <input pInputText [(ngModel)]="payOtherDetail" class="w-full" placeholder="Specify category" />
+        </div>
+      }
+      @if (payShowClientSearch()) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Client *</label>
+          <div class="relative">
+            <input pInputText [ngModel]="payClientQuery()" (ngModelChange)="searchPayClient($event)"
+              placeholder="Search client by name or phone..." class="w-full" data-testid="pay-client-search" />
+            @if (payClientSearching()) {
+              <div class="absolute z-10 w-full bg-white border rounded shadow-lg mt-1 p-2 text-sm text-gray-500">Searching...</div>
+            } @else if (payClientResults().length) {
+              <ul class="absolute z-10 w-full bg-white border rounded shadow-lg mt-1 max-h-56 overflow-auto p-0 m-0 list-none">
+                @for (c of payClientResults(); track c.phone) {
+                  <li class="px-3 py-2 text-sm cursor-pointer border-b last:border-b-0 hover:bg-blue-50"
+                    [class.text-gray-400]="!c.latest_consultation_id"
+                    (mousedown)="selectPayClient(c); $event.preventDefault()">
+                    <span class="font-medium">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
+                    <span class="text-gray-500"> · {{ c.phone }}</span>
+                    @if (!c.latest_consultation_id) {
+                      <span class="ml-2 text-xs text-red-400">no consultation</span>
+                    }
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+          @if (payClientLabel()) {
+            <div class="mt-1 text-xs text-blue-600"><i class="pi pi-user mr-1"></i>{{ payClientLabel() }}</div>
+          }
+        </div>
+      }
+      @if (payShowCartItem()) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Product Package (cart item)</label>
+          <p-select [(ngModel)]="payCartItemId" [options]="payCartItemOptions()" optionLabel="label" optionValue="value"
+            placeholder="Attach the package this expense is for" styleClass="w-full" appendTo="body" [filter]="true"
+            filterPlaceholder="Search..." [showClear]="true" data-testid="pay-cart-item" />
+        </div>
+      }
+      @if (payShowUserSelect()) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">User *</label>
+          <p-select [(ngModel)]="payInstructorId" [options]="instructors()" optionLabel="label" optionValue="id"
+            placeholder="Select user" styleClass="w-full" appendTo="body" [showClear]="true" [filter]="true"
+            filterPlaceholder="Search..." data-testid="pay-user" />
+        </div>
+      }
+      @if (payShowVehicleSelect()) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Vehicle *</label>
+          <p-select [(ngModel)]="payVehicleId" [options]="vehicleOptions()" optionLabel="label" optionValue="id"
+            placeholder="Select vehicle" styleClass="w-full" appendTo="body" [filter]="true" filterPlaceholder="Search..."
+            data-testid="pay-vehicle" />
+        </div>
+      }
+    }
     <div>
       <label class="mb-1 block text-sm font-medium text-gray-700">Charges (adjustable at payment)</label>
       <p-inputNumber [(ngModel)]="payCharges" [min]="0" [max]="999999" mode="decimal"
@@ -441,7 +512,7 @@
   </div>
   <ng-template pTemplate="footer">
     <p-button label="Cancel" severity="secondary" (onClick)="showPayDialog.set(false)" />
-    <p-button label="Pay" [disabled]="payingUpload()" [loading]="payingUpload()" (onClick)="submitPayment()" />
+    <p-button label="Pay" [disabled]="payingUpload() || !payCanSubmit()" [loading]="payingUpload()" (onClick)="submitPayment()" />
   </ng-template>
 </p-dialog>
 
@@ -555,7 +626,7 @@
           </div>
         }
       }
-      @if (!editHadClient) {
+      @if (editShowClientSearch()) {
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">Client</label>
           <div class="relative">
@@ -584,6 +655,14 @@
           }
         </div>
       }
+      @if (editShowCartItem()) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">Product Package (cart item)</label>
+          <p-select [(ngModel)]="editCartItemId" [options]="editCartItemOptions()" optionLabel="label" optionValue="value"
+            placeholder="Attach the package this expense is for" styleClass="w-full" appendTo="body" [filter]="true"
+            filterPlaceholder="Search..." [showClear]="true" data-testid="edit-cart-item" />
+        </div>
+      }
       @if ((!editHadClient || editHadCategory) && e.consultation_id && editPostedCount() > 0) {
         <p class="text-xs text-slate-500" data-testid="edit-client-posted-total">
           <span class="pi pi-info-circle mr-1"></span>Already posted from this client:
@@ -591,7 +670,7 @@
           ({{ editPostedCount() }} expense{{ editPostedCount() === 1 ? '' : 's' }})
         </p>
       }
-      @if ((e.category || '').toLowerCase() === 'fuel' || editCategory().toLowerCase() === 'fuel' || editCategoryRequiresVehicle()) {
+      @if (editShowVehicleSelect()) {
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">Vehicle</label>
           <p-select [(ngModel)]="editVehicleId" [options]="vehicleOptions()" optionLabel="label" optionValue="id"
@@ -602,7 +681,7 @@
           <p-inputNumber [(ngModel)]="editMileage" [min]="0" [max]="999999" [useGrouping]="false" styleClass="w-full" inputStyleClass="w-full" />
         </div>
       }
-      @if ((e.category || '').toLowerCase() === 'fuel' || editCategory().toLowerCase() === 'fuel' || editCategoryRequiresUser()) {
+      @if (editShowUserSelect()) {
         <div>
           <label class="mb-1 block text-sm font-medium text-gray-700">User</label>
           <p-select [(ngModel)]="editInstructorId" [options]="instructors()" optionLabel="label" optionValue="id"

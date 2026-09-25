@@ -577,6 +577,122 @@
             + charges <span class="font-semibold">{{ money(payingExpense()?.charges ?? 0) }}</span>
           }
         </div>
+        @if (payNeedsCategory()) {
+          <div class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <span class="pi pi-exclamation-triangle mr-1"></span>This expense has no category. Add one before paying —
+            the category decides which entity (client, user or vehicle) must be attached.
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">Category *</label>
+            <p-select
+              [options]="editCategoryOptions()"
+              optionLabel="label"
+              optionValue="value"
+              [ngModel]="payCategory()"
+              (ngModelChange)="payCategory.set($event)"
+              placeholder="Select category"
+              appendTo="body"
+              class="w-full"
+              data-testid="pay-category"
+            />
+          </div>
+          @if (payCategory() === 'Other') {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Other detail *</label>
+              <input pInputText [(ngModel)]="payOtherDetail" class="w-full" data-testid="pay-category-other" />
+            </div>
+          }
+          @if (payShowClientSearch()) {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Client *</label>
+              <input
+                type="text"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                [ngModel]="payClientQuery()"
+                (ngModelChange)="searchPayClient($event)"
+                placeholder="Search client by name or phone..."
+                data-testid="pay-client-search"
+              />
+              @if (payClientSearching()) {
+                <p class="mt-1 text-xs text-slate-500">Searching...</p>
+              }
+              @if (payClientResults().length) {
+                <div class="mt-1 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-white">
+                  @for (c of payClientResults(); track c.phone) {
+                    <button
+                      type="button"
+                      class="block w-full border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-blue-50"
+                      (mousedown)="selectPayClient(c); $event.preventDefault()"
+                    >
+                      <span class="font-medium text-slate-900">{{ c.first_name }}{{ c.last_name ? ' ' + c.last_name : '' }}</span>
+                      <span class="text-xs text-slate-500"> · {{ c.phone }}</span>
+                      @if (!c.latest_consultation_id) { <span class="text-xs text-red-400">no consultation</span> }
+                    </button>
+                  }
+                </div>
+              }
+              @if (payClientLabel()) {
+                <p class="mt-1 text-xs text-blue-600"><span class="pi pi-user mr-1"></span>{{ payClientLabel() }}</p>
+              }
+            </div>
+          }
+          @if (payShowCartItem()) {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Product Package (cart item)</label>
+              <p-select
+                [options]="payCartItemOptions()"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="payCartItemId()"
+                (ngModelChange)="payCartItemId.set($event)"
+                placeholder="Attach the package this expense is for"
+                appendTo="body"
+                [showClear]="true"
+                [filter]="true"
+                filterPlaceholder="Search..."
+                class="w-full"
+                data-testid="pay-cart-item"
+              />
+            </div>
+          }
+          @if (payShowUserSelect()) {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">User *</label>
+              <p-select
+                [options]="instructors()"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="payInstructorId()"
+                (ngModelChange)="payInstructorId.set($event)"
+                placeholder="Select user"
+                appendTo="body"
+                [showClear]="true"
+                [filter]="true"
+                filterPlaceholder="Search..."
+                class="w-full"
+                data-testid="pay-user"
+              />
+            </div>
+          }
+          @if (payShowVehicleSelect()) {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Vehicle *</label>
+              <p-select
+                [options]="vehicleOptions()"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="payVehicleId()"
+                (ngModelChange)="payVehicleId.set($event)"
+                placeholder="Select vehicle"
+                appendTo="body"
+                [filter]="true"
+                filterPlaceholder="Search..."
+                class="w-full"
+                data-testid="pay-vehicle"
+              />
+            </div>
+          }
+        }
         <div>
           <label class="mb-1 block text-xs font-medium text-slate-600">Charges (adjustable at payment)</label>
           <input
@@ -619,7 +735,7 @@
         </div>
         <div class="flex gap-2 pt-1">
           <button type="button" class="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-medium text-slate-600" (click)="showPayDialog.set(false)">Cancel</button>
-          <button type="button" class="flex-1 rounded-lg bg-blue-600 p-2 text-sm font-medium text-white" (click)="submitPayment()" data-testid="confirm-pay">Pay</button>
+          <button type="button" class="flex-1 rounded-lg bg-blue-600 p-2 text-sm font-medium text-white disabled:opacity-50" [disabled]="!payCanSubmit()" (click)="submitPayment()" data-testid="confirm-pay">Pay</button>
         </div>
       </div>
     </div>
@@ -826,7 +942,7 @@
               </div>
             }
           }
-          @if (!editHadClient) {
+          @if (editShowClientSearch()) {
             <div>
               <label class="mb-1 block text-xs font-medium text-slate-600">Client</label>
               <input
@@ -860,7 +976,26 @@
               }
             </div>
           }
-          @if ((e.category || '').toLowerCase() === 'fuel' || editCategory().toLowerCase() === 'fuel' || editCategoryRequiresVehicle()) {
+          @if (editShowCartItem()) {
+            <div>
+              <label class="mb-1 block text-xs font-medium text-slate-600">Product Package (cart item)</label>
+              <p-select
+                [options]="editCartItemOptions()"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="editCartItemId()"
+                (ngModelChange)="editCartItemId.set($event)"
+                placeholder="Attach the package this expense is for"
+                appendTo="body"
+                [showClear]="true"
+                [filter]="true"
+                filterPlaceholder="Search..."
+                class="w-full"
+                data-testid="edit-cart-item"
+              />
+            </div>
+          }
+          @if (editShowVehicleSelect()) {
             <div>
               <label class="mb-1 block text-xs font-medium text-slate-600">Vehicle</label>
               <p-select
@@ -887,7 +1022,7 @@
               />
             </div>
           }
-          @if ((e.category || '').toLowerCase() === 'fuel' || editCategory().toLowerCase() === 'fuel' || editCategoryRequiresUser()) {
+          @if (editShowUserSelect()) {
             <div>
               <label class="mb-1 block text-xs font-medium text-slate-600">User</label>
               <p-select

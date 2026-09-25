@@ -163,6 +163,7 @@ class ExpenseUpdate(BaseModel):
     vehicle_id: uuid.UUID | None = None
     instructor_id: str | None = None
     consultation_id: uuid.UUID | None = None
+    cart_item_id: uuid.UUID | None = None
     category: str | None = None
     charges: float | None = None
     paid_charges: float | None = None

@@ -72,6 +72,19 @@ export class ExpensesCmp implements OnInit {
   payReceiptFile = signal<File | null>(null);
   payingUpload = signal(false);
   payDate = signal<Date | null>(null);
+  // Category-less pay block: the pay dialog itself collects the missing
+  // category plus the entity the category is tagged with (client/user/vehicle).
+  payCategory = signal('');
+  payOtherDetail = signal('');
+  payClientQuery = signal('');
+  payClientLabel = signal('');
+  payClientResults = signal<ClientInfo[]>([]);
+  payClientSearching = signal(false);
+  payConsultationId = signal('');
+  payInstructorId = signal('');
+  payVehicleId = signal('');
+  payCartItems = signal<CartItemRead[]>([]);
+  payCartItemId = signal('');
   showApproveDialog = signal(false);
   approvingExpense = signal<Expense | null>(null);
   approveDate = signal<Date | null>(null);
@@ -238,6 +251,54 @@ export class ExpensesCmp implements OnInit {
   editDescription = signal('');
   editPostedTotal = signal(0);
   editPostedCount = signal(0);
+  editCartItems = signal<CartItemRead[]>([]);
+  editCartItemId = signal('');
+
+  /** The category that drives entity pickers in the edit dialog: the newly
+   * picked one when filling a missing category, else the expense's own. */
+  editEffectiveCategoryName(): string {
+    return this.editCategory() || this.editingExpense()?.category || '';
+  }
+
+  editEffectiveCategoryDef(): ExpenseCategory | null {
+    const name = this.editEffectiveCategoryName();
+    return this.categories().find(c => c.name === name) ?? null;
+  }
+
+  /** Client search only when the category is marked requires_client (or is a
+   * client-account category); requires_user / requires_vehicle categories get
+   * the user / vehicle pickers instead. */
+  editShowClientSearch(): boolean {
+    if (this.editHadClient) return false;
+    const def = this.editEffectiveCategoryDef();
+    return !!def?.requires_client || def?.account === 'client_accounts';
+  }
+
+  editShowUserSelect(): boolean {
+    const e = this.editingExpense();
+    const fuel = (e?.category || '').toLowerCase() === 'fuel' || this.editCategory().toLowerCase() === 'fuel';
+    return fuel || !!this.editEffectiveCategoryDef()?.requires_user;
+  }
+
+  editShowVehicleSelect(): boolean {
+    const e = this.editingExpense();
+    const fuel = (e?.category || '').toLowerCase() === 'fuel' || this.editCategory().toLowerCase() === 'fuel';
+    return fuel || !!this.editEffectiveCategoryDef()?.requires_vehicle;
+  }
+
+  /** Cart-item attach: category requires a client and the expense has a
+   * client linked but no cart item yet. */
+  editShowCartItem(): boolean {
+    const e = this.editingExpense();
+    return !!this.editEffectiveCategoryDef()?.requires_client && !!e?.consultation_id;
+  }
+
+  editCartItemOptions = computed(() =>
+    this.editCartItems().map(ci => ({
+      label: ci.package_name || ci.product_name || `Cart item (${ci.id.slice(0, 8)})`,
+      value: ci.id,
+    }))
+  );
 
   canBackdate(): boolean {
     return this.authService.currentUserCanBackdate();
@@ -269,6 +330,7 @@ export class ExpensesCmp implements OnInit {
     if ((this.editVehicleId() || '') !== (e.vehicle_id || '')) return true;
     if ((this.editInstructorId() || '') !== (e.instructor_id || '')) return true;
     if (this.editMileage() !== (e.mileage ?? null)) return true;
+    if (this.editCartItemId() && this.editCartItemId() !== (e.cart_item_id || '')) return true;
     return false;
   }
 
@@ -730,7 +792,103 @@ export class ExpensesCmp implements OnInit {
     this.payCharges.set(e.charges ?? 0);
     this.payReceiptFile.set(null);
     this.payDate.set(e.paid_at ? this.toLocalDateOnly(new Date(e.paid_at)) : this.docDate(e));
+    // category-less pay block state
+    this.payCategory.set('');
+    this.payOtherDetail.set('');
+    this.payClientQuery.set('');
+    this.payClientLabel.set(e.client_name || '');
+    this.payClientResults.set([]);
+    this.payConsultationId.set(e.consultation_id || '');
+    this.payInstructorId.set(e.instructor_id || '');
+    this.payVehicleId.set(e.vehicle_id || '');
+    this.payCartItems.set([]);
+    this.payCartItemId.set(e.cart_item_id || '');
+    if (e.consultation_id) this.loadPayCartItems(e.consultation_id);
     this.showPayDialog.set(true);
+  }
+
+  /** Paying is blocked until a category is set; the pay dialog collects it. */
+  payNeedsCategory(): boolean {
+    return !((this.payingExpense()?.category || '').trim());
+  }
+
+  payCategoryDef(): ExpenseCategory | null {
+    return this.categories().find(c => c.name === this.payCategory()) ?? null;
+  }
+
+  payShowClientSearch(): boolean {
+    const def = this.payCategoryDef();
+    return this.payNeedsCategory() && (!!def?.requires_client || def?.account === 'client_accounts');
+  }
+
+  payShowUserSelect(): boolean {
+    return this.payNeedsCategory() && !!this.payCategoryDef()?.requires_user;
+  }
+
+  payShowVehicleSelect(): boolean {
+    return this.payNeedsCategory() && !!this.payCategoryDef()?.requires_vehicle;
+  }
+
+  payShowCartItem(): boolean {
+    return this.payNeedsCategory() && !!this.payCategoryDef()?.requires_client && !!this.payConsultationId();
+  }
+
+  payCartItemOptions = computed(() =>
+    this.payCartItems().map(ci => ({
+      label: ci.package_name || ci.product_name || `Cart item (${ci.id.slice(0, 8)})`,
+      value: ci.id,
+    }))
+  );
+
+  private loadPayCartItems(consultationId: string) {
+    if (!consultationId) return;
+    this.cartItemService.list(consultationId).subscribe({
+      next: (items) => this.payCartItems.set(items || []),
+      error: () => this.payCartItems.set([]),
+    });
+  }
+
+  onPayCategoryChange() {
+    this.payClientResults.set([]);
+  }
+
+  async searchPayClient(q: string) {
+    this.payClientQuery.set(q);
+    const search = (q || '').trim();
+    if (search.length < 2) {
+      this.payClientResults.set([]);
+      return;
+    }
+    this.payClientSearching.set(true);
+    try {
+      const res = await this.consultationService.clientSearch(search).toPromise();
+      this.payClientResults.set(res || []);
+    } catch {
+      this.payClientResults.set([]);
+    } finally {
+      this.payClientSearching.set(false);
+    }
+  }
+
+  selectPayClient(c: ClientInfo) {
+    this.payConsultationId.set(c.latest_consultation_id || '');
+    this.payClientLabel.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
+    this.payClientResults.set([]);
+    this.payCartItemId.set('');
+    this.payCartItems.set([]);
+    if (c.latest_consultation_id) this.loadPayCartItems(c.latest_consultation_id);
+  }
+
+  payCanSubmit(): boolean {
+    if (!this.payNeedsCategory()) return true;
+    const cat = this.payCategory();
+    if (!cat) return false;
+    if (cat === '__other__' && !this.payOtherDetail().trim()) return false;
+    const def = this.payCategoryDef();
+    if ((def?.requires_client || def?.account === 'client_accounts') && !this.payConsultationId()) return false;
+    if (def?.requires_user && !this.payInstructorId()) return false;
+    if (def?.requires_vehicle && !this.payVehicleId()) return false;
+    return true;
   }
 
   // Date edits are available to the respective people: document date to
@@ -813,9 +971,21 @@ export class ExpensesCmp implements OnInit {
 
   async submitPayment() {
     const e = this.payingExpense();
-    if (!e) return;
+    if (!e || !this.payCanSubmit()) return;
     this.payingUpload.set(true);
     try {
+      // Category-less expenses must be categorized first — apply the category
+      // and the entity tagged on it (client/user/vehicle) before paying.
+      if (this.payNeedsCategory()) {
+        const patch: ExpenseUpdate = {
+          category: this.payCategory() === '__other__' ? this.payOtherDetail().trim() : this.payCategory(),
+        };
+        if (this.payConsultationId()) patch.consultation_id = this.payConsultationId();
+        if (this.payCartItemId()) patch.cart_item_id = this.payCartItemId();
+        if (this.payInstructorId()) patch.instructor_id = this.payInstructorId();
+        if (this.payVehicleId()) patch.vehicle_id = this.payVehicleId();
+        await this.financeService.updateExpense(e.id, patch).toPromise();
+      }
       let receipt_url: string | undefined;
       if (this.payReceiptFile()) {
         const uploadRes = await this.financeService.uploadReceipt(this.payReceiptFile()!).toPromise();
@@ -859,10 +1029,23 @@ export class ExpensesCmp implements OnInit {
     this.editDescription.set(e.description || '');
     this.editPostedTotal.set(0);
     this.editPostedCount.set(0);
+    this.editCartItems.set([]);
+    this.editCartItemId.set(e.cart_item_id || '');
     this.editHadCategory = !!(e.category && e.category.trim());
     this.editHadClient = !!e.consultation_id;
-    if (e.consultation_id) this.loadClientPostedTotalForEdit(e.consultation_id);
+    if (e.consultation_id) {
+      this.loadClientPostedTotalForEdit(e.consultation_id);
+      this.loadEditCartItems(e.consultation_id);
+    }
     this.showEditDialog.set(true);
+  }
+
+  private loadEditCartItems(consultationId: string) {
+    if (!consultationId) return;
+    this.cartItemService.list(consultationId).subscribe({
+      next: (items) => this.editCartItems.set(items || []),
+      error: () => this.editCartItems.set([]),
+    });
   }
 
   async loadClientPostedTotalForEdit(consultationId: string) {
@@ -908,7 +1091,12 @@ export class ExpensesCmp implements OnInit {
     this.editingExpense.update(e => e ? { ...e, consultation_id: c.latest_consultation_id || '' } : e);
     this.editClientLabel.set(`${c.first_name}${c.last_name ? ' ' + c.last_name : ''} · ${c.phone}`);
     this.editClientResults.set([]);
-    if (c.latest_consultation_id) this.loadClientPostedTotalForEdit(c.latest_consultation_id);
+    this.editCartItemId.set('');
+    this.editCartItems.set([]);
+    if (c.latest_consultation_id) {
+      this.loadClientPostedTotalForEdit(c.latest_consultation_id);
+      this.loadEditCartItems(c.latest_consultation_id);
+    }
   }
 
   async saveEdit() {
@@ -929,6 +1117,8 @@ export class ExpensesCmp implements OnInit {
       if ((this.editVehicleId() || '') !== (e.vehicle_id || '')) payload.vehicle_id = this.editVehicleId() || undefined;
       if ((this.editInstructorId() || '') !== (e.instructor_id || '')) payload.instructor_id = this.editInstructorId() || undefined;
       if (this.editMileage() !== (e.mileage ?? null)) payload.mileage = this.editMileage() ?? undefined;
+      const newCartItem = this.editCartItemId();
+      if (newCartItem && newCartItem !== (e.cart_item_id || '')) payload.cart_item_id = newCartItem;
       if (!Object.keys(payload).length) {
         this.messageService.add({ severity: 'warn', summary: 'Nothing to update', detail: 'No changes were made.' });
         this.loading.set(false);

@@ -63,6 +63,7 @@ export interface ExpenseCreatePayload {
 export interface ExpenseUpdatePayload {
   category?: string;
   consultation_id?: string;
+  cart_item_id?: string;
   amount?: number;
   charges?: number;
   description?: string;

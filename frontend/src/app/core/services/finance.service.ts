@@ -89,6 +89,7 @@ export interface ExpenseUpdate {
   rejection_reason?: string;
   receipt_url?: string;
   consultation_id?: string;
+  cart_item_id?: string;
   category?: string;
   charges?: number;
   paid_charges?: number;

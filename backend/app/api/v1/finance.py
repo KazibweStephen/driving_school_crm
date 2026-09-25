@@ -328,6 +328,7 @@ async def update_expense(
         rejection_reason=data.rejection_reason,
         receipt_url=data.receipt_url,
         consultation_id=data.consultation_id,
+        cart_item_id=data.cart_item_id,
         category=data.category,
         charges=data.charges,
         paid_charges=data.paid_charges,
@@ -456,6 +457,11 @@ async def mark_expense_paid(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
     if expense.status != ExpenseStatus.APPROVED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only approved expenses can be marked as paid")
+    if not (expense.category or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Add a category to this expense before paying it.",
+        )
 
     charges = float(data.charges) if data and data.charges is not None else float(expense.charges or 0.0)
     if charges < 0:

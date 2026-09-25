@@ -410,6 +410,7 @@ async def update_expense(
     rejection_reason: str | None = None,
     receipt_url: str | None = None,
     consultation_id: uuid.UUID | None = None,
+    cart_item_id: uuid.UUID | None = None,
     category: str | None = None,
     charges: float | None = None,
     paid_charges: float | None = None,
@@ -459,6 +460,8 @@ async def update_expense(
         expense.receipt_url = receipt_url
     if consultation_id is not None and expense.consultation_id is None:
         expense.consultation_id = consultation_id
+    if cart_item_id is not None and expense.cart_item_id is None:
+        expense.cart_item_id = cart_item_id
     if category is not None:
         cat = category.strip()
         if cat and not (expense.category or "").strip():

@@ -757,6 +757,26 @@ export class ClientProfile implements OnInit {
   editingLesson = signal<ClientLesson | null>(null);
   lessonEditForm: ClientLessonUpdate = {};
 
+  // ── Move / Reschedule Lesson ───────────────────────────────
+
+  showRescheduleDialog = signal(false);
+  rescheduleLesson = signal<ClientLesson | null>(null);
+  rsDateObj = signal<Date | null>(null);
+  rsStart = signal('');
+  rsEnd = signal('');
+  shiftOnMove = signal(true);
+  rescheduleSaving = signal(false);
+
+  readonly timeOptions = Array.from({ length: 26 }, (_, i) => {
+    const h = String(6 + Math.floor(i / 2)).padStart(2, '0');
+    const m = i % 2 === 0 ? '00' : '30';
+    return { label: `${h}:${m}`, value: `${h}:${m}` };
+  });
+
+  todayDate(): Date {
+    return new Date();
+  }
+
   // ── Permit Progress ────────────────────────────────────────
 
   permitProgress = signal<Map<string, PermitProgress>>(new Map());
@@ -1503,6 +1523,58 @@ export class ClientProfile implements OnInit {
     }
   }
 
+  openRescheduleDialog(lesson: ClientLesson) {
+    this.rescheduleLesson.set(lesson);
+    this.rsDateObj.set(lesson.scheduled_date ? this.parseLessonDate(lesson.scheduled_date) : new Date());
+    this.rsStart.set((lesson.scheduled_start_time || '').slice(0, 5));
+    this.rsEnd.set((lesson.scheduled_end_time || '').slice(0, 5));
+    this.shiftOnMove.set(true);
+    this.showRescheduleDialog.set(true);
+  }
+
+  dismissRescheduleDialog() {
+    this.showRescheduleDialog.set(false);
+    this.rescheduleLesson.set(null);
+  }
+
+  private parseLessonDate(d: string | Date): Date {
+    if (d instanceof Date) return d;
+    if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      return new Date(d + 'T00:00:00');
+    }
+    return new Date(d);
+  }
+
+  async submitReschedule() {
+    const lesson = this.rescheduleLesson();
+    const date = this.rsDateObj();
+    if (!lesson || !date) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Select a date' });
+      return;
+    }
+    this.rescheduleSaving.set(true);
+    try {
+      const body: ClientLessonUpdate = {
+        scheduled_date: this.toDateStr(date),
+        shift_subsequent: this.shiftOnMove(),
+      };
+      const start = this.rsStart().trim();
+      const end = this.rsEnd().trim();
+      if (start) body.scheduled_start_time = start.length === 5 ? `${start}:00` : start;
+      if (end) body.scheduled_end_time = end.length === 5 ? `${end}:00` : end;
+      const updated = await this.lessonPlanService.updateClientLesson(lesson.id, body).toPromise();
+      if (updated) {
+        this.updateLessonInList(updated);
+        this.messageService.add({ severity: 'success', summary: 'Lesson moved' });
+      }
+      this.dismissRescheduleDialog();
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to move lesson' });
+    } finally {
+      this.rescheduleSaving.set(false);
+    }
+  }
+
   // ── Lesson Execution ──
 
   async openExecutionDialog(lesson: ClientLesson) {
@@ -1946,6 +2018,13 @@ export class ClientProfile implements OnInit {
 
   canResumeLesson(lesson: any): boolean {
     return lesson.status === 'started';
+  }
+
+  canRescheduleLesson(lesson: any): boolean {
+    return (
+      (lesson.status === 'pending' || lesson.status === 'ready' || lesson.status === 'scheduled') &&
+      !lesson.is_locked
+    );
   }
 
   cartItemSeverity(s: string): 'info' | 'success' | 'warn' | 'danger' | 'contrast' {

@@ -918,6 +918,7 @@
                               }
                               @if (canStartLesson(lesson)) {
                                 <p-button icon="pi pi-check-circle" severity="success" (onClick)="completeLessonRow(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Complete" tooltipPosition="top" />
+                                <p-button icon="pi pi-calendar" severity="secondary" (onClick)="openRescheduleDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Move" tooltipPosition="top" />
                                 <p-button icon="pi pi-ban" severity="danger" (onClick)="updateLessonStatus(lesson, 'skipped')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Skip" tooltipPosition="top" />
                               }
                               <p-button icon="pi pi-trash" severity="danger" (click)="removeLessonFromPlan(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" tooltipPosition="top" />
@@ -1824,6 +1825,7 @@
                                   }
                                   @if (canStartLesson(lesson)) {
                                     <p-button icon="pi pi-check-circle" severity="success" (onClick)="completeLessonRow(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Complete" tooltipPosition="top" />
+                                    <p-button icon="pi pi-calendar" severity="secondary" (onClick)="openRescheduleDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Move" tooltipPosition="top" />
                                     <p-button icon="pi pi-ban" severity="danger" (onClick)="updateLessonStatus(lesson, 'skipped')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Skip" tooltipPosition="top" />
                                   }
                                   <p-button icon="pi pi-trash" severity="danger" (click)="removeLessonFromPlan(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" tooltipPosition="top" />
@@ -3296,6 +3298,44 @@
           </div>
         }
       </div>
+    </p-dialog>
+
+    <!-- Move / Reschedule Lesson Dialog -->
+    <p-dialog header="Move Lesson" [(visible)]="showRescheduleDialog" [modal]="true"
+              [style]="{ width: '90vw', maxWidth: '440px' }" [draggable]="false" [resizable]="false"
+              [closable]="!rescheduleSaving()">
+      @if (rescheduleLesson(); as lesson) {
+        <div class="flex flex-col gap-4 pt-2">
+          <p class="text-sm text-gray-600 truncate">{{ lesson.title }}</p>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Date</label>
+              <p-datepicker [ngModel]="rsDateObj()" (ngModelChange)="rsDateObj.set($event)"
+                            dateFormat="yy-mm-dd" appendTo="body" styleClass="w-full" [minDate]="todayDate()" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">Start Time</label>
+              <p-select [(ngModel)]="rsStart" [options]="timeOptions" placeholder="--:--"
+                        class="w-full" optionLabel="label" optionValue="value" appendTo="body" />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">End Time</label>
+              <p-select [(ngModel)]="rsEnd" [options]="timeOptions" placeholder="--:--"
+                        class="w-full" optionLabel="label" optionValue="value" appendTo="body" />
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <p-checkbox [ngModel]="shiftOnMove()" (ngModelChange)="shiftOnMove.set($event)" [binary]="true" inputId="reschedule_shift_subsequent" />
+            <label for="reschedule_shift_subsequent" class="text-sm text-gray-700">Shift all subsequent lessons forward</label>
+          </div>
+          <div class="flex justify-end gap-2 border-t pt-3">
+            <p-button label="Cancel" severity="secondary" [disabled]="rescheduleSaving()" (onClick)="dismissRescheduleDialog()" />
+            <p-button label="Move" icon="pi pi-calendar" [loading]="rescheduleSaving()" (onClick)="submitReschedule()" />
+          </div>
+        </div>
+      }
     </p-dialog>
 
     <p-dialog header="Guide" [(visible)]="showGuide" [modal]="true" [style]="{ width: '90vw', maxWidth: '520px' }" [draggable]="false" [resizable]="false">

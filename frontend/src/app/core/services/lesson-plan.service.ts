@@ -211,6 +211,9 @@ export interface ClientLessonUpdate {
   status?: string;
   difficulty?: string;
   scheduled_date?: string | null;
+  scheduled_start_time?: string | null;
+  scheduled_end_time?: string | null;
+  shift_subsequent?: boolean;
   duration_minutes?: number | null;
   vehicle_inspection_minutes?: number | null;
   cockpit_drill_minutes?: number | null;

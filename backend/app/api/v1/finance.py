@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_permission
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.company import BorrowStatus, CollectionStatus, Company, ExpenseStatus, TransferStatus
+from app.models.company import BorrowStatus, Branch, CollectionStatus, Company, ExpenseCategory, ExpenseStatus, TransferPool, TransferStatus
 from app.models.user import User
 from app.utils.timezones import today_local, now_local, BUSINESS_TZ
 from app.schemas.company import (
@@ -461,7 +461,7 @@ async def mark_expense_paid(
     if charges < 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Charges cannot be negative")
 
-    expense_pool = expense.account or "petty_cash"
+    expense_pool = await _resolve_expense_pool(db, expense)
     available = await finance_service.pool_available(db, expense.branch_id, expense_pool)
     if float(expense.amount) + charges > available:
         raise HTTPException(
@@ -585,6 +585,31 @@ async def _assert_permit_floor(db: AsyncSession, expense, value: datetime) -> da
             ),
         )
     return resolved
+
+
+async def _resolve_expense_pool(db: AsyncSession, expense) -> str:
+    """Pool an expense is paid from: the stored account when it is a valid
+    pool; otherwise the category's configured account (legacy rows predate
+    per-category accounts, or carry removed pool names like 'operating_cash');
+    petty cash as the last resort."""
+    valid = (TransferPool.PETTY_CASH.value, TransferPool.CLIENT_ACCOUNTS.value)
+    if expense.account in valid:
+        return expense.account
+    branch = (
+        await db.execute(select(Branch).where(Branch.id == expense.branch_id))
+    ).scalar_one_or_none()
+    if branch is not None and (expense.category or "").strip():
+        match = (
+            await db.execute(
+                select(ExpenseCategory).where(
+                    ExpenseCategory.company_id == branch.company_id,
+                    ExpenseCategory.name == expense.category,
+                )
+            )
+        ).scalar_one_or_none()
+        if match is not None and match.account in valid:
+            return match.account
+    return TransferPool.PETTY_CASH.value
 
 
 @router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)

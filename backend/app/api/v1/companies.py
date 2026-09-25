@@ -13,6 +13,7 @@ from app.models.company import (
     BranchMonthlyTarget,
     Company,
     Expense,
+    ExpenseCategory,
     Sale,
     UserBranchAssignment,
     VehicleBranchAssignment,
@@ -643,11 +644,24 @@ async def create_expense(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Category is required",
         )
+    category_name = data.category.strip()
+    account = None
+    cat_match = (
+        await db.execute(
+            select(ExpenseCategory).where(
+                ExpenseCategory.company_id == branch.company_id,
+                ExpenseCategory.name == category_name,
+            )
+        )
+    ).scalar_one_or_none()
+    if cat_match is not None:
+        account = cat_match.account
     expense = Expense(
         branch_id=bid,
         amount=data.amount,
         description=data.description,
-        category=data.category.strip(),
+        category=category_name,
+        account=account or "petty_cash",
         expense_date=data.expense_date,
         created_by_phone=current_user.phone,
     )

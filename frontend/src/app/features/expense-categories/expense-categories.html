@@ -48,6 +48,13 @@
           }
         </td>
         <td>
+          @if (c.requires_vehicle) {
+            <p-tag value="Vehicle" severity="info" icon="pi pi-car" />
+          } @else {
+            <span class="text-sm text-gray-400">No</span>
+          }
+        </td>
+        <td>
           @if (c.is_operating) {
             <p-tag value="Operating" severity="success" />
           } @else {
@@ -80,7 +87,7 @@
     </ng-template>
     <ng-template pTemplate="emptymessage">
       <tr>
-        <td colspan="8" class="text-center text-gray-500 py-4">No categories found</td>
+        <td colspan="9" class="text-center text-gray-500 py-4">No categories found</td>
       </tr>
     </ng-template>
   </p-table>
@@ -112,6 +119,12 @@
       <span class="flex items-center gap-2">
         <p-checkbox [(ngModel)]="form().requires_user" binary="true" inputId="reqUser" />
         <label for="reqUser" class="text-sm text-gray-700">Requires user</label>
+      </span>
+    </div>
+    <div class="flex gap-6">
+      <span class="flex items-center gap-2">
+        <p-checkbox [(ngModel)]="form().requires_vehicle" binary="true" inputId="reqVehicle" />
+        <label for="reqVehicle" class="text-sm text-gray-700">Requires vehicle</label>
       </span>
       <span class="flex items-center gap-2">
         <p-checkbox [(ngModel)]="form().is_operating" binary="true" inputId="isOp" />

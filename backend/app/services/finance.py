@@ -210,6 +210,29 @@ async def create_expense(
         if not await _verify_consultation_company(db, consultation_id, company_id, current_user_role):
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Client not found")
+    # Vehicle-required categories (e.g. Fuel, Vehicle Maintenance): a vehicle must
+    # be supplied, matching the "just like fuel" behaviour of the expense dialogs.
+    if vehicle_id is None and category:
+        cat_company_id = company_id
+        if cat_company_id is None:
+            _b = (await db.execute(select(Branch).where(Branch.id == branch_id))).scalar_one_or_none()
+            if _b is not None:
+                cat_company_id = _b.company_id
+        if cat_company_id is not None:
+            _cat = (
+                await db.execute(
+                    select(ExpenseCategory).where(
+                        ExpenseCategory.company_id == cat_company_id,
+                        ExpenseCategory.name == category,
+                    )
+                )
+            ).scalar_one_or_none()
+            if _cat is not None and _cat.requires_vehicle:
+                from fastapi import HTTPException
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"A vehicle is required for {category} expenses.",
+                )
     if not account and category and company_id is not None:
         match = (
             await db.execute(

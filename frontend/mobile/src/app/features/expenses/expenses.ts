@@ -833,8 +833,8 @@ export class Expenses {
       });
       return;
     }
-    if (this.category() === 'Fuel' && !this.vehicleId()) {
-      this.messageService.add({ severity: 'warn', summary: 'Select the vehicle being fueled' });
+    if ((this.isFuel() || this.categoryRequiresVehicle()) && !this.vehicleId()) {
+      this.messageService.add({ severity: 'warn', summary: 'Select the vehicle for this expense' });
       return;
     }
     this.submitting.set(true);

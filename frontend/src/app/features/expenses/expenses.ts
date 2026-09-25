@@ -971,6 +971,7 @@ export class ExpensesCmp implements OnInit {
     if (this.form.category === '__other__' && !this.form.otherDetail.trim()) return false;
     if (this.selectedCategory()?.requires_client && !this.form.consultation_id) return false;
     if (this.isClientAccountCategory() && !this.canFundFromClientAccount()) return false;
+    if ((this.isFuel() || this.selectedCategoryRequiresVehicle()) && !this.form.vehicle_id) return false;
     // Require cart item for permit-related categories when the selected
     // client has permit-processing cart items (tagged-expense flow).
     if (this.isPermitCategory() && this.permitCartItems().length > 0 && !this.form.cart_item_id) return false;

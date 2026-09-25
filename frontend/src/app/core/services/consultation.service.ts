@@ -188,12 +188,13 @@ export interface BulkOnboardingResponse {
 export class ConsultationService {
   constructor(private http: HttpClient) {}
 
-  list(params?: { search?: string; status?: string; stage?: string; page?: number; page_size?: number }) {
+  list(params?: { search?: string; status?: string; stage?: string; sort_by?: string; page?: number; page_size?: number }) {
     let hp = new HttpParams();
     if (params) {
       if (params.search) hp = hp.set('search', params.search);
       if (params.status) hp = hp.set('status', params.status);
       if (params.stage) hp = hp.set('stage', params.stage);
+      if (params.sort_by) hp = hp.set('sort_by', params.sort_by);
       if (params.page) hp = hp.set('page', params.page);
       if (params.page_size) hp = hp.set('page_size', params.page_size);
     }

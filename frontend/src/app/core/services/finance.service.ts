@@ -104,6 +104,7 @@ export interface ExpenseListResponse {
   total: number;
   page: number;
   page_size: number;
+  status_totals?: Record<string, { total: number; count: number }>;
 }
 
 export interface BranchTransfer {

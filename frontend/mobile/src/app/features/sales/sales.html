@@ -136,6 +136,15 @@
           class="w-full"
           data-testid="consultation-search"
         />
+        <button
+          type="button"
+          (click)="toggleConsultationDocSort()"
+          data-testid="sort-sales-document-date"
+          class="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-slate-600"
+        >
+          <span>Sort by Document Date</span>
+          <span class="pi" [class]="consultationSortBy() === 'document_date_desc' ? 'pi-sort-amount-down' : consultationSortBy() === 'document_date_asc' ? 'pi-sort-amount-up-alt' : 'pi-sort-alt'"></span>
+        </button>
         <div class="space-y-2">
           @for (c of filteredConsultations(); track c.id) {
             <button
@@ -148,6 +157,11 @@
                 {{ c.first_name }} {{ c.middle_name }} {{ c.last_name }}
               </div>
               <div class="text-xs text-slate-500">{{ c.phone }}</div>
+              @if (c.document_date) {
+                <div class="mt-0.5 text-[11px] font-medium text-slate-500" data-testid="sales-document-date">
+                  Doc date: {{ c.document_date | date: 'dd/MM/yyyy' }}
+                </div>
+              }
               @if (c.branch_name) {
                 <div class="mt-0.5 text-[11px] text-slate-400">
                   <span class="pi pi-map-marker"></span> {{ c.branch_name }}

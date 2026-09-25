@@ -40,6 +40,7 @@ import { UserService } from '../../core/services/user.service';
 })
 export class ExpensesCmp implements OnInit {
   expenses = signal<Expense[]>([]);
+  statusTotals = signal<Record<string, { total: number; count: number }>>({});
   branches = signal<Branch[]>([]);
   vehicles = signal<Vehicle[]>([]);
   vehicleOptions = computed(() =>
@@ -541,6 +542,7 @@ export class ExpensesCmp implements OnInit {
       if (res) {
         this.expenses.set(res.items);
         this.total = res.total;
+        this.statusTotals.set(res.status_totals ?? {});
       }
     } catch {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load expenses' });

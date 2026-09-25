@@ -93,7 +93,7 @@ async def list_expenses(
     cart_item_id: uuid.UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
-) -> tuple[list[Expense], int]:
+) -> tuple[list[Expense], int, dict[str, dict]]:
     query = select(Expense).options(
         selectinload(Expense.created_by_user),
         selectinload(Expense.approved_by_user),
@@ -104,47 +104,68 @@ async def list_expenses(
         selectinload(Expense.vehicle),
     )
     count_query = select(func.count(Expense.id))
+    # Per-status totals (sum amount + charges) over the SAME filtered scope.
+    status_totals_query = select(
+        Expense.status,
+        func.coalesce(func.sum(Expense.amount + func.coalesce(Expense.paid_charges, Expense.charges, 0)), 0).label("total"),
+        func.count(Expense.id).label("count"),
+    ).group_by(Expense.status)
 
     effective_branch_ids = branch_ids if branch_ids else ([branch_id] if branch_id else None)
     if effective_branch_ids:
         query = query.where(Expense.branch_id.in_(effective_branch_ids))
         count_query = count_query.where(Expense.branch_id.in_(effective_branch_ids))
+        status_totals_query = status_totals_query.where(Expense.branch_id.in_(effective_branch_ids))
     if company_id is not None:
         query = query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
         count_query = count_query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
+        status_totals_query = status_totals_query.join(Branch, Expense.branch_id == Branch.id).where(Branch.company_id == company_id)
     if status:
         query = query.where(Expense.status == status)
         count_query = count_query.where(Expense.status == status)
     if category:
         query = query.where(Expense.category == category)
         count_query = count_query.where(Expense.category == category)
+        status_totals_query = status_totals_query.where(Expense.category == category)
     if category_not:
         query = query.where(or_(Expense.category != category_not, Expense.category.is_(None)))
         count_query = count_query.where(or_(Expense.category != category_not, Expense.category.is_(None)))
+        status_totals_query = status_totals_query.where(or_(Expense.category != category_not, Expense.category.is_(None)))
     if consultation_id:
         query = query.where(Expense.consultation_id == consultation_id)
         count_query = count_query.where(Expense.consultation_id == consultation_id)
+        status_totals_query = status_totals_query.where(Expense.consultation_id == consultation_id)
     if cart_item_id:
         query = query.where(Expense.cart_item_id == cart_item_id)
         count_query = count_query.where(Expense.cart_item_id == cart_item_id)
+        status_totals_query = status_totals_query.where(Expense.cart_item_id == cart_item_id)
     if date_from is not None:
         d_from = func.date(at_business_tz(Expense.expense_date)) >= date_from
         query = query.where(d_from)
         count_query = count_query.where(d_from)
+        status_totals_query = status_totals_query.where(d_from)
     if date_to is not None:
         d_to = func.date(at_business_tz(Expense.expense_date)) <= date_to
         query = query.where(d_to)
         count_query = count_query.where(d_to)
+        status_totals_query = status_totals_query.where(d_to)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
+
+    status_totals: dict[str, dict] = {}
+    for st, st_total, st_count in (await db.execute(status_totals_query)).all():
+        status_totals[st.value if hasattr(st, "value") else str(st)] = {
+            "total": float(st_total or 0),
+            "count": int(st_count or 0),
+        }
 
     query = query.order_by(Expense.created_at.desc())
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     expenses = list(result.scalars().all())
 
-    return expenses, total
+    return expenses, total, status_totals
 
 
 async def _verify_branch_company(

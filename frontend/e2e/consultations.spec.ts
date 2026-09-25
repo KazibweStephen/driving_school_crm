@@ -16,7 +16,7 @@ test.describe('Consultations & Clients Flow', () => {
   test('navigates to consultations page and shows list', async ({ page }) => {
     await page.goto('/consultations');
     await expect(page).toHaveURL(/\/consultations/, { timeout: 10000 });
-    await expect(page.locator('h1')).toContainText('Consultations');
+    await expect(page.locator('h1')).toContainText('Sales');
     // Desktop table should have rows (auto-wait instead of fixed timeout)
     const rows = page.locator('table').first().locator('tbody tr');
     await expect(rows.first()).toBeVisible({ timeout: 10000 });
@@ -155,7 +155,7 @@ test.describe('Consultations & Clients Flow', () => {
   test('clients page redirects to consultations', async ({ page }) => {
     await page.goto('/clients');
     await expect(page).toHaveURL(/\/consultations/, { timeout: 10000 });
-    await expect(page.locator('h1')).toContainText('Consultations');
+    await expect(page.locator('h1')).toContainText('Sales');
   });
 
   test('stage filter shows only paid clients', async ({ page }) => {

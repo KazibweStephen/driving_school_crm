@@ -280,6 +280,7 @@ async def list_consultations(
     page_size: int = Query(default=20, ge=1, le=100),
     branch_id: uuid.UUID | None = Query(None),
     branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
+    sort_by: str | None = Query(None, pattern=r"^(document_date_desc|document_date_asc)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("consultations.view")),
 ):
@@ -296,6 +297,7 @@ async def list_consultations(
         db, search=search, status=status, page=page, page_size=page_size, stage=stage,
         branch_id=branch_id, branch_ids=resolved_branch_ids,
         company_id=current_user.company_id, current_user_role=current_user.role,
+        sort_by=sort_by,
     )
     return ConsultationListResponse(
         consultations=[ConsultationRead.from_orm_with_cart(c) for c in consultations],

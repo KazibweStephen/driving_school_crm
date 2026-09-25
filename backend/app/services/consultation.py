@@ -144,6 +144,7 @@ async def search_consultations(
     branch_ids: list[uuid.UUID] | None = None,
     company_id: uuid.UUID | None = None,
     current_user_role: UserRole | None = None,
+    sort_by: str | None = None,
 ) -> tuple[list[Consultation], int]:
     query = select(Consultation).options(
         selectinload(Consultation.follow_ups).selectinload(FollowUp.cart_items),
@@ -214,7 +215,12 @@ async def search_consultations(
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar() or 0
 
-    query = query.order_by(Consultation.created_at.desc())
+    if sort_by in ("document_date_desc", "document_date_asc"):
+        col = Consultation.document_date
+        order = col.desc() if sort_by == "document_date_desc" else col.asc()
+        query = query.order_by(order.nulls_last(), Consultation.created_at.desc())
+    else:
+        query = query.order_by(Consultation.created_at.desc())
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     return list(result.scalars().all()), total

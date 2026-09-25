@@ -96,7 +96,20 @@
                 <p-checkbox [binary]="true" [ngModel]="isAllSelected()" (onChange)="toggleSelectAll()" />
               </th>
             }
-            <th>Name</th><th>Phone</th><th>Location</th><th>Branch</th><th>Status</th><th>Stage</th><th>Actions</th>
+            <th>Name</th><th>Phone</th><th>Location</th><th>Branch</th><th>Status</th><th>Stage</th>
+            <th>
+              <button type="button" (click)="toggleDocDateSort()" data-testid="sort-sales-document-date" title="Sort by document date" class="inline-flex items-center gap-1 text-left">
+                Doc Date
+                @if (sortBy() === 'document_date_desc') {
+                  <span class="pi pi-sort-amount-down"></span>
+                } @else if (sortBy() === 'document_date_asc') {
+                  <span class="pi pi-sort-amount-up-alt"></span>
+                } @else {
+                  <span class="pi pi-sort-alt"></span>
+                }
+              </button>
+            </th>
+            <th>Actions</th>
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-c>
@@ -112,6 +125,7 @@
             <td class="text-sm text-gray-500">{{ c.branch_name || '—' }}</td>
             <td><p-tag [value]="c.status" [severity]="statusSeverity(c.status)" /></td>
             <td class="text-sm text-gray-500">{{ stageLabel(c) }}</td>
+            <td class="text-sm text-gray-500" data-testid="sales-document-date">{{ (c.document_date | date: 'mediumDate') ?? '—' }}</td>
             <td>
               <div class="flex items-center gap-1">
                 <p-button icon="pi pi-eye" severity="secondary" [routerLink]="['/consultations', c.id]" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="View" />
@@ -121,7 +135,7 @@
           </tr>
         </ng-template>
         <ng-template pTemplate="emptydata">
-          <tr><td [colSpan]="authService.currentUserRole() === 'super_user' ? 8 : 7" class="py-8 text-center text-gray-400">@if (loading()) { <p>Loading...</p> } @else { <p>No consultations yet</p> }</td></tr>
+          <tr><td [colSpan]="authService.currentUserRole() === 'super_user' ? 9 : 8" class="py-8 text-center text-gray-400">@if (loading()) { <p>Loading...</p> } @else { <p>No consultations yet</p> }</td></tr>
         </ng-template>
       </p-table>
     </div>
@@ -132,6 +146,7 @@
             <div class="min-w-0 flex-1">
               <a [routerLink]="['/consultations', c.id]" class="font-medium text-blue-600 hover:text-blue-800 hover:underline">{{ fullName(c) }}</a>
               <p class="mt-0.5 text-sm text-gray-500">{{ c.phone }}</p>
+              @if (c.document_date) { <p class="text-xs text-gray-400" data-testid="sales-document-date-mob">Doc: {{ c.document_date | date: 'mediumDate' }}</p> }
               @if (c.location) { <p class="text-xs text-gray-400">{{ c.location }}</p> }
             </div>
             <p-tag [value]="c.status" [severity]="statusSeverity(c.status)" />

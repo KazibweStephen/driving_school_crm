@@ -229,11 +229,12 @@ export class ConsultationService {
     return this.http.get<ClientInfo[]>('/api/v1/consultations/client-search', { params });
   }
 
-  list(params?: { search?: string; page?: number; page_size?: number }) {
+  list(params?: { search?: string; page?: number; page_size?: number; sort_by?: string }) {
     let hp = new HttpParams();
     if (params?.search) hp = hp.set('search', params.search);
     if (params?.page) hp = hp.set('page', params.page);
     if (params?.page_size) hp = hp.set('page_size', params.page_size);
+    if (params?.sort_by) hp = hp.set('sort_by', params.sort_by);
     return this.http.get<ConsultationListResponse>('/api/v1/consultations/', { params: hp });
   }
 

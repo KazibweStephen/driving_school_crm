@@ -84,6 +84,7 @@ export class Clients implements OnInit, OnDestroy {
   loading = signal(false);
   search = signal('');
   stageFilter = signal<string | null>(null);
+  sortBy = signal('');
   page = signal(1);
   pageSize = signal(20);
   total = signal(0);
@@ -360,6 +361,7 @@ export class Clients implements OnInit, OnDestroy {
         .list({
           search: this.search() || undefined,
           stage: this.stageFilter() || undefined,
+          sort_by: this.sortBy() || undefined,
           page: this.page(),
           page_size: this.pageSize(),
         })
@@ -409,9 +411,19 @@ export class Clients implements OnInit, OnDestroy {
   clearFilters() {
     this.search.set('');
     this.stageFilter.set(null);
+    this.sortBy.set('');
     this.page.set(1);
     this.clientResults.set([]);
     this.isSearching.set(false);
+    this.loadConsultations();
+  }
+
+  toggleDocDateSort() {
+    this.sortBy.set(
+      this.sortBy() === '' ? 'document_date_desc'
+        : this.sortBy() === 'document_date_desc' ? 'document_date_asc' : '',
+    );
+    this.page.set(1);
     this.loadConsultations();
   }
 

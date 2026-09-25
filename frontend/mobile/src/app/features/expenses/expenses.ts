@@ -68,6 +68,7 @@ export class Expenses {
   submitting = signal(false);
 
   expenses = signal<Expense[]>([]);
+  statusTotals = signal<Record<string, { total: number; count: number }>>({});
   total = signal(0);
   page = signal(1);
   pageSize = 20;
@@ -594,6 +595,7 @@ export class Expenses {
         next: (res) => {
           this.expenses.set(res.items ?? []);
           this.total.set(res.total ?? 0);
+          this.statusTotals.set(res.status_totals ?? {});
           this.loading.set(false);
         },
         error: () => {

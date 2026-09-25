@@ -232,7 +232,7 @@ async def list_expenses(
     resolved_branch_ids = (
         [branch_id] if branch_id else await resolve_branch_ids(db, current_user, requested)
     )
-    expenses, total = await finance_service.list_expenses(
+    expenses, total, status_totals = await finance_service.list_expenses(
         db, branch_ids=resolved_branch_ids, status=status,
         page=page, page_size=page_size,
         company_id=current_user.company_id, current_user_role=current_user.role,
@@ -250,6 +250,7 @@ async def list_expenses(
     return {
         "items": items,
         "total": total,
+        "status_totals": status_totals,
         "page": page,
         "page_size": page_size,
     }

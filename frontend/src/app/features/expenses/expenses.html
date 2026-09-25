@@ -62,6 +62,33 @@
     }
   </div>
 
+  <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div class="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3" data-testid="expense-total-pending">
+      <div>
+        <p class="text-xs font-medium uppercase tracking-wide text-amber-700">Pending</p>
+        <p class="text-lg font-bold text-amber-900">{{ (statusTotals()['pending']?.total ?? 0) | number }}</p>
+      </div>
+      <span class="pi pi-clock text-2xl text-amber-400"></span>
+      <span class="text-xs text-amber-600">{{ statusTotals()['pending']?.count ?? 0 }} expenses</span>
+    </div>
+    <div class="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-4 py-3" data-testid="expense-total-approved">
+      <div>
+        <p class="text-xs font-medium uppercase tracking-wide text-blue-700">Approved</p>
+        <p class="text-lg font-bold text-blue-900">{{ (statusTotals()['approved']?.total ?? 0) | number }}</p>
+      </div>
+      <span class="pi pi-check-circle text-2xl text-blue-400"></span>
+      <span class="text-xs text-blue-600">{{ statusTotals()['approved']?.count ?? 0 }} expenses</span>
+    </div>
+    <div class="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 px-4 py-3" data-testid="expense-total-paid">
+      <div>
+        <p class="text-xs font-medium uppercase tracking-wide text-green-700">Paid</p>
+        <p class="text-lg font-bold text-green-900">{{ (statusTotals()['paid']?.total ?? 0) | number }}</p>
+      </div>
+      <span class="pi pi-money-bill text-2xl text-green-400"></span>
+      <span class="text-xs text-green-600">{{ statusTotals()['paid']?.count ?? 0 }} expenses</span>
+    </div>
+  </div>
+
   <p-table [value]="expenses()" [loading]="loading()" [paginator]="true" [rows]="pageSize"
     [totalRecords]="total" [lazy]="true" (onPage)="onPage($event)"
     [rowsPerPageOptions]="[10, 20, 50]" sortField="expense_date" [sortOrder]="-1">

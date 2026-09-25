@@ -142,6 +142,26 @@
       />
     }
 
+    @if (tab() === 'expenses') {
+      <div class="grid grid-cols-3 gap-2" data-testid="expense-totals">
+        <div class="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Pending</div>
+          <div class="text-sm font-bold text-amber-900">{{ money(statusTotals()['pending']?.total ?? 0) }}</div>
+          <div class="text-[10px] text-amber-600">{{ statusTotals()['pending']?.count ?? 0 }}</div>
+        </div>
+        <div class="rounded-xl border border-blue-200 bg-blue-50 p-3">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-blue-700">Approved</div>
+          <div class="text-sm font-bold text-blue-900">{{ money(statusTotals()['approved']?.total ?? 0) }}</div>
+          <div class="text-[10px] text-blue-600">{{ statusTotals()['approved']?.count ?? 0 }}</div>
+        </div>
+        <div class="rounded-xl border border-green-200 bg-green-50 p-3">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-green-700">Paid</div>
+          <div class="text-sm font-bold text-green-900">{{ money(statusTotals()['paid']?.total ?? 0) }}</div>
+          <div class="text-[10px] text-green-600">{{ statusTotals()['paid']?.count ?? 0 }}</div>
+        </div>
+      </div>
+    }
+
     <div class="space-y-3">
       @for (e of expenses(); track e.id) {
         <div class="rounded-xl border border-slate-200 bg-white p-4">

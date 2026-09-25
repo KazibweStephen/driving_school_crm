@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, DatePipe } from '@angular/common';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -46,6 +46,7 @@ type SalesTab = 'active' | 'consultations';
   imports: [
     FormsModule,
     DecimalPipe,
+    DatePipe,
     ButtonModule,
     InputTextModule,
     DatePickerModule,
@@ -124,6 +125,7 @@ export class Sales {
   consultationLoading = signal(false);
   activeServerHits = signal(false);
   consultationServerHits = signal(false);
+  consultationSortBy = signal('');
 
   filteredActiveClients = computed(() => {
     const q = this.activeSearch().trim().toLowerCase();
@@ -198,7 +200,7 @@ export class Sales {
     }
     if (term.length >= 2 && this.filteredConsultations().length === 0) {
       this.consultationLoading.set(true);
-      this.consultationService.list({ search: term, page_size: 50 }).subscribe({
+      this.consultationService.list({ search: term, page_size: 50, sort_by: this.consultationSortBy() || undefined }).subscribe({
         next: (res) => {
           const hits = res.consultations ?? [];
           this.consultationServerHits.set(hits.length > 0);
@@ -226,10 +228,18 @@ export class Sales {
   }
 
   private loadConsultations() {
-    this.consultationService.list({ page_size: 50 }).subscribe({
+    this.consultationService.list({ page_size: 50, sort_by: this.consultationSortBy() || undefined }).subscribe({
       next: (res) => this.consultations.set(res.consultations ?? []),
       error: () => this.consultations.set([]),
     });
+  }
+
+  toggleConsultationDocSort() {
+    this.consultationSortBy.set(
+      this.consultationSortBy() === '' ? 'document_date_desc'
+        : this.consultationSortBy() === 'document_date_desc' ? 'document_date_asc' : '',
+    );
+    this.loadConsultations();
   }
 
   private async startUpsellDeepLink(id: string) {

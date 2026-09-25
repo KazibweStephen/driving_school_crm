@@ -1054,7 +1054,7 @@ export class Expenses {
   }
 
   loadInstructors() {
-    this.catalog.listInstructors().subscribe({
+    this.catalog.listUsers({ page_size: 100 }).subscribe({
       next: (res) => {
         const users = res?.users ?? [];
         this.instructors.set(
@@ -1067,11 +1067,12 @@ export class Expenses {
 
   private currentInstructorsFromResponse(users: any[]): { label: string; value: string }[] {
     return users
-      .filter((u) => u.role === 'instructor' && u.status === 'active')
+      .filter((u) => u.status === 'active')
       .map((u) => ({
         label: `${u.first_name ?? ''}${u.last_name ? ' ' + u.last_name : ''} · ${u.phone}`.trim(),
         value: u.phone,
-      }));
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }
 
   searchEditClient(q: string) {

@@ -38,6 +38,18 @@ export interface TimerSync {
   distance_km?: number;
 }
 
+export interface LessonBatchStatusItem {
+  id: string;
+  status: string;
+  updated: boolean;
+  error?: string | null;
+}
+
+export interface LessonBatchStatusResponse {
+  updated: LessonBatchStatusItem[];
+  unchanged: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class LessonService {
   constructor(private http: HttpClient) {}
@@ -79,5 +91,12 @@ export class LessonService {
 
   updateLesson(lessonId: string, data: Partial<ClientLesson>) {
     return this.http.patch<ClientLesson>(`/api/v1/lesson-plans/lessons/${lessonId}`, data);
+  }
+
+  batchStatus(lessonIds: string[], status: 'completed' | 'skipped') {
+    return this.http.post<LessonBatchStatusResponse>(
+      `/api/v1/lesson-plans/lessons/batch-status`,
+      { lesson_ids: lessonIds, status },
+    );
   }
 }

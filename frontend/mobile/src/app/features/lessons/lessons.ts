@@ -101,6 +101,7 @@ export class Lessons implements OnInit {
   rsEnd = signal('');
   shiftOnMove = signal(true);
   saving = signal(false);
+  savingBatch = signal(false);
 
   setView(v: ViewMode) {
     this.view.set(v);
@@ -192,6 +193,14 @@ export class Lessons implements OnInit {
   canReschedule(slot: WeeklyScheduleEntry): boolean {
     return slot.status === 'pending' || slot.status === 'ready' || slot.status === 'scheduled';
   }
+
+  canComplete(slot: WeeklyScheduleEntry): boolean {
+    return slot.status === 'pending' || slot.status === 'ready' || slot.status === 'scheduled';
+  }
+
+  selectedDayActionable = computed(() =>
+    this.selectedSlots().filter((s) => this.canComplete(s)),
+  );
 
   statusLabel(status: string): string {
     const map: Record<string, string> = {
@@ -304,6 +313,62 @@ export class Lessons implements OnInit {
         this.messageService.add({
           severity: 'error',
           summary: 'Could not remove',
+          detail: err.error?.detail || 'Try again',
+        });
+      },
+    });
+  }
+
+  completeSlot(slot: WeeklyScheduleEntry) {
+    if (!window.confirm(`Mark "${slot.title}" as completed?`)) return;
+    this.starting.set(true);
+    this.lessonService.completeLesson(slot.lesson_id, 'completed').subscribe({
+      next: () => {
+        this.starting.set(false);
+        this.messageService.add({ severity: 'success', summary: 'Lesson completed' });
+        this.load();
+      },
+      error: (err) => {
+        this.starting.set(false);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Could not complete',
+          detail: err.error?.detail || 'Try again',
+        });
+      },
+    });
+  }
+
+  batchCompleteDay() {
+    const ids = this.selectedDayActionable().map((s) => s.lesson_id);
+    if (ids.length && !window.confirm(`Mark all ${ids.length} lesson(s) on this day as completed?`)) return;
+    this.applyBatch(ids, 'completed');
+  }
+
+  batchSkipDay() {
+    const ids = this.selectedDayActionable().map((s) => s.lesson_id);
+    if (ids.length && !window.confirm(`Mark all ${ids.length} lesson(s) on this day as skipped?`)) return;
+    this.applyBatch(ids, 'skipped');
+  }
+
+  private applyBatch(ids: string[], status: 'completed' | 'skipped') {
+    if (!ids.length) return;
+    this.savingBatch.set(true);
+    this.lessonService.batchStatus(ids, status).subscribe({
+      next: (res) => {
+        this.savingBatch.set(false);
+        const n = res?.updated?.length ?? 0;
+        this.messageService.add({
+          severity: 'success',
+          summary: status === 'completed' ? `Completed ${n} lesson(s)` : `Skipped ${n} lesson(s)`,
+        });
+        this.load();
+      },
+      error: (err) => {
+        this.savingBatch.set(false);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Batch failed',
           detail: err.error?.detail || 'Try again',
         });
       },

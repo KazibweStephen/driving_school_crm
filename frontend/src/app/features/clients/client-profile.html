@@ -917,6 +917,7 @@
                                 <p-button icon="pi pi-play" severity="info" (onClick)="restoreExecutionDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Resume Lesson" tooltipPosition="top" />
                               }
                               @if (canStartLesson(lesson)) {
+                                <p-button icon="pi pi-check-circle" severity="success" (onClick)="completeLessonRow(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Complete" tooltipPosition="top" />
                                 <p-button icon="pi pi-ban" severity="danger" (onClick)="updateLessonStatus(lesson, 'skipped')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Skip" tooltipPosition="top" />
                               }
                               <p-button icon="pi pi-trash" severity="danger" (click)="removeLessonFromPlan(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" tooltipPosition="top" />
@@ -1822,6 +1823,7 @@
                                     <p-button icon="pi pi-play" severity="info" (onClick)="restoreExecutionDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Resume Lesson" tooltipPosition="top" />
                                   }
                                   @if (canStartLesson(lesson)) {
+                                    <p-button icon="pi pi-check-circle" severity="success" (onClick)="completeLessonRow(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Complete" tooltipPosition="top" />
                                     <p-button icon="pi pi-ban" severity="danger" (onClick)="updateLessonStatus(lesson, 'skipped')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Skip" tooltipPosition="top" />
                                   }
                                   <p-button icon="pi pi-trash" severity="danger" (click)="removeLessonFromPlan(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" tooltipPosition="top" />

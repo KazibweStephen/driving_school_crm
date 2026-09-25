@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -15,6 +16,9 @@ from app.schemas.lesson_plan import (
     ClientLessonPlanUpdate,
     ClientLessonRead,
     ClientLessonUpdate,
+    LessonBatchStatus,
+    LessonBatchStatusItem,
+    LessonBatchStatusResponse,
     LessonBulkReorder,
     LessonHistoryRead,
     LessonPlanImportResponse,
@@ -684,8 +688,21 @@ async def complete_lesson(
     lesson = await lesson_service.get_client_lesson_by_id(db, lid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
-    if lesson.status.value != "started" and lesson.status.value != "paused":
-        raise HTTPException(status_code=400, detail="Lesson must be started before completing")
+    if lesson.is_locked:
+        raise HTTPException(status_code=403, detail="Lesson is locked. Upgrade package to unlock.")
+    if lesson.status.value == "started" or lesson.status.value == "paused":
+        # Standard completion path: lesson was actively run.
+        completed_at = None
+    elif lesson.status.value in ("scheduled", "pending", "ready"):
+        # Catch-up completion of a lesson that was never started (e.g. past
+        # lessons being completed in a batch). Record it on its scheduled day.
+        completed_at = (
+            datetime.combine(lesson.scheduled_date, time.min)
+            if lesson.scheduled_date
+            else None
+        )
+    else:
+        raise HTTPException(status_code=400, detail=f"Lesson is already {lesson.status.value}")
 
     # Fuel budget guard: the lesson's vehicle rate is already counted in the
     # plan's projected fuel because the lesson is not yet completed.
@@ -706,7 +723,8 @@ async def complete_lesson(
             fuel_cost = vehicle_rate.rate_per_lesson
 
     updated = await lesson_service.update_client_lesson(
-        db, lesson, status="completed", outcome=outcome, notes=notes, fuel_cost=fuel_cost
+        db, lesson, status="completed", outcome=outcome, notes=notes, fuel_cost=fuel_cost,
+        completed_at=completed_at,
     )
 
     # Send training completed SMS
@@ -760,10 +778,80 @@ async def skip_lesson(
     lesson = await lesson_service.get_client_lesson_by_id(db, lid, company_id=current_user.company_id, current_user_role=current_user.role)
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
+    if lesson.is_locked:
+        raise HTTPException(status_code=403, detail="Lesson is locked. Upgrade package to unlock.")
+    if lesson.status.value in ("completed", "skipped", "cancelled", "expired"):
+        raise HTTPException(status_code=400, detail=f"Lesson is already {lesson.status.value}")
     updated = await lesson_service.update_client_lesson(
         db, lesson, status="skipped"
     )
     return ClientLessonRead.model_validate(updated)
+
+
+@router.post("/api/v1/lesson-plans/lessons/batch-status", response_model=LessonBatchStatusResponse)
+async def batch_lesson_status(
+    data: LessonBatchStatus,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("lesson_plans.edit")),
+):
+    """Complete or skip multiple lessons at once (e.g. all past lessons of a day).
+
+    Terminal lessons (already completed/skipped/cancelled/expired) and locked
+    lessons are left untouched and counted as unchanged. No notifications are
+    sent so catch-up batches do not spam clients.
+    """
+    if not data.lesson_ids:
+        raise HTTPException(status_code=400, detail="No lessons provided")
+    updated_items: list[LessonBatchStatusItem] = []
+    unchanged = 0
+    for lid in data.lesson_ids:
+        lesson = await lesson_service.get_client_lesson_by_id(
+            db, lid, company_id=current_user.company_id, current_user_role=current_user.role
+        )
+        if not lesson:
+            unchanged += 1
+            continue
+        if lesson.is_locked:
+            unchanged += 1
+            continue
+        current = lesson.status.value if lesson.status else None
+        if lesson.status.value in ("completed", "skipped", "cancelled", "expired"):
+            unchanged += 1
+            continue
+        if data.status == "skipped" and current not in ("scheduled", "pending", "ready"):
+            unchanged += 1
+            continue
+        try:
+            await fuel_service.assert_plan_fuel_budget(
+                db, lesson.lesson_plan_id, current_user.company_id
+            )
+        except ValueError as e:
+            updated_items.append(
+                LessonBatchStatusItem(
+                    id=lid, status=data.status, updated=False,
+                    error=f"Fuel budget exceeded: {e}",
+                )
+            )
+            continue
+        fuel_cost = None
+        completed_at = None
+        if data.status == "completed":
+            if current not in ("started", "paused") and lesson.scheduled_date:
+                completed_at = datetime.combine(lesson.scheduled_date, time.min)
+            if not lesson.is_theory and lesson.vehicle_id:
+                vehicle_rate = await fuel_service.get_vehicle_active_rate_for_vehicle(
+                    db, lesson.vehicle_id, current_user.company_id
+                )
+                if vehicle_rate:
+                    fuel_cost = vehicle_rate.rate_per_lesson
+        await lesson_service.update_client_lesson(
+            db, lesson, status=data.status,
+            instructor_id=current_user.phone,
+            fuel_cost=fuel_cost,
+            completed_at=completed_at,
+        )
+        updated_items.append(LessonBatchStatusItem(id=lid, status=data.status, updated=True))
+    return LessonBatchStatusResponse(updated=updated_items, unchanged=unchanged)
 
 
 @router.post("/api/v1/lesson-plans/lessons/{lesson_id}/move", response_model=list[ClientLessonRead])

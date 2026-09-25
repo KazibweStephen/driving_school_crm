@@ -1127,6 +1127,7 @@ async def update_client_lesson(
     enforce_prerequisites: bool | None = None,
     fuel_cost: Decimal | None = None,
     shift_subsequent: bool | None = None,
+    completed_at: datetime | None = None,
 ) -> ClientLesson:
     _old_date = lesson.scheduled_date
     if day_number is not None:
@@ -1153,8 +1154,11 @@ async def update_client_lesson(
     if status is not None:
         from_state = lesson.status.value if lesson.status else None
         lesson.status = LessonState(status)
-        if status == "completed" and not lesson.completed_at:
-            lesson.completed_at = datetime.utcnow()
+        if status == "completed":
+            if completed_at is not None:
+                lesson.completed_at = completed_at
+            elif not lesson.completed_at:
+                lesson.completed_at = datetime.utcnow()
         # Record history
         history = LessonHistory(
             client_lesson_id=lesson.id,

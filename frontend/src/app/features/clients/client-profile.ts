@@ -1683,6 +1683,16 @@ export class ClientProfile implements OnInit {
     }
   }
 
+  async completeLessonRow(lesson: ClientLesson) {
+    try {
+      const updated = await this.lessonPlanService.completeLesson(lesson.id, 'completed').toPromise();
+      if (updated) this.updateLessonInList(updated);
+      this.messageService.add({ severity: 'success', summary: 'Lesson completed' });
+    } catch {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to complete lesson' });
+    }
+  }
+
   // ── Lesson Execution ──
 
   async openExecutionDialog(lesson: ClientLesson) {

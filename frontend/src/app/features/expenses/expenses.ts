@@ -127,7 +127,6 @@ export class ExpensesCmp implements OnInit {
   }
 
   selectedCategoryRequiresVehicle(): boolean {
-    if (this.hasCartExpenseTypes() && !this.isFuel()) return false;
     const cat = this.categories().find(c => c.name === this.form.category);
     return !!cat?.requires_vehicle;
   }
@@ -476,7 +475,7 @@ export class ExpensesCmp implements OnInit {
   }
 
   loadInstructors() {
-    this.userService.list({ role: 'instructor', status: 'active', page_size: 100 }).subscribe({
+    this.userService.list({ status: 'active', page_size: 100 }).subscribe({
       next: (res) => {
         this.instructors.set((res?.users || []).map(u => ({
           id: u.phone,

@@ -66,6 +66,24 @@
       </div>
     } @else {
       <div class="space-y-3">
+        @if (selectedDayActionable().length > 1) {
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="flex-1 rounded-lg bg-green-600 p-2 text-xs font-medium text-white"
+              [disabled]="savingBatch()"
+              (click)="batchCompleteDay()"
+              data-testid="batch-complete-day"
+            ><span class="pi pi-check"></span> Complete all ({{ selectedDayActionable().length }})</button>
+            <button
+              type="button"
+              class="flex-1 rounded-lg bg-amber-500 p-2 text-xs font-medium text-white"
+              [disabled]="savingBatch()"
+              (click)="batchSkipDay()"
+              data-testid="batch-skip-day"
+            ><span class="pi pi-ban"></span> Skip all ({{ selectedDayActionable().length }})</button>
+          </div>
+        }
         @for (slot of selectedSlots(); track slot.lesson_id) {
           <div class="rounded-xl border border-slate-200 bg-white p-4">
             <div class="flex items-center justify-between">
@@ -101,22 +119,30 @@
               />
             }
             @if (canReschedule(slot)) {
-              <div class="mt-2 flex gap-2">
+              <div class="mt-2 grid grid-cols-2 gap-2">
+                @if (canComplete(slot)) {
+                  <button
+                    type="button"
+                    class="rounded-lg border border-green-200 bg-green-50 p-2 text-xs font-medium text-green-700"
+                    (click)="completeSlot(slot)"
+                    data-testid="complete-lesson"
+                  ><span class="pi pi-check"></span> Complete</button>
+                }
                 <button
                   type="button"
-                  class="flex-1 rounded-lg border border-slate-200 p-2 text-xs font-medium text-slate-600"
+                  class="rounded-lg border border-slate-200 p-2 text-xs font-medium text-slate-600"
                   (click)="openReschedule(slot)"
                   data-testid="reschedule-lesson"
                 ><span class="pi pi-calendar"></span> Move</button>
                 <button
                   type="button"
-                  class="flex-1 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-medium text-amber-700"
+                  class="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-medium text-amber-700"
                   (click)="openSkip(slot)"
                   data-testid="skip-lesson"
                 ><span class="pi pi-ban"></span> Skip</button>
                 <button
                   type="button"
-                  class="flex-1 rounded-lg border border-slate-200 p-2 text-xs font-medium text-red-600"
+                  class="rounded-lg border border-slate-200 p-2 text-xs font-medium text-red-600"
                   (click)="removeLesson(slot)"
                   data-testid="remove-lesson"
                 ><span class="pi pi-trash"></span> Remove</button>

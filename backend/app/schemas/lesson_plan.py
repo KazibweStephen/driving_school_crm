@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime, time
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -334,6 +335,23 @@ class ClientLessonRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class LessonBatchStatus(BaseModel):
+    lesson_ids: list[uuid.UUID]
+    status: Literal["completed", "skipped"]
+
+
+class LessonBatchStatusItem(BaseModel):
+    id: uuid.UUID
+    status: str
+    updated: bool
+    error: str | None = None
+
+
+class LessonBatchStatusResponse(BaseModel):
+    updated: list[LessonBatchStatusItem]
+    unchanged: int = 0
 
 
 class ClientLessonPlanCreate(BaseModel):

@@ -182,22 +182,25 @@ export class Lessons implements OnInit {
   }
 
   canStart(slot: WeeklyScheduleEntry): boolean {
-    if (slot.status === 'in_progress') return false;
+    if (slot.status === 'started' || slot.status === 'in_progress' || slot.status === 'paused') return false;
     if (slot.scheduled_date && slot.scheduled_date < todayISO()) return false;
     const today = todayISO();
     if (slot.scheduled_date && slot.scheduled_date > today) return false;
-    return slot.status === 'pending' || slot.status === 'unlocked';
+    return slot.status === 'pending' || slot.status === 'ready' || slot.status === 'scheduled';
   }
 
   canReschedule(slot: WeeklyScheduleEntry): boolean {
-    return slot.status === 'pending' || slot.status === 'unlocked';
+    return slot.status === 'pending' || slot.status === 'ready' || slot.status === 'scheduled';
   }
 
   statusLabel(status: string): string {
     const map: Record<string, string> = {
-      pending: 'Pending',
-      unlocked: 'Ready',
+      pending: 'Scheduled',
+      ready: 'Ready',
+      scheduled: 'Scheduled',
+      started: 'In progress',
       in_progress: 'In progress',
+      paused: 'Paused',
       completed: 'Completed',
       partially_completed: 'Partial',
       skipped: 'Skipped',
@@ -205,6 +208,9 @@ export class Lessons implements OnInit {
       carried_over: 'Carried over',
       makeup: 'Makeup',
       excused: 'Excused',
+      repeated: 'Repeated',
+      expired: 'Expired',
+      locked: 'Locked',
     };
     return map[status] || status;
   }

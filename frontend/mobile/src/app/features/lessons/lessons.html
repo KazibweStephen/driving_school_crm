@@ -82,8 +82,8 @@
               <span
                 [class.bg-green-100]="slot.status === 'completed' || slot.status === 'partially_completed'"
                 [class.text-green-700]="slot.status === 'completed' || slot.status === 'partially_completed'"
-                [class.bg-amber-100]="slot.status === 'pending' || slot.status === 'unlocked'"
-                [class.text-amber-700]="slot.status === 'pending' || slot.status === 'unlocked'"
+                [class.bg-amber-100]="slot.status === 'pending' || slot.status === 'scheduled' || slot.status === 'ready'"
+                [class.text-amber-700]="slot.status === 'pending' || slot.status === 'scheduled' || slot.status === 'ready'"
                 [class.bg-blue-100]="slot.status === 'in_progress'"
                 [class.text-blue-700]="slot.status === 'in_progress'"
                 class="rounded-full px-2 py-0.5 text-[10px] font-medium"

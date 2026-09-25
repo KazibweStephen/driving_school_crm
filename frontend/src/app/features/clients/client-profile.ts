@@ -2089,6 +2089,45 @@ export class ClientProfile implements OnInit {
     }
   }
 
+  lessonStatusLabel(lesson: any): string {
+    if (lesson.is_locked) return 'Locked';
+    switch (lesson.status) {
+      case 'started':
+      case 'in_progress': return 'Ongoing';
+      case 'paused': return 'Paused';
+      case 'completed': return 'Done';
+      case 'skipped': return 'Skipped';
+      case 'cancelled': return 'Cancelled';
+      case 'ready': return 'Ready';
+      case 'scheduled': return 'Scheduled';
+      default: return 'Pending';
+    }
+  }
+
+  lessonStatusSeverity(lesson: any): 'success' | 'warn' | 'danger' | 'info' | 'contrast' {
+    if (lesson.is_locked) return 'danger';
+    switch (lesson.status) {
+      case 'completed': return 'success';
+      case 'started':
+      case 'in_progress':
+      case 'paused': return 'info';
+      case 'skipped':
+      case 'cancelled': return 'warn';
+      default: return 'contrast';
+    }
+  }
+
+  canStartLesson(lesson: any): boolean {
+    return (
+      (lesson.status === 'pending' || lesson.status === 'ready' || lesson.status === 'scheduled') &&
+      !lesson.is_locked
+    );
+  }
+
+  canResumeLesson(lesson: any): boolean {
+    return lesson.status === 'started';
+  }
+
   cartItemSeverity(s: string): 'info' | 'success' | 'warn' | 'danger' | 'contrast' {
     switch (s) {
       case 'interested': return 'info';

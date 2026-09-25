@@ -99,7 +99,7 @@ export class MainLayout implements OnInit, OnDestroy {
     {
       label: 'Sales & Expenses', icon: 'pi pi-dollar', expanded: false,
       children: [
-        { path: '/consultations', label: 'Consultations', icon: 'pi pi-phone', permission: 'consultations.view' },
+        { path: '/consultations', label: 'Sales', icon: 'pi pi-phone', permission: 'consultations.view' },
         { path: '/bulk-onboarding', label: 'Bulk Onboarding', icon: 'pi pi-upload', permission: 'bulk_onboarding.manage' },
         { path: '/expenses', label: 'Expenses', icon: 'pi pi-minus-circle', permission: 'expenses.view' },
         { path: '/expense-categories', label: 'Expense Categories', icon: 'pi pi-tags', permission: 'expenses.manage' },

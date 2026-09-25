@@ -1,7 +1,7 @@
 <div class="p-4 sm:p-6">
   <div class="mb-4 flex items-center justify-between">
     <a [routerLink]="['/consultations']" class="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800">
-      <span class="pi pi-arrow-left"></span> Back to Consultations
+      <span class="pi pi-arrow-left"></span> Back to Sales
     </a>
     <button (click)="viewMode.set(viewMode() === 'tabbed' ? 'detailed' : 'tabbed')"
             class="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
@@ -905,18 +905,18 @@
                             </div>
                             <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto sm:ml-auto justify-end">
                               <p-tag
-                                [value]="lesson.is_locked ? 'Locked' : lesson.status === 'started' || lesson.status === 'in_progress' ? 'Ongoing' : lesson.status === 'completed' ? 'Done' : lesson.status === 'skipped' ? 'Skipped' : lesson.status === 'cancelled' ? 'Cancelled' : 'Pending'"
-                                [severity]="lesson.is_locked ? 'danger' : lesson.status === 'completed' ? 'success' : lesson.status === 'started' || lesson.status === 'in_progress' ? 'info' : lesson.status === 'skipped' ? 'warn' : 'contrast'"
+                                [value]="lessonStatusLabel(lesson)"
+                                [severity]="lessonStatusSeverity(lesson)"
                                 styleClass="text-xs"
                               />
                               <p-button icon="pi pi-eye" severity="secondary" (onClick)="openLessonDetail(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Details" tooltipPosition="top" />
-                              @if (lesson.status === 'pending' && !lesson.is_locked) {
+                              @if (canStartLesson(lesson)) {
                                 <p-button icon="pi pi-play" severity="info" (onClick)="openExecutionDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Start Lesson" tooltipPosition="top" />
                               }
-                              @if (lesson.status === 'started') {
+                              @if (canResumeLesson(lesson)) {
                                 <p-button icon="pi pi-play" severity="info" (onClick)="restoreExecutionDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Resume Lesson" tooltipPosition="top" />
                               }
-                              @if (lesson.status === 'pending' && !lesson.is_locked) {
+                              @if (canStartLesson(lesson)) {
                                 <p-button icon="pi pi-ban" severity="danger" (onClick)="updateLessonStatus(lesson, 'skipped')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Skip" tooltipPosition="top" />
                               }
                               <p-button icon="pi pi-trash" severity="danger" (click)="removeLessonFromPlan(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" tooltipPosition="top" />
@@ -1810,18 +1810,18 @@
                                 </div>
                                 <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto sm:ml-auto justify-end">
                                   <p-tag
-                                    [value]="lesson.is_locked ? 'Locked' : lesson.status === 'started' || lesson.status === 'in_progress' ? 'Ongoing' : lesson.status === 'completed' ? 'Done' : lesson.status === 'skipped' ? 'Skipped' : lesson.status === 'cancelled' ? 'Cancelled' : 'Pending'"
-                                    [severity]="lesson.is_locked ? 'danger' : lesson.status === 'completed' ? 'success' : lesson.status === 'started' || lesson.status === 'in_progress' ? 'info' : lesson.status === 'skipped' ? 'warn' : 'contrast'"
+                                    [value]="lessonStatusLabel(lesson)"
+                                    [severity]="lessonStatusSeverity(lesson)"
                                     styleClass="text-xs"
                                   />
                                   <p-button icon="pi pi-eye" severity="secondary" (onClick)="openLessonDetail(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Details" tooltipPosition="top" />
-                                  @if (lesson.status === 'pending' && !lesson.is_locked) {
+                                  @if (canStartLesson(lesson)) {
                                     <p-button icon="pi pi-play" severity="info" (onClick)="openExecutionDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Start Lesson" tooltipPosition="top" />
                                   }
-                                  @if (lesson.status === 'started') {
+                                  @if (canResumeLesson(lesson)) {
                                     <p-button icon="pi pi-play" severity="info" (onClick)="restoreExecutionDialog(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Resume Lesson" tooltipPosition="top" />
                                   }
-                                  @if (lesson.status === 'pending' && !lesson.is_locked) {
+                                  @if (canStartLesson(lesson)) {
                                     <p-button icon="pi pi-ban" severity="danger" (onClick)="updateLessonStatus(lesson, 'skipped')" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Skip" tooltipPosition="top" />
                                   }
                                   <p-button icon="pi pi-trash" severity="danger" (click)="removeLessonFromPlan(lesson)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Remove" tooltipPosition="top" />

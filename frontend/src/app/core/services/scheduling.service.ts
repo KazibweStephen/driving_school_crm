@@ -93,6 +93,36 @@ export interface LockScheduleRequest {
   manual_days?: number;
 }
 
+export interface LessonSlotProbe {
+  scheduled_date: string;
+  day_number?: number;
+  is_theory?: boolean;
+  duration_minutes?: number | null;
+}
+
+export interface FindSlotsForLessonsRequest {
+  lessons: LessonSlotProbe[];
+  preferred_times: string[];
+  instructor_id?: string;
+  vehicle_id?: string;
+  instructor_id_auto?: string;
+  vehicle_id_auto?: string;
+  manual_days?: number;
+}
+
+export interface LessonSlotAssignment {
+  scheduled_date: string;
+  day_number?: number;
+  is_theory?: boolean;
+  duration_minutes?: number | null;
+  vehicle_id?: string | null;
+  instructor_id?: string | null;
+  available: boolean;
+  assigned_start_time?: string | null;
+  assigned_end_time?: string | null;
+  message?: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SchedulingService {
   constructor(private http: HttpClient) {}
@@ -154,6 +184,13 @@ export class SchedulingService {
     return this.http.get<any>(
       `/api/v1/instructors/${instructorId}/find-slot`,
       { params }
+    );
+  }
+
+  findSlotsForLessons(planId: string, data: FindSlotsForLessonsRequest) {
+    return this.http.post<LessonSlotAssignment[]>(
+      `/api/v1/lesson-plans/${planId}/find-slots`,
+      data
     );
   }
 }

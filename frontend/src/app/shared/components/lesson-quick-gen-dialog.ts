@@ -3,12 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { SelectModule } from 'primeng/select';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { DatePickerModule } from 'primeng/datepicker';
 import { TooltipModule } from 'primeng/tooltip';
 import { DatePipe } from '@angular/common';
 import { LessonPlanService, LessonPlanTemplate, ClientLesson, ClientLessonPlan } from '../../core/services/lesson-plan.service';
 import { ProductService } from '../../core/services/product.service';
+import { SchedulingService, LessonSlotAssignment } from '../../core/services/scheduling.service';
 import { User } from '../../core/services/user.service';
 import { Vehicle } from '../../core/services/vehicle.service';
 import { toLocalDateStr } from '../utils/date.utils';
@@ -34,12 +36,16 @@ interface QuickGenLesson {
   practical_objectives: string[];
   status: 'completed' | 'pending' | 'locked';
   duration_minutes: number;
+  assigned_start_time?: string | null;
+  assigned_end_time?: string | null;
+  slot_available?: boolean;
+  slot_message?: string | null;
 }
 
 @Component({
   selector: 'app-lesson-quick-gen-dialog',
   standalone: true,
-  imports: [FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, DatePickerModule, TooltipModule, DatePipe],
+  imports: [FormsModule, ButtonModule, DialogModule, SelectModule, MultiSelectModule, InputNumberModule, DatePickerModule, TooltipModule, DatePipe],
   template: `
     <p-dialog [(visible)]="visible" header="Quick Generate Lessons" [modal]="true"
       [style]="{ width: '92vw', maxWidth: '560px' }" [draggable]="false" [resizable]="false"
@@ -82,6 +88,15 @@ interface QuickGenLesson {
             <div class="text-xs text-red-500 flex items-center gap-1">
               <i class="pi pi-exclamation-triangle"></i>
               {{ dateError() }}
+            </div>
+          }
+          @if (schedulingMode()) {
+            <div>
+              <label class="block text-xs text-gray-500 mb-0.5">Preferred Start Times (choose 1+ — system tries each per lesson date)</label>
+              <p-multiSelect [(ngModel)]="preferredTimes" [options]="timeOptions"
+                optionLabel="label" optionValue="value" placeholder="e.g. 17:00, 18:00"
+                appendTo="body" class="w-full" display="chip" />
+              <p class="text-xs text-gray-400 mt-0.5">Slots are found per lesson date on the vehicle/instructor schedule, skipping breaks and avoiding collisions.</p>
             </div>
           }
           <div class="grid grid-cols-2 gap-3">
@@ -203,6 +218,18 @@ interface QuickGenLesson {
                       @if (lesson.status === 'pending') {
                         <span class="text-[11px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium whitespace-nowrap">Scheduled</span>
                       }
+                      @if (schedulingMode()) {
+                        @let slot = slotResultFor(lesson);
+                        @if (slot?.available) {
+                          <span class="text-[11px] px-1.5 py-0.5 rounded bg-green-50 text-green-700 font-medium whitespace-nowrap shrink-0">
+<i class="pi pi-clock mr-0.5" style="font-size: 0.6rem"></i>{{ slotTimeLabel(slot!.assigned_start_time) }}
+                          </span>
+                        } @else if (slot && !slot.available) {
+                          <span class="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-medium whitespace-nowrap shrink-0" [title]="slot.message || ''">
+                            <i class="pi pi-exclamation-triangle mr-0.5" style="font-size: 0.6rem"></i>No slot
+                          </span>
+                        }
+                      }
                       <p-datepicker [ngModel]="lesson.date" (ngModelChange)="onPreviewDateChange(lesson, $event)"
                         dateFormat="yy-mm-dd" appendTo="body" styleClass="w-56" />
                       <p-select [ngModel]="lesson.lesson_type"
@@ -219,6 +246,15 @@ interface QuickGenLesson {
                   <span class="flex items-center gap-1 text-orange-600"><i class="pi pi-calendar-plus" style="font-size: 0.7rem"></i> {{ previewScheduledCount() }} scheduled</span>
                 </div>
               </div>
+
+              @if (schedulingMode()) {
+                <p-button label="Find & Lock Slots" icon="pi pi-search" (click)="findSlots()"
+                  [loading]="slotFinding()" [disabled]="slotFinding() || !preferredTimes().length"
+                  styleClass="w-full" severity="secondary" />
+                @if (!preferredTimes().length) {
+                  <p class="text-xs text-amber-500 -mt-1">Pick at least one preferred start time above first.</p>
+                }
+              }
             }
           }
         </div>
@@ -266,6 +302,18 @@ interface QuickGenLesson {
                     @if (lesson.title) { <span class="text-gray-400 ml-1">{{ lesson.title }}</span> }
                   </span>
                   <span class="text-gray-400">{{ lesson.duration_minutes }}m</span>
+                  @if (schedulingMode()) {
+                    @let slot = slotResultFor(lesson);
+                    @if (slot?.available) {
+                      <span class="px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium whitespace-nowrap">
+                        <i class="pi pi-clock mr-0.5" style="font-size: 0.6rem"></i>{{ slotTimeLabel(slot!.assigned_start_time) }}
+                      </span>
+                    } @else if (slot && !slot.available) {
+                      <span class="px-1.5 py-0.5 rounded bg-red-100 text-red-600 font-medium whitespace-nowrap" [title]="slot.message || ''">
+                        <i class="pi pi-exclamation-triangle mr-0.5" style="font-size: 0.6rem"></i>No slot
+                      </span>
+                    }
+                  }
                   <span class="px-1.5 py-0.5 rounded font-medium whitespace-nowrap"
                         [class.bg-green-100]="lesson.status === 'completed'"
                         [class.text-green-700]="lesson.status === 'completed'"
@@ -279,6 +327,19 @@ interface QuickGenLesson {
               }
             </div>
           </div>
+
+          @if (schedulingMode()) {
+            <div class="flex items-center justify-between gap-2">
+              <p-button label="Find & Lock Slots" icon="pi pi-search" (click)="findSlots()"
+                [loading]="slotFinding()" [disabled]="slotFinding() || !preferredTimes().length"
+                severity="secondary" size="small" />
+              @if (!preferredTimes().length) {
+                <span class="text-[11px] text-amber-500">Pick preferred start times on the config step.</span>
+              } @else {
+                <span class="text-[11px] text-gray-400">{{ slotPlacedCount() }} placed / {{ slotBlockedCount() }} blocked</span>
+              }
+            </div>
+          }
 
           @if (form().instructor_id || form().vehicle_id) {
             <div class="text-xs text-gray-500 flex gap-3">
@@ -329,6 +390,11 @@ export class LessonQuickGenDialog {
   itemDates = signal<Record<string, Date | null>>({});
   itemStatus = signal<Record<string, 'completed' | 'pending' | 'locked'>>({});
 
+  schedulingMode = signal(false);
+  preferredTimes = signal<string[]>([]);
+  slotFinding = signal(false);
+  slotResults = signal<Record<string, LessonSlotAssignment>>({});
+
   trainingDays = 0;
   trainingHours = 0;
   instructorOpts: { label: string; value: string }[] = [];
@@ -337,13 +403,24 @@ export class LessonQuickGenDialog {
   templates: LessonPlanTemplate[] = [];
   templateOpts: { label: string; value: string }[] = [];
 
+  timeOptions = Array.from({ length: 26 }, (_, i) => {
+    const h = Math.floor((i * 30) / 60) + 6;
+    const m = (i * 30) % 60;
+    const label = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    return { label, value: label };
+  });
+
   private planId = '';
   private cartItemId = '';
   private existingLessons: ClientLesson[] = [];
 
   @Output() saved = new EventEmitter<void>();
 
-  constructor(private lessonPlanService: LessonPlanService, private productService: ProductService) {}
+  constructor(
+    private lessonPlanService: LessonPlanService,
+    private productService: ProductService,
+    private schedulingService: SchedulingService,
+  ) {}
 
   get maxPracticalDays(): () => number {
     return () => this.trainingDays || 999;
@@ -397,6 +474,8 @@ export class LessonQuickGenDialog {
     templates: LessonPlanTemplate[],
     productId: string | null,
     packageId: string | null,
+    scheduling = false,
+    preferredTimes: string[] = [],
   ) {
     this.step.set('config');
     this.planId = plan.id;
@@ -405,6 +484,9 @@ export class LessonQuickGenDialog {
     this.templates = templates;
     this.allVehicles = vehicles;
     this.instructorOpts = instructors.map(u => ({ label: u.name, value: u.phone }));
+    this.schedulingMode.set(scheduling);
+    this.preferredTimes.set(preferredTimes);
+    this.slotResults.set({});
 
     if (productId && packageId) {
       try {
@@ -665,6 +747,70 @@ export class LessonQuickGenDialog {
     this.step.set('preview');
   }
 
+  async findSlots() {
+    const f = this.form();
+    const lessons = this.previewLessons()
+      .filter(l => l.status !== 'completed')
+      .map((l, i) => ({
+        scheduled_date: toLocalDateStr(l.date),
+        day_number: i + 1,
+        is_theory: l.lesson_type === 'theory',
+        duration_minutes: l.duration_minutes,
+      }));
+    if (!lessons.length) {
+      this.slotResults.set({});
+      return;
+    }
+    const times = this.preferredTimes();
+    if (!times.length) {
+      this.slotResults.set({});
+      return;
+    }
+    this.slotFinding.set(true);
+    try {
+      const results = await this.schedulingService.findSlotsForLessons(this.planId, {
+        lessons,
+        preferred_times: times,
+        instructor_id: f.instructor_id || undefined,
+        vehicle_id: f.vehicle_id || undefined,
+      }).toPromise();
+      const byDate: Record<string, LessonSlotAssignment> = {};
+      for (const r of results || []) {
+        byDate[r.scheduled_date] = r;
+      }
+      this.slotResults.set(byDate);
+      const misses = (results || []).filter(r => !r.available).length;
+      if (misses > 0) {
+        alert(`${misses} lesson(s) could not be placed at preferred times. Check the preview markers.`);
+      }
+    } catch {
+      this.slotResults.set({});
+      alert('Failed to find slots. Confirm the instructor/vehicle are set.');
+    } finally {
+      this.slotFinding.set(false);
+    }
+  }
+
+  slotResultFor(lesson: QuickGenLesson): LessonSlotAssignment | null {
+    if (!this.schedulingMode()) return null;
+    return this.slotResults()[toLocalDateStr(lesson.date)] || null;
+  }
+
+  slotPlacedCount(): number {
+    const res = this.slotResults();
+    return Object.keys(res).filter(k => res[k].available).length;
+  }
+
+  slotTimeLabel(t?: string | null): string {
+    if (!t) return '';
+    return t.length >= 5 ? t.substring(0, 5) : t;
+  }
+
+  slotBlockedCount(): number {
+    const res = this.slotResults();
+    return Object.keys(res).filter(k => !res[k].available).length;
+  }
+
   private buildLessonsFromTemplate(): QuickGenLesson[] {
     const template = this.selectedTemplate();
     if (!template) return [];
@@ -693,7 +839,7 @@ export class LessonQuickGenDialog {
       const instructorId = f.instructor_id || '';
       const vehicleId = f.vehicle_id || '';
 
-      let lessonsToSave: { scheduled_date: Date | null; duration_minutes: number; is_theory: boolean; instructor_id: string; vehicle_id: string; order: number; title: string | null; lesson_objectives: string[]; practical_objectives: string[]; template_item_id: string | null; status: string; is_locked: boolean }[];
+      let lessonsToSave: { scheduled_date: Date | null; scheduled_start_time: string | null; scheduled_end_time: string | null; duration_minutes: number; is_theory: boolean; instructor_id: string; vehicle_id: string; order: number; title: string | null; lesson_objectives: string[]; practical_objectives: string[]; template_item_id: string | null; status: string; is_locked: boolean }[];
 
       if (template) {
         const ids = this.selectedItemIds();
@@ -701,37 +847,48 @@ export class LessonQuickGenDialog {
         if (items.length === 0) { this.saving.set(false); return; }
         const dates = this.itemDates();
         const statuses = this.itemStatus();
-        lessonsToSave = items.map((item: any, idx: number) => ({
-          scheduled_date: dates[item.id] || null,
-          duration_minutes: item.is_theory ? 120 : 30,
-          is_theory: item.is_theory,
-          instructor_id: instructorId,
-          vehicle_id: vehicleId,
-          order: idx + 1,
-          title: item.title,
-          lesson_objectives: item.lesson_objectives || [],
-          practical_objectives: item.practical_objectives || [],
-          template_item_id: item.id,
-          status: statuses[item.id] || 'completed',
-          is_locked: statuses[item.id] === 'locked',
-        }));
+        lessonsToSave = items.map((item: any, idx: number) => {
+          const d = dates[item.id] || null;
+          const slot = d ? this.slotResults()[toLocalDateStr(d)] : null;
+          return {
+            scheduled_date: d,
+            scheduled_start_time: slot?.available ? (slot.assigned_start_time || null) : null,
+            scheduled_end_time: slot?.available ? (slot.assigned_end_time || null) : null,
+            duration_minutes: item.is_theory ? 120 : 30,
+            is_theory: item.is_theory,
+            instructor_id: instructorId,
+            vehicle_id: vehicleId,
+            order: idx + 1,
+            title: item.title,
+            lesson_objectives: item.lesson_objectives || [],
+            practical_objectives: item.practical_objectives || [],
+            template_item_id: item.id,
+            status: statuses[item.id] || 'completed',
+            is_locked: statuses[item.id] === 'locked',
+          };
+        });
       } else {
         const pv = this.preview();
         if (pv.length === 0) { this.saving.set(false); return; }
-        lessonsToSave = pv.map((l, idx) => ({
-          scheduled_date: l.date,
-          duration_minutes: l.duration_minutes,
-          is_theory: l.lesson_type === 'theory',
-          instructor_id: instructorId,
-          vehicle_id: vehicleId,
-          order: idx + 1,
-          title: l.title,
-          lesson_objectives: l.lesson_objectives,
-          practical_objectives: l.practical_objectives,
-          template_item_id: l.template_item_id,
-          status: l.status,
-          is_locked: l.status === 'locked',
-        }));
+        lessonsToSave = pv.map((l, idx) => {
+          const slot = this.slotResults()[toLocalDateStr(l.date)] || null;
+          return {
+            scheduled_date: l.date,
+            scheduled_start_time: slot?.available ? (slot.assigned_start_time || null) : null,
+            scheduled_end_time: slot?.available ? (slot.assigned_end_time || null) : null,
+            duration_minutes: l.duration_minutes,
+            is_theory: l.lesson_type === 'theory',
+            instructor_id: instructorId,
+            vehicle_id: vehicleId,
+            order: idx + 1,
+            title: l.title,
+            lesson_objectives: l.lesson_objectives,
+            practical_objectives: l.practical_objectives,
+            template_item_id: l.template_item_id,
+            status: l.status,
+            is_locked: l.status === 'locked',
+          };
+        });
       }
 
       const newTemplateId = f.lesson_plan_template_id || null;
@@ -752,6 +909,8 @@ export class LessonQuickGenDialog {
           is_locked: ls.is_locked || false,
           status: ls.status,
           scheduled_date: ls.scheduled_date ? toLocalDateStr(ls.scheduled_date) : undefined,
+          scheduled_start_time: ls.scheduled_start_time || undefined,
+          scheduled_end_time: ls.scheduled_end_time || undefined,
           duration_minutes: ls.duration_minutes,
           is_theory: ls.is_theory,
           instructor_id: ls.instructor_id || undefined,
@@ -774,6 +933,10 @@ export class LessonQuickGenDialog {
     this.selectedItemIds.set([]);
     this.itemDates.set({});
     this.itemStatus.set({});
+    this.schedulingMode.set(false);
+    this.preferredTimes.set([]);
+    this.slotResults.set({});
+    this.slotFinding.set(false);
   }
 
   private startOfDay(d: Date): Date {

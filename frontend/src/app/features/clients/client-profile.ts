@@ -33,8 +33,7 @@ import { LessonLibraryService } from '../../core/services/lesson-library.service
 import { VideoLibraryService } from '../../core/services/video-library.service';
 import { VehicleService, Vehicle } from '../../core/services/vehicle.service';
 import { UserService, User } from '../../core/services/user.service';
-import { SchedulingService, ClientAvailability, FindAndLockResult } from '../../core/services/scheduling.service';
-import { VehicleScheduleService } from '../../core/services/vehicle-schedule.service';
+import { SchedulingService } from '../../core/services/scheduling.service';
 import { CompanyService, Branch } from '../../core/services/company.service';
 import { DiscountService, Discount, CartItemDiscount } from '../../core/services/discount.service';
 import { NotificationRefreshService } from '../../core/services/notification-refresh.service';
@@ -311,7 +310,6 @@ export class ClientProfile implements OnInit {
     private vehicleService: VehicleService,
     private userService: UserService,
     private schedulingService: SchedulingService,
-    private vehicleScheduleService: VehicleScheduleService,
     private permitProgressService: PermitProgressService,
     private financeService: FinanceService,
     private companyService: CompanyService,
@@ -602,10 +600,6 @@ export class ClientProfile implements OnInit {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }
-
-  formatTime(t: string): string {
-    return t ? t.substring(0, 5) : '';
   }
 
   // ── Open / Edit Session ──
@@ -1364,220 +1358,36 @@ export class ClientProfile implements OnInit {
 
   // ── Scheduling ──
 
-  showScheduleDialog = signal(false);
-  schedulingPlan = signal<ClientLessonPlan | null>(null);
-  scheduleDate = signal<Date | null>(null);
-  scheduleInstructorId = signal<string>('');
-  scheduleVehicleId = signal<string>('');
-  scheduleInstructorIdAuto = signal<string>('');
-  scheduleVehicleIdAuto = signal<string>('');
-  scheduleManualDays = signal<number>(5);
-  schedulePreferredTimes = signal<string>('17:00,18:00');
-  scheduleResult = signal<FindAndLockResult | null>(null);
-  scheduleLoading = signal(false);
   availableInstructors = signal<User[]>([]);
   availableVehicles = signal<Vehicle[]>([]);
-  scheduleAvailabilities = signal<ClientAvailability[]>([]);
-  newAvailabilityDay = signal<number>(0);
-  newAvailabilityTimes = signal<string[]>([]);
-  manualVehicles = computed(() => this.availableVehicles().filter(v => v.transmission === 'manual'));
-  autoVehicles = computed(() => this.availableVehicles().filter(v => v.transmission === 'automatic'));
-  manualVehicleOptions = computed(() =>
-    this.manualVehicles().map(v => ({ id: v.id, label: `${v.plate_number} · ${v.transmission}` }))
-  );
-  autoVehicleOptions = computed(() =>
-    this.autoVehicles().map(v => ({ id: v.id, label: `${v.plate_number} · ${v.transmission}` }))
-  );
 
-  timeOptions = Array.from({length: 26}, (_, i) => {
-    const h = Math.floor((i * 30) / 60) + 6;
-    const m = (i * 30) % 60;
-    const label = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    return { label, value: label };
-  });
-
-  async openScheduleDialog(plan: ClientLessonPlan) {
-    this.schedulingPlan.set(plan);
-    this.scheduleDate.set(null);
-    this.scheduleInstructorId.set('');
-    this.scheduleVehicleId.set('');
-    this.scheduleInstructorIdAuto.set('');
-    this.scheduleVehicleIdAuto.set('');
-    this.scheduleManualDays.set(plan.manual_days ?? 5);
-    this.schedulePreferredTimes.set('');
-    this.scheduleResult.set(null);
-    this.scheduleLoading.set(true);
-    this.showScheduleDialog.set(true);
+  async openScheduleDialog(plan: ClientLessonPlan, dialog: LessonQuickGenDialog) {
+    const cartItem = this.trainableCartItems().find(ci =>
+      this.lessonPlansForCartItem(ci.id).some(p => p.id === plan.id)
+    );
+    const productId = cartItem?.product_id || null;
+    const packageId = cartItem?.package_id || null;
+    await this.loadVehiclesAndInstructors();
     try {
-      const [instructors, vehicles, avails] = await Promise.all([
-        this.userService.list({ role: 'instructor', status: 'active', page_size: 100 }).toPromise(),
-        this.vehicleService.list({ status: 'available' }).toPromise(),
-        this.schedulingService.listAvailabilities(plan.cart_item_id).toPromise(),
-      ]);
-      this.availableInstructors.set(instructors?.users?.filter(u => u.role === 'instructor') || []);
-      this.availableVehicles.set(vehicles || []);
-      this.scheduleAvailabilities.set(avails || []);
-      if (avails?.length) {
-        this.schedulePreferredTimes.set(avails.map(a => a.start_time.substring(0, 5)).join(','));
-      }
-      if (plan.start_date) {
-        this.scheduleDate.set(new Date(plan.start_date));
-      }
+      const avails = await this.schedulingService.listAvailabilities(plan.cart_item_id).toPromise();
+      const preferredTimes = (avails || []).map(a => a.start_time.substring(0, 5));
+      dialog.open(
+        plan,
+        this.availableInstructors(),
+        this.availableVehicles(),
+        this.templates(),
+        productId,
+        packageId,
+        true,
+        preferredTimes,
+      );
     } catch {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load scheduling data' });
-    } finally {
-      this.scheduleLoading.set(false);
-    }
-  }
-
-  async addAvailability() {
-    const plan = this.schedulingPlan();
-    const times = this.newAvailabilityTimes();
-    if (!plan || !times.length) return;
-    try {
-      const results = await Promise.all(
-        times.map(t => this.schedulingService.createAvailability({
-          cart_item_id: plan.cart_item_id,
-          day_of_week: this.newAvailabilityDay(),
-          start_time: t,
-        }).toPromise())
-      );
-      const added = results.filter(Boolean) as ClientAvailability[];
-      if (added.length) {
-        this.scheduleAvailabilities.update(list => [...list, ...added]);
-        this.schedulePreferredTimes.set(
-          [...this.scheduleAvailabilities(), ...added].map(a => this.formatTime(a.start_time)).join(',')
-        );
-        this.newAvailabilityTimes.set([]);
-      }
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to add availability' });
-    }
-  }
-
-  async removeAvailability(availId: string) {
-    try {
-      await this.schedulingService.deleteAvailability(availId).toPromise();
-      this.scheduleAvailabilities.update(list => list.filter(a => a.id !== availId));
-      this.schedulePreferredTimes.set(
-        this.scheduleAvailabilities().filter(a => a.id !== availId).map(a => this.formatTime(a.start_time)).join(',')
-      );
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to remove availability' });
-    }
-  }
-
-  async findAndLock() {
-    const plan = this.schedulingPlan();
-    if (!plan || !this.scheduleDate()) return;
-    // Auto-resolve instructor from vehicle if not set
-    if (!this.scheduleInstructorId() && this.scheduleVehicleId()) {
-      await this.onScheduleVehicleChange();
-    }
-    // If no instructor found, fall back to manual lock (skip availability check)
-    if (!this.scheduleInstructorId()) {
-      this.messageService.add({ severity: 'info', summary: 'No instructor', detail: 'No instructor in schedule — locking directly' });
-      await this.lockManually();
-      return;
-    }
-    this.scheduleLoading.set(true);
-    this.scheduleResult.set(null);
-    try {
-      const times = this.schedulePreferredTimes()
-        .split(',')
-        .map(t => t.trim())
-        .filter(t => t.length > 0);
-      const result = await this.schedulingService.findAndLock(plan.id, {
-        instructor_id: this.scheduleInstructorId(),
-        vehicle_id: this.scheduleVehicleId() || undefined,
-        instructor_id_auto: this.scheduleInstructorIdAuto() || undefined,
-        vehicle_id_auto: this.scheduleVehicleIdAuto() || undefined,
-        start_date: this.formatDate(this.scheduleDate()!),
-        preferred_times: times.length > 0 ? times : ['17:00'],
-        manual_days: this.scheduleManualDays(),
-      }).toPromise();
-      this.scheduleResult.set(result ?? null);
-      if (result?.locked) {
-        await this.loadLessonPlans();
-        this.messageService.add({ severity: 'success', summary: 'Locked', detail: `Schedule locked at ${result.start_time}` });
-      }
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to find available slot' });
-    } finally {
-      this.scheduleLoading.set(false);
-    }
-  }
-
-  async lockManually() {
-    const plan = this.schedulingPlan();
-    if (!plan || !this.scheduleDate()) return;
-    if (this.scheduleManualDays() > 0 && !this.scheduleVehicleId()) {
-      this.messageService.add({ severity: 'warn', summary: 'Missing', detail: 'Select a manual-phase vehicle first' });
-      return;
-    }
-    // Try to resolve instructor from schedule as a convenience (optional)
-    if (!this.scheduleInstructorId()) {
-      await this.onScheduleVehicleChange();
-    }
-    this.scheduleLoading.set(true);
-    try {
-      const result = await this.schedulingService.lockSchedule(plan.id, {
-        start_time: this.schedulePreferredTimes().split(',')[0]?.trim() || '17:00',
-        instructor_id: this.scheduleInstructorId() || undefined,
-        vehicle_id: this.scheduleVehicleId() || undefined,
-        instructor_id_auto: this.scheduleInstructorIdAuto() || undefined,
-        vehicle_id_auto: this.scheduleVehicleIdAuto() || undefined,
-        start_date: this.formatDate(this.scheduleDate()!),
-        manual_days: this.scheduleManualDays(),
-      }).toPromise();
-      await this.loadLessonPlans();
-      this.messageService.add({ severity: 'success', summary: 'Locked', detail: `Schedule locked: ${result?.message}` });
-      this.showScheduleDialog.set(false);
-    } catch {
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to lock schedule' });
-    } finally {
-      this.scheduleLoading.set(false);
     }
   }
 
   planIsLocked(plan: ClientLessonPlan): boolean {
     return plan.lessons.some(l => l.plan_locked_time != null);
-  }
-
-  async onScheduleVehicleChange() {
-    const vid = this.scheduleVehicleId();
-    const date = this.scheduleDate();
-    if (!vid || !date) return;
-    const times = this.schedulePreferredTimes().split(',').map(t => t.trim()).filter(t => t.length > 0);
-    const firstTime = times[0] || '17:00';
-    try {
-      const dayOfWeek = date.getDay() === 0 ? 6 : date.getDay() - 1; // JS Sun=0 → Mon=0
-      if (dayOfWeek > 4) return; // weekend
-      const res = await this.vehicleScheduleService.resolveInstructor(vid, dayOfWeek, firstTime).toPromise();
-      if (res?.instructor_id) {
-        this.scheduleInstructorId.set(res.instructor_id);
-      }
-    } catch {
-      // No instructor assigned for this time slot — leave as-is
-    }
-  }
-
-  async onScheduleVehicleAutoChange() {
-    const vid = this.scheduleVehicleIdAuto();
-    const date = this.scheduleDate();
-    if (!vid || !date) return;
-    const times = this.schedulePreferredTimes().split(',').map(t => t.trim()).filter(t => t.length > 0);
-    const firstTime = times[0] || '17:00';
-    try {
-      const dayOfWeek = date.getDay() === 0 ? 6 : date.getDay() - 1;
-      if (dayOfWeek > 4) return;
-      const res = await this.vehicleScheduleService.resolveInstructor(vid, dayOfWeek, firstTime).toPromise();
-      if (res?.instructor_id) {
-        this.scheduleInstructorIdAuto.set(res.instructor_id);
-      }
-    } catch {
-      // No instructor assigned for this time slot — leave as-is
-    }
   }
 
   planLockedTime(plan: ClientLessonPlan): string | null {

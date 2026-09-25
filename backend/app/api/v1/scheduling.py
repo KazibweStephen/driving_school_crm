@@ -12,6 +12,7 @@ from app.schemas.lesson_plan import (
     ClientAvailabilityRead,
     ClientAvailabilityUpdate,
     FindAndLockRequest,
+    FindSlotsForLessonsRequest,
     InstructorScheduleDay,
     LockScheduleRequest,
     ScheduleSlot,
@@ -202,6 +203,45 @@ async def find_and_lock_schedule(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    return result
+
+
+@router.post("/api/v1/lesson-plans/{plan_id}/find-slots")
+async def find_slots_for_lessons(
+    plan_id: str,
+    data: FindSlotsForLessonsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("availabilities.edit")),
+):
+    """Read-only preview: assign the first free preferred start time to each
+    generated lesson date (days may include weekends for theory). No writes."""
+    try:
+        pid = uuid.UUID(plan_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid plan ID")
+    vid = uuid.UUID(data.vehicle_id) if data.vehicle_id else None
+    vid_auto = uuid.UUID(data.vehicle_id_auto) if data.vehicle_id_auto else None
+    lessons = [
+        {
+            "scheduled_date": l.scheduled_date,
+            "day_number": l.day_number,
+            "is_theory": l.is_theory,
+            "duration_minutes": l.duration_minutes,
+        }
+        for l in data.lessons
+    ]
+    result = await scheduling_service.find_slots_for_lessons(
+        db,
+        lessons,
+        data.preferred_times,
+        instructor_id=data.instructor_id,
+        vehicle_id=vid,
+        instructor_id_auto=data.instructor_id_auto,
+        vehicle_id_auto=vid_auto,
+        manual_days=data.manual_days,
+        exclude_plan_id=pid,
+        company_id=current_user.company_id,
+    )
     return result
 
 

@@ -513,6 +513,17 @@ async def create_client_plan(
             elif isinstance(scheduled_date_val, datetime):
                 scheduled_date_val = scheduled_date_val.date()
 
+            # Parse scheduled_start_time / scheduled_end_time ("HH:MM" -> time)
+            def _parse_time_str(value):
+                if not value:
+                    return None
+                if isinstance(value, _time):
+                    return value
+                return _time.fromisoformat(str(value))
+
+            scheduled_start = _parse_time_str(lesson.get("scheduled_start_time"))
+            scheduled_end = _parse_time_str(lesson.get("scheduled_end_time"))
+
             # Parse template_item_id
             template_item_id_val = lesson.get("template_item_id")
             if isinstance(template_item_id_val, str) and template_item_id_val:
@@ -543,6 +554,8 @@ async def create_client_plan(
                 preferred_location=lesson.get("preferred_location"),
                 enforce_prerequisites=lesson.get("enforce_prerequisites", True),
                 scheduled_date=scheduled_date_val,
+                scheduled_start_time=scheduled_start,
+                scheduled_end_time=scheduled_end,
                 duration_minutes=lesson.get("duration_minutes", 120 if is_theory else 30),
                 instructor_id=lesson.get("instructor_id"),
                 vehicle_id=lesson.get("vehicle_id"),
@@ -627,6 +640,16 @@ async def replace_plan_lessons(
         elif isinstance(scheduled_date_val, datetime):
             scheduled_date_val = scheduled_date_val.date()
 
+        def _parse_time_str(value):
+            if not value:
+                return None
+            if isinstance(value, _time):
+                return value
+            return _time.fromisoformat(str(value))
+
+        scheduled_start = _parse_time_str(lesson.get("scheduled_start_time"))
+        scheduled_end = _parse_time_str(lesson.get("scheduled_end_time"))
+
         template_item_id_val = lesson.get("template_item_id")
         if isinstance(template_item_id_val, str) and template_item_id_val:
             try:
@@ -662,6 +685,8 @@ async def replace_plan_lessons(
             preferred_location=lesson.get("preferred_location"),
             enforce_prerequisites=lesson.get("enforce_prerequisites", True),
             scheduled_date=scheduled_date_val,
+            scheduled_start_time=scheduled_start,
+            scheduled_end_time=scheduled_end,
             duration_minutes=lesson.get("duration_minutes", 120 if is_theory else 30),
             instructor_id=lesson.get("instructor_id"),
             vehicle_id=lesson.get("vehicle_id"),

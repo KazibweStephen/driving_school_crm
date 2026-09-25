@@ -249,6 +249,8 @@ class ClientLessonCreate(BaseModel):
     preferred_location: str | None = None
     enforce_prerequisites: bool = True
     scheduled_date: date | None = None
+    scheduled_start_time: str | None = None
+    scheduled_end_time: str | None = None
     duration_minutes: int = 30
     instructor_id: str | None = None
     vehicle_id: str | None = None
@@ -800,6 +802,25 @@ class FindAndLockRequest(BaseModel):
     vehicle_id: str | None = None
     start_date: date  # first lesson date
     preferred_times: list[str]  # ["17:00", "18:00", …] — system tries each
+    instructor_id_auto: str | None = None
+    vehicle_id_auto: str | None = None
+    manual_days: int | None = None
+
+
+class LessonSlotProbe(BaseModel):
+    """One generated lesson's date/duration for the read-only slot preview."""
+    scheduled_date: date
+    day_number: int = 0
+    is_theory: bool = False
+    duration_minutes: int | None = None
+
+
+class FindSlotsForLessonsRequest(BaseModel):
+    """Read-only preview: assign the first free preferred slot per lesson date."""
+    lessons: list[LessonSlotProbe]
+    preferred_times: list[str]
+    instructor_id: str | None = None
+    vehicle_id: str | None = None
     instructor_id_auto: str | None = None
     vehicle_id_auto: str | None = None
     manual_days: int | None = None

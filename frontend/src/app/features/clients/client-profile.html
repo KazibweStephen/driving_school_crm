@@ -861,7 +861,7 @@
                         @if (planVehicle(plan); as veh) {
                           <span>· Vehicle: <strong>{{ vehicleName(veh) }}</strong></span>
                         }
-                        <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openScheduleDialog(plan)" styleClass="p-button-sm p-button-rounded p-button-text p-button-plain" pTooltip="Change schedule" tooltipPosition="top" />
+                        <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openScheduleDialog(plan, lessonEditDialog)" styleClass="p-button-sm p-button-rounded p-button-text p-button-plain" pTooltip="Change schedule" tooltipPosition="top" />
                       </div>
                     }
 
@@ -1742,7 +1742,7 @@
                         </div>
                         <div class="flex items-center gap-1 shrink-0" (click)="$event.stopPropagation()">
                           @if (!planIsLocked(plan)) {
-                            <p-button icon="pi pi-calendar-clock" severity="secondary" (onClick)="openScheduleDialog(plan)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Schedule" tooltipPosition="top" />
+                            <p-button icon="pi pi-calendar-clock" severity="secondary" (onClick)="openScheduleDialog(plan, lessonEditDialog)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Schedule" tooltipPosition="top" />
                           }
                           <p-button icon="pi pi-pencil" size="small" severity="secondary" (onClick)="openLessonEditDialog(plan, lessonEditDialog)" styleClass="p-button-sm p-button-rounded p-button-text" pTooltip="Edit lessons" tooltipPosition="top" />
                           @if (templateLessons.length > 0) {
@@ -1767,7 +1767,7 @@
                             @if (planVehicle(plan); as veh) {
                               <span>· Vehicle: <strong>{{ vehicleName(veh) }}</strong></span>
                             }
-                            <p-button icon="pi pi-pencil" severity="secondary" (onClick)="openScheduleDialog(plan)" styleClass="p-button-sm p-button-rounded p-button-text p-button-plain" pTooltip="Change schedule" tooltipPosition="top" />
+<p-button icon="pi pi-pencil" severity="secondary" (onClick)="openScheduleDialog(plan, lessonEditDialog)" styleClass="p-button-sm p-button-rounded p-button-text p-button-plain" pTooltip="Change schedule" tooltipPosition="top" />
                           </div>
                         }
 
@@ -3149,138 +3149,6 @@
                 </div>
                 <p-button icon="pi pi-plus" severity="success" (onClick)="addTemplateLessonToPlan(plan, item); showAddFromTemplateLessonDialog.set(false)"
                           styleClass="p-button-sm p-button-rounded" pTooltip="Add to plan" tooltipPosition="top" />
-              </div>
-            }
-          }
-        </div>
-      }
-    </p-dialog>
-
-    <!-- Schedule Dialog -->
-    <p-dialog header="Schedule Lesson Plan" [(visible)]="showScheduleDialog" [modal]="true"
-              [style]="{ width: '95vw', maxWidth: '650px' }" [draggable]="false" [resizable]="false"
-              [closable]="!scheduleLoading()">
-      @let plan = schedulingPlan();
-      @if (plan) {
-        <div class="flex flex-col gap-4 pt-2">
-          <!-- Preferred Start Times -->
-          <div>
-            <label class="mb-1 block text-sm font-semibold text-gray-700">Preferred Start Times</label>
-            <p class="mb-2 text-xs text-gray-500">Select preferred start times (30-min slots from 6:00 AM to 7:00 PM).</p>
-            <div class="flex items-start gap-2 mb-2">
-              <p-select [(ngModel)]="newAvailabilityDay"
-                [options]="[{label:'Monday',value:0},{label:'Tuesday',value:1},{label:'Wednesday',value:2},{label:'Thursday',value:3},{label:'Friday',value:4}]"
-                optionLabel="label" optionValue="value" styleClass="w-40" appendTo="body" />
-              <p-multiSelect [(ngModel)]="newAvailabilityTimes" [options]="timeOptions" optionLabel="label" optionValue="value"
-                placeholder="Select times" styleClass="w-48" appendTo="body" [maxSelectedLabels]="4" />
-              <p-button label="Add" size="small" severity="secondary" [disabled]="!newAvailabilityTimes().length"
-                (onClick)="addAvailability()" />
-            </div>
-            @if (scheduleAvailabilities().length > 0) {
-              <div class="flex flex-wrap gap-2">
-                @for (avail of scheduleAvailabilities(); track avail.id) {
-                  <span class="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">
-                    {{ ['Mon','Tue','Wed','Thu','Fri'][avail.day_of_week] }} {{ formatTime(avail.start_time) }}
-                    <button class="pi pi-times ml-1 cursor-pointer text-blue-400 hover:text-red-500" (click)="removeAvailability(avail.id)"></button>
-                  </span>
-                }
-              </div>
-            }
-          </div>
-
-          <!-- Start Date -->
-          <div>
-            <label class="mb-1 block text-sm font-semibold text-gray-700">Start Date</label>
-            <p-datepicker [(ngModel)]="scheduleDate" dateFormat="dd/mm/yy" [minDate]="today" styleClass="w-full" appendTo="body" />
-          </div>
-
-          <!-- Manual Days -->
-          <div>
-            <label class="mb-1 block text-sm font-semibold text-gray-700">Manual Days <span class="text-xs text-gray-400">(first N days on manual, rest on auto)</span></label>
-            <p-inputNumber [(ngModel)]="scheduleManualDays" [min]="0" [max]="30" styleClass="w-full" inputId="integeronly" />
-          </div>
-
-          <!-- Manual Phase Vehicle -->
-          @if (scheduleManualDays() > 0) {
-            <div class="rounded-lg border border-blue-200 bg-blue-50 p-3">
-              <p class="mb-2 text-sm font-semibold text-blue-800">
-                Manual Phase
-                <span class="text-xs font-normal">(Days 1 – {{ scheduleManualDays() }})</span>
-              </p>
-              <p-select [(ngModel)]="scheduleVehicleId"
-                        [options]="manualVehicleOptions()"
-                        optionLabel="label" optionValue="id"
-                        placeholder="Select manual vehicle"
-                        styleClass="w-full" appendTo="body"
-                        (onChange)="onScheduleVehicleChange()" />
-            </div>
-          }
-
-          <!-- Auto Phase Vehicle -->
-          <div class="rounded-lg border border-green-200 bg-green-50 p-3">
-            <p class="mb-2 text-sm font-semibold text-green-800">
-              Auto Phase
-              <span class="text-xs font-normal">(Days {{ scheduleManualDays() + 1 }} – end)</span>
-            </p>
-            <p-select [(ngModel)]="scheduleVehicleIdAuto"
-                      [options]="autoVehicleOptions()"
-                      optionLabel="label" optionValue="id"
-                      placeholder="Select auto vehicle"
-                      styleClass="w-full" appendTo="body"
-                      (onChange)="onScheduleVehicleAutoChange()" />
-          </div>
-
-          <!-- Actions -->
-          <div class="flex gap-2">
-            <p-button label="Find & Lock" icon="pi pi-search" [loading]="scheduleLoading()"
-                      (onClick)="findAndLock()" styleClass="flex-1 justify-center" severity="success" />
-            <p-button label="Manual Lock" icon="pi pi-lock" [loading]="scheduleLoading()"
-                      (onClick)="lockManually()" styleClass="flex-1 justify-center" severity="warn" />
-          </div>
-
-          <!-- Result -->
-          @if (scheduleResult(); as result) {
-            @if (result.locked) {
-              <div class="rounded-lg border border-green-200 bg-green-50 p-3">
-                <p class="text-sm font-medium text-green-800 flex items-center gap-2">
-                  <span class="pi pi-check-circle text-green-600"></span>
-                  Schedule locked at <strong>{{ result.start_time }}</strong>
-                  — {{ result.lessons_locked }} lessons scheduled
-                </p>
-              </div>
-            } @else {
-              <div class="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <p class="mb-2 text-sm font-medium text-amber-800 flex items-center gap-2">
-                  <span class="pi pi-exclamation-triangle text-amber-600"></span>
-                  {{ result.message }}
-                </p>
-                @if (result.schedule) {
-                  <div class="max-h-48 overflow-y-auto rounded border bg-white p-2">
-                    @if (result.schedule.all_slots?.length) {
-                      <div class="grid grid-cols-3 gap-1 sm:grid-cols-4 md:grid-cols-6">
-                        @for (slot of result.schedule.all_slots; track slot.start_time) {
-                          <div class="rounded px-2 py-1 text-xs text-center"
-                               [class.bg-red-100]="slot.busy"
-                               [class.bg-green-100]="!slot.busy"
-                               [class.text-red-700]="slot.busy"
-                               [class.text-green-700]="!slot.busy">
-                            {{ slot.start_time }}
-                          </div>
-                        }
-                      </div>
-                    }
-                    @if (result.schedule.collisions?.length) {
-                      <div class="mt-2 border-t pt-2">
-                        <p class="text-xs font-semibold text-red-600 mb-1">Collisions:</p>
-                        @for (coll of result.schedule.collisions; track coll.time_slot) {
-                          <div class="mb-1 rounded bg-red-50 px-2 py-1 text-xs text-red-700">
-                            {{ coll.time_slot }} — {{ coll.count }} overlapping lessons
-                          </div>
-                        }
-                      </div>
-                    }
-                  </div>
-                }
               </div>
             }
           }

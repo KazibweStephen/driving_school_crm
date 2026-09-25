@@ -573,6 +573,206 @@ async def check_preferred_times(
     return None
 
 
+async def find_slots_for_lessons(
+    db: AsyncSession,
+    lessons: list[dict],
+    preferred_times: list[str],
+    instructor_id: str | None = None,
+    vehicle_id: uuid.UUID | None = None,
+    instructor_id_auto: str | None = None,
+    vehicle_id_auto: uuid.UUID | None = None,
+    manual_days: int | None = None,
+    exclude_plan_id: uuid.UUID | None = None,
+    company_id: uuid.UUID | None = None,
+) -> list[dict]:
+    """Read-only preview: assign each generated lesson the first free preferred
+    start time on its own date, respecting breaks, instructor bookings and
+    vehicle/instructor daily capacity. No DB writes.
+
+    `lessons` items: {scheduled_date, day_number?, is_theory?, duration_minutes?}
+    Returns per-lesson dicts with `available`, `assigned_start_time`,
+    `assigned_end_time`, `message`.
+    Theory lessons (Saturdays) are allowed — only practicals are blocked on weekends.
+    """
+    preferred = [time.fromisoformat(t) for t in preferred_times] if preferred_times else []
+    if not preferred:
+        return [
+            {**l, "available": False, "assigned_start_time": None,
+             "assigned_end_time": None,
+             "message": "No preferred start times provided"}
+            for l in lessons
+        ]
+
+    def _resolve_phase(l: dict):
+        day_number = l.get("day_number") or 0
+        is_manual = bool(manual_days) and day_number and day_number <= manual_days
+        v = vehicle_id if is_manual else (vehicle_id_auto or vehicle_id)
+        i = instructor_id if is_manual else (instructor_id_auto or instructor_id)
+        return v, i
+
+    ordered = sorted(lessons, key=lambda l: (l["scheduled_date"], l.get("day_number") or 0))
+    active_breaks = await _get_active_breaks(db, company_id=company_id)
+    standard = [(b[0], b[1]) for b in active_breaks if b[2]]
+
+    dates = sorted({l["scheduled_date"] for l in ordered})
+    vehicle_ids: set[uuid.UUID] = set()
+    instructor_ids: set[str] = set()
+    for l in ordered:
+        v, i = _resolve_phase(l)
+        if v:
+            vehicle_ids.add(v)
+        if i:
+            instructor_ids.add(i)
+
+    vehicle_half_counts = await _half_day_counts_by_vehicle(
+        db, vehicle_ids, dates, exclude_plan_id=exclude_plan_id
+    )
+    instructor_half_counts = await _half_day_counts_by_instructor(
+        db, instructor_ids, dates, exclude_plan_id=exclude_plan_id
+    )
+
+    def _enforced_vehicle(v_id: uuid.UUID, on_date: date) -> list[tuple[time, time]]:
+        return _enforced_breaks_from_counts(
+            active_breaks, vehicle_half_counts, (v_id, on_date), standard
+        )
+
+    def _enforced_instructor(i_id: str, on_date: date) -> list[tuple[time, time]]:
+        return _enforced_breaks_from_counts(
+            active_breaks, instructor_half_counts, (i_id, on_date), standard
+        )
+
+    async def _booked_excluding_plan(i_id: str, on_date: date) -> list[tuple[time, time]]:
+        q = (
+            select(ClientLesson.scheduled_start_time, ClientLesson.scheduled_end_time)
+            .where(
+                ClientLesson.instructor_id == i_id,
+                ClientLesson.scheduled_date == on_date,
+                ClientLesson.is_active == True,
+                ClientLesson.status.notin_(["cancelled", "skipped"]),
+                ClientLesson.scheduled_start_time.is_not(None),
+            )
+        )
+        if exclude_plan_id:
+            q = q.where(ClientLesson.lesson_plan_id != exclude_plan_id)
+        res = await db.execute(q)
+        return [(r[0], r[1]) for r in res.all() if r[0] and r[1]]
+
+    # Batch-internal booked times per (entity, date) to prevent two of this
+    # plan's own lessons landing on the same date+time.
+    veh_booked: dict[tuple[uuid.UUID, date], list[tuple[time, time]]] = {}
+    instr_booked: dict[tuple[str, date], list[tuple[time, time]]] = {}
+    veh_used: dict[tuple[uuid.UUID, date], int] = {}
+    instr_used: dict[tuple[str, date], int] = {}
+
+    results: list[dict] = []
+    for l in ordered:
+        on_date = l["scheduled_date"]
+        is_theory = l.get("is_theory", False)
+        if not is_theory and on_date.weekday() > 4:
+            results.append(
+                {
+                    **l,
+                    "available": False,
+                    "assigned_start_time": None,
+                    "assigned_end_time": None,
+                    "message": "Practical lessons cannot be scheduled on weekends",
+                }
+            )
+            continue
+
+        duration = l.get("duration_minutes", 120 if is_theory else 30)
+        v_id, i_id = _resolve_phase(l)
+
+        entry: dict = {
+            **l,
+            "vehicle_id": str(v_id) if v_id else None,
+            "instructor_id": i_id,
+            "available": False,
+            "assigned_start_time": None,
+            "assigned_end_time": None,
+            "message": None,
+        }
+        if not i_id:
+            entry["message"] = "No instructor assigned"
+            results.append(entry)
+            continue
+
+        instr_booked_list = list(instr_booked.get((i_id, on_date), []))
+        prev_instr = await _booked_excluding_plan(i_id, on_date)
+        instr_booked_list.extend(prev_instr)
+
+        veh_booked_list = list(veh_booked.get((v_id, on_date), [])) if v_id else []
+
+        instr_breaks = _enforced_instructor(i_id, on_date)
+        instr_slots = _generate_slots(instr_breaks)
+        instr_max = len(instr_slots)
+        existing_instr = (
+            instructor_half_counts.get((i_id, on_date), (0, 0, 0))[2]
+        )
+        instr_used_so_far = instr_used.get((i_id, on_date), 0) + existing_instr
+
+        veh_breaks = _enforced_vehicle(v_id, on_date) if v_id else []
+        veh_slots = _generate_slots(veh_breaks) if v_id else []
+        veh_max = len(veh_slots)
+        existing_veh = (
+            vehicle_half_counts.get((v_id, on_date), (0, 0, 0))[2] if v_id else 0
+        )
+        veh_used_so_far = veh_used.get((v_id, on_date), 0) + existing_veh
+
+        if instr_used_so_far >= instr_max:
+            entry["message"] = f"Instructor at capacity on {on_date.isoformat()}"
+            results.append(entry)
+            continue
+        if v_id and veh_used_so_far >= veh_max:
+            entry["message"] = f"Vehicle at capacity on {on_date.isoformat()}"
+            results.append(entry)
+            continue
+
+        assigned: tuple[time, time] | None = None
+        for pref in preferred:
+            end_dt = datetime.combine(on_date, pref) + timedelta(minutes=duration)
+            pref_end = end_dt.time()
+            if pref >= DAY_END and pref_end > DAY_END:
+                continue
+            if pref < DAY_START:
+                continue
+            # break overlap (start or block span)
+            in_break = any(
+                pref < b_end and pref_end > b_start
+                for b_start, b_end in [*instr_breaks, *veh_breaks]
+            )
+            if in_break:
+                continue
+            if not _is_slot_free(pref, pref_end, instr_booked_list):
+                continue
+            if v_id and not _is_slot_free(pref, pref_end, veh_booked_list):
+                continue
+            assigned = (pref, pref_end)
+            break
+
+        if assigned is None:
+            entry["message"] = (
+                f"No free slot at preferred times on {on_date.isoformat()}"
+            )
+            results.append(entry)
+            continue
+
+        s, e = assigned
+        entry["available"] = True
+        entry["assigned_start_time"] = s.isoformat()
+        entry["assigned_end_time"] = e.isoformat()
+
+        instr_booked.setdefault((i_id, on_date), []).append((s, e))
+        instr_used[(i_id, on_date)] = instr_used.get((i_id, on_date), 0) + 1
+        if v_id:
+            veh_booked.setdefault((v_id, on_date), []).append((s, e))
+            veh_used[(v_id, on_date)] = veh_used.get((v_id, on_date), 0) + 1
+
+        results.append(entry)
+
+    return results
+
+
 async def find_and_lock_schedule(
     db: AsyncSession,
     plan_id: uuid.UUID,

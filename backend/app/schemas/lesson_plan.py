@@ -288,6 +288,7 @@ class ClientLessonUpdate(BaseModel):
     scheduled_start_time: str | None = None
     scheduled_end_time: str | None = None
     duration_minutes: int | None = None
+    shift_subsequent: bool | None = None
 
 
 class ClientLessonRead(BaseModel):

@@ -359,8 +359,11 @@ export class LessonPlanService {
     return this.http.post<ClientLesson>(`/api/v1/lesson-plans/lessons/${lessonId}/skip`, {});
   }
 
-  moveLesson(lessonId: string, newDayNumber: number) {
-    return this.http.post<ClientLesson[]>(`/api/v1/lesson-plans/lessons/${lessonId}/move?new_day_number=${newDayNumber}`, {});
+  moveLesson(lessonId: string, newDayNumber: number, shiftSubsequent = true) {
+    return this.http.post<ClientLesson[]>(
+      `/api/v1/lesson-plans/lessons/${lessonId}/move?new_day_number=${newDayNumber}&shift_subsequent=${shiftSubsequent}`,
+      {}
+    );
   }
 
   getLessonHistory(lessonId: string) {

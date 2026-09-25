@@ -574,6 +574,7 @@ async def update_client_lesson(
         notes=data.notes,
         preferred_location=data.preferred_location,
         enforce_prerequisites=data.enforce_prerequisites,
+        shift_subsequent=data.shift_subsequent,
     )
 
     # Fuel snapshot if a lesson is completed directly via edit

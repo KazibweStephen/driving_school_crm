@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, time as _time
+from datetime import date, datetime, timedelta, time as _time
 from decimal import Decimal
 
 from sqlalchemy import or_, select, update
@@ -1126,7 +1126,9 @@ async def update_client_lesson(
     preferred_location: str | None = None,
     enforce_prerequisites: bool | None = None,
     fuel_cost: Decimal | None = None,
+    shift_subsequent: bool | None = None,
 ) -> ClientLesson:
+    _old_date = lesson.scheduled_date
     if day_number is not None:
         lesson.day_number = day_number
     if week_number is not None:
@@ -1260,6 +1262,21 @@ async def update_client_lesson(
         lesson.enforce_prerequisites = enforce_prerequisites
     if fuel_cost is not None:
         lesson.fuel_cost = Decimal(fuel_cost)
+    # Stretch-forward contract (mirrors /move shift_subsequent): when a forward
+    # reschedule/cancel carries shift_subsequent=True, every OTHER lesson in the
+    # plan scheduled on/after the OLD date also shifts forward by the same date
+    # delta — the whole tail is delayed, preserving relative spacing.
+    if shift_subsequent is True and _old_date is not None and scheduled_date is not None:
+        if scheduled_date > _old_date:
+            _delta = (scheduled_date - _old_date).days
+            if _delta > 0:
+                await db.execute(
+                    update(ClientLesson)
+                    .where(ClientLesson.lesson_plan_id == lesson.lesson_plan_id)
+                    .where(ClientLesson.id != lesson.id)
+                    .where(ClientLesson.scheduled_date >= _old_date)
+                    .values(scheduled_date=ClientLesson.scheduled_date + timedelta(days=_delta))
+                )
     await db.flush()
     await db.refresh(lesson)
     # Recompute plan completion counters whenever a lesson status may have changed

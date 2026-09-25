@@ -107,7 +107,13 @@
                   class="flex-1 rounded-lg border border-slate-200 p-2 text-xs font-medium text-slate-600"
                   (click)="openReschedule(slot)"
                   data-testid="reschedule-lesson"
-                ><span class="pi pi-calendar"></span> Reschedule</button>
+                ><span class="pi pi-calendar"></span> Move</button>
+                <button
+                  type="button"
+                  class="flex-1 rounded-lg border border-red-200 bg-red-50 p-2 text-xs font-medium text-red-700"
+                  (click)="openCancel(slot)"
+                  data-testid="cancel-lesson"
+                ><span class="pi pi-times-circle"></span> Cancel</button>
                 <button
                   type="button"
                   class="flex-1 rounded-lg border border-slate-200 p-2 text-xs font-medium text-red-600"
@@ -172,9 +178,14 @@
   <div class="fixed inset-0 z-50 flex items-end bg-black/40" data-testid="reschedule-dialog">
     <div class="w-full rounded-t-2xl bg-white p-4">
       <div class="mb-3 flex items-center justify-between">
-        <h2 class="text-base font-semibold">Reschedule lesson</h2>
-        <button type="button" class="text-slate-400" (click)="showReschedule.set(false)"><span class="pi pi-times"></span></button>
+        <h2 class="text-base font-semibold">{{ cancelMode() ? 'Cancel lesson' : 'Move lesson' }}</h2>
+        <button type="button" class="text-slate-400" (click)="dismissReschedule()"><span class="pi pi-times"></span></button>
       </div>
+      @if (cancelMode()) {
+        <div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          This lesson will be marked <span class="font-semibold">cancelled</span> and pushed forward to the chosen date. With the checkbox below on, every subsequent lesson shifts forward too.
+        </div>
+      }
       <div class="space-y-3">
         <div>
           <label class="mb-1 block text-xs font-medium text-slate-600">Date</label>
@@ -186,7 +197,19 @@
             data-testid="rs-date"
           />
         </div>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+        <p-checkbox
+          [ngModel]="shiftOnMove()"
+          (ngModelChange)="shiftOnMove.set($event)"
+          inputId="shift-subsequent"
+          [binary]="true"
+          data-testid="shift-subsequent"
+        />
+        <label for="shift-subsequent" class="text-xs font-medium text-blue-900">
+          Shift subsequent lessons forward too
+        </label>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
           <div>
             <label class="mb-1 block text-xs font-medium text-slate-600">Start time</label>
             <input
@@ -209,8 +232,8 @@
           </div>
         </div>
         <div class="flex gap-2 pt-1">
-          <button type="button" class="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-medium text-slate-600" (click)="showReschedule.set(false)">Cancel</button>
-          <button type="button" class="flex-1 rounded-lg bg-blue-600 p-2 text-sm font-medium text-white" [disabled]="saving()" (click)="submitReschedule()" data-testid="confirm-reschedule">Save</button>
+          <button type="button" class="flex-1 rounded-lg border border-slate-300 p-2 text-sm font-medium text-slate-600" (click)="dismissReschedule()">Cancel</button>
+          <button type="button" class="flex-1 rounded-lg bg-blue-600 p-2 text-sm font-medium text-white" [disabled]="saving()" (click)="submitReschedule()" data-testid="confirm-reschedule">{{ cancelMode() ? 'Confirm cancel' : 'Save' }}</button>
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { CheckboxModule } from 'primeng/checkbox';
 import { AuthService } from '../../core/auth/auth.service';
 import {
   ScheduleService,
@@ -24,7 +25,7 @@ type ViewMode = 'day' | 'week' | 'month';
 
 @Component({
   selector: 'app-lessons',
-  imports: [ButtonModule, FormsModule, LoadingOverlay, PageHeader],
+  imports: [ButtonModule, CheckboxModule, FormsModule, LoadingOverlay, PageHeader],
   templateUrl: './lessons.html',
 })
 export class Lessons implements OnInit {
@@ -91,12 +92,14 @@ export class Lessons implements OnInit {
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastSync = 0;
 
-  // reschedule
+  // reschedule / cancel
   showReschedule = signal(false);
   rescheduleLesson = signal<WeeklyScheduleEntry | null>(null);
+  cancelMode = signal(false);
   rsDate = signal('');
   rsStart = signal('');
   rsEnd = signal('');
+  shiftOnMove = signal(true);
   saving = signal(false);
 
   setView(v: ViewMode) {
@@ -207,11 +210,32 @@ export class Lessons implements OnInit {
   }
 
   openReschedule(slot: WeeklyScheduleEntry) {
+    this.cancelMode.set(false);
     this.rescheduleLesson.set(slot);
+    this.shiftOnMove.set(true);
     this.rsDate.set(slot.scheduled_date || '');
     this.rsStart.set((slot.scheduled_start_time || '').slice(0, 5));
     this.rsEnd.set((slot.scheduled_end_time || '').slice(0, 5));
     this.showReschedule.set(true);
+  }
+
+  openCancel(slot: WeeklyScheduleEntry) {
+    this.cancelMode.set(true);
+    this.rescheduleLesson.set(slot);
+    this.shiftOnMove.set(true);
+    this.rsStart.set((slot.scheduled_start_time || '').slice(0, 5));
+    this.rsEnd.set((slot.scheduled_end_time || '').slice(0, 5));
+    if (slot.scheduled_date) {
+      this.rsDate.set(toISODate(addDays(new Date(slot.scheduled_date + 'T00:00:00'), 1)));
+    } else {
+      this.rsDate.set('');
+    }
+    this.showReschedule.set(true);
+  }
+
+  dismissReschedule() {
+    this.showReschedule.set(false);
+    this.cancelMode.set(false);
   }
 
   submitReschedule() {
@@ -221,15 +245,25 @@ export class Lessons implements OnInit {
       this.messageService.add({ severity: 'error', summary: 'Select a date' });
       return;
     }
+    const cancelled = this.cancelMode();
     this.saving.set(true);
-    const body: Partial<LessonUpdateBody> = { scheduled_date: this.rsDate() };
+    // Stretch-forward contract (backend PATCH shift_subsequent): when ON (default), the
+    // WHOLE tail scheduled on/after the original date shifts forward by the same delta.
+    const body: Partial<LessonUpdateBody> = {
+      scheduled_date: this.rsDate(),
+      shift_subsequent: this.shiftOnMove(),
+    };
+    if (cancelled) body.status = 'cancelled';
     if (this.rsStart()) body.scheduled_start_time = this.rsStart() + ':00';
     if (this.rsEnd()) body.scheduled_end_time = this.rsEnd() + ':00';
     this.lessonService.updateLesson(lesson.lesson_id, body).subscribe({
       next: () => {
         this.saving.set(false);
-        this.showReschedule.set(false);
-        this.messageService.add({ severity: 'success', summary: 'Lesson rescheduled' });
+        this.dismissReschedule();
+        this.messageService.add({
+          severity: 'success',
+          summary: cancelled ? 'Lesson cancelled & rescheduled' : 'Lesson rescheduled',
+        });
         this.load();
       },
       error: (err) => {
@@ -367,8 +401,10 @@ export class Lessons implements OnInit {
 }
 
 interface LessonUpdateBody {
-  scheduled_date: string;
-  scheduled_start_time: string;
-  scheduled_end_time: string;
-  is_active: boolean;
+  scheduled_date?: string;
+  scheduled_start_time?: string;
+  scheduled_end_time?: string;
+  is_active?: boolean;
+  status?: string;
+  shift_subsequent?: boolean;
 }

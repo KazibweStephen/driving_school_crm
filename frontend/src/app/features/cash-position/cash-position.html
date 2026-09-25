@@ -142,7 +142,7 @@
     </div>
     <div class="flex flex-col gap-1">
       <label class="text-sm font-medium text-gray-700">To Branch (Head Office) *</label>
-      <p-select [(ngModel)]="sendForm.to_branch_id" [options]="branches" optionLabel="name" optionValue="id"
+      <p-select [(ngModel)]="sendForm.to_branch_id" [options]="allBranches.length ? allBranches : branches" optionLabel="name" optionValue="id"
         placeholder="Select destination" styleClass="w-full" appendTo="body" />
     </div>
     <div class="grid grid-cols-2 gap-3">

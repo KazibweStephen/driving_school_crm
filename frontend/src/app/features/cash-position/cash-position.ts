@@ -44,6 +44,9 @@ export class CashPositionCmp implements OnInit {
   positions = signal<BranchCashPosition[]>([]);
   loading = signal(false);
   branches: Branch[] = [];
+  /** All company branches — the send-money destination is a company-level
+   * choice (e.g. Head Office), not limited to the user's assigned branches. */
+  allBranches: Branch[] = [];
   headOfficeId = '';
 
   poolOptions: Pool[] = [
@@ -116,6 +119,11 @@ export class CashPositionCmp implements OnInit {
     const companyId = this.authService.currentUserCompanyId();
     if (companyId) {
       try {
+        this.allBranches = (await this.companyService.listBranches(companyId).toPromise()) || [];
+      } catch {
+        this.allBranches = [];
+      }
+      try {
         const company = await this.companyService.get(companyId).toPromise();
         this.headOfficeId = company?.head_office_branch_id || '';
       } catch {
@@ -148,7 +156,9 @@ export class CashPositionCmp implements OnInit {
   }
 
   branchName(id: string): string {
-    return this.branches.find(b => b.id === id)?.name || id.substring(0, 8);
+    return this.allBranches.find(b => b.id === id)?.name
+      || this.branches.find(b => b.id === id)?.name
+      || id.substring(0, 8);
   }
 
   branchIsHeadOffice(id: string): boolean {

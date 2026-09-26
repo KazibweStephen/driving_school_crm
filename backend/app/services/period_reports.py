@@ -27,13 +27,14 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import and_, case, exists, func, or_, select
+from sqlalchemy import String, and_, case, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.models.cart import CartItem, CartItemStatus
 from app.models.company import Branch, BranchMonthlyTarget, Company, Expense, ExpenseStatus
 from app.models.consultation import Consultation
+from app.models.discount import CartItemDiscount
 from app.models.payment import Payment
 from app.models.product import Package, Product
 from app.models.user import User
@@ -131,23 +132,6 @@ def payment_day() -> Any:
 def consultation_day() -> Any:
     return func.coalesce(
         Consultation.document_date, func.date(at_business_tz(Consultation.created_at))
-    )
-
-
-def _has_prior_payment():
-    """EXISTS: an earlier payment exists for the same consultation."""
-    prior = Payment.__table__.alias("prior_payment")
-    return exists(
-        select(prior.c.id).where(
-            and_(
-                prior.c.consultation_id == Payment.consultation_id,
-                or_(
-                    prior.c.created_at < Payment.created_at,
-                    and_(prior.c.created_at == Payment.created_at, prior.c.id < Payment.id),
-                ),
-                prior.c.id != Payment.id,
-            )
-        )
     )
 
 
@@ -300,14 +284,24 @@ async def build_period_report(
     day = payment_day()
     in_period = and_(day >= start, day <= end)
 
-    # ---------------- sales vs collections ------------------------------- #
-    prior = _has_prior_payment()
+    # ---------------- cohorts: sold in the period vs sold before it -------- #
+    # A "sold product" is a (consultation, product, package) group of
+    # non-cancelled payments. Its value is the package price MINUS the discounts
+    # applied to the cart item, and it belongs to the period of its FIRST
+    # payment. That single definition drives every figure below, so the report
+    # can line up "what we expected" against "what we actually took".
     cash_conds = [Payment.cancelled_at.is_(None), in_period]
     branch_filter = _payment_scope(branch_ids, include_unassigned)
     if branch_filter is not None:
         cash_conds.append(branch_filter)
 
     async def _cash(cond) -> tuple[float, int]:
+        """Cash received in the period from the products matching ``cond``.
+
+        Every payment in the period is counted against the cohort it belongs
+        to, not just the first one: a client who pays twice for a package sold
+        this period has paid twice *for that sale*.
+        """
         row = (
             await db.execute(
                 select(
@@ -316,29 +310,114 @@ async def build_period_report(
                 )
                 .select_from(Payment)
                 .join(_Cons, _Cons.id == Payment.consultation_id)
+                .join(
+                    cohorts,
+                    and_(*_on_cohort(Payment.consultation_id, Payment.product_id, Payment.package_id)),
+                )
                 .where(and_(*cash_conds), cond)
             )
         ).one()
         return _f(row[0]), int(row[1])
 
-    total_sales, sales_payments = await _cash(~prior)
-    total_collections, collection_payments = await _cash(prior)
-    total_cash = total_sales + total_collections
+    group_conds = [Payment.cancelled_at.is_(None), Payment.consultation_id.isnot(None)]
+    if branch_filter is not None:
+        group_conds.append(branch_filter)
 
-    # cash from clients that already existed before the period started
-    old_client_row = (
-        await db.execute(
-            select(func.coalesce(func.sum(Payment.total_paid), 0))
-            .select_from(Payment)
-            .join(_Cons, _Cons.id == Payment.consultation_id)
-            .where(
-                and_(*cash_conds),
-                prior,
-                func.date(at_business_tz(_Cons.created_at)) < start,
-            )
+    # the day each product was sold = the day of its first payment
+    first_payments = (
+        select(
+            Payment.consultation_id.label("cid"),
+            Payment.product_id.label("pid"),
+            Payment.package_id.label("pkg"),
+            func.min(day).label("first_day"),
+            func.max(Payment.total_amount).label("charged"),
         )
-    ).scalar()
-    old_client_collections = _f(old_client_row)
+        .select_from(Payment)
+        .join(_Cons, _Cons.id == Payment.consultation_id)
+        .where(and_(*group_conds))
+        .group_by(Payment.consultation_id, Payment.product_id, Payment.package_id)
+        .subquery()
+    )
+
+    # what each sold product was worth: package price less discounts
+    package_value = (
+        select(
+            CartItem.consultation_id.label("cid"),
+            CartItem.product_id.label("pid"),
+            CartItem.package_id.label("pkg"),
+            (
+                func.max(func.coalesce(Package.price, 0))
+                - func.coalesce(func.sum(CartItemDiscount.applied_amount), 0)
+            ).label("value"),
+        )
+        .select_from(CartItem)
+        .outerjoin(Package, cast(Package.id, String) == CartItem.package_id)
+        .outerjoin(CartItemDiscount, CartItemDiscount.cart_item_id == CartItem.id)
+        .group_by(CartItem.consultation_id, CartItem.product_id, CartItem.package_id)
+        .subquery()
+    )
+
+    cohorts = (
+        select(
+            first_payments.c.cid.label("cid"),
+            first_payments.c.pid.label("pid"),
+            first_payments.c.pkg.label("pkg"),
+            first_payments.c.first_day.label("first_day"),
+            func.coalesce(
+                func.nullif(package_value.c.value, 0),
+                first_payments.c.charged,
+                0,
+            ).label("expected"),
+        )
+        .select_from(first_payments)
+        .outerjoin(
+            package_value,
+            and_(
+                package_value.c.cid == first_payments.c.cid,
+                package_value.c.pid.is_not_distinct_from(first_payments.c.pid),
+                package_value.c.pkg.is_not_distinct_from(first_payments.c.pkg),
+            ),
+        )
+        .subquery()
+    )
+
+    def _on_cohort(cid, pid, pkg) -> list[Any]:
+        """NULL-safe join condition between a payment/balance row and a cohort."""
+        return [
+            cid == cohorts.c.cid,
+            cohorts.c.pid.is_not_distinct_from(pid),
+            cohorts.c.pkg.is_not_distinct_from(pkg),
+        ]
+
+    sold_in_period = and_(cohorts.c.first_day >= start, cohorts.c.first_day <= end)
+    sold_before = cohorts.c.first_day < start
+
+    async def _cohort_totals(cond) -> tuple[float, int, int]:
+        """(expected value, products sold, distinct clients) for a cohort."""
+        row = (
+            await db.execute(
+                select(
+                    func.coalesce(func.sum(cohorts.c.expected), 0),
+                    func.count(cohorts.c.cid),
+                    func.count(func.distinct(cohorts.c.cid)),
+                )
+                .select_from(cohorts)
+                .where(cond)
+            )
+        ).one()
+        return _f(row[0]), int(row[1]), int(row[2])
+
+    # sold during the period -> what we expected from it
+    total_expected, packages_sold, sold_clients = await _cohort_totals(sold_in_period)
+    # sold in an earlier period -> what we expected to collect from it
+    expected_from_collection, prior_packages, prior_clients = await _cohort_totals(
+        sold_before
+    )
+
+    # cash received in the period against each cohort
+    total_paid, sales_payments = await _cash(sold_in_period)
+    total_collected, collection_payments = await _cash(sold_before)
+    total_cash = total_paid + total_collected
 
     # ---------------- consultations & conversions ------------------------ #
     cons_conds = [consultation_day() >= start, consultation_day() <= end]
@@ -351,43 +430,8 @@ async def build_period_report(
     )
 
     # a conversion = a package that received its FIRST payment in the period
-    first_pay_conds = [Payment.cancelled_at.is_(None), Payment.consultation_id.isnot(None)]
-    first_branch = _payment_scope(branch_ids, include_unassigned)
-    if first_branch is not None:
-        first_pay_conds.append(first_branch)
-    first_payments = (
-        select(
-            Payment.consultation_id.label("cid"),
-            Payment.product_id.label("pid"),
-            Payment.package_id.label("pkg"),
-            func.min(day).label("first_day"),
-        )
-        .select_from(Payment)
-        .join(_Cons, _Cons.id == Payment.consultation_id)
-        .where(and_(*first_pay_conds))
-        .group_by(Payment.consultation_id, Payment.product_id, Payment.package_id)
-        .subquery()
-    )
-    conversions = int(
-        (
-            await db.execute(
-                select(func.count())
-                .select_from(first_payments)
-                .where(first_payments.c.first_day >= start, first_payments.c.first_day <= end)
-            )
-        ).scalar()
-        or 0
-    )
-    converted_clients = int(
-        (
-            await db.execute(
-                select(func.count(func.distinct(first_payments.c.cid))).where(
-                    first_payments.c.first_day >= start, first_payments.c.first_day <= end
-                )
-            )
-        ).scalar()
-        or 0
-    )
+    conversions = packages_sold
+    converted_clients = sold_clients
 
     # ---------------- outstanding (as at period end) ---------------------- #
     period_end_balances = _grouped_balances(
@@ -412,6 +456,22 @@ async def build_period_report(
         ).scalar()
         or 0
     )
+
+    async def _cohort_outstanding(cond) -> float:
+        """Money still owed by one cohort, as at the end of the period."""
+        return _f(
+            (
+                await db.execute(
+                    select(func.coalesce(func.sum(period_end_balances.c.balance), 0))
+                    .select_from(period_end_balances)
+                    .join(cohorts, and_(*_on_cohort(period_end_balances.c.cid, period_end_balances.c.pid, period_end_balances.c.pkg)))
+                    .where(cond)
+                )
+            ).scalar()
+        )
+
+    sales_outstanding = await _cohort_outstanding(sold_in_period)
+    collection_outstanding = await _cohort_outstanding(sold_before)
 
     # ---------------- expenses ------------------------------------------ #
     exp_conds: list[Any] = []
@@ -461,8 +521,10 @@ async def build_period_report(
     expenses_pending_count = int(pending_row or 0)
 
     # ---------------- goal ----------------------------------------------- #
+    # Performance against the target is a function of what was SOLD, so money
+    # collected from earlier periods can never flatter the period's result.
     target, target_source = await _period_target(db, company_id, branch_ids, start, end)
-    attainment = (total_sales / target * 100.0) if target else 0.0
+    attainment = (total_expected / target * 100.0) if target else 0.0
 
     # ---------------- best selling products ------------------------------ #
     best_products = await _best_selling_products(
@@ -487,14 +549,23 @@ async def build_period_report(
         "generated_at": datetime.now(),
         "branch_ids": branch_ids,
         "totals": {
-            "total_sales": total_sales,
+            "total_expected": total_expected,
+            "total_paid": total_paid,
             "sales_payments": sales_payments,
-            "total_collections": total_collections,
+            "sales_collected_pct": (total_paid / total_expected * 100.0) if total_expected else 0.0,
+            "sales_outstanding": sales_outstanding,
+            "packages_sold": packages_sold,
+            "sold_clients": sold_clients,
+            "expected_from_collection": expected_from_collection,
+            "total_collected": total_collected,
             "collection_payments": collection_payments,
+            "collection_collected_pct": (
+                (total_collected / expected_from_collection * 100.0)
+                if expected_from_collection
+                else 0.0
+            ),
+            "collection_outstanding": collection_outstanding,
             "total_cash_received": total_cash,
-            "old_client_collections": old_client_collections,
-            "new_client_cash": total_cash - old_client_collections,
-            "old_client_share": (old_client_collections / total_cash * 100.0) if total_cash else 0.0,
             "consultations": consultations,
             "conversions": conversions,
             "converted_clients": converted_clients,
@@ -510,9 +581,9 @@ async def build_period_report(
         },
         "goal": {
             "target": target,
-            "attained": total_sales,
+            "attained": total_expected,
             "attainment_pct": attainment,
-            "remaining": max(0.0, target - total_sales),
+            "remaining": max(0.0, target - total_expected),
             "status": _goal_status(attainment),
             "source": target_source,
         },
@@ -521,6 +592,10 @@ async def build_period_report(
         "at_risk_clients": at_risk["items"],
         "at_risk_total": at_risk["total"],
         "risk_days": risk_days,
+        "sold_before": {
+            "packages": prior_packages,
+            "clients": prior_clients,
+        },
     }
 
 

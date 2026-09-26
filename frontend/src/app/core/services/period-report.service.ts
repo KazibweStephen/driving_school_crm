@@ -5,14 +5,25 @@ import { Observable } from 'rxjs';
 export type PeriodKind = 'week' | 'month' | 'quarter' | 'year';
 
 export interface PeriodTotals {
-  total_sales: number;
+  /** Price (less discounts) of the products SOLD during the period. */
+  total_expected: number;
+  /** Cash received in the period for those products. */
+  total_paid: number;
   sales_payments: number;
-  total_collections: number;
+  sales_collected_pct: number;
+  /** Still owed by the clients who bought during the period. */
+  sales_outstanding: number;
+  packages_sold: number;
+  sold_clients: number;
+  /** Price (less discounts) of products sold BEFORE the period. */
+  expected_from_collection: number;
+  /** Cash received in the period against those earlier sales. */
+  total_collected: number;
   collection_payments: number;
+  collection_collected_pct: number;
+  /** Still owed by clients who bought before the period. */
+  collection_outstanding: number;
   total_cash_received: number;
-  old_client_collections: number;
-  new_client_cash: number;
-  old_client_share: number;
   consultations: number;
   conversions: number;
   converted_clients: number;
@@ -68,6 +79,11 @@ export interface AtRiskClient {
   consultation_date: string | null;
 }
 
+export interface SoldBeforeCohort {
+  packages: number;
+  clients: number;
+}
+
 export interface PeriodReport {
   period: PeriodKind;
   period_label: string;
@@ -82,6 +98,7 @@ export interface PeriodReport {
   at_risk_clients: AtRiskClient[];
   at_risk_total: number;
   risk_days: number;
+  sold_before: SoldBeforeCohort;
 }
 
 @Injectable({ providedIn: 'root' })

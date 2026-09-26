@@ -71,22 +71,36 @@ DashboardSummary.model_rebuild()
 # Period reports (week / month / quarter / year)
 # --------------------------------------------------------------------------- #
 class PeriodTotals(BaseModel):
-    """Money and counts for the selected period.
+    """Expected value versus cash actually received, for the selected period.
 
-    ``total_sales`` is cash from NEW sales (the first payment recorded for a
-    consultation); ``total_collections`` is cash collected against earlier
-    sales. ``old_client_collections`` is the slice of collections that came
-    from clients who already existed before the period started.
+    A "sold product" is a (consultation, product, package) group. Its value is
+    the package price minus the discounts applied to the cart item, and the
+    period it belongs to is the period of its FIRST payment.
+
+    Sales cohort - products first sold during the period:
+      ``total_expected``   price minus discounts of those products
+      ``total_paid``       cash received in the period against them
+
+    Collection cohort - products first sold BEFORE the period:
+      ``expected_from_collection``  price minus discounts of those products
+      ``total_collected``           cash received in the period against them
+
+    ``total_cash_received`` is simply ``total_paid + total_collected``.
     """
 
-    total_sales: float
+    total_expected: float
+    total_paid: float
     sales_payments: int
-    total_collections: float
+    sales_collected_pct: float
+    sales_outstanding: float
+    packages_sold: int
+    sold_clients: int
+    expected_from_collection: float
+    total_collected: float
     collection_payments: int
+    collection_collected_pct: float
+    collection_outstanding: float
     total_cash_received: float
-    old_client_collections: float
-    new_client_cash: float
-    old_client_share: float
     consultations: int
     conversions: int
     converted_clients: int
@@ -142,6 +156,13 @@ class AtRiskClient(BaseModel):
     consultation_date: date | None = None
 
 
+class SoldBeforeCohort(BaseModel):
+    """How many products/clients were sold BEFORE the period (the collection stream)."""
+
+    packages: int = 0
+    clients: int = 0
+
+
 class PeriodReportResponse(BaseModel):
     period: str
     period_label: str
@@ -156,3 +177,4 @@ class PeriodReportResponse(BaseModel):
     at_risk_clients: list[AtRiskClient] = []
     at_risk_total: int = 0
     risk_days: int = 14
+    sold_before: SoldBeforeCohort = SoldBeforeCohort()

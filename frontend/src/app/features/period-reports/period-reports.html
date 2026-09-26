@@ -44,28 +44,96 @@
       </span>
     </div>
 
-    <!-- cash -->
-    <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <p-card>
-        <div class="text-sm text-gray-500">New Sales</div>
-        <div class="text-xl font-bold text-green-600" data-testid="total-sales">
-          {{ currencyService.symbol() }} {{ formatAmount(r.totals.total_sales) }}
+    <!-- sales cohort: expected vs paid -->
+    <p-card class="mb-4">
+      <div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 class="font-semibold text-gray-900">Sold in this period</h3>
+        <span class="text-xs text-gray-500">
+          {{ r.totals.packages_sold }} package(s) from {{ r.totals.sold_clients }} client(s)
+        </span>
+      </div>
+      <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div>
+          <div class="text-xs text-gray-500">Total Amount Expected</div>
+          <div class="text-lg font-bold text-gray-900" data-testid="total-expected">
+            {{ currencyService.symbol() }} {{ formatAmount(r.totals.total_expected) }}
+          </div>
+          <div class="text-xs text-gray-400">price less discounts</div>
         </div>
-        <div class="text-xs text-gray-400">{{ r.totals.sales_payments }} payment(s)</div>
-      </p-card>
-      <p-card>
-        <div class="text-sm text-gray-500">Collections</div>
-        <div class="text-xl font-bold text-blue-600" data-testid="total-collections">
-          {{ currencyService.symbol() }} {{ formatAmount(r.totals.total_collections) }}
+        <div>
+          <div class="text-xs text-gray-500">Total Paid</div>
+          <div class="text-lg font-bold text-green-600" data-testid="total-paid">
+            {{ currencyService.symbol() }} {{ formatAmount(r.totals.total_paid) }}
+          </div>
+          <div class="text-xs text-gray-400">{{ r.totals.sales_payments }} payment(s)</div>
         </div>
-        <div class="text-xs text-gray-400">{{ r.totals.collection_payments }} payment(s)</div>
-      </p-card>
+        <div>
+          <div class="text-xs text-gray-500">Collected against these sales</div>
+          <div class="text-lg font-bold text-gray-900" data-testid="sales-collected-pct">
+            {{ r.totals.sales_collected_pct.toFixed(1) }}%
+          </div>
+          <p-progressbar [value]="attainmentPct(r.totals.sales_collected_pct)" [showValue]="false" styleClass="h-1.5" />
+        </div>
+        <div>
+          <div class="text-xs text-gray-500">Still owing</div>
+          <div class="text-lg font-bold text-amber-600" data-testid="sales-outstanding">
+            {{ currencyService.symbol() }} {{ formatAmount(r.totals.sales_outstanding) }}
+          </div>
+          <div class="text-xs text-gray-400">of the period's sales</div>
+        </div>
+      </div>
+    </p-card>
+
+    <!-- collection cohort: expected vs collected -->
+    <p-card class="mb-4">
+      <div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 class="font-semibold text-gray-900">Collected from earlier sales</h3>
+        <span class="text-xs text-gray-500">
+          {{ r.sold_before.packages }} package(s) sold before this period, from {{ r.sold_before.clients }} client(s)
+        </span>
+      </div>
+      <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div>
+          <div class="text-xs text-gray-500">Total Expected From Collection</div>
+          <div class="text-lg font-bold text-gray-900" data-testid="expected-from-collection">
+            {{ currencyService.symbol() }} {{ formatAmount(r.totals.expected_from_collection) }}
+          </div>
+          <div class="text-xs text-gray-400">price less discounts</div>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500">Total Collected</div>
+          <div class="text-lg font-bold text-blue-600" data-testid="total-collected">
+            {{ currencyService.symbol() }} {{ formatAmount(r.totals.total_collected) }}
+          </div>
+          <div class="text-xs text-gray-400">{{ r.totals.collection_payments }} payment(s)</div>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500">Collected against those sales</div>
+          <div class="text-lg font-bold text-gray-900" data-testid="collection-collected-pct">
+            {{ r.totals.collection_collected_pct.toFixed(1) }}%
+          </div>
+          <p-progressbar [value]="attainmentPct(r.totals.collection_collected_pct)" [showValue]="false" styleClass="h-1.5" />
+        </div>
+        <div>
+          <div class="text-xs text-gray-500">Still owing</div>
+          <div class="text-lg font-bold text-amber-600" data-testid="collection-outstanding">
+            {{ currencyService.symbol() }} {{ formatAmount(r.totals.collection_outstanding) }}
+          </div>
+          <div class="text-xs text-gray-400">from earlier sales</div>
+        </div>
+      </div>
+    </p-card>
+
+    <!-- cash summary -->
+    <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-2">
       <p-card>
         <div class="text-sm text-gray-500">Total Cash Received</div>
         <div class="text-xl font-bold text-gray-900" data-testid="total-cash">
           {{ currencyService.symbol() }} {{ formatAmount(r.totals.total_cash_received) }}
         </div>
-        <div class="text-xs text-gray-400">Sales + collections</div>
+        <div class="text-xs text-gray-400">
+          Paid {{ formatAmount(r.totals.total_paid) }} + collected {{ formatAmount(r.totals.total_collected) }}
+        </div>
       </p-card>
       <p-card>
         <div class="text-sm text-gray-500">Net Cash (after paid expenses)</div>
@@ -76,27 +144,6 @@
         <div class="text-xs text-gray-400">Expenses paid {{ formatAmount(r.totals.expenses_paid) }}</div>
       </p-card>
     </div>
-
-    <!-- collections split -->
-    <p-card class="mb-4">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div class="text-sm text-gray-500">Cash from existing clients</div>
-          <div class="text-lg font-semibold text-gray-900" data-testid="old-client-collections">
-            {{ currencyService.symbol() }} {{ formatAmount(r.totals.old_client_collections) }}
-            <span class="text-sm font-normal text-gray-500">
-              ({{ r.totals.old_client_share.toFixed(0) }}% of cash)
-            </span>
-          </div>
-        </div>
-        <div class="text-right">
-          <div class="text-sm text-gray-500">Cash from new clients</div>
-          <div class="text-lg font-semibold text-gray-900">
-            {{ currencyService.symbol() }} {{ formatAmount(r.totals.new_client_cash) }}
-          </div>
-        </div>
-      </div>
-    </p-card>
 
     <!-- sales funnel + goal -->
     <div class="mb-4 grid gap-3 lg:grid-cols-2">
@@ -132,7 +179,7 @@
         </div>
         <p-progressbar [value]="attainmentPct(r.goal.attainment_pct)" [showValue]="false" styleClass="h-2" />
         <div class="mt-1 text-xs text-gray-500">
-          {{ r.goal.attainment_pct.toFixed(1) }}% of target
+          {{ r.goal.attainment_pct.toFixed(1) }}% of target — measured on value sold, not on collections
           @if (r.goal.remaining > 0) {
             · {{ currencyService.symbol() }} {{ formatAmount(r.goal.remaining) }} still needed
           }

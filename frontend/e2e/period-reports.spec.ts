@@ -46,38 +46,60 @@ test.describe('Management (period) reports', () => {
     }
   });
 
-  test('cash KPI cards match the API totals', async ({ page }) => {
+  test('expected/paid/collected KPI cards match the API totals', async ({ page }) => {
     const api = await apiReport(page, 'month');
     expect(api.status).toBe(200);
     const t = api.body.totals;
+    const money = (n: number) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
     await page.goto('/period-reports');
     await page.getByTestId('period-month').click();
-    await expect(page.getByTestId('total-sales')).toContainText(
-      Number(t.total_sales).toLocaleString('en-US', { maximumFractionDigits: 0 }),
+    // the sales cohort (products sold inside the period)
+    await expect(page.getByTestId('total-expected')).toContainText(money(t.total_expected));
+    await expect(page.getByTestId('total-paid')).toContainText(money(t.total_paid));
+    // the collection cohort (products sold before the period)
+    await expect(page.getByTestId('expected-from-collection')).toContainText(
+      money(t.expected_from_collection),
     );
-    await expect(page.getByTestId('total-collections')).toContainText(
-      Number(t.total_collections).toLocaleString('en-US', { maximumFractionDigits: 0 }),
-    );
-    await expect(page.getByTestId('total-cash')).toContainText(
-      Number(t.total_cash_received).toLocaleString('en-US', { maximumFractionDigits: 0 }),
-    );
+    await expect(page.getByTestId('total-collected')).toContainText(money(t.total_collected));
+    await expect(page.getByTestId('total-cash')).toContainText(money(t.total_cash_received));
   });
 
-  test('sales and collections always sum to total cash', async ({ page }) => {
+  test('paid + collected always equals total cash, for every period', async ({ page }) => {
     await page.goto('/period-reports');
     for (const period of ['week', 'month', 'quarter', 'year']) {
       const api = await apiReport(page, period);
       expect(api.status, `${period} should load`).toBe(200);
       const t = api.body.totals;
-      expect(t.total_sales + t.total_collections).toBeCloseTo(t.total_cash_received, 2);
-      // Old-client cash can never exceed the period's total cash.
-      expect(t.old_client_collections).toBeLessThanOrEqual(t.total_cash_received);
+      // The two cohorts partition the cash received in the period.
+      expect(t.total_paid + t.total_collected).toBeCloseTo(t.total_cash_received, 2);
+      // You cannot collect more than the cohort was worth, or pay more than expected.
+      expect(t.total_paid).toBeLessThanOrEqual(t.total_expected + 1);
+      expect(t.total_collected).toBeLessThanOrEqual(t.expected_from_collection + 1);
+      // Outstanding of the two cohorts cannot exceed what is outstanding overall.
+      expect(t.sales_outstanding).toBeLessThanOrEqual(t.outstanding_total + 1);
+      expect(t.collection_outstanding).toBeLessThanOrEqual(t.outstanding_total + 1);
       // Net cash = cash received - paid expenses.
       expect(t.net_cash).toBeCloseTo(t.total_cash_received - t.expenses_paid, 2);
       // Rates are percentages.
       expect(t.conversion_rate).toBeGreaterThanOrEqual(0);
       expect(t.conversion_rate).toBeLessThanOrEqual(100);
+    }
+  });
+
+  test('target performance is driven by value sold, not by collections', async ({ page }) => {
+    for (const period of ['week', 'month', 'quarter', 'year']) {
+      const api = await apiReport(page, period);
+      const { totals: t, goal: g } = api.body;
+      // Attainment is measured on what was sold...
+      expect(g.attained).toBeCloseTo(t.total_expected, 2);
+      // ...so it must differ from a cash-based figure whenever the two diverge.
+      expect(g.attained).not.toBeCloseTo(t.total_cash_received, 0);
+      // Remains and status stay consistent with the sold value.
+      if (g.target > 0) {
+        expect(g.attainment_pct).toBeCloseTo((t.total_expected / g.target) * 100, 4);
+        expect(g.remaining).toBeCloseTo(Math.max(0, g.target - t.total_expected), 2);
+      }
     }
   });
 

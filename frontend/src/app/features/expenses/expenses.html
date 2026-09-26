@@ -636,7 +636,7 @@
         <label class="mb-1 block text-sm font-medium text-gray-700">Category</label>
         <p-select [(ngModel)]="editCategory" [options]="editCategoryOptions()" optionLabel="label" optionValue="value"
           placeholder="Select category" styleClass="w-full" appendTo="body" [filter]="true" filterPlaceholder="Search..."
-          (onChange)="onEditCategoryChange()" />
+          (onChange)="onEditCategoryChange()" data-testid="edit-category" />
         <p class="mt-1 text-xs text-gray-400">Changing the category re-points the expense to that category's cash pool.</p>
       </div>
       @if (editCategory() === '__other__') {
@@ -731,11 +731,11 @@
         <textarea pTextarea [(ngModel)]="editDescription" class="w-full" rows="2"></textarea>
       </div>
     </div>
-    <ng-template pTemplate="footer">
-      <p-button label="Cancel" severity="secondary" (onClick)="showEditDialog.set(false)" />
-      <p-button label="Save" [disabled]="!editCanSave()" (onClick)="saveEdit()" data-testid="confirm-edit" />
-    </ng-template>
   }
+  <ng-template pTemplate="footer">
+    <p-button label="Cancel" severity="secondary" (onClick)="showEditDialog.set(false)" />
+    <p-button label="Save" [disabled]="!editCanSave()" (onClick)="saveEdit()" data-testid="confirm-edit" />
+  </ng-template>
 </p-dialog>
 
 <p-dialog

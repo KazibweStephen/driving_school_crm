@@ -339,7 +339,7 @@ export class Expenses {
   }
 
   permitCartItems = signal<{ id: string; product_id: string; package_id: string | null; product_name?: string | null; package_name?: string | null; requires_permit_processing: boolean }[]>([]);
-  cartExpenseTypes = signal<{ category: string; amount: number; already_paid: boolean }[]>([]);
+  cartExpenseTypes = signal<{ category: string; amount: number; already_paid: boolean; category_id?: string | null; category_name?: string | null; account?: string | null; requires_client?: boolean }[]>([]);
   cartExpenseTypeLoading = signal(false);
   hasCartExpenseTypes = computed(() => this.cartExpenseTypes().length > 0);
 
@@ -579,7 +579,16 @@ export class Expenses {
     return (this.amount() ?? 0) <= avail + 0.001;
   }
 
+  /** The linked expense type of the selected category, when the cart item's
+   * package tags free-form expense types (its own name need not match a
+   * category name, so it carries its own pool). */
+  selectedCartExpenseType(): { category: string; account?: string | null } | null {
+    return this.cartExpenseTypes().find(t => t.category === this.category()) ?? null;
+  }
+
   isClientAccountCategory(): boolean {
+    const tagged = this.selectedCartExpenseType();
+    if (tagged?.account) return tagged.account === 'client_accounts';
     return this.accountCategories.has(this.category());
   }
 
@@ -933,6 +942,9 @@ export class Expenses {
       consultation_id: this.consultationId() ?? undefined,
       cart_item_id: this.cartItemId() ?? undefined,
       expense_date: this.expenseDate(),
+      // Send the resolved pool so a free-form expected-expense type name is
+      // never filed against petty cash when its category draws from the client.
+      account: this.isClientAccountCategory() ? 'client_accounts' : 'petty_cash',
       status: 'pending',
     };
     this.uploadThenCreate(payload);

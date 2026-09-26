@@ -58,6 +58,8 @@ export interface ExpenseCreatePayload {
   expense_date?: string;
   status?: string;
   receipt_url?: string;
+  /** Cash pool: 'client_accounts' or 'petty_cash' (resolved from the category). */
+  account?: string;
 }
 
 export interface ExpenseUpdatePayload {

@@ -479,6 +479,11 @@ async def mark_expense_paid(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Charges cannot be negative")
 
     expense_pool = await _resolve_expense_pool(db, expense)
+    # Persist the resolved pool: a row stamped 'petty_cash' from an older release
+    # (or a free-form expected-expense type name that never matched a category)
+    # must be re-stamped when it is actually paid from the client's account.
+    if expense.account != expense_pool:
+        expense.account = expense_pool
     available = await finance_service.pool_available(db, expense.branch_id, expense_pool)
     if float(expense.amount) + charges > available:
         raise HTTPException(
@@ -605,27 +610,28 @@ async def _assert_permit_floor(db: AsyncSession, expense, value: datetime) -> da
 
 
 async def _resolve_expense_pool(db: AsyncSession, expense) -> str:
-    """Pool an expense is paid from: the stored account when it is a valid
-    pool; otherwise the category's configured account (legacy rows predate
-    per-category accounts, or carry removed pool names like 'operating_cash');
-    petty cash as the last resort."""
+    """Pool an expense is paid from.
+
+    The expense CATEGORY is the authority: a category configured for
+    ``client_accounts`` (Learner Permit Payment, Test/Police Booking, IOV Fees,
+    Permit Payment, ...) is always paid from the client's account, even when the
+    stored row still says ``petty_cash`` from an older release or a name that no
+    longer matched its category. Only categories with no configured account fall
+    back to the stored value, then to petty cash.
+    """
     valid = (TransferPool.PETTY_CASH.value, TransferPool.CLIENT_ACCOUNTS.value)
-    if expense.account in valid:
-        return expense.account
     branch = (
         await db.execute(select(Branch).where(Branch.id == expense.branch_id))
     ).scalar_one_or_none()
     if branch is not None and (expense.category or "").strip():
-        match = (
-            await db.execute(
-                select(ExpenseCategory).where(
-                    ExpenseCategory.company_id == branch.company_id,
-                    ExpenseCategory.name == expense.category,
-                )
-            )
-        ).scalar_one_or_none()
-        if match is not None and match.account in valid:
-            return match.account
+        from app.services.finance import resolve_expense_account
+        resolved = await resolve_expense_account(
+            db, branch.company_id, expense.category, expense.cart_item_id
+        )
+        if resolved in valid:
+            return resolved
+    if expense.account in valid:
+        return expense.account
     return TransferPool.PETTY_CASH.value
 
 

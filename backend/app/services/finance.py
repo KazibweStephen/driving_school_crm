@@ -62,6 +62,132 @@ async def _is_once_per_cart_item_category(
     return low in expected
 
 
+def _normalise_category_name(name: str) -> str:
+    return " ".join((name or "").split()).strip().lower()
+
+
+async def _match_expense_category(
+    db: AsyncSession, company_id: uuid.UUID, name: str
+) -> ExpenseCategory | None:
+    """Resolve an expense category from the category string on an expense.
+
+    Expected-expense types are named freely by the user ("Learners Permit
+    Payment(Class B)", "Test Fees Booking"), so an exact-name-only lookup would
+    miss the category and silently stamp the expense ``petty_cash`` even though
+    the category is a client-account one. Match case/space-insensitively first,
+    then fall back to a contains match.
+    """
+    key = _normalise_category_name(name)
+    if not key or company_id is None:
+        return None
+    cats = list(
+        (
+            await db.execute(
+                select(ExpenseCategory).where(ExpenseCategory.company_id == company_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for c in cats:
+        if _normalise_category_name(c.name) == key:
+            return c
+    for c in cats:
+        cn = _normalise_category_name(c.name)
+        if cn and (cn in key or key in cn):
+            return c
+    return None
+
+
+async def _linked_cart_item_category(
+    db: AsyncSession,
+    cart_item_id,
+    company_id: uuid.UUID,
+    category_name: str,
+) -> ExpenseCategory | None:
+    """The expense category linked to a cart item's package expected-expense
+    type. This is an exact lookup (name + FK), so a free-form type name
+    ("Learners Permit Payment(Class B)", "Test Fees Booking") still resolves to
+    the right category — and therefore the right cash pool."""
+    key = _normalise_category_name(category_name)
+    if not key or not cart_item_id or company_id is None:
+        return None
+    from app.models.cart import CartItem
+    from app.models.product import PackageExpectedExpense
+    from app.services.expected_expense import get_package_links
+
+    item = (
+        await db.execute(select(CartItem).where(CartItem.id == cart_item_id))
+    ).scalar_one_or_none()
+    if item is None or not item.package_id:
+        return None
+    try:
+        package_id = uuid.UUID(str(item.package_id))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+    # Catalogue-linked expected expense items (the name IS the expense type).
+    for line in (await get_package_links(db, package_id, company_id))["items"]:
+        name = line.get("name") or line.get("category_name") or ""
+        if _normalise_category_name(name) != key:
+            continue
+        cat = await _get_expected_expense_category(db, line.get("category_id"))
+        if cat is not None:
+            return cat
+        return await _match_expense_category(db, company_id, name)
+
+    # Legacy per-package rows (no category link — resolve by name).
+    legacy = (
+        await db.execute(
+            select(PackageExpectedExpense).where(
+                PackageExpectedExpense.package_id == package_id
+            )
+        )
+    ).scalars().all()
+    for row in legacy:
+        if _normalise_category_name(row.category) == key and "fuel" not in key:
+            return await _match_expense_category(db, company_id, row.category)
+    return None
+
+
+async def _get_expected_expense_category(
+    db: AsyncSession, category_id
+) -> ExpenseCategory | None:
+    if category_id is None:
+        return None
+    try:
+        cid = uuid.UUID(str(category_id))
+    except (ValueError, AttributeError, TypeError):
+        return None
+    return (
+        await db.execute(select(ExpenseCategory).where(ExpenseCategory.id == cid))
+    ).scalar_one_or_none()
+
+
+async def resolve_expense_account(
+    db: AsyncSession,
+    company_id: uuid.UUID | None,
+    category_name: str,
+    cart_item_id=None,
+) -> str | None:
+    """The cash pool an expense for this category must draw from.
+
+    Resolution order (first hit wins):
+      1. the category LINKED to the cart item's package expected-expense type
+         (exact — survives free-form type names)
+      2. an exact/close name match on the company's expense categories
+      3. None (caller decides: stored account, then petty cash)
+    """
+    if company_id is None or not (category_name or "").strip():
+        return None
+    cat = await _linked_cart_item_category(
+        db, cart_item_id, company_id, category_name
+    )
+    if cat is None:
+        cat = await _match_expense_category(db, company_id, category_name)
+    return cat.account if cat is not None else None
+
+
 async def client_expense_account_balance(
     db: AsyncSession,
     consultation_id: uuid.UUID,
@@ -318,14 +444,9 @@ async def create_expense(
             if _b is not None:
                 cat_company_id = _b.company_id
         if cat_company_id is not None:
-            _cat = (
-                await db.execute(
-                    select(ExpenseCategory).where(
-                        ExpenseCategory.company_id == cat_company_id,
-                        ExpenseCategory.name == category,
-                    )
-                )
-            ).scalar_one_or_none()
+            _cat = await _linked_cart_item_category(
+                db, cart_item_id, cat_company_id, category
+            ) or await _match_expense_category(db, cat_company_id, category)
             if _cat is not None and _cat.requires_vehicle:
                 from fastapi import HTTPException
                 raise HTTPException(
@@ -333,16 +454,11 @@ async def create_expense(
                     detail=f"A vehicle is required for {category} expenses.",
                 )
     if not account and category and company_id is not None:
-        match = (
-            await db.execute(
-                select(ExpenseCategory).where(
-                    ExpenseCategory.company_id == company_id,
-                    ExpenseCategory.name == category,
-                )
-            )
-        ).scalar_one_or_none()
-        if match is not None:
-            account = match.account or "petty_cash"
+        # Category LINKED to the cart item's package expected-expense type wins
+        # (free-form type names never match a category name), then a name match.
+        account = await resolve_expense_account(
+            db, company_id, category, cart_item_id
+        ) or "petty_cash"
     resolved_account = account or "petty_cash"
     # Gate client-account expenses at creation: the branch's client-account
     # pool must already hold enough funds (the client account is typically
@@ -579,16 +695,11 @@ async def update_expense(
             ).scalar_one_or_none()
             cat_company = company_id or (branch.company_id if branch else None)
             if cat_company is not None:
-                match = (
-                    await db.execute(
-                        select(ExpenseCategory).where(
-                            ExpenseCategory.company_id == cat_company,
-                            ExpenseCategory.name == cat,
-                        )
-                    )
-                ).scalar_one_or_none()
-                if match is not None:
-                    expense.account = match.account or "petty_cash"
+                resolved = await resolve_expense_account(
+                    db, cat_company, cat, expense.cart_item_id
+                )
+                if resolved:
+                    expense.account = resolved
     if charges is not None:
         expense.charges = charges
     if paid_charges is not None:

@@ -28,6 +28,12 @@ export interface CartItemExpectedExpenseType {
   category: string;
   amount: number;
   already_paid: boolean;
+  /** Linked expense category (from the expected-expense item's category link). */
+  category_id?: string | null;
+  category_name?: string | null;
+  /** Cash pool this expense type draws from — 'client_accounts' or 'petty_cash'. */
+  account?: string | null;
+  requires_client?: boolean;
 }
 
 export interface CartItemExpectedExpenses {

@@ -112,7 +112,7 @@ export class ExpensesCmp implements OnInit {
       const opts = this.cartExpenseTypes().map(t => ({
         label: t.already_paid ? `${t.category} — already filed` : (t.amount > 0 ? `${t.category} (${t.amount.toLocaleString()})` : t.category),
         value: t.category,
-        requires_client: false,
+        requires_client: t.requires_client ?? this.linkedAccount(t) === 'client_accounts',
         disabled: t.already_paid,
       }));
       return [...opts, { label: 'Other', value: '__other__', requires_client: false, disabled: false }];
@@ -125,6 +125,14 @@ export class ExpensesCmp implements OnInit {
     }));
     return [...opts, { label: 'Other', value: '__other__', requires_client: false, disabled: false }];
   });
+  /** The cash pool an expected-expense type is linked to (package tagged types
+   * carry their own account so a custom type name still picks the right pool). */
+  linkedAccount(t: CartItemExpectedExpenseType | null | undefined): string | null {
+    return t?.account ?? null;
+  }
+  selectedCartExpenseType(): CartItemExpectedExpenseType | null {
+    return this.cartExpenseTypes().find(t => t.category === this.form.category) ?? null;
+  }
   selectedCategory(): { label: string; value: string; requires_client: boolean } | null {
     return this.categoryOptions().find(c => c.value === this.form.category) ?? null;
   }
@@ -156,6 +164,10 @@ export class ExpensesCmp implements OnInit {
 
   selectedCategoryAccount(): string {
     if (this.form.category === '__other__') return 'petty_cash';
+    // A tagged expected-expense type carries the pool of its linked category —
+    // its own name is free-form and may not match any category name.
+    const tagged = this.selectedCartExpenseType();
+    if (tagged?.account) return tagged.account;
     const cat = this.categories().find(c => c.name === this.form.category);
     return cat?.account || 'petty_cash';
   }
@@ -718,6 +730,10 @@ export class ExpensesCmp implements OnInit {
         expense_date: f.expense_date instanceof Date
           ? toLocalDateStr(f.expense_date)
           : f.expense_date,
+        // Send the resolved pool so a free-form expected-expense type name can
+        // never be filed against petty cash when its category draws from the
+        // client's account.
+        account: this.form.category !== '__other__' ? this.selectedCategoryAccount() : undefined,
         receipt_url,
       };
       await this.financeService.createExpense(payload).toPromise();

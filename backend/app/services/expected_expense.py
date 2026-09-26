@@ -10,6 +10,51 @@ from app.models.expected_expense import ExpectedExpenseItem, PackageExpenseLink
 from app.models.product import Package
 
 
+def _normalise(name: str) -> str:
+    return " ".join((name or "").split()).strip().lower()
+
+
+async def _get_category(
+    db: AsyncSession, category_id: object
+) -> ExpenseCategory | None:
+    if not category_id or not _valid_uuid(category_id):
+        return None
+    return (
+        await db.execute(
+            select(ExpenseCategory).where(ExpenseCategory.id == uuid.UUID(str(category_id)))
+        )
+    ).scalar_one_or_none()
+
+
+async def _match_category_by_name(
+    db: AsyncSession, company_id: uuid.UUID, name: str
+) -> ExpenseCategory | None:
+    """Find an expense category from a free-form expense-type name.
+
+    Exact (case/space insensitive) name first, then a "contains" match so
+    names like "Test Fees Booking" still resolve to "Test Booking".
+    """
+    key = _normalise(name)
+    if not key:
+        return None
+    cats = list(
+        (
+            await db.execute(
+                select(ExpenseCategory).where(ExpenseCategory.company_id == company_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for c in cats:
+        if _normalise(c.name) == key:
+            return c
+    for c in cats:
+        if _normalise(c.name) in key or key in _normalise(c.name):
+            return c
+    return None
+
+
 async def list_items(
     db: AsyncSession,
     company_id: uuid.UUID,
@@ -205,7 +250,7 @@ async def get_cart_item_expense_types(
         if not key or "fuel" in key:
             continue
         by_category.setdefault(
-            key, {"category": r.category.strip(), "amount": float(r.amount)}
+            key, {"category": r.category.strip(), "amount": float(r.amount), "category_id": None}
         )
 
     # Catalogue-linked expected expense items (name is the expense type).
@@ -217,7 +262,29 @@ async def get_cart_item_expense_types(
             continue
         item = by_category.get(key)
         if item is None:
-            by_category[key] = {"category": name.strip(), "amount": float(line.get("line_total") or 0)}
+            by_category[key] = {
+                "category": name.strip(),
+                "amount": float(line.get("line_total") or 0),
+                "category_id": line.get("category_id"),
+            }
+
+    # Resolve each expense type to its ExpenseCategory so the client knows which
+    # cash pool (petty cash vs the client's account) it draws from. Expected
+    # expense items are named freely ("Learners Permit Payment(Class B)"), so
+    # matching on the name alone silently falls back to petty cash — use the
+    # category link first, then a normalised name match.
+    for item in by_category.values():
+        if not item.get("category_id"):
+            match = await _match_category_by_name(db, company_id, item["category"])
+            if match is not None:
+                item["category_id"] = match.id
+        cat = await _get_category(db, item.get("category_id"))
+        if cat is None:
+            match = await _match_category_by_name(db, company_id, item["category"])
+            cat = match
+        item["account"] = (cat.account if cat is not None else None) or "petty_cash"
+        item["requires_client"] = bool(cat.requires_client) if cat is not None else False
+        item["category_name"] = cat.name if cat is not None else item["category"]
 
     # Mark already-paid: an expense already exists for this cart item + category.
     existing = (

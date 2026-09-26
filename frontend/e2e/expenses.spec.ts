@@ -349,4 +349,23 @@ test.describe('Expenses Workflow', () => {
       { token, cartItemId: ids.cartItemId, consultationId: ids.consultationId },
     );
   });
+  test('edit expense dialog exposes the category and a working Save button', async ({ page }) => {
+    await page.goto('/expenses');
+    await page.waitForSelector('[data-testid="edit-expense"]', { timeout: 20000 });
+    const row = page.locator('table tbody tr').filter({ has: page.locator('[data-testid="edit-expense"]') }).first();
+    await row.locator('[data-testid="edit-expense"]').first().click();
+    const dlg = page
+      .locator('.p-dialog')
+      .filter({ has: page.locator('.p-dialog-header:has-text("Edit Expense")') })
+      .last();
+    await expect(dlg).toBeVisible();
+    // The footer must be a direct child of p-dialog — a <ng-template pTemplate="footer">
+    // nested inside an @if block silently renders no footer (and so no Save button).
+    await expect(dlg.locator('.p-dialog-footer')).toBeVisible();
+    const save = dlg.locator('[data-testid="confirm-edit"]');
+    await expect(save).toBeVisible();
+    await expect(save).toBeEnabled();
+    await expect(dlg.locator('[data-testid="edit-category"]')).toBeVisible();
+    await dlg.locator('.p-dialog-header .p-dialog-close-button, .p-dialog-close-button').first().click();
+  });
 });

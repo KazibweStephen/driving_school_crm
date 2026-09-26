@@ -1,0 +1,286 @@
+<div class="p-4 sm:p-6">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Management Reports</h1>
+      <p class="text-sm text-gray-500">Sales, collections, conversions, expenses and client risk</p>
+    </div>
+    <p-button label="Print" icon="pi pi-print" severity="secondary" (onClick)="print()" data-testid="print-report" />
+  </div>
+
+  <div class="mb-4 flex flex-wrap items-center gap-2 print:hidden">
+    @for (opt of periodOptions; track opt.value) {
+      <p-button
+        [label]="opt.label"
+        [outlined]="period() !== opt.value"
+        [severity]="period() === opt.value ? undefined : 'secondary'"
+        (onClick)="setPeriod(opt.value)"
+        [attr.data-testid]="'period-' + opt.value"
+      />
+    }
+    <span class="mx-1 border-l border-gray-300"></span>
+    <p-button icon="pi pi-chevron-left" severity="secondary" [text]="true" pTooltip="Previous period"
+      (onClick)="goToPeriod(-1)" data-testid="prev-period" />
+    <p-datepicker [ngModel]="anchor" (ngModelChange)="onAnchorChange($event)" dateFormat="dd/mm/yy"
+      [showIcon]="true" appendTo="body" styleClass="w-40" data-testid="anchor-picker" />
+    <p-button icon="pi pi-chevron-right" severity="secondary" [text]="true" pTooltip="Next period"
+      (onClick)="goToPeriod(1)" data-testid="next-period" />
+    <p-button label="This period" severity="secondary" (onClick)="goToCurrent()" data-testid="current-period" />
+    @if (branches.length > 1) {
+      <p-multiSelect [(ngModel)]="selectedBranchIds" [options]="branches" optionLabel="name" optionValue="id"
+        placeholder="All Branches" appendTo="body" [showHeader]="false" [maxSelectedLabels]="2"
+        [selectedItemsLabel]="'{0} branches'" styleClass="w-64" (onChange)="load()" data-testid="branch-filter" />
+      <p-button label="All branches" severity="secondary" icon="pi pi-filter-slash" (onClick)="clearBranches()" />
+    }
+  </div>
+
+  @if (loading()) {
+    <div class="py-16 text-center text-gray-500"><i class="pi pi-spin pi-spinner"></i> Building report…</div>
+  } @else if (report(); as r) {
+    <div class="mb-4 flex flex-wrap items-baseline gap-2">
+      <h2 class="text-xl font-semibold text-gray-900" data-testid="period-label">{{ r.period_label }}</h2>
+      <span class="text-sm text-gray-500">
+        {{ formatDate(r.period_start) }} — {{ formatDate(r.period_end) }} ·
+        {{ r.branch_ids.length === branches.length && branches.length > 1 ? 'All branches' : (r.branch_ids.length) + ' branch(es)' }}
+      </span>
+    </div>
+
+    <!-- cash -->
+    <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <p-card>
+        <div class="text-sm text-gray-500">New Sales</div>
+        <div class="text-xl font-bold text-green-600" data-testid="total-sales">
+          {{ currencyService.symbol() }} {{ formatAmount(r.totals.total_sales) }}
+        </div>
+        <div class="text-xs text-gray-400">{{ r.totals.sales_payments }} payment(s)</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Collections</div>
+        <div class="text-xl font-bold text-blue-600" data-testid="total-collections">
+          {{ currencyService.symbol() }} {{ formatAmount(r.totals.total_collections) }}
+        </div>
+        <div class="text-xs text-gray-400">{{ r.totals.collection_payments }} payment(s)</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Total Cash Received</div>
+        <div class="text-xl font-bold text-gray-900" data-testid="total-cash">
+          {{ currencyService.symbol() }} {{ formatAmount(r.totals.total_cash_received) }}
+        </div>
+        <div class="text-xs text-gray-400">Sales + collections</div>
+      </p-card>
+      <p-card>
+        <div class="text-sm text-gray-500">Net Cash (after paid expenses)</div>
+        <div class="text-xl font-bold {{ r.totals.net_cash >= 0 ? 'text-emerald-700' : 'text-red-600' }}"
+          data-testid="net-cash">
+          {{ currencyService.symbol() }} {{ formatAmount(r.totals.net_cash) }}
+        </div>
+        <div class="text-xs text-gray-400">Expenses paid {{ formatAmount(r.totals.expenses_paid) }}</div>
+      </p-card>
+    </div>
+
+    <!-- collections split -->
+    <p-card class="mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div class="text-sm text-gray-500">Cash from existing clients</div>
+          <div class="text-lg font-semibold text-gray-900" data-testid="old-client-collections">
+            {{ currencyService.symbol() }} {{ formatAmount(r.totals.old_client_collections) }}
+            <span class="text-sm font-normal text-gray-500">
+              ({{ r.totals.old_client_share.toFixed(0) }}% of cash)
+            </span>
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="text-sm text-gray-500">Cash from new clients</div>
+          <div class="text-lg font-semibold text-gray-900">
+            {{ currencyService.symbol() }} {{ formatAmount(r.totals.new_client_cash) }}
+          </div>
+        </div>
+      </div>
+    </p-card>
+
+    <!-- sales funnel + goal -->
+    <div class="mb-4 grid gap-3 lg:grid-cols-2">
+      <p-card>
+        <h3 class="mb-2 font-semibold text-gray-900">Sales Performance</h3>
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div>
+            <div class="text-xs text-gray-500">Consultations</div>
+            <div class="text-xl font-bold text-gray-900" data-testid="consultations">{{ r.totals.consultations }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-500">Packages Sold</div>
+            <div class="text-xl font-bold text-gray-900" data-testid="conversions">{{ r.totals.conversions }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-500">Conversion Rate</div>
+            <div class="text-xl font-bold text-gray-900" data-testid="conversion-rate">{{ r.totals.conversion_rate.toFixed(1) }}%</div>
+          </div>
+        </div>
+        <div class="mt-2 text-xs text-gray-400">{{ r.totals.converted_clients }} distinct clients bought a package</div>
+      </p-card>
+
+      <p-card>
+        <div class="mb-2 flex items-center justify-between">
+          <h3 class="font-semibold text-gray-900">Goal Attainment</h3>
+          <p-tag [severity]="goalSeverity(r.goal.status)" [value]="goalLabel(r.goal.status)" />
+        </div>
+        <div class="mb-1 flex items-baseline justify-between">
+          <span class="text-lg font-bold" data-testid="goal-attainment">
+            {{ currencyService.symbol() }} {{ formatAmount(r.goal.attained) }}
+          </span>
+          <span class="text-sm text-gray-500">of {{ currencyService.symbol() }} {{ formatAmount(r.goal.target) }}</span>
+        </div>
+        <p-progressbar [value]="attainmentPct(r.goal.attainment_pct)" [showValue]="false" styleClass="h-2" />
+        <div class="mt-1 text-xs text-gray-500">
+          {{ r.goal.attainment_pct.toFixed(1) }}% of target
+          @if (r.goal.remaining > 0) {
+            · {{ currencyService.symbol() }} {{ formatAmount(r.goal.remaining) }} still needed
+          }
+          · target basis: {{ r.goal.source.replace(/_/g, ' ') }}
+        </div>
+      </p-card>
+    </div>
+
+    <!-- money owed -->
+    <p-card class="mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-semibold text-gray-900">Outstanding at period end</h3>
+        <div class="text-right">
+          <span class="text-lg font-bold text-red-600" data-testid="outstanding-total">
+            {{ currencyService.symbol() }} {{ formatAmount(r.totals.outstanding_total) }}
+          </span>
+          <span class="ml-2 text-sm text-gray-500">across {{ r.totals.outstanding_clients }} clients</span>
+        </div>
+      </div>
+    </p-card>
+
+    <!-- expenses -->
+    <p-card class="mb-4">
+      <h3 class="mb-2 font-semibold text-gray-900">Expenses</h3>
+      <div class="grid grid-cols-2 gap-2 text-center lg:grid-cols-4">
+        <div>
+          <div class="text-xs text-gray-500">Filed</div>
+          <div class="text-lg font-semibold text-gray-900">{{ currencyService.symbol() }} {{ formatAmount(r.totals.expenses_filed) }}</div>
+          <div class="text-xs text-gray-400">{{ r.totals.expenses_filed_count }} expense(s)</div>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500">Paid</div>
+          <div class="text-lg font-semibold text-red-600">{{ currencyService.symbol() }} {{ formatAmount(r.totals.expenses_paid) }}</div>
+          <div class="text-xs text-gray-400">{{ r.totals.expenses_paid_count }} expense(s)</div>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500">Awaiting action</div>
+          <div class="text-lg font-semibold text-amber-600">{{ r.totals.expenses_pending_count }}</div>
+          <div class="text-xs text-gray-400">pending or approved</div>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500">Net cash</div>
+          <div class="text-lg font-semibold {{ r.totals.net_cash >= 0 ? 'text-emerald-700' : 'text-red-600' }}">
+            {{ currencyService.symbol() }} {{ formatAmount(r.totals.net_cash) }}
+          </div>
+          <div class="text-xs text-gray-400">cash − paid expenses</div>
+        </div>
+      </div>
+    </p-card>
+
+    <!-- tables -->
+    <div class="mb-4 grid gap-3 lg:grid-cols-2">
+      <p-card>
+        <h3 class="mb-2 font-semibold text-gray-900">Best Selling Products</h3>
+        <p-table [value]="r.best_selling_products" [rows]="8" [paginator]="r.best_selling_products.length > 8"
+          data-testid="products-table" styleClass="text-sm">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Product / Package</th>
+              <th class="text-right">Clients</th>
+              <th class="text-right">Amount</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-row>
+            <tr>
+              <td>
+                <div class="font-medium text-gray-800">{{ row.product_name }}</div>
+                <div class="text-xs text-gray-500">{{ row.package_name }}</div>
+              </td>
+              <td class="text-right">{{ row.clients }}</td>
+              <td class="text-right font-semibold">{{ currencyService.symbol() }} {{ formatAmount(row.amount) }}</td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr><td colspan="3" class="text-center text-gray-400">No sales in this period</td></tr>
+          </ng-template>
+        </p-table>
+      </p-card>
+
+      <p-card>
+        <h3 class="mb-2 font-semibold text-gray-900">Top Performers</h3>
+        <p-table [value]="r.top_performers" [rows]="8" [paginator]="r.top_performers.length > 8"
+          data-testid="staff-table" styleClass="text-sm">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Staff</th>
+              <th class="text-right">Clients</th>
+              <th class="text-right">Sales</th>
+              <th class="text-right">Collected</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-row>
+            <tr>
+              <td>
+                <div class="font-medium text-gray-800">{{ row.name }}</div>
+                <div class="text-xs text-gray-500">{{ row.phone }}</div>
+              </td>
+              <td class="text-right">{{ row.clients }}</td>
+              <td class="text-right font-semibold text-green-600">{{ currencyService.symbol() }} {{ formatAmount(row.sales) }}</td>
+              <td class="text-right">{{ currencyService.symbol() }} {{ formatAmount(row.collected) }}</td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr><td colspan="4" class="text-center text-gray-400">No performance recorded</td></tr>
+          </ng-template>
+        </p-table>
+      </p-card>
+    </div>
+
+    <!-- at risk -->
+    <p-card>
+      <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-semibold text-gray-900">
+          Clients Not Paid For {{ r.risk_days }}+ Days
+        </h3>
+        <span class="text-sm text-gray-500" data-testid="at-risk-total">{{ r.at_risk_total }} client(s)</span>
+      </div>
+      <p-table [value]="r.at_risk_clients" [rows]="10" [paginator]="r.at_risk_clients.length > 10"
+        data-testid="at-risk-table" styleClass="text-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Client</th>
+            <th>Branch</th>
+            <th>Last payment</th>
+            <th class="text-right">Days idle</th>
+            <th class="text-right">Balance</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-row>
+          <tr>
+            <td>
+              <div class="font-medium text-gray-800">{{ row.client_name }}</div>
+              <div class="text-xs text-gray-500">{{ row.phone || '—' }}</div>
+            </td>
+            <td class="text-sm text-gray-600">{{ row.branch_name }}</td>
+            <td class="text-sm text-gray-600">{{ formatDate(row.last_payment_date) }}</td>
+            <td class="text-right">
+              <p-tag [severity]="row.days_since_payment >= 30 ? 'danger' : 'warn'" [value]="row.days_since_payment + 'd'" />
+            </td>
+            <td class="text-right font-semibold text-red-600">{{ currencyService.symbol() }} {{ formatAmount(row.balance) }}</td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+          <tr><td colspan="5" class="text-center text-gray-400">No idle clients — everything is on schedule</td></tr>
+        </ng-template>
+      </p-table>
+    </p-card>
+  } @else {
+    <div class="py-16 text-center text-gray-500">No report data available</div>
+  }
+</div>

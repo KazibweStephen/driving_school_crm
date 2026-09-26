@@ -40,6 +40,11 @@ PERMISSION_GROUPS: list[PermissionGroup] = [
     PermissionGroup("dashboard", "Dashboard", ["dashboard.manage", "dashboard.view"]),
     PermissionGroup("reports", "Reports", ["reports.manage", "reports.view", "reports.print"]),
     PermissionGroup(
+        "period_reports",
+        "Period Reports",
+        ["period_reports.manage", "period_reports.view", "period_reports.print"],
+    ),
+    PermissionGroup(
         "consultations",
         "Consultations",
         ["consultations.manage", "consultations.view", "consultations.create", "consultations.edit", "consultations.delete"],
@@ -210,11 +215,36 @@ def expand_permissions(codes: list[str]) -> list[str]:
 # ── Default per-role matrices ────────────────────────────────────────────────
 # super_user is implicit (bypasses all checks) and is therefore not listed.
 
+# ---------------------------------------------------------------------------
+# KNOWN TECH DEBT — role/permission matrix drift (do not "fix" blindly)
+# ---------------------------------------------------------------------------
+# `_DEFAULT_MATRIX` below is the *supported baseline* for each role, and it is
+# what a freshly created company is seeded with. The rows stored in
+# `role_permissions` are per-company and are edited by hand through the admin
+# `/permissions` role-matrix editor, so over time they drift away from the
+# defaults in BOTH directions:
+#   * stripped  — e.g. `instructor` lost `dashboard.view` in 2 of 3 companies,
+#     which left those instructors with no landing page and made their app
+#     appear to hang after login (fixed by migration c1d2e3f4a5b6, which
+#     re-grants a small "must never be missing" baseline only).
+#   * missing newer codes — the largest observed gaps are one company's
+#     `supervisor` (-52 codes), `manager` (-48) and `branch_supervisor` (-42),
+#     because those matrices predate several permission groups and were never
+#     re-seeded.
+# Restoring the defaults wholesale is a SECURITY decision, not a data fix: it
+# would silently hand access to code paths a company may have deliberately
+# closed. Until an owner reviews each company, treat the stored matrix as
+# authoritative at runtime (it already is — `has_permission()` reads the DB)
+# and the defaults as documentation only. A reconciliation report
+# (`GET /api/v1/permissions/drift`) is the intended way to surface the gaps.
+# ---------------------------------------------------------------------------
+
 _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.COMPANY_SUPER_USER: ALL_PERMISSIONS,
     UserRole.OFFICE_ADMIN: [
         "dashboard.view",
         "reports.view",
+        "period_reports.view", "period_reports.print",
         "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating", "finance.capital", "finance.end_of_day",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
@@ -246,6 +276,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.BRANCH_SUPERVISOR: [
         "dashboard.view",
         "reports.view",
+        "period_reports.view", "period_reports.print",
         "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating", "finance.end_of_day",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
@@ -277,6 +308,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.MANAGER: [
         "dashboard.view",
         "reports.view",
+        "period_reports.view", "period_reports.print",
         "finance.view", "finance.cash_position", "finance.pnl", "finance.send", "finance.fund", "finance.operating", "finance.capital", "finance.end_of_day",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",
@@ -308,6 +340,7 @@ _DEFAULT_MATRIX: dict[UserRole, list[str]] = {
     UserRole.SUPERVISOR: [
         "dashboard.view",
         "reports.view",
+        "period_reports.view", "period_reports.print",
         "finance.view", "finance.end_of_day",
         "consultations.view", "consultations.create", "consultations.edit", "consultations.delete",
         "payments.view", "payments.record",

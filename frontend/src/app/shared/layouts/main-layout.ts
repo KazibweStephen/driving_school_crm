@@ -93,6 +93,7 @@ export class MainLayout implements OnInit, OnDestroy {
   topItems: NavItem[] = [
     { path: '/dashboard', label: 'Dashboard', icon: 'pi pi-home', permission: 'dashboard.view' },
     { path: '/reports', label: 'Reports', icon: 'pi pi-chart-bar', permission: 'reports.view' },
+    { path: '/period-reports', label: 'Period Reports', icon: 'pi pi-chart-line', permission: 'period_reports.view' },
   ];
 
   navGroups: NavGroup[] = [

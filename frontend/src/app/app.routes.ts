@@ -202,6 +202,12 @@ export const routes: Routes = [
           import('./features/reports/reports').then((c) => c.ReportsCmp),
       },
       {
+        path: 'period-reports',
+        data: { permission: 'period_reports.view' },
+        loadComponent: () =>
+          import('./features/period-reports/period-reports').then((c) => c.PeriodReportsCmp),
+      },
+      {
         path: 'company-settings',
         data: { permission: 'sms.view' },
         loadComponent: () =>

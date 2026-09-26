@@ -5,6 +5,18 @@ const SUPER_PHONE = '0782832711';
 const SUPER_PIN = '1234';
 const COMPANY_ID = '00000000-0000-0000-0000-000000000001';
 
+let cachedToken = '';
+async function superToken(): Promise<string> {
+  if (cachedToken) return cachedToken;
+  const r = await fetch('http://localhost:80/api/v1/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: SUPER_PHONE, pin: SUPER_PIN }),
+  });
+  cachedToken = (await r.json() as any).access_token;
+  return cachedToken;
+}
+
 test.describe('Permissions', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -80,5 +92,25 @@ test.describe('Permissions', () => {
       },
       { token, companyId: COMPANY_ID, before },
     );
+  });
+  test('a user without the landing page permission still lands somewhere', async ({ page, request }) => {
+    // Regression: the permission guard used to redirect /dashboard -> /dashboard
+    // for a role without `dashboard.view`, freezing the page after a successful
+    // login. The guard must fall back to the first page the role CAN open.
+    const phone = '25676569702';
+    const res = await request.post(`/api/v1/users/${phone}/reset-pin`, {
+      headers: { Authorization: `Bearer ${await superToken()}` },
+    });
+    const pin = (await res.json()).new_pin;
+
+    await page.goto('/login');
+    await page.fill('input[name="phone"], #phone', phone);
+    await page.fill('input[name="pin"], #pin', pin);
+    await page.click('button[type="submit"]');
+    await page.waitForURL((u) => !u.pathname.includes('/login'), { timeout: 20000 });
+    // The page must be interactive (a redirect loop pegs the main thread and
+    // every DOM query then times out).
+    await expect(page.locator('body')).toContainText('CRM', { timeout: 10000 });
+    await expect(page.locator('.p-sidebar, aside, nav').first()).toBeVisible();
   });
 });

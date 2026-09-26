@@ -7,6 +7,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
 import { AuthService } from '../../../core/auth/auth.service';
 import { CompanyService, Company } from '../../../core/services/company.service';
+import { landingPathFor } from '../../../core/auth/permission.guard';
 
 @Component({
   selector: 'app-login',
@@ -72,7 +73,11 @@ export class Login {
     this.companyError.set(null);
     this.companyLoading.set(true);
     try {
-      const companies = await this.companyService.list().toPromise();
+      // Only roles that may read the company list get a switcher; everyone else
+      // goes straight to their landing page (the call 403s otherwise).
+      const companies = this.auth.hasPermission('companies.view')
+        ? await this.companyService.list().toPromise()
+        : [];
       if (companies && companies.length > 1) {
         this.companies.set(companies);
         this.selectedCompanyId.set(this.auth.currentUserCompanyId());
@@ -84,7 +89,10 @@ export class Login {
     } finally {
       this.companyLoading.set(false);
     }
-    await this.router.navigate(['/dashboard']);
+    // Land on the first page this role may actually open — `/dashboard` is
+    // permission-gated and used to leave low-privilege users stuck in a
+    // redirect loop after a successful login.
+    await this.router.navigateByUrl(landingPathFor(this.auth));
   }
 
   async confirmCompany() {
@@ -100,7 +108,7 @@ export class Login {
       if (res) {
         this.auth.setSession(res.access_token, res.refresh_token);
         this.showCompanyDialog.set(false);
-        await this.router.navigate(['/dashboard']);
+        await this.router.navigateByUrl(landingPathFor(this.auth));
       }
     } catch {
       this.companyError.set('Failed to switch company. Please try again.');

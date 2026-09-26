@@ -243,5 +243,13 @@ export const routes: Routes = [
       { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
     ],
   },
+  // Terminal route for authenticated users whose role has no permitted page.
+  // Deliberately outside the guarded shell and without a `permission` so the
+  // guard can always land somewhere instead of redirect-looping.
+  {
+    path: 'no-access',
+    loadComponent: () =>
+      import('./shared/components/no-access').then((m) => m.NoAccess),
+  },
   { path: '**', redirectTo: '/dashboard' },
 ];

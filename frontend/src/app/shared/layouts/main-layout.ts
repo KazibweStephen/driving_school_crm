@@ -208,17 +208,21 @@ export class MainLayout implements OnInit, OnDestroy {
   }
 
   async refreshNotifications() {
-    try {
-      const res: TransferNotificationsResponse | undefined = await this.financeService
-        .getTransferNotifications(20)
-        .toPromise();
-      if (res) {
-        this.notifications.set(res.items);
-        this.toReceiveCount.set(res.to_receive_count);
-        this.toReceiveAmount.set(res.to_receive_amount);
+    // Only fetch what this role may read — an unguarded call 403s for
+    // low-privilege roles (e.g. an instructor without transfers.view).
+    if (this.auth.hasPermission('transfers.view')) {
+      try {
+        const res: TransferNotificationsResponse | undefined = await this.financeService
+          .getTransferNotifications(20)
+          .toPromise();
+        if (res) {
+          this.notifications.set(res.items);
+          this.toReceiveCount.set(res.to_receive_count);
+          this.toReceiveAmount.set(res.to_receive_amount);
+        }
+      } catch {
+        /* non-critical */
       }
-    } catch {
-      /* non-critical */
     }
 
     if (this.auth.hasPermission('discounts.view')) {

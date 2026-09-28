@@ -276,6 +276,7 @@ async def list_client_accounts(
     branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
     search: str | None = Query(None),
     only_overdrawn: bool = Query(False),
+    only_needs_funding: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("client_accounts.view")),
 ):
@@ -299,6 +300,7 @@ async def list_client_accounts(
         current_user_role=current_user.role,
         search=search,
         only_overdrawn=only_overdrawn,
+        only_needs_funding=only_needs_funding,
     )
     return {
         "items": items,
@@ -346,8 +348,9 @@ async def fund_client_account(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("client_accounts.fund")),
 ):
-    """Fund one or more clients' expense accounts from a single client at the
-    same branch. Allocations are applied atomically."""
+    """Fund one or more clients' expense accounts from one or more clients at the
+    same branch. Allocations are applied atomically; each source is drawn on in
+    the order given until the recipients are fully covered."""
     resolved_branch_ids = await resolve_branch_ids(db, current_user, None)
     allocations = [
         (a.to_consultation_id, a.amount) for a in (data.allocations or [])
@@ -356,16 +359,24 @@ async def fund_client_account(
         if data.to_consultation_id is None or data.amount is None:
             raise HTTPException(status_code=400, detail="Nothing to fund.")
         allocations = [(data.to_consultation_id, data.amount)]
-    src = (
+    # `from_consultation_id` stays first; the extra sources follow in dialog order.
+    sources = [data.from_consultation_id] + list(data.from_consultation_ids or [])
+    if data.from_consultation_ids:
+        sources = list(data.from_consultation_ids)
+        if data.from_consultation_id not in sources:
+            sources = [data.from_consultation_id, *sources]
+    srcs = (
         await db.execute(
-            select(Consultation).where(Consultation.id == data.from_consultation_id)
+            select(Consultation).where(Consultation.id.in_(sources))
         )
-    ).scalar_one_or_none()
-    if src is not None and src.branch_id and src.branch_id not in resolved_branch_ids:
-        raise HTTPException(status_code=403, detail="Permission denied for that branch.")
+    ).scalars().all()
+    for src in srcs:
+        if src.branch_id and src.branch_id not in resolved_branch_ids:
+            raise HTTPException(status_code=403, detail="Permission denied for that branch.")
     result = await finance_service.fund_client_accounts(
         db,
-        from_consultation_id=data.from_consultation_id,
+        from_consultation_id=sources[0],
+        from_consultation_ids=sources[1:],
         allocations=allocations,
         reason=data.reason,
         user_phone=current_user.phone,

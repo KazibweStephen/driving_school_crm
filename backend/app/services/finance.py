@@ -467,6 +467,7 @@ async def list_client_accounts(
     current_user_role: UserRole | None = None,
     search: str | None = None,
     only_overdrawn: bool = False,
+    only_needs_funding: bool = False,
 ) -> list[dict]:
     """The Client Accounts ledger: every consultation that has any client
     account activity, with the drawn/balance/permit-shortfall figures.
@@ -599,6 +600,10 @@ async def list_client_accounts(
         )
         if only_overdrawn and remaining >= -0.001:
             continue
+        # An account "needs funding" when what it still owes on its expected
+        # expenses is more than the money it actually holds.
+        if only_needs_funding and permit_unpaid - remaining <= 0.001:
+            continue
         out.append(
             {
                 "consultation_id": str(cid),
@@ -632,16 +637,23 @@ async def fund_client_accounts(
     allocations: list[tuple[uuid.UUID, float]],
     reason: str | None,
     user_phone: str | None,
+    from_consultation_ids: list[uuid.UUID] | None = None,
 ) -> dict:
-    """Move money from one client's expense account into other clients' expense
-    accounts, all at the same branch, so an overdrawn account can pay its
-    expenses. Every allocation is applied or none of them are.
+    """Move money out of one or more clients' expense accounts into other
+    clients' expense accounts, all at the same branch, so a short account can pay
+    its expenses. Every leg is applied or none of them are.
+
+    `from_consultation_ids` holds the funding sources in the order they were
+    added. Each source is drawn on in turn until the total required is reached,
+    and no source is ever drawn below its own required expenses.
 
     Guards:
-      * the donor and every recipient must be different clients at one branch;
-      * the donor may only give the surplus over their OWN required expenses, so
-        drawing funding never leaves them unable to pay what they still owe (the
-        money is taken from what other clients at that branch hold, never created);
+      * every source and every recipient must be a different client, all at one
+        branch;
+      * a source may only give the surplus over its OWN required expenses, so
+        drawing funding never leaves it unable to pay what it still owes (the
+        money is taken from what other clients at that branch hold, never
+        created);
       * no client may be funded past its own shortfall, so an account can never
         end up holding more than what it still owes on its permit expenses.
     """
@@ -650,33 +662,56 @@ async def fund_client_accounts(
     if not allocations:
         raise HTTPException(status_code=400, detail="Enter an amount for at least one client.")
 
+    # Legacy single-source calls stay valid; `from_consultation_id` is always a
+    # source so the first one keeps working untouched.
+    sources: list[uuid.UUID] = []
+    for cid in [from_consultation_id, *(from_consultation_ids or [])]:
+        if cid not in sources:
+            sources.append(cid)
+
     rows = (
         await db.execute(
             select(Consultation)
             .options(selectinload(Consultation.branch))
             .where(
                 Consultation.id.in_(
-                    [from_consultation_id] + [to_id for to_id, _ in allocations]
+                    sources + [to_id for to_id, _ in allocations]
                 )
             )
         )
     ).scalars().unique().all()
     by_id = {c.id: c for c in rows}
-    src = by_id.get(from_consultation_id)
-    if src is None or any(to_id not in by_id for to_id, _ in allocations):
+    if any(cid not in by_id for cid in sources) or any(
+        to_id not in by_id for to_id, _ in allocations
+    ):
         raise HTTPException(status_code=404, detail="Client not found.")
+    if not any(sid.branch_id for sid in (by_id[c] for c in sources)):
+        raise HTTPException(
+            status_code=400,
+            detail="The funding clients have no branch, so their accounts cannot be used.",
+        )
+
+    recipient_ids = [to_id for to_id, _ in allocations]
+    overlap = [cid for cid in sources if cid in set(recipient_ids)]
+    if overlap:
+        raise HTTPException(
+            status_code=400, detail="Pick two different clients."
+        )
+    branch_ids = {by_id[c].branch_id for c in sources if by_id[c].branch_id}
+    if len(branch_ids) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="The funding clients must all be at the same branch.",
+        )
+    branch_id = branch_ids.pop()
 
     cleaned: list[tuple[uuid.UUID, float]] = []
     for to_id, raw in allocations:
-        if to_id == from_consultation_id:
-            raise HTTPException(
-                status_code=400, detail="Pick two different clients."
-            )
         amount = round(float(raw), 2)
         if amount <= 0:
             continue
         dst = by_id[to_id]
-        if not src.branch_id or src.branch_id != dst.branch_id:
+        if not dst.branch_id or dst.branch_id != branch_id:
             raise HTTPException(
                 status_code=400,
                 detail="Client accounts can only be funded from another client at the same branch.",
@@ -686,8 +721,8 @@ async def fund_client_accounts(
         raise HTTPException(status_code=400, detail="Enter an amount for at least one client.")
 
     # Trim every allocation to the recipient's own shortfall first, so asking for
-    # more than is owed is capped rather than rejected — and the funding client is
-    # only ever charged for what is actually moved. `remaining` already counts
+    # more than is owed is capped rather than rejected — and the funding clients
+    # are only ever charged for what is actually moved. `remaining` already counts
     # money previously funded in, so a client part-funded earlier can still be
     # topped up to exactly its remaining shortfall.
     trimmed: list[tuple[uuid.UUID, float]] = []
@@ -713,57 +748,76 @@ async def fund_client_accounts(
         )
 
     total = round(sum(a for _, a in trimmed), 2)
-    # The funding client keeps enough back to pay their OWN required expenses, so
-    # only their surplus over that requirement can be drawn. This is normally
-    # profit, but a client still owing permit expenses gives nothing away.
-    src_bal = await client_expense_account_balance(db, from_consultation_id)
-    src_required = float(src_bal["required"])
-    src_spendable = float(src_bal["remaining"]) - src_required
-    if total > src_spendable + 0.001:
-        if src_spendable <= 0.001:
+    # Each source keeps enough back to pay its OWN required expenses, so only its
+    # surplus over that requirement can be drawn. This is normally profit, but a
+    # client still owing permit expenses gives nothing away.
+    source_avail: list[tuple[uuid.UUID, float]] = []
+    for sid in sources:
+        bal = await client_expense_account_balance(db, sid)
+        source_avail.append(
+            (sid, max(0.0, float(bal["available_to_fund"])))
+        )
+    total_avail = round(sum(a for _, a in source_avail), 2)
+    if total > total_avail + 0.001:
+        if total_avail <= 0.001:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "The funding client has no spare funds to give: their balance is "
-                    "already spoken for by their own unpaid expenses."
+                    "The funding clients have no spare funds to give: their balances are "
+                    "already committed to their own unpaid expenses and previous funding."
                 ),
             )
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Amount exceeds the funding client's available funds "
-                f"{max(src_spendable, 0.0):,.2f} — their own unpaid expenses of "
-                f"{src_required:,.2f} are kept back."
+                f"Amount exceeds the funding clients' available funds "
+                f"{total_avail:,.2f} — their own unpaid expenses are kept back."
             ),
         )
 
+    # Draw on the sources in the order they were added until the recipients are
+    # fully covered, so an added account only contributes what is still needed.
     created: list[dict] = []
-    for to_id, use in trimmed:
-        if use <= 0.001:
+    outstanding = total
+    for sid, avail in source_avail:
+        if outstanding <= 0.001:
+            break
+        take = round(min(avail, outstanding), 2)
+        if take <= 0.001:
             continue
-        row = ClientAccountFunding(
-            branch_id=src.branch_id,
-            from_consultation_id=from_consultation_id,
-            to_consultation_id=to_id,
-            amount=use,
-            reason=(reason or None),
-            status=ACTIVE_FUNDING,
-            initiated_by=user_phone,
-        )
-        db.add(row)
-        await db.flush()
-        created.append(
-            {
-                "id": str(row.id),
-                "from_consultation_id": str(from_consultation_id),
-                "to_consultation_id": str(to_id),
-                "amount": use,
-                "reason": row.reason,
-            }
-        )
+        outstanding = round(outstanding - take, 2)
+        for to_id, want in trimmed:
+            if take <= 0.001:
+                break
+            use = round(min(take, want), 2)
+            if use <= 0.001:
+                continue
+            take = round(take - use, 2)
+            row = ClientAccountFunding(
+                branch_id=branch_id,
+                from_consultation_id=sid,
+                to_consultation_id=to_id,
+                amount=use,
+                reason=(reason or None),
+                status=ACTIVE_FUNDING,
+                initiated_by=user_phone,
+            )
+            db.add(row)
+            await db.flush()
+            created.append(
+                {
+                    "id": str(row.id),
+                    "branch_id": str(branch_id),
+                    "from_consultation_id": str(sid),
+                    "to_consultation_id": str(to_id),
+                    "amount": use,
+                    "reason": row.reason,
+                }
+            )
 
     return {
         "fundings": created,
+        "sources": [str(sid) for sid in sources],
         "total": round(sum(c["amount"] for c in created), 2),
         **created[0],
     }

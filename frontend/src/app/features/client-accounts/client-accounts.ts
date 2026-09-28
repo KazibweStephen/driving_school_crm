@@ -52,6 +52,7 @@ export class ClientAccountsCmp implements OnInit {
 
   search = signal('');
   onlyOverdrawn = signal(false);
+  onlyNeedsFunding = signal(false);
   branchIds = signal<string[]>([]);
   branches = signal<Branch[]>([]);
   allBranches = signal<Branch[]>([]);
@@ -61,6 +62,11 @@ export class ClientAccountsCmp implements OnInit {
   fundingSaving = signal(false);
   fundError = signal('');
   fundReason = signal('');
+  /** The funding clients already added, in the order they were added. The first
+   *  one is the primary source; each is drawn on in turn until the recipients
+   *  are fully covered. */
+  donorIds = signal<string[]>([]);
+  /** Live value of the "add a funding client" picker. */
   donorId = signal<string | null>(null);
   fundingAmounts = signal<Record<string, number>>({});
 
@@ -89,6 +95,7 @@ export class ClientAccountsCmp implements OnInit {
     const pool = this.donors().length ? this.donors() : this.accounts();
     return pool
       .filter((a) => !ids.has(a.consultation_id))
+      .filter((a) => !this.donorIds().includes(a.consultation_id))
       .filter((a) => a.branch_id && branchIds.has(a.branch_id))
       // A client can only give what is left after their own required expenses.
       .filter((a) => a.available_to_fund > 0.001)
@@ -102,15 +109,17 @@ export class ClientAccountsCmp implements OnInit {
       }));
   });
 
-  donorAccount = computed(() => {
-    const id = this.donorId();
-    if (!id) return null;
-    return (
+  /** The added funding clients, in order, as ledger rows. */
+  donorAccounts = computed(() => {
+    const lookup = (id: string) =>
       this.donors().find((a) => a.consultation_id === id) ??
       this.accounts().find((a) => a.consultation_id === id) ??
-      null
-    );
+      null;
+    return this.donorIds().map(lookup).filter((a): a is ClientAccount => !!a);
   });
+
+  /** The primary funding client — the one whose name is used in messages. */
+  donorAccount = computed(() => this.donorAccounts()[0] ?? null);
 
   /** A single funding client can only cover recipients at its own branch, so a
    *  selection spanning branches has to be funded one branch at a time. */
@@ -123,24 +132,24 @@ export class ClientAccountsCmp implements OnInit {
     return set.size > 1;
   });
 
-  /** What the funding client can actually give: their balance less the amount
-   *  they still owe on their own expenses. Normally this is their profit. */
-  donorAvailable = computed(() => {
-    const donor = this.donorAccount();
-    return donor ? donor.available_to_fund : 0;
-  });
+  /** What all the added funding clients can actually give between them: each
+   *  one's balance less what they still owe on their own expenses. */
+  donorAvailable = computed(() =>
+    this.donorAccounts().reduce((sum, a) => sum + a.available_to_fund, 0),
+  );
 
   /** Per-recipient allocations, with the whole shortfall pre-filled so the
    *  default action covers exactly the unpaid permit expenses. Amounts are
-   *  trimmed against the funding client's available funds in row order. */
+   *  trimmed against the funding clients' combined available funds in row
+   *  order, and then split across the sources in the order they were added. */
   allocations = computed(() => {
-    const donor = this.donorAccount();
+    const hasDonor = this.donorIds().length > 0;
     const amounts = this.fundingAmounts();
-    let donorLeft = donor ? donor.available_to_fund : Infinity;
+    let donorLeft = hasDonor ? this.donorAvailable() : Infinity;
     return this.selectedAccounts().map((a) => {
       const raw = amounts[a.consultation_id];
       const amount = raw === undefined || raw === null ? a.funding_needed : Number(raw);
-      const capped = donor ? Math.min(Math.max(amount, 0), donorLeft) : Math.max(amount, 0);
+      const capped = hasDonor ? Math.min(Math.max(amount, 0), donorLeft) : Math.max(amount, 0);
       donorLeft -= capped;
       return {
         account: a,
@@ -158,13 +167,28 @@ export class ClientAccountsCmp implements OnInit {
   totalAllocated = computed(() =>
     this.allocations().reduce((s, r) => s + r.amount, 0),
   );
-  /** Funds the funding client still has spare after this transfer. */
+  /** Funds the added funding clients still have spare after this transfer. */
   donorRemaining = computed(() =>
     Number((this.donorAvailable() - this.totalAllocated()).toFixed(2)),
   );
+
+  /** Mirrors the backend waterfall: each added source contributes only as much
+   *  as is still outstanding, so a later source stays untouched once the
+   *  recipients are covered. */
+  sourcePlan = computed(() => {
+    let outstanding = this.totalAllocated();
+    return this.donorAccounts().map((a) => {
+      const contribution =
+        outstanding > 0.001
+          ? Number(Math.min(a.available_to_fund, outstanding).toFixed(2))
+          : 0;
+      outstanding = Number((outstanding - contribution).toFixed(2));
+      return { account: a, contribution };
+    });
+  });
+
   fundCanSubmit = computed(() => {
-    const donor = this.donorAccount();
-    if (!donor) return false;
+    if (!this.donorIds().length) return false;
     if (this.selectionSpansBranches()) return false;
     if (!this.allocations().length) return false;
     if (this.totalAllocated() <= 0) return false;
@@ -200,6 +224,7 @@ export class ClientAccountsCmp implements OnInit {
           branch_ids: this.branchIds().length ? this.branchIds().join(',') : null,
           search: this.search().trim() || null,
           only_overdrawn: this.onlyOverdrawn(),
+          only_needs_funding: this.onlyNeedsFunding(),
         })
         .toPromise();
       this.accounts.set(res?.items ?? []);
@@ -231,6 +256,7 @@ export class ClientAccountsCmp implements OnInit {
   clearFilters() {
     this.search.set('');
     this.onlyOverdrawn.set(false);
+    this.onlyNeedsFunding.set(false);
     this.branchIds.set([]);
     this.load();
   }
@@ -260,6 +286,7 @@ export class ClientAccountsCmp implements OnInit {
   openFundDialog() {
     this.fundError.set('');
     this.fundReason.set('');
+    this.donorIds.set([]);
     this.donorId.set(null);
     this.fundingAmounts.set({});
     this.showFundDialog.set(true);
@@ -291,8 +318,31 @@ export class ClientAccountsCmp implements OnInit {
     }
   }
 
-  setDonor(id: string | null) {
-    this.donorId.set(id);
+  /** Add the picked client to the list of funding sources. Sources are kept in
+   *  the order they are added, and each is drawn on in that order. */
+  addDonor() {
+    const id = this.donorId();
+    if (!id) return;
+    if (this.donorIds().includes(id)) {
+      this.donorId.set(null);
+      return;
+    }
+    this.donorIds.set([...this.donorIds(), id]);
+    this.donorId.set(null);
+    // Re-fill the amounts from scratch so they are trimmed against the new
+    // combined available funds rather than keeping stale trimmed values.
+    this.fundingAmounts.set({});
+    this.fundError.set('');
+  }
+
+  removeDonor(id: string) {
+    this.donorIds.set(this.donorIds().filter((d) => d !== id));
+    this.fundingAmounts.set({});
+    this.fundError.set('');
+  }
+
+  clearDonors() {
+    this.donorIds.set([]);
     this.fundingAmounts.set({});
     this.fundError.set('');
   }
@@ -311,10 +361,9 @@ export class ClientAccountsCmp implements OnInit {
   }
 
   useFullDonorBalance() {
-    const donor = this.donorAccount();
-    if (!donor) return;
+    if (!this.donorIds().length) return;
     const next: Record<string, number> = {};
-    let left = donor.available_to_fund;
+    let left = this.donorAvailable();
     for (const r of this.allocations()) {
       const take = Math.min(Math.max(r.needed, 0), left);
       if (take > 0) next[r.account.consultation_id] = Number(take.toFixed(2));
@@ -325,8 +374,8 @@ export class ClientAccountsCmp implements OnInit {
   }
 
   async submitFunding() {
-    const donor = this.donorId();
-    if (!donor) return;
+    const sources = this.donorIds();
+    if (!sources.length) return;
     if (this.selectionSpansBranches()) {
       this.fundError.set(
         'A funding client can only cover clients at its own branch. Fund one branch at a time.',
@@ -340,7 +389,7 @@ export class ClientAccountsCmp implements OnInit {
     }
     if (this.donorRemaining() < -0.001) {
       this.fundError.set(
-        'The total exceeds what the funding client can spare — their own unpaid expenses are kept back.',
+        'The total exceeds what the funding clients can spare — their own unpaid expenses are kept back. Add another funding client or fund fewer clients.',
       );
       return;
     }
@@ -351,7 +400,8 @@ export class ClientAccountsCmp implements OnInit {
       // One request: the backend applies every allocation or none of them.
       await this.svc
         .fund({
-          from_consultation_id: donor,
+          from_consultation_id: sources[0],
+          from_consultation_ids: sources.slice(1),
           allocations: rows.map((r) => ({
             to_consultation_id: r.account.consultation_id,
             amount: r.amount,
@@ -363,12 +413,13 @@ export class ClientAccountsCmp implements OnInit {
         severity: 'success',
         summary: 'Client accounts funded',
         detail: `${rows.length} client${rows.length > 1 ? 's' : ''} funded from ${
-          this.donorAccount()?.client_name || 'the selected client'
-        }.`,
+          sources.length
+        } funding client${sources.length > 1 ? 's' : ''}.`,
       });
       this.showFundDialog.set(false);
       this.selected.set(new Set<string>());
       this.fundingAmounts.set({});
+      this.donorIds.set([]);
       this.donors.set([]);
       await this.load();
     } catch (e: any) {

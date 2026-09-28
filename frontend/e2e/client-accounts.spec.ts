@@ -208,21 +208,35 @@ test.describe('Client Accounts', () => {
     const dialog = page.getByRole('dialog', { name: 'Fund Client Accounts' });
     await expect(dialog).toBeVisible();
 
-    // Pick the donor.
+    // Pick the funder and add it. It can be removed again, so the list of
+    // funding clients is editable in both directions.
     await page.getByTestId('fund-donor').click();
     await page.locator('.p-select-option', { hasText: 'Acc' }).first().click();
+    await page.getByTestId('fund-donor-add').click();
     // The funder's own reserve is shown, and only the surplus is offered. It owes
     // nothing of its own here, so all 1,000,000 is available.
-    await expect(dialog.getByTestId('fund-donor-summary')).toBeVisible();
-    await expect(dialog.getByTestId('fund-donor-balance')).toHaveText(/1,?000,?000/);
-    await expect(dialog.getByTestId('fund-donor-required')).toHaveText('0');
-    await expect(dialog.getByTestId('fund-donor-available')).toHaveText(/1,?000,?000/);
+    await expect(dialog.getByTestId('fund-donor-list')).toBeVisible();
+    await expect(dialog.getByTestId('fund-source-balance-0')).toHaveText(/1,?000,?000/);
+    await expect(dialog.getByTestId('fund-source-required-0')).toHaveText('0');
+    await expect(dialog.getByTestId('fund-source-available-0')).toHaveText(/1,?000,?000/);
+    await expect(dialog.getByTestId('fund-source-contribution-0')).toHaveText(/640,?000/);
+    await expect(dialog.getByTestId('fund-source-count')).toHaveText('1');
     await expect(dialog.getByTestId('fund-selected-count')).toHaveText('1');
     await expect(dialog.getByTestId('fund-total-needed')).toHaveText(/640,?000/);
     await expect(dialog.getByTestId('fund-total-allocating')).toHaveText(/640,?000/);
     await expect(dialog.getByTestId('fund-total-available')).toHaveText(/1,?000,?000/);
     await expect(dialog.getByTestId('fund-donor-left')).toHaveText(/360,?000/);
     await expect(dialog.getByTestId('fund-short-warning')).toBeHidden();
+
+    // Removing the funder empties the list and blocks the funding.
+    await page.getByTestId('fund-source-remove-0').click();
+    await expect(dialog.getByTestId('fund-donor-list')).toBeHidden();
+    await expect(page.getByTestId('confirm-fund').locator('button')).toBeDisabled();
+    // Put it back to fund the client.
+    await page.getByTestId('fund-donor').click();
+    await page.locator('.p-select-option', { hasText: 'Acc' }).first().click();
+    await page.getByTestId('fund-donor-add').click();
+    await expect(dialog.getByTestId('fund-donor-list')).toBeVisible();
 
     // The shortfall is pre-filled as the amount (testid sits on the p-inputnumber
     // host, so read the inner input).
@@ -622,5 +636,121 @@ test.describe('Client Accounts', () => {
     expect(out.overAvail[1]).toMatch(/120,000/);
     expect(out.fourthFundedIn).toBe(0);
     expect(out.fourthNeeded).toBe(640000);
+  });
+
+  test('draws on several funding clients in order until the total required is covered', async ({
+    page,
+  }) => {
+    await loginSuperAdmin(page);
+    // Two more sources: one that can give 500,000 and one that can give 300,000,
+    // to cover a recipient that is 640,000 short.
+    const srcA = await makeClient(page, BRANCH, `${fixtureTag}6`, 500000);
+    const srcB = await makeClient(page, BRANCH, `${fixtureTag}7`, 300000);
+    extraIds.push(srcA.consultation_id, srcB.consultation_id);
+    expect(srcA.payment_error).toBeNull();
+    expect(srcB.payment_error).toBeNull();
+
+    const out = await page.evaluate(
+      async ({ donorId, secondId, srcAId, srcBId, branchId }) => {
+        const tok = (await (
+          await fetch('/api/v1/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: '0782832711', pin: '1234' }),
+          })
+        ).json()).access_token;
+        const h = { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` };
+        const accounts = async (id: string) =>
+          (
+            await fetch(`/api/v1/finance/expenses/client-account-balance?consultation_id=${id}`, {
+              headers: h,
+            })
+          ).json();
+        const fund = (body: any) =>
+          fetch('/api/v1/finance/client-accounts/fund', { method: 'POST', headers: h, body: JSON.stringify(body) });
+
+        // The first recipient is 640,000 short. Two sources together hold 800,000,
+        // so the request is covered: 500,000 from the first, 140,000 from the second.
+        const res = await fund({
+          from_consultation_id: srcAId,
+          from_consultation_ids: [srcBId],
+          allocations: [{ to_consultation_id: secondId, amount: 640000 }],
+        });
+        const body = await res.json();
+        const legs = (body.fundings || []).map((f: any) => ({
+          from: f.from_consultation_id,
+          to: f.to_consultation_id,
+          amount: f.amount,
+        }));
+        const a = await accounts(srcAId);
+        const b = await accounts(srcBId);
+        const r = await accounts(secondId);
+
+        // A funding client can never also be a recipient in the same request.
+        const shortRes = await fund({
+          from_consultation_id: srcAId,
+          from_consultation_ids: [srcBId],
+          allocations: [{ to_consultation_id: srcAId, amount: 5000 }],
+        });
+
+        return {
+          status: res.status,
+          total: body.total,
+          legs,
+          srcA: { remaining: a.remaining, available: a.available_to_fund },
+          srcB: { remaining: b.remaining, available: b.available_to_fund },
+          recv: { remaining: r.remaining, needed: r.funding_needed },
+          short: [shortRes.status, (await shortRes.json()).detail],
+        };
+      },
+      {
+        donorId,
+        secondId: recvId,
+        srcAId: srcA.consultation_id,
+        srcBId: srcB.consultation_id,
+        branchId: BRANCH,
+      },
+    );
+
+    expect(out.status).toBe(201);
+    // Two legs, one per source, in the order they were added.
+    expect(out.total).toBe(640000);
+    expect(out.legs.length).toBe(2);
+    expect(out.legs[0]).toMatchObject({ amount: 500000 });
+    expect(out.legs[1]).toMatchObject({ amount: 140000 });
+    // The first source is emptied, the second keeps only what was not needed.
+    expect(out.srcA.remaining).toBe(0);
+    expect(out.srcB.remaining).toBe(160000);
+    expect(out.srcB.available).toBe(160000);
+    // The recipient is fully settled: no shortfall left.
+    expect(out.recv.remaining).toBe(320000);
+    expect(out.recv.needed).toBe(0);
+    // A funding client can never also be a recipient.
+    expect(out.short[0]).toBe(400);
+    expect(out.short[1]).toMatch(/different clients/);
+  });
+
+  test('highlights the accounts whose unpaid expenses exceed their funds', async ({ page }) => {
+    await loginSuperAdmin(page);
+    await page.getByLabel('Toggle menu').click();
+    await page.getByText('Finance', { exact: true }).click();
+    await page.getByText('Client Accounts', { exact: true }).click();
+    await expect(page.getByTestId('accounts-table')).toBeVisible();
+
+    // The recipient is 320,000 short on unpaid permit expenses while holding no
+    // funds, so it is highlighted and badged; the donor is not.
+    const row = page.getByTestId(`account-row-${recvPhone}`);
+    await expect(row).toHaveAttribute('data-underfunded', 'true');
+    await expect(page.getByTestId(`needs-funding-${recvPhone}`)).toBeVisible();
+    await expect(page.getByTestId(`account-row-${donorPhone}`)).not.toHaveAttribute(
+      'data-underfunded',
+      'true',
+    );
+
+    // The filter narrows the ledger to exactly those accounts.
+    await page.getByTestId('only-needs-funding').check();
+    await page.getByTestId('only-needs-funding').locator('xpath=..').locator('xpath=..').getByRole('button', { name: 'Apply' }).click();
+    await expect(row).toBeVisible();
+    await expect(page.getByTestId(`account-row-${donorPhone}`)).toHaveCount(0);
   });
 });

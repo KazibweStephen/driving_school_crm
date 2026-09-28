@@ -417,9 +417,14 @@ class ClientAccountFundingAllocation(BaseModel):
 
 class ClientAccountFundingCreate(BaseModel):
     """Fund one client from another at the same branch, or several recipients at
-    once from a single funding client (applied atomically)."""
+    once from one or more funding clients (applied atomically).
+
+    `from_consultation_id` is the first funding source. Extra sources added in the
+    dialog are listed in `from_consultation_ids` and are drawn on in that order
+    until the recipients are fully covered."""
 
     from_consultation_id: uuid.UUID
+    from_consultation_ids: list[uuid.UUID] | None = None
     to_consultation_id: uuid.UUID | None = None
     amount: float | None = None
     allocations: list[ClientAccountFundingAllocation] | None = None

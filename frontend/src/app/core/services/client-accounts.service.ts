@@ -73,6 +73,9 @@ export interface FundClientAccountAllocation {
 
 export interface FundClientAccountPayload {
   from_consultation_id: string;
+  /** Extra funding clients, in the order they were added. The backend draws on
+   *  each source in turn until the recipients are fully covered. */
+  from_consultation_ids?: string[];
   /** Preferred: several recipients funded in one atomic request. */
   allocations?: FundClientAccountAllocation[];
   /** Legacy single-recipient form. */
@@ -91,12 +94,14 @@ export class ClientAccountsService {
     branch_ids?: string | null;
     search?: string | null;
     only_overdrawn?: boolean;
+    only_needs_funding?: boolean;
   } = {}): Observable<ClientAccountsResponse> {
     let q = new HttpParams();
     if (params.branch_id) q = q.set('branch_id', params.branch_id);
     if (params.branch_ids) q = q.set('branch_ids', params.branch_ids);
     if (params.search) q = q.set('search', params.search);
     if (params.only_overdrawn) q = q.set('only_overdrawn', 'true');
+    if (params.only_needs_funding) q = q.set('only_needs_funding', 'true');
     return this.http.get<ClientAccountsResponse>(`${this.base}/client-accounts`, { params: q });
   }
 

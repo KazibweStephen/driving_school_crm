@@ -111,6 +111,15 @@
       />
       Overdrawn only
     </label>
+    <label class="flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        [ngModel]="onlyNeedsFunding()"
+        (ngModelChange)="onlyNeedsFunding.set($event)"
+        data-testid="only-needs-funding"
+      />
+      Needs funding only
+    </label>
     <p-button label="Apply" icon="pi pi-filter" size="small" (onClick)="applyFilters()" />
     <p-button label="Clear" size="small" severity="secondary" [outlined]="true" (onClick)="clearFilters()" />
   </div>
@@ -139,7 +148,13 @@
         </thead>
         <tbody>
           @for (a of accounts(); track a.consultation_id) {
-            <tr class="border-t border-gray-100" [class.bg-rose-50]="a.overdrawn" [attr.data-testid]="'account-row-' + a.client_phone">
+            <tr
+              class="border-t border-gray-100"
+              [class.bg-rose-50]="a.overdrawn"
+              [class.bg-amber-50]="!a.overdrawn && a.funding_needed > 0"
+              [attr.data-underfunded]="a.funding_needed > 0 ? 'true' : null"
+              [attr.data-testid]="'account-row-' + a.client_phone"
+            >
               <td class="px-2 py-2">
                 <input
                   type="checkbox"
@@ -153,6 +168,15 @@
                   {{ a.client_name || '—' }}
                 </a>
                 <div class="text-xs text-gray-500">{{ a.client_phone }}</div>
+                @if (a.funding_needed > 0) {
+                  <span
+                    class="mt-0.5 inline-flex items-center gap-1 rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-medium text-amber-900"
+                    [attr.data-testid]="'needs-funding-' + a.client_phone"
+                  >
+                    <i class="pi pi-exclamation-triangle text-[10px]"></i>
+                    Needs funding
+                  </span>
+                }
               </td>
               <td class="px-2 py-2 text-gray-600">{{ a.branch_name || '—' }}</td>
               <td class="px-2 py-2 text-right">{{ fmt(a.client_paid) }}</td>
@@ -282,46 +306,89 @@
   }
 
   <label class="mb-1 block text-sm font-medium">Fund from</label>
-  <p-select
-    [options]="donorOptions()"
-    [ngModel]="donorId()"
-    (ngModelChange)="setDonor($event)"
-    optionLabel="label"
-    optionValue="value"
-    placeholder="Pick a client with a positive balance at the same branch"
-    [filter]="true"
-    filterBy="label"
-    appendTo="body"
-    styleClass="w-full"
-    data-testid="fund-donor"
-  />
+  @if (donorIds().length) {
+    <p class="mb-2 text-xs text-gray-500">
+      Add as many funding clients as you need. Each one is applied in the order shown, contributing
+      only as much as is still outstanding, until the total required is covered.
+    </p>
+  }
+  <div class="flex items-start gap-2">
+    <p-select
+      [options]="donorOptions()"
+      [ngModel]="donorId()"
+      (ngModelChange)="donorId.set($event)"
+      optionLabel="label"
+      optionValue="value"
+      placeholder="Pick a client that can spare money at the same branch"
+      [filter]="true"
+      filterBy="label"
+      appendTo="body"
+      styleClass="flex-1"
+      data-testid="fund-donor"
+    />
+    <p-button
+      label="Add"
+      icon="pi pi-plus"
+      [disabled]="!donorId()"
+      (onClick)="addDonor()"
+      data-testid="fund-donor-add"
+    />
+  </div>
 
-  @if (donorAccount(); as d) {
-    <div class="mt-2 rounded-md bg-indigo-50 px-3 py-2 text-sm text-indigo-900" data-testid="fund-donor-summary">
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <span>
-          Balance:
-          <strong data-testid="fund-donor-balance">{{ fmt(d.remaining) }}</strong>
-        </span>
-        <span>
-          Own expenses to pay:
-          <strong data-testid="fund-donor-required">{{ fmt(d.required) }}</strong>
-        </span>
-        <span>
-          Can give:
-          <strong data-testid="fund-donor-available" class="text-indigo-700">
-            {{ fmt(d.available_to_fund) }}
-          </strong>
-        </span>
-        @if (d.branch_name) {
-          <span class="text-indigo-700">· {{ d.branch_name }}</span>
-        }
-      </div>
-      <p class="mt-1 text-xs text-indigo-700">
-        The funding client keeps back what is still owed on their own expenses, so only the
-        surplus — normally their profit — can be moved to other clients.
-      </p>
+  @if (donorAccounts().length) {
+    <div class="mt-2 overflow-x-auto rounded-md border border-indigo-200 bg-indigo-50" data-testid="fund-donor-list">
+      <table class="min-w-full text-sm text-indigo-900">
+        <thead class="text-left text-xs uppercase text-indigo-700">
+          <tr>
+            <th class="px-2 py-1.5">#</th>
+            <th class="px-2 py-1.5">Funding client</th>
+            <th class="px-2 py-1.5 text-right">Balance</th>
+            <th class="px-2 py-1.5 text-right">Own expenses</th>
+            <th class="px-2 py-1.5 text-right">Can give</th>
+            <th class="px-2 py-1.5 text-right">Will give</th>
+            <th class="px-2 py-1.5"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of sourcePlan(); track p.account.consultation_id; let i = $index) {
+            <tr class="border-t border-indigo-100" [attr.data-testid]="'fund-source-' + i">
+              <td class="px-2 py-1.5">{{ i + 1 }}</td>
+              <td class="px-2 py-1.5">
+                {{ p.account.client_name || p.account.client_phone }}
+                <div class="text-xs text-indigo-700">{{ p.account.branch_name }}</div>
+              </td>
+              <td class="px-2 py-1.5 text-right" [attr.data-testid]="'fund-source-balance-' + i">
+                {{ fmt(p.account.remaining) }}
+              </td>
+              <td class="px-2 py-1.5 text-right" [attr.data-testid]="'fund-source-required-' + i">
+                {{ fmt(p.account.required) }}
+              </td>
+              <td class="px-2 py-1.5 text-right" [attr.data-testid]="'fund-source-available-' + i">
+                {{ fmt(p.account.available_to_fund) }}
+              </td>
+              <td class="px-2 py-1.5 text-right font-semibold" [attr.data-testid]="'fund-source-contribution-' + i">
+                {{ fmt(p.contribution) }}
+              </td>
+              <td class="px-2 py-1.5 text-right">
+                <p-button
+                  icon="pi pi-times"
+                  severity="secondary"
+                  [text]="true"
+                  size="small"
+                  ariaLabel="Remove funding client"
+                  (onClick)="removeDonor(p.account.consultation_id)"
+                  [attr.data-testid]="'fund-source-remove-' + i"
+                />
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
     </div>
+    <p class="mt-1 text-xs text-indigo-700" data-testid="fund-donor-summary">
+      Each funding client keeps back what is still owed on their own expenses, so only the surplus —
+      normally their profit — can be moved to other clients.
+    </p>
   }
 
   <p class="mt-3 mb-1 text-sm font-medium">Amounts</p>
@@ -393,6 +460,12 @@
       <span class="text-gray-600">
         Total to move:
         <strong class="text-gray-900" data-testid="fund-total-allocating">{{ fmt(totalAllocated()) }}</strong>
+      </span>
+      <span class="text-gray-600">
+        Funding clients:
+        <strong class="text-gray-900" data-testid="fund-source-count">
+          {{ donorIds().length }}
+        </strong>
       </span>
       <span class="text-gray-600">
         Available to fund:

@@ -112,6 +112,12 @@ export const routes: Routes = [
           import('./features/transfers/transfers').then((c) => c.TransfersCmp),
       },
       {
+        path: 'client-accounts',
+        data: { permission: 'client_accounts.view' },
+        loadComponent: () =>
+          import('./features/client-accounts/client-accounts').then((c) => c.ClientAccountsCmp),
+      },
+      {
         path: 'cash-position',
         data: { permission: 'finance.cash_position' },
         loadComponent: () =>

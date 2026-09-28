@@ -408,6 +408,47 @@ class BranchTransferRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Client Account Funding ──
+
+class ClientAccountFundingAllocation(BaseModel):
+    to_consultation_id: uuid.UUID
+    amount: float
+
+
+class ClientAccountFundingCreate(BaseModel):
+    """Fund one client from another at the same branch, or several recipients at
+    once from a single funding client (applied atomically)."""
+
+    from_consultation_id: uuid.UUID
+    to_consultation_id: uuid.UUID | None = None
+    amount: float | None = None
+    allocations: list[ClientAccountFundingAllocation] | None = None
+    reason: str | None = None
+
+
+class ClientAccountFundingCancel(BaseModel):
+    reason: str | None = None
+
+
+class ClientAccountFundingRead(BaseModel):
+    id: str
+    branch_id: str
+    branch_name: str | None = None
+    from_consultation_id: str
+    from_client_name: str | None = None
+    from_client_phone: str | None = None
+    to_consultation_id: str
+    to_client_name: str | None = None
+    to_client_phone: str | None = None
+    amount: float
+    reason: str | None = None
+    status: str
+    initiated_by: str | None = None
+    initiated_at: str | None = None
+    cancelled_at: str | None = None
+    cancel_reason: str | None = None
+
+
 # ── Expense Category ──
 
 class ExpenseCategoryCreate(BaseModel):

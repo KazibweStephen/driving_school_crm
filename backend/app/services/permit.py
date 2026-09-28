@@ -290,15 +290,18 @@ async def list_permit_trackers(
 
     search_term = (search or "").strip()
     if search_term:
-        like = f"%{search_term.lower()}%"
-        query = query.where(
-            or_(
-                func.lower(Consultation.first_name).like(like),
-                func.lower(Consultation.middle_name).like(like),
-                func.lower(Consultation.last_name).like(like),
-                Consultation.phone.like(like),
+        # Each whitespace-separated word must appear somewhere in the client's
+        # name (or phone), so "Ready Permit" finds first="Ready", last="Permit".
+        for word in search_term.split():
+            like = f"%{word.lower()}%"
+            query = query.where(
+                or_(
+                    func.lower(Consultation.first_name).like(like),
+                    func.lower(Consultation.middle_name).like(like),
+                    func.lower(Consultation.last_name).like(like),
+                    Consultation.phone.like(like),
+                )
             )
-        )
 
     count = await db.execute(select(func.count()).select_from(query.subquery()))
     total = int(count.scalar() or 0)

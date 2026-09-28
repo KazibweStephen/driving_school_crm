@@ -328,6 +328,22 @@ async def hard_delete_consultations(
             delete(Commission).where(Commission.cart_item_id.in_(cart_item_ids))
         )
 
+    # Client-to-client account funding rows reference both consultations with
+    # ON DELETE RESTRICT so a live funding can never be orphaned. A hard delete
+    # is explicitly destructive (super admin only), so drop the funding rows
+    # first — otherwise the consultation can never be removed once it has been
+    # part of a funding.
+    from app.models.company import ClientAccountFunding
+
+    await db.execute(
+        delete(ClientAccountFunding).where(
+            or_(
+                ClientAccountFunding.from_consultation_id.in_(consultation_ids),
+                ClientAccountFunding.to_consultation_id.in_(consultation_ids),
+            )
+        )
+    )
+
     result = await db.execute(
         delete(Consultation).where(Consultation.id.in_(consultation_ids))
     )

@@ -13,6 +13,7 @@ from app.api.deps import get_current_user, require_permission
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.company import BorrowStatus, Branch, CollectionStatus, Company, ExpenseCategory, ExpenseStatus, TransferPool, TransferStatus
+from app.models.consultation import Consultation
 from app.models.user import User
 from app.utils.timezones import today_local, now_local, BUSINESS_TZ
 from app.schemas.company import (
@@ -35,6 +36,8 @@ from app.schemas.company import (
     ExpenseUpdate,
     HoFundingCreate,
     MarkExpensePaid,
+    ClientAccountFundingCancel,
+    ClientAccountFundingCreate,
 )
 from app.schemas.end_of_day import EndOfDayReportCreate
 from app.services import end_of_day as end_of_day_service
@@ -265,6 +268,129 @@ async def get_client_account_balance(
     """Per-client expense-account tracking: paid in − posted − remitted, so
     the UI can show what's left before posting another client-account expense."""
     return await finance_service.client_expense_account_balance(db, consultation_id)
+
+
+@router.get("/client-accounts", response_model=dict)
+async def list_client_accounts(
+    branch_id: uuid.UUID | None = Query(None),
+    branch_ids: str | None = Query(None, description="Comma-separated branch UUIDs"),
+    search: str | None = Query(None),
+    only_overdrawn: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("client_accounts.view")),
+):
+    """Ledger of every client expense account: what was paid in, what has been
+    drawn, what was remitted, what other clients funded in/out, the balance,
+    and the shortfall still needed to cover the client's unpaid permit expenses."""
+    requested = (
+        [uuid.UUID(b) for b in branch_ids.split(",") if b]
+        if branch_ids
+        else None
+    )
+    # Never trust a caller-supplied branch: fold it into the requested set so
+    # resolve_branch_ids still enforces the caller's branch assignments.
+    if branch_id is not None:
+        requested = (requested or []) + [branch_id]
+    resolved_branch_ids = await resolve_branch_ids(db, current_user, requested)
+    items = await finance_service.list_client_accounts(
+        db,
+        company_id=current_user.company_id,
+        branch_ids=resolved_branch_ids,
+        current_user_role=current_user.role,
+        search=search,
+        only_overdrawn=only_overdrawn,
+    )
+    return {
+        "items": items,
+        "total": len(items),
+        "totals": {
+            "client_paid": round(sum(i["client_paid"] for i in items), 2),
+            "posted": round(sum(i["posted"] for i in items), 2),
+            "remitted": round(sum(i["remitted"] for i in items), 2),
+            "funded_in": round(sum(i["funded_in"] for i in items), 2),
+            "funded_out": round(sum(i["funded_out"] for i in items), 2),
+            "remaining": round(sum(i["remaining"] for i in items), 2),
+            "funding_needed": round(sum(i["funding_needed"] for i in items), 2),
+        },
+    }
+
+
+@router.get("/client-accounts/fundings", response_model=dict)
+async def list_client_account_fundings(
+    branch_id: uuid.UUID | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("client_accounts.view")),
+):
+    """Audit trail of every client-to-client account funding."""
+    resolved_branch_ids = await resolve_branch_ids(
+        db, current_user, [branch_id] if branch_id is not None else None
+    )
+    items = await finance_service.list_client_account_fundings(
+        db,
+        company_id=current_user.company_id,
+        branch_ids=resolved_branch_ids,
+        current_user_role=current_user.role,
+        limit=limit,
+    )
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/client-accounts/fund", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def fund_client_account(
+    data: ClientAccountFundingCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("client_accounts.fund")),
+):
+    """Fund one or more clients' expense accounts from a single client at the
+    same branch. Allocations are applied atomically."""
+    resolved_branch_ids = await resolve_branch_ids(db, current_user, None)
+    allocations = [
+        (a.to_consultation_id, a.amount) for a in (data.allocations or [])
+    ]
+    if not allocations:
+        if data.to_consultation_id is None or data.amount is None:
+            raise HTTPException(status_code=400, detail="Nothing to fund.")
+        allocations = [(data.to_consultation_id, data.amount)]
+    src = (
+        await db.execute(
+            select(Consultation).where(Consultation.id == data.from_consultation_id)
+        )
+    ).scalar_one_or_none()
+    if src is not None and src.branch_id and src.branch_id not in resolved_branch_ids:
+        raise HTTPException(status_code=403, detail="Permission denied for that branch.")
+    result = await finance_service.fund_client_accounts(
+        db,
+        from_consultation_id=data.from_consultation_id,
+        allocations=allocations,
+        reason=data.reason,
+        user_phone=current_user.phone,
+    )
+    await db.commit()
+    return result
+
+
+@router.post("/client-accounts/fundings/{funding_id}/cancel", response_model=dict)
+async def cancel_client_account_funding(
+    funding_id: uuid.UUID,
+    data: ClientAccountFundingCancel | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("client_accounts.fund")),
+):
+    """Reverse a funding, as long as the funded client has not yet spent it."""
+    resolved_branch_ids = await resolve_branch_ids(db, current_user, None)
+    f = await finance_service.get_client_account_funding(db, funding_id)
+    if f is not None and f["branch_id"] not in {str(b) for b in resolved_branch_ids}:
+        raise HTTPException(status_code=403, detail="Permission denied for that branch.")
+    result = await finance_service.cancel_client_account_funding(
+        db,
+        funding_id=funding_id,
+        reason=data.reason if data else None,
+        user_phone=current_user.phone,
+        company_id=current_user.company_id,
+    )
+    await db.commit()
+    return result
 
 
 @router.get("/expenses/notifications", response_model=dict)

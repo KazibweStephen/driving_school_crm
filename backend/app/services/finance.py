@@ -12,6 +12,8 @@ from app.models.company import (
     BorrowStatus,
     Branch,
     BranchTransfer,
+    ClientAccountFunding,
+    ClientAccountFundingStatus,
     Company,
     Collection,
     CollectionStatus,
@@ -195,7 +197,8 @@ async def client_expense_account_balance(
 ) -> dict:
     """Track the money a client has on the expense account, to avoid double
     posting: paid in by the client − already-posted client-account expenses
-    (pending/approved/paid) − already remitted to head office."""
+    (pending/approved/paid) − already remitted to head office, plus anything
+    funded into / out of the account by other clients at the same branch."""
     paid = float(
         (
             await db.execute(
@@ -222,6 +225,17 @@ async def client_expense_account_balance(
     if exclude_expense_id is not None:
         posted_q = posted_q.where(Expense.id != exclude_expense_id)
     posted = float((await db.execute(posted_q)).scalar() or 0)
+    permit_unpaid = float(
+        (
+            await db.execute(
+                posted_q.where(
+                    Expense.status.in_([ExpenseStatus.PENDING, ExpenseStatus.APPROVED]),
+                    func.lower(func.trim(Expense.category)).in_(PERMIT_ACCOUNT_CATEGORIES),
+                )
+            )
+        ).scalar()
+        or 0
+    )
     remitted = float(
         (
             await db.execute(
@@ -236,13 +250,644 @@ async def client_expense_account_balance(
         ).scalar()
         or 0
     )
+    funded_in, funded_out = await _client_funding_totals(db, consultation_id)
+    remaining = paid - posted - remitted + funded_in - funded_out
     return {
         "consultation_id": str(consultation_id),
         "client_paid": round(paid, 2),
+        "permit_unpaid": round(permit_unpaid, 2),
+        "funding_needed": round(max(0.0, permit_unpaid - remaining), 2),
         "posted": round(posted, 2),
         "remitted": round(remitted, 2),
-        "remaining": round(paid - posted - remitted, 2),
+        "funded_in": round(funded_in, 2),
+        "funded_out": round(funded_out, 2),
+        "remaining": round(remaining, 2),
     }
+
+
+# ── Client account funding (client → client, same branch) ──
+
+ACTIVE_FUNDING = ClientAccountFundingStatus.ACTIVE
+
+
+def _client_label(consultation: Consultation | None) -> str | None:
+    if consultation is None:
+        return None
+    return f"{consultation.first_name} {consultation.last_name or ''}".strip() or None
+
+
+async def _client_funding_totals(
+    db: AsyncSession, consultation_id: uuid.UUID
+) -> tuple[float, float]:
+    """(funded_in, funded_out) for one client's expense account, counting only
+    active (non-cancelled) fundings."""
+    rows = (
+        await db.execute(
+            select(
+                ClientAccountFunding.from_consultation_id,
+                func.coalesce(func.sum(ClientAccountFunding.amount), 0),
+            )
+            .where(
+                ClientAccountFunding.status == ACTIVE_FUNDING,
+                or_(
+                    ClientAccountFunding.from_consultation_id == consultation_id,
+                    ClientAccountFunding.to_consultation_id == consultation_id,
+                ),
+            )
+            .group_by(ClientAccountFunding.from_consultation_id)
+        )
+    ).all()
+    funded_in = 0.0
+    funded_out = 0.0
+    for from_id, total in rows:
+        total = float(total or 0)
+        if from_id == consultation_id:
+            funded_out += total
+        else:
+            funded_in += total
+    return funded_in, funded_out
+
+
+# Categories that count as "permit expenses" for the funding shortfall. Kept
+# in sync with `app.services.permit._PERMIT_CATEGORY_NAMES`; importing that
+# private set would create a cycle (permit imports finance).
+PERMIT_ACCOUNT_CATEGORIES: tuple[str, ...] = (
+    "learner permit payment",
+    "test booking",
+    "police booking",
+    "iov fees",
+    "permit payment",
+)
+
+
+def _is_permit_account_category(category: str | None) -> bool:
+    return bool(category) and category.strip().lower() in PERMIT_ACCOUNT_CATEGORIES
+
+
+async def _permit_expense_totals(
+    db: AsyncSession, consultation_id: uuid.UUID
+) -> tuple[float, float]:
+    """(unpaid_permit_expenses, total_permit_expenses) posted against a
+    client's expense account. Unpaid = filed but not yet paid (pending or
+    approved); these are the expenses a funding is meant to cover."""
+    rows = (
+        await db.execute(
+            select(
+                Expense.status,
+                func.coalesce(
+                    func.sum(
+                        Expense.amount
+                        + func.coalesce(Expense.paid_charges, Expense.charges, 0)
+                    ),
+                    0,
+                ),
+            )
+            .where(
+                Expense.consultation_id == consultation_id,
+                Expense.account == TransferPool.CLIENT_ACCOUNTS.value,
+                Expense.status.in_([ExpenseStatus.PENDING, ExpenseStatus.APPROVED, ExpenseStatus.PAID]),
+                func.lower(func.trim(Expense.category)).in_(PERMIT_ACCOUNT_CATEGORIES),
+            )
+            .group_by(Expense.status)
+        )
+    ).all()
+    unpaid = 0.0
+    total = 0.0
+    for status, amount in rows:
+        amount = float(amount or 0)
+        total += amount
+        if status in (ExpenseStatus.PENDING, ExpenseStatus.APPROVED):
+            unpaid += amount
+    return unpaid, total
+
+
+async def _client_account_row(
+    db: AsyncSession,
+    consultation: Consultation,
+) -> dict:
+    """One row of the Client Accounts ledger: what the client paid in, what
+    has been drawn from their account, what was remitted, what other clients
+    funded in/out, the balance, and how much is still needed to cover the
+    unpaid permit expenses."""
+    cid = consultation.id
+    paid = float(
+        (
+            await db.execute(
+                select(func.coalesce(func.sum(Payment.total_paid), 0)).where(
+                    Payment.consultation_id == cid,
+                    Payment.cancelled_at.is_(None),
+                )
+            )
+        ).scalar()
+        or 0
+    )
+    posted_rows = (
+        await db.execute(
+            select(
+                Expense.status,
+                func.coalesce(
+                    func.sum(
+                        Expense.amount
+                        + func.coalesce(Expense.paid_charges, Expense.charges, 0)
+                    ),
+                    0,
+                ),
+            )
+            .where(
+                Expense.consultation_id == cid,
+                Expense.account == TransferPool.CLIENT_ACCOUNTS.value,
+                Expense.status.in_(
+                    [ExpenseStatus.PENDING, ExpenseStatus.APPROVED, ExpenseStatus.PAID]
+                ),
+            )
+            .group_by(Expense.status)
+        )
+    ).all()
+    posted = 0.0
+    unpaid_total = 0.0
+    for status, amount in posted_rows:
+        amount = float(amount or 0)
+        posted += amount
+        if status in (ExpenseStatus.PENDING, ExpenseStatus.APPROVED):
+            unpaid_total += amount
+    permit_unpaid, permit_total = await _permit_expense_totals(db, cid)
+    permit_paid = permit_total - permit_unpaid
+    remitted = float(
+        (
+            await db.execute(
+                select(func.coalesce(func.sum(TransferPaymentLink.amount), 0))
+                .join(BranchTransfer, TransferPaymentLink.transfer_id == BranchTransfer.id)
+                .join(Payment, TransferPaymentLink.payment_id == Payment.id)
+                .where(
+                    Payment.consultation_id == cid,
+                    BranchTransfer.cancelled_at.is_(None),
+                )
+            )
+        ).scalar()
+        or 0
+    )
+    funded_in, funded_out = await _client_funding_totals(db, cid)
+    remaining = paid - posted - remitted + funded_in - funded_out
+    return {
+        "consultation_id": str(cid),
+        "client_name": f"{consultation.first_name} {consultation.last_name or ''}".strip(),
+        "client_phone": consultation.phone,
+        "branch_id": str(consultation.branch_id) if consultation.branch_id else None,
+        "branch_name": consultation.branch.name if consultation.branch else None,
+        "client_paid": round(paid, 2),
+        "posted": round(posted, 2),
+        "unpaid_posted": round(unpaid_total, 2),
+        "permit_paid": round(permit_paid, 2),
+        "permit_unpaid": round(permit_unpaid, 2),
+        "remitted": round(remitted, 2),
+        "funded_in": round(funded_in, 2),
+        "funded_out": round(funded_out, 2),
+        "remaining": round(remaining, 2),
+        "overdrawn": remaining < -0.001,
+        "funding_needed": round(max(0.0, permit_unpaid - remaining), 2),
+    }
+
+
+def _consultation_account_query(branch_ids: list[uuid.UUID] | None):
+    q = select(Consultation).outerjoin(Branch, Consultation.branch_id == Branch.id)
+    if branch_ids:
+        q = q.where(Consultation.branch_id.in_(branch_ids))
+    return q
+
+
+async def list_client_accounts(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID | None,
+    branch_ids: list[uuid.UUID] | None,
+    current_user_role: UserRole | None = None,
+    search: str | None = None,
+    only_overdrawn: bool = False,
+) -> list[dict]:
+    """The Client Accounts ledger: every consultation that has any client
+    account activity, with the drawn/balance/permit-shortfall figures.
+
+    All the sums are gathered with a handful of grouped queries — this runs
+    over every consultation in scope, so per-row queries would be an N+1
+    disaster.
+    """
+    q = _consultation_account_query(branch_ids).options(selectinload(Consultation.branch))
+    if company_id is not None:
+        q = q.where(
+            or_(
+                Consultation.branch_id.is_(None),
+                Branch.company_id == company_id,
+            )
+        )
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        q = q.where(
+            or_(
+                Consultation.first_name.ilike(term),
+                Consultation.last_name.ilike(term),
+                Consultation.phone.ilike(term),
+            )
+        )
+    consultations = (await db.execute(q)).scalars().unique().all()
+    if not consultations:
+        return []
+    ids = [c.id for c in consultations]
+
+    paid_rows = (
+        await db.execute(
+            select(Payment.consultation_id, func.coalesce(func.sum(Payment.total_paid), 0))
+            .where(Payment.consultation_id.in_(ids), Payment.cancelled_at.is_(None))
+            .group_by(Payment.consultation_id)
+        )
+    ).all()
+    paid_by = {r[0]: float(r[1] or 0) for r in paid_rows}
+
+    expense_rows = (
+        await db.execute(
+            select(
+                Expense.consultation_id,
+                Expense.status,
+                func.lower(func.trim(Expense.category)),
+                func.coalesce(
+                    func.sum(Expense.amount + func.coalesce(Expense.paid_charges, Expense.charges, 0)),
+                    0,
+                ),
+            )
+            .where(
+                Expense.consultation_id.in_(ids),
+                Expense.account == TransferPool.CLIENT_ACCOUNTS.value,
+                Expense.status.in_([ExpenseStatus.PENDING, ExpenseStatus.APPROVED, ExpenseStatus.PAID]),
+            )
+            .group_by(Expense.consultation_id, Expense.status, func.lower(func.trim(Expense.category)))
+        )
+    ).all()
+    posted_by: dict = {}
+    unpaid_by: dict = {}
+    permit_unpaid_by: dict = {}
+    permit_paid_by: dict = {}
+    for cid, status, category, amount in expense_rows:
+        amount = float(amount or 0)
+        posted_by[cid] = posted_by.get(cid, 0.0) + amount
+        if status in (ExpenseStatus.PENDING, ExpenseStatus.APPROVED):
+            unpaid_by[cid] = unpaid_by.get(cid, 0.0) + amount
+        if _is_permit_account_category(category):
+            if status in (ExpenseStatus.PENDING, ExpenseStatus.APPROVED):
+                permit_unpaid_by[cid] = permit_unpaid_by.get(cid, 0.0) + amount
+            else:
+                permit_paid_by[cid] = permit_paid_by.get(cid, 0.0) + amount
+
+    remitted_rows = (
+        await db.execute(
+            select(Payment.consultation_id, func.coalesce(func.sum(TransferPaymentLink.amount), 0))
+            .join(TransferPaymentLink, TransferPaymentLink.payment_id == Payment.id)
+            .join(BranchTransfer, TransferPaymentLink.transfer_id == BranchTransfer.id)
+            .where(
+                Payment.consultation_id.in_(ids),
+                BranchTransfer.cancelled_at.is_(None),
+            )
+            .group_by(Payment.consultation_id)
+        )
+    ).all()
+    remitted_by = {r[0]: float(r[1] or 0) for r in remitted_rows}
+
+    funding_rows = (
+        await db.execute(
+            select(
+                ClientAccountFunding.from_consultation_id,
+                ClientAccountFunding.to_consultation_id,
+                func.coalesce(func.sum(ClientAccountFunding.amount), 0),
+            )
+            .where(
+                ClientAccountFunding.status == ACTIVE_FUNDING,
+                or_(
+                    ClientAccountFunding.from_consultation_id.in_(ids),
+                    ClientAccountFunding.to_consultation_id.in_(ids),
+                ),
+            )
+            .group_by(
+                ClientAccountFunding.from_consultation_id,
+                ClientAccountFunding.to_consultation_id,
+            )
+        )
+    ).all()
+    funded_in_by: dict = {}
+    funded_out_by: dict = {}
+    for from_id, to_id, amount in funding_rows:
+        amount = float(amount or 0)
+        funded_out_by[from_id] = funded_out_by.get(from_id, 0.0) + amount
+        funded_in_by[to_id] = funded_in_by.get(to_id, 0.0) + amount
+
+    out: list[dict] = []
+    for c in consultations:
+        cid = c.id
+        paid = paid_by.get(cid, 0.0)
+        posted = posted_by.get(cid, 0.0)
+        funded_in = funded_in_by.get(cid, 0.0)
+        if paid == 0 and posted == 0 and funded_in == 0:
+            continue
+        permit_unpaid = permit_unpaid_by.get(cid, 0.0)
+        remaining = (
+            paid
+            - posted
+            - remitted_by.get(cid, 0.0)
+            + funded_in
+            - funded_out_by.get(cid, 0.0)
+        )
+        if only_overdrawn and remaining >= -0.001:
+            continue
+        out.append(
+            {
+                "consultation_id": str(cid),
+                "client_name": _client_label(c),
+                "client_phone": c.phone,
+                "branch_id": str(c.branch_id) if c.branch_id else None,
+                "branch_name": c.branch.name if c.branch else None,
+                "client_paid": round(paid, 2),
+                "posted": round(posted, 2),
+                "unpaid_posted": round(unpaid_by.get(cid, 0.0), 2),
+                "permit_paid": round(permit_paid_by.get(cid, 0.0), 2),
+                "permit_unpaid": round(permit_unpaid, 2),
+                "remitted": round(remitted_by.get(cid, 0.0), 2),
+                "funded_in": round(funded_in, 2),
+                "funded_out": round(funded_out_by.get(cid, 0.0), 2),
+                "remaining": round(remaining, 2),
+                "overdrawn": remaining < -0.001,
+                "funding_needed": round(max(0.0, permit_unpaid - remaining), 2),
+            }
+        )
+    out.sort(key=lambda r: (not r["overdrawn"], r["remaining"], r["client_name"] or ""))
+    return out
+
+
+async def fund_client_accounts(
+    db: AsyncSession,
+    *,
+    from_consultation_id: uuid.UUID,
+    allocations: list[tuple[uuid.UUID, float]],
+    reason: str | None,
+    user_phone: str | None,
+) -> dict:
+    """Move money from one client's expense account into other clients' expense
+    accounts, all at the same branch, so an overdrawn account can pay its
+    expenses. Every allocation is applied or none of them are.
+
+    Guards:
+      * the donor and every recipient must be different clients at one branch;
+      * the donor must not be drawn below zero by the total funding (the money is
+        taken from what other clients at that branch hold, never created);
+      * no client may be funded past its own shortfall, so an account can never
+        end up holding more than what it still owes on its permit expenses.
+    """
+    from fastapi import HTTPException
+
+    if not allocations:
+        raise HTTPException(status_code=400, detail="Enter an amount for at least one client.")
+
+    rows = (
+        await db.execute(
+            select(Consultation)
+            .options(selectinload(Consultation.branch))
+            .where(
+                Consultation.id.in_(
+                    [from_consultation_id] + [to_id for to_id, _ in allocations]
+                )
+            )
+        )
+    ).scalars().unique().all()
+    by_id = {c.id: c for c in rows}
+    src = by_id.get(from_consultation_id)
+    if src is None or any(to_id not in by_id for to_id, _ in allocations):
+        raise HTTPException(status_code=404, detail="Client not found.")
+
+    cleaned: list[tuple[uuid.UUID, float]] = []
+    for to_id, raw in allocations:
+        if to_id == from_consultation_id:
+            raise HTTPException(
+                status_code=400, detail="Pick two different clients."
+            )
+        amount = round(float(raw), 2)
+        if amount <= 0:
+            continue
+        dst = by_id[to_id]
+        if not src.branch_id or src.branch_id != dst.branch_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Client accounts can only be funded from another client at the same branch.",
+            )
+        cleaned.append((to_id, amount))
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Enter an amount for at least one client.")
+
+    total = round(sum(a for _, a in cleaned), 2)
+    # Trim every allocation to the recipient's own shortfall first, so asking for
+    # more than is owed is capped rather than rejected — and the funding client is
+    # only ever charged for what is actually moved.
+    already = await db.execute(
+        select(ClientAccountFunding.to_consultation_id, func.coalesce(func.sum(ClientAccountFunding.amount), 0))
+        .where(
+            ClientAccountFunding.status == ACTIVE_FUNDING,
+            ClientAccountFunding.to_consultation_id.in_([to_id for to_id, _ in cleaned]),
+        )
+        .group_by(ClientAccountFunding.to_consultation_id)
+    )
+    funded_to = {row[0]: float(row[1] or 0) for row in already.all()}
+
+    trimmed: list[tuple[uuid.UUID, float]] = []
+    seen: set[uuid.UUID] = set()
+    for to_id, amount in cleaned:
+        if to_id in seen:
+            # Fold a repeated recipient into the earlier entry.
+            idx = next(i for i, (t, _) in enumerate(trimmed) if t == to_id)
+            prev = trimmed[idx][1]
+            bal = await client_expense_account_balance(db, to_id)
+            needed = max(0.0, float(bal["permit_unpaid"]) - float(bal["remaining"]))
+            allowed = round(needed - funded_to.get(to_id, 0.0) - prev, 2)
+            take = min(round(amount - prev, 2), max(allowed, 0.0))
+            trimmed[idx] = (to_id, round(prev + max(take, 0.0), 2))
+            continue
+        seen.add(to_id)
+        bal = await client_expense_account_balance(db, to_id)
+        needed = max(0.0, float(bal["permit_unpaid"]) - float(bal["remaining"]))
+        allowed = round(needed - funded_to.get(to_id, 0.0), 2)
+        if allowed <= 0.001:
+            continue
+        trimmed.append((to_id, min(amount, allowed)))
+    if not trimmed:
+        raise HTTPException(
+            status_code=400,
+            detail="None of the selected clients have a shortfall left to cover.",
+        )
+
+    total = round(sum(a for _, a in trimmed), 2)
+    src_bal = await client_expense_account_balance(db, from_consultation_id)
+    if total > float(src_bal["remaining"]) + 0.001:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Amount exceeds the funding client's available balance "
+                f"{float(src_bal['remaining']):,.2f}."
+            ),
+        )
+
+    created: list[dict] = []
+    for to_id, use in trimmed:
+        if use <= 0.001:
+            continue
+        row = ClientAccountFunding(
+            branch_id=src.branch_id,
+            from_consultation_id=from_consultation_id,
+            to_consultation_id=to_id,
+            amount=use,
+            reason=(reason or None),
+            status=ACTIVE_FUNDING,
+            initiated_by=user_phone,
+        )
+        db.add(row)
+        await db.flush()
+        created.append(
+            {
+                "id": str(row.id),
+                "from_consultation_id": str(from_consultation_id),
+                "to_consultation_id": str(to_id),
+                "amount": use,
+                "reason": row.reason,
+            }
+        )
+
+    return {
+        "fundings": created,
+        "total": round(sum(c["amount"] for c in created), 2),
+        **created[0],
+    }
+
+
+async def list_client_account_fundings(
+    db: AsyncSession,
+    *,
+    company_id: uuid.UUID | None,
+    branch_ids: list[uuid.UUID] | None,
+    current_user_role: UserRole | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    q = (
+        select(ClientAccountFunding)
+        .join(Branch, ClientAccountFunding.branch_id == Branch.id)
+        .options(
+            selectinload(ClientAccountFunding.from_consultation),
+            selectinload(ClientAccountFunding.to_consultation),
+            selectinload(ClientAccountFunding.branch),
+        )
+    )
+    if company_id is not None:
+        q = q.where(Branch.company_id == company_id)
+    if branch_ids:
+        q = q.where(ClientAccountFunding.branch_id.in_(branch_ids))
+    rows = (
+        (await db.execute(q.order_by(ClientAccountFunding.created_at.desc()).limit(limit)))
+        .scalars()
+        .unique()
+        .all()
+    )
+    return [
+        {
+            "id": str(f.id),
+            "branch_id": str(f.branch_id),
+            "branch_name": f.branch.name if f.branch else None,
+            "from_consultation_id": str(f.from_consultation_id),
+            "from_client_name": _client_label(f.from_consultation),
+            "from_client_phone": f.from_consultation.phone if f.from_consultation else None,
+            "to_consultation_id": str(f.to_consultation_id),
+            "to_client_name": _client_label(f.to_consultation),
+            "to_client_phone": f.to_consultation.phone if f.to_consultation else None,
+            "amount": round(float(f.amount), 2),
+            "reason": f.reason,
+            "status": f.status.value if hasattr(f.status, "value") else f.status,
+            "initiated_by": f.initiated_by,
+            "initiated_at": f.initiated_at.isoformat() if f.initiated_at else None,
+            "cancelled_at": f.cancelled_at.isoformat() if f.cancelled_at else None,
+            "cancel_reason": f.cancel_reason,
+        }
+        for f in rows
+    ]
+
+
+async def get_client_account_funding(
+    db: AsyncSession, funding_id: uuid.UUID
+) -> dict | None:
+    f = (
+        await db.execute(
+            select(ClientAccountFunding).where(ClientAccountFunding.id == funding_id)
+        )
+    ).scalar_one_or_none()
+    if f is None:
+        return None
+    return {
+        "id": str(f.id),
+        "branch_id": str(f.branch_id),
+        "from_consultation_id": str(f.from_consultation_id),
+        "to_consultation_id": str(f.to_consultation_id),
+        "amount": round(float(f.amount), 2),
+        "status": f.status.value if hasattr(f.status, "value") else f.status,
+    }
+
+
+async def cancel_client_account_funding(
+    db: AsyncSession,
+    *,
+    funding_id: uuid.UUID,
+    reason: str | None,
+    user_phone: str | None,
+    company_id: uuid.UUID | None,
+) -> dict:
+    from fastapi import HTTPException
+
+    f = (
+        await db.execute(
+            select(ClientAccountFunding).where(ClientAccountFunding.id == funding_id)
+        )
+    ).scalar_one_or_none()
+    if f is None:
+        raise HTTPException(status_code=404, detail="Funding not found.")
+    if company_id is not None:
+        branch_company = (
+            await db.execute(
+                select(Branch.company_id).where(Branch.id == f.branch_id)
+            )
+        ).scalar_one_or_none()
+        if branch_company != company_id:
+            raise HTTPException(status_code=404, detail="Funding not found.")
+    if f.status != ACTIVE_FUNDING:
+        raise HTTPException(status_code=400, detail="This funding is already cancelled.")
+    # A funding is an internal same-branch transfer, so undoing it is safe as long
+    # as the receiving client has not drawn new money out of their account since.
+    # Comparing the balance against the funded amount instead would make reversal
+    # impossible in the normal case: after covering the shortfall the client holds
+    # exactly the (smaller) amount still owed on their permit expenses.
+    drawn_since = (
+        await db.execute(
+            select(func.count())
+            .select_from(Expense)
+            .where(
+                Expense.consultation_id == f.to_consultation_id,
+                Expense.account == TransferPool.CLIENT_ACCOUNTS.value,
+                Expense.created_at > f.initiated_at,
+            )
+        )
+    ).scalar_one()
+    if drawn_since:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot cancel: the funded client has drawn new expenses from "
+                "their account since this funding was made."
+            ),
+        )
+    f.status = ClientAccountFundingStatus.CANCELLED
+    f.cancelled_by = user_phone
+    f.cancelled_at = now_local()
+    f.cancel_reason = reason or None
+    await db.flush()
+    return {"id": str(f.id), "status": ClientAccountFundingStatus.CANCELLED.value}
 
 
 async def _assert_client_expense_cap(
@@ -256,12 +901,15 @@ async def _assert_client_expense_cap(
     bal = await client_expense_account_balance(db, consultation_id, exclude_expense_id)
     if float(additional) > bal["remaining"] + 0.001:
         from fastapi import HTTPException
+        funded = f" + funded in {bal['funded_in']:,.2f} − funded out {bal['funded_out']:,.2f}" if (
+            bal["funded_in"] or bal["funded_out"]
+        ) else ""
         raise HTTPException(
             status_code=400,
             detail=(
                 f"Amount exceeds this client's remaining expense-account balance "
                 f"{bal['remaining']:,.2f} (paid {bal['client_paid']:,.2f} − already posted "
-                f"{bal['posted']:,.2f} − remitted {bal['remitted']:,.2f})."
+                f"{bal['posted']:,.2f} − remitted {bal['remitted']:,.2f}{funded})."
             ),
         )
 

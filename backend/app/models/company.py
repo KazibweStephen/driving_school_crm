@@ -476,6 +476,73 @@ class TransferPaymentLink(Base):
     payment: Mapped["Payment"] = relationship("Payment")
 
 
+class ClientAccountFundingStatus(str, enum.Enum):
+    ACTIVE = "active"
+    CANCELLED = "cancelled"
+
+
+class ClientAccountFunding(Base):
+    """Money moved from one client's expense account into another client's
+    expense account, both at the same branch.
+
+    Client expense accounts can go negative: a permit/IOV expense is posted
+    before the client has paid enough, so their account is overdrawn and the
+    per-client posting cap blocks any further expense. There is no way to fix
+    that today, because the only source of client-account money is a payment
+    collected from that same client. This table records the corrective move —
+    taking the shortfall from the balance of *other* clients at the branch —
+    so the overdrawn account can pay its expenses again.
+
+    Unlike a BranchTransfer this does not move money between branches or
+    change any branch pool total; it only re-allocates money already held at
+    the branch, hence it is audited on its own rather than through
+    `branch_transfers`.
+    """
+
+    __tablename__ = "client_account_fundings"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    branch_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("branches.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    from_consultation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("consultations.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    to_consultation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("consultations.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[ClientAccountFundingStatus] = mapped_column(
+        Enum(ClientAccountFundingStatus, values_callable=lambda x: [e.value for e in x]),
+        default=ClientAccountFundingStatus.ACTIVE, nullable=False, index=True,
+    )
+    initiated_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.phone"), nullable=True
+    )
+    initiated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    cancelled_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.phone"), nullable=True
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    branch: Mapped["Branch"] = relationship("Branch")
+    from_consultation: Mapped["Consultation"] = relationship(
+        "Consultation", foreign_keys=[from_consultation_id]
+    )
+    to_consultation: Mapped["Consultation"] = relationship(
+        "Consultation", foreign_keys=[to_consultation_id]
+    )
+
+
 class ExpenseCategory(Base):
     """An editable catalogue of expense categories. Categories that are
     client-related (e.g. Permit Payment, Learner Permit Payment) carry a

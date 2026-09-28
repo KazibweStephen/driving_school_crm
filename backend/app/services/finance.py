@@ -256,7 +256,9 @@ async def client_expense_account_balance(
         "consultation_id": str(consultation_id),
         "client_paid": round(paid, 2),
         "permit_unpaid": round(permit_unpaid, 2),
+        "required": round(permit_unpaid, 2),
         "funding_needed": round(max(0.0, permit_unpaid - remaining), 2),
+        "available_to_fund": round(max(0.0, remaining - permit_unpaid), 2),
         "posted": round(posted, 2),
         "remitted": round(remitted, 2),
         "funded_in": round(funded_in, 2),
@@ -444,7 +446,9 @@ async def _client_account_row(
         "funded_out": round(funded_out, 2),
         "remaining": round(remaining, 2),
         "overdrawn": remaining < -0.001,
+        "required": round(permit_unpaid, 2),
         "funding_needed": round(max(0.0, permit_unpaid - remaining), 2),
+        "available_to_fund": round(max(0.0, remaining - permit_unpaid), 2),
     }
 
 
@@ -612,7 +616,9 @@ async def list_client_accounts(
                 "funded_out": round(funded_out_by.get(cid, 0.0), 2),
                 "remaining": round(remaining, 2),
                 "overdrawn": remaining < -0.001,
+                "required": round(permit_unpaid, 2),
                 "funding_needed": round(max(0.0, permit_unpaid - remaining), 2),
+                "available_to_fund": round(max(0.0, remaining - permit_unpaid), 2),
             }
         )
     out.sort(key=lambda r: (not r["overdrawn"], r["remaining"], r["client_name"] or ""))
@@ -633,8 +639,9 @@ async def fund_client_accounts(
 
     Guards:
       * the donor and every recipient must be different clients at one branch;
-      * the donor must not be drawn below zero by the total funding (the money is
-        taken from what other clients at that branch hold, never created);
+      * the donor may only give the surplus over their OWN required expenses, so
+        drawing funding never leaves them unable to pay what they still owe (the
+        money is taken from what other clients at that branch hold, never created);
       * no client may be funded past its own shortfall, so an account can never
         end up holding more than what it still owes on its permit expenses.
     """
@@ -678,40 +685,27 @@ async def fund_client_accounts(
     if not cleaned:
         raise HTTPException(status_code=400, detail="Enter an amount for at least one client.")
 
-    total = round(sum(a for _, a in cleaned), 2)
     # Trim every allocation to the recipient's own shortfall first, so asking for
     # more than is owed is capped rather than rejected — and the funding client is
-    # only ever charged for what is actually moved.
-    already = await db.execute(
-        select(ClientAccountFunding.to_consultation_id, func.coalesce(func.sum(ClientAccountFunding.amount), 0))
-        .where(
-            ClientAccountFunding.status == ACTIVE_FUNDING,
-            ClientAccountFunding.to_consultation_id.in_([to_id for to_id, _ in cleaned]),
-        )
-        .group_by(ClientAccountFunding.to_consultation_id)
-    )
-    funded_to = {row[0]: float(row[1] or 0) for row in already.all()}
-
+    # only ever charged for what is actually moved. `remaining` already counts
+    # money previously funded in, so a client part-funded earlier can still be
+    # topped up to exactly its remaining shortfall.
     trimmed: list[tuple[uuid.UUID, float]] = []
     seen: set[uuid.UUID] = set()
     for to_id, amount in cleaned:
+        bal = await client_expense_account_balance(db, to_id)
+        needed = float(bal["funding_needed"])
         if to_id in seen:
             # Fold a repeated recipient into the earlier entry.
             idx = next(i for i, (t, _) in enumerate(trimmed) if t == to_id)
             prev = trimmed[idx][1]
-            bal = await client_expense_account_balance(db, to_id)
-            needed = max(0.0, float(bal["permit_unpaid"]) - float(bal["remaining"]))
-            allowed = round(needed - funded_to.get(to_id, 0.0) - prev, 2)
-            take = min(round(amount - prev, 2), max(allowed, 0.0))
+            take = min(round(amount - prev, 2), max(0.0, round(needed - prev, 2)))
             trimmed[idx] = (to_id, round(prev + max(take, 0.0), 2))
             continue
         seen.add(to_id)
-        bal = await client_expense_account_balance(db, to_id)
-        needed = max(0.0, float(bal["permit_unpaid"]) - float(bal["remaining"]))
-        allowed = round(needed - funded_to.get(to_id, 0.0), 2)
-        if allowed <= 0.001:
+        if needed <= 0.001:
             continue
-        trimmed.append((to_id, min(amount, allowed)))
+        trimmed.append((to_id, min(amount, needed)))
     if not trimmed:
         raise HTTPException(
             status_code=400,
@@ -719,13 +713,27 @@ async def fund_client_accounts(
         )
 
     total = round(sum(a for _, a in trimmed), 2)
+    # The funding client keeps enough back to pay their OWN required expenses, so
+    # only their surplus over that requirement can be drawn. This is normally
+    # profit, but a client still owing permit expenses gives nothing away.
     src_bal = await client_expense_account_balance(db, from_consultation_id)
-    if total > float(src_bal["remaining"]) + 0.001:
+    src_required = float(src_bal["required"])
+    src_spendable = float(src_bal["remaining"]) - src_required
+    if total > src_spendable + 0.001:
+        if src_spendable <= 0.001:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "The funding client has no spare funds to give: their balance is "
+                    "already spoken for by their own unpaid expenses."
+                ),
+            )
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Amount exceeds the funding client's available balance "
-                f"{float(src_bal['remaining']):,.2f}."
+                f"Amount exceeds the funding client's available funds "
+                f"{max(src_spendable, 0.0):,.2f} — their own unpaid expenses of "
+                f"{src_required:,.2f} are kept back."
             ),
         )
 

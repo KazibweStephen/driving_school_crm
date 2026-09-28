@@ -310,7 +310,11 @@ async def list_client_accounts(
             "funded_in": round(sum(i["funded_in"] for i in items), 2),
             "funded_out": round(sum(i["funded_out"] for i in items), 2),
             "remaining": round(sum(i["remaining"] for i in items), 2),
+            "required": round(sum(i["required"] for i in items), 2),
             "funding_needed": round(sum(i["funding_needed"] for i in items), 2),
+            "available_to_fund": round(
+                sum(i["available_to_fund"] for i in items), 2
+            ),
         },
     }
 

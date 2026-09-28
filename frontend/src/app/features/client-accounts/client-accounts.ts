@@ -79,10 +79,9 @@ export class ClientAccountsCmp implements OnInit {
     this.accounts().filter((a) => this.selected().has(a.consultation_id)),
   );
 
-  /** Clients at each selected recipient's branch that actually hold a
-   *  spendable client-account balance, offered as funding sources. Loaded with
-   *  its own unfiltered request so the "Overdrawn only" / search filters on the
-   *  ledger can never hide the clients that are able to give. */
+  /** Clients at each selected recipient's branch that can actually spare money.
+   *  Loaded with its own unfiltered request so the "Overdrawn only" / search
+   *  filters on the ledger can never hide the clients that are able to give. */
   donorOptions = computed(() => {
     const recipients = this.selectedAccounts();
     const ids = new Set(recipients.map((r) => r.consultation_id));
@@ -91,12 +90,15 @@ export class ClientAccountsCmp implements OnInit {
     return pool
       .filter((a) => !ids.has(a.consultation_id))
       .filter((a) => a.branch_id && branchIds.has(a.branch_id))
-      .filter((a) => a.remaining > 0.001)
-      .sort((a, b) => b.remaining - a.remaining)
+      // A client can only give what is left after their own required expenses.
+      .filter((a) => a.available_to_fund > 0.001)
+      .sort((a, b) => b.available_to_fund - a.available_to_fund)
       .map((a) => ({
-        label: `${a.client_name || a.client_phone} · ${a.branch_name} · avail ${this.fmt(a.remaining)}`,
+        label: `${a.client_name || a.client_phone} · ${a.branch_name} · can give ${this.fmt(a.available_to_fund)}`,
         value: a.consultation_id,
         remaining: a.remaining,
+        available: a.available_to_fund,
+        required: a.required,
       }));
   });
 
@@ -121,12 +123,20 @@ export class ClientAccountsCmp implements OnInit {
     return set.size > 1;
   });
 
+  /** What the funding client can actually give: their balance less the amount
+   *  they still owe on their own expenses. Normally this is their profit. */
+  donorAvailable = computed(() => {
+    const donor = this.donorAccount();
+    return donor ? donor.available_to_fund : 0;
+  });
+
   /** Per-recipient allocations, with the whole shortfall pre-filled so the
-   *  default action covers exactly the unpaid permit expenses. */
+   *  default action covers exactly the unpaid permit expenses. Amounts are
+   *  trimmed against the funding client's available funds in row order. */
   allocations = computed(() => {
     const donor = this.donorAccount();
     const amounts = this.fundingAmounts();
-    let donorLeft = donor ? donor.remaining : Infinity;
+    let donorLeft = donor ? donor.available_to_fund : Infinity;
     return this.selectedAccounts().map((a) => {
       const raw = amounts[a.consultation_id];
       const amount = raw === undefined || raw === null ? a.funding_needed : Number(raw);
@@ -141,13 +151,17 @@ export class ClientAccountsCmp implements OnInit {
     });
   });
 
+  /** Sum of what the selected clients need — the total the funding aims to cover. */
+  totalNeeded = computed(() =>
+    this.allocations().reduce((s, r) => s + r.needed, 0),
+  );
   totalAllocated = computed(() =>
     this.allocations().reduce((s, r) => s + r.amount, 0),
   );
-  donorRemaining = computed(() => {
-    const donor = this.donorAccount();
-    return donor ? Number((donor.remaining - this.totalAllocated()).toFixed(2)) : 0;
-  });
+  /** Funds the funding client still has spare after this transfer. */
+  donorRemaining = computed(() =>
+    Number((this.donorAvailable() - this.totalAllocated()).toFixed(2)),
+  );
   fundCanSubmit = computed(() => {
     const donor = this.donorAccount();
     if (!donor) return false;
@@ -300,7 +314,7 @@ export class ClientAccountsCmp implements OnInit {
     const donor = this.donorAccount();
     if (!donor) return;
     const next: Record<string, number> = {};
-    let left = donor.remaining;
+    let left = donor.available_to_fund;
     for (const r of this.allocations()) {
       const take = Math.min(Math.max(r.needed, 0), left);
       if (take > 0) next[r.account.consultation_id] = Number(take.toFixed(2));
@@ -325,7 +339,9 @@ export class ClientAccountsCmp implements OnInit {
       return;
     }
     if (this.donorRemaining() < -0.001) {
-      this.fundError.set('The total exceeds the funding client\'s available balance.');
+      this.fundError.set(
+        'The total exceeds what the funding client can spare — their own unpaid expenses are kept back.',
+      );
       return;
     }
     this.fundingSaving.set(true);

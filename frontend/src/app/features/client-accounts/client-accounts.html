@@ -31,7 +31,7 @@
   </div>
 
   <!-- Summary cards -->
-  <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+  <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
     <div class="rounded-lg border border-gray-200 bg-white p-3">
       <div class="text-xs uppercase text-gray-500">Paid in</div>
       <div class="text-lg font-semibold text-gray-900" data-testid="total-client-paid">
@@ -67,6 +67,13 @@
       <div class="text-lg font-semibold text-rose-900" data-testid="total-funding-needed">
         {{ fmt(totals()?.funding_needed) }}
       </div>
+    </div>
+    <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+      <div class="text-xs uppercase text-emerald-700">Available to fund</div>
+      <div class="text-lg font-semibold text-emerald-900" data-testid="total-available-to-fund">
+        {{ fmt(totals()?.available_to_fund) }}
+      </div>
+      <div class="text-xs text-emerald-700">balance less own unpaid expenses</div>
     </div>
   </div>
 
@@ -127,7 +134,7 @@
             <th class="px-2 py-2 text-right">Funded out</th>
             <th class="px-2 py-2 text-right">Balance</th>
             <th class="px-2 py-2 text-right">Unpaid permit</th>
-            <th class="px-2 py-2 text-right">Funding needed</th>
+            <th class="px-2 py-2 text-right">Required</th>
           </tr>
         </thead>
         <tbody>
@@ -290,11 +297,30 @@
   />
 
   @if (donorAccount(); as d) {
-    <div class="mt-2 rounded-md bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
-      Available to give: <strong>{{ fmt(d.remaining) }}</strong>
-      @if (d.branch_name) {
-        <span class="text-indigo-700">· {{ d.branch_name }}</span>
-      }
+    <div class="mt-2 rounded-md bg-indigo-50 px-3 py-2 text-sm text-indigo-900" data-testid="fund-donor-summary">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span>
+          Balance:
+          <strong data-testid="fund-donor-balance">{{ fmt(d.remaining) }}</strong>
+        </span>
+        <span>
+          Own expenses to pay:
+          <strong data-testid="fund-donor-required">{{ fmt(d.required) }}</strong>
+        </span>
+        <span>
+          Can give:
+          <strong data-testid="fund-donor-available" class="text-indigo-700">
+            {{ fmt(d.available_to_fund) }}
+          </strong>
+        </span>
+        @if (d.branch_name) {
+          <span class="text-indigo-700">· {{ d.branch_name }}</span>
+        }
+      </div>
+      <p class="mt-1 text-xs text-indigo-700">
+        The funding client keeps back what is still owed on their own expenses, so only the
+        surplus — normally their profit — can be moved to other clients.
+      </p>
     </div>
   }
 
@@ -333,7 +359,7 @@
             </td>
             <td class="px-2 py-2 text-right">
               <p-button
-                label="Needed"
+                label="Required"
                 size="small"
                 severity="secondary"
                 [outlined]="true"
@@ -352,20 +378,49 @@
     </table>
   </div>
 
-  <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-    <span class="text-gray-600">
-      Total to move: <strong class="text-gray-900">{{ fmt(totalAllocated()) }}</strong>
-    </span>
-    <span class="text-gray-600">
-      Funding client left with:
-      <strong [class.text-rose-700]="donorRemaining() < 0" class="text-gray-900">
-        {{ fmt(donorRemaining()) }}
-      </strong>
-    </span>
+  <div class="mt-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <span class="text-gray-600">
+        Clients selected:
+        <strong class="text-gray-900" data-testid="fund-selected-count">
+          {{ selectedAccounts().length }}
+        </strong>
+      </span>
+      <span class="text-gray-600">
+        Total needed:
+        <strong class="text-gray-900" data-testid="fund-total-needed">{{ fmt(totalNeeded()) }}</strong>
+      </span>
+      <span class="text-gray-600">
+        Total to move:
+        <strong class="text-gray-900" data-testid="fund-total-allocating">{{ fmt(totalAllocated()) }}</strong>
+      </span>
+      <span class="text-gray-600">
+        Available to fund:
+        <strong class="text-gray-900" data-testid="fund-total-available">
+          {{ fmt(donorAvailable()) }}
+        </strong>
+      </span>
+      <span class="text-gray-600">
+        Funds left after:
+        <strong
+          [class.text-rose-700]="donorRemaining() < -0.001"
+          class="text-gray-900"
+          data-testid="fund-donor-left"
+        >
+          {{ fmt(donorRemaining()) }}
+        </strong>
+      </span>
+    </div>
+    @if (donorId() && totalNeeded() > totalAllocated() + 0.001) {
+      <p class="mt-1 text-xs text-amber-700" data-testid="fund-short-warning">
+        The available funds only cover {{ fmt(totalAllocated()) }} of the {{ fmt(totalNeeded()) }}
+        needed. Raise the funding client, or fund fewer clients, to cover the rest.
+      </p>
+    }
   </div>
   @if (donorId()) {
     <p-button
-      label="Use the whole needed amounts"
+      label="Fill all required amounts"
       size="small"
       severity="secondary"
       [outlined]="true"

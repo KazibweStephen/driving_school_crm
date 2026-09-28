@@ -157,6 +157,7 @@ test.describe('Client Accounts', () => {
   let fixtureTag: string;
   let donorId: string;
   let recvId: string;
+  const extraIds: string[] = [];
 
   test.beforeEach(async ({ page }) => {
     // Fixtures are created via the API, which needs a page origin for relative URLs.
@@ -179,7 +180,8 @@ test.describe('Client Accounts', () => {
   });
 
   test.afterEach(async ({ page }) => {
-    await cleanup(page, [donorId, recvId].filter(Boolean));
+    await cleanup(page, [donorId, recvId, ...extraIds].filter(Boolean));
+    extraIds.length = 0;
   });
 
   test('shows the drawn balance and the permit shortfall, and funds it from another client', async ({
@@ -209,7 +211,18 @@ test.describe('Client Accounts', () => {
     // Pick the donor.
     await page.getByTestId('fund-donor').click();
     await page.locator('.p-select-option', { hasText: 'Acc' }).first().click();
-    await expect(dialog.getByText(/Available to give/)).toBeVisible();
+    // The funder's own reserve is shown, and only the surplus is offered. It owes
+    // nothing of its own here, so all 1,000,000 is available.
+    await expect(dialog.getByTestId('fund-donor-summary')).toBeVisible();
+    await expect(dialog.getByTestId('fund-donor-balance')).toHaveText(/1,?000,?000/);
+    await expect(dialog.getByTestId('fund-donor-required')).toHaveText('0');
+    await expect(dialog.getByTestId('fund-donor-available')).toHaveText(/1,?000,?000/);
+    await expect(dialog.getByTestId('fund-selected-count')).toHaveText('1');
+    await expect(dialog.getByTestId('fund-total-needed')).toHaveText(/640,?000/);
+    await expect(dialog.getByTestId('fund-total-allocating')).toHaveText(/640,?000/);
+    await expect(dialog.getByTestId('fund-total-available')).toHaveText(/1,?000,?000/);
+    await expect(dialog.getByTestId('fund-donor-left')).toHaveText(/360,?000/);
+    await expect(dialog.getByTestId('fund-short-warning')).toBeHidden();
 
     // The shortfall is pre-filled as the amount (testid sits on the p-inputnumber
     // host, so read the inner input).
@@ -261,9 +274,10 @@ test.describe('Client Accounts', () => {
           });
 
         // The recipient's shortfall is 640,000 and the donor holds 1,000,000, so
-        // an over-request is trimmed to the shortfall instead of rejected. Draw
-        // 700,000 of the donor's own account down first so the shortfall really
-        // does exceed what the donor can give, which must still be refused.
+        // an over-request is trimmed to the shortfall instead of rejected. File a
+        // 700,000 permit expense against the donor first: that amount is now owed
+        // on the donor's own account, so it has no spare funds left to give and
+        // the funding must be refused even though the donor is not overdrawn.
         const drawn = await fetch('/api/v1/finance/expenses', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
@@ -308,7 +322,7 @@ test.describe('Client Accounts', () => {
     );
     expect(results.drawn).toBe(201);
     expect(results.overdraw[0]).toBe(400);
-    expect(results.overdraw[1]).toMatch(/exceeds the funding client/);
+    expect(results.overdraw[1]).toMatch(/no spare funds to give/);
     expect(results.self[0]).toBe(400);
     expect(results.otherBranch[0]).toBe(400);
     expect(results.otherBranch[1]).toMatch(/same branch/);
@@ -462,5 +476,151 @@ test.describe('Client Accounts', () => {
     expect(out.badBatch[0]).toBe(400);
     expect(out.badBatch[1]).toMatch(/same branch/);
     expect(out.afterCount).toBe(out.beforeCount);
+  });
+
+  test('the funding client can only give its surplus, and covers several clients at once', async ({
+    page,
+  }) => {
+    await loginSuperAdmin(page);
+    // Three more clients, each short by the same 640,000.
+    const extra = [];
+    for (const suffix of ['3', '4', '5']) {
+      const c = await makeClient(page, BRANCH, `${fixtureTag}${suffix}`, 320000);
+      expect(c.payment_error, `extra fixture collection ${suffix}`).toBeNull();
+      const over = await makeOverdrawn(page, c, BRANCH, 320000);
+      expect(over.error, `extra fixture overdraft ${suffix}`).toBeNull();
+      extra.push(c.consultation_id);
+    }
+    extraIds.push(...extra);
+    const [secondId, thirdId, fourthId] = extra;
+
+    const out = await page.evaluate(
+      async ({ donorId, secondId, thirdId, fourthId, branchId }) => {
+        const tok = (await (
+          await fetch('/api/v1/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: '0782832711', pin: '1234' }),
+          })
+        ).json()).access_token;
+        const h = { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` };
+        const accounts = async (id: string) =>
+          (
+            await fetch(`/api/v1/finance/expenses/client-account-balance?consultation_id=${id}`, {
+              headers: h,
+            })
+          ).json();
+        const fund = (body: any) =>
+          fetch('/api/v1/finance/client-accounts/fund', { method: 'POST', headers: h, body: JSON.stringify(body) });
+
+        // File 300,000 of permit expense against the donor itself, so it now owes
+        // that much. Paid 1,000,000 - drawn 300,000 = 700,000 held, of which the
+        // 300,000 is spoken for and only 400,000 is spare.
+        const own = await fetch('/api/v1/finance/expenses', {
+          method: 'POST',
+          headers: h,
+          body: JSON.stringify({
+            branch_id: branchId,
+            category: 'Police Booking',
+            account: 'client_accounts',
+            amount: 300000,
+            consultation_id: donorId,
+            description: 'donor reserve probe',
+          }),
+        });
+        const before = await accounts(donorId);
+        const donorBefore = {
+          own: own.status,
+          remaining: before.remaining,
+          required: before.required,
+          available: before.available_to_fund,
+        };
+
+        // Top the donor up to 1,700,000 held / 1,400,000 spare, enough for one
+        // funding to cover two clients at 640,000 each.
+        await fetch(`/api/v1/consultations/${donorId}/payments/collect`, {
+          method: 'POST',
+          headers: h,
+          body: JSON.stringify({
+            amount: 1000000,
+            product_id: '00b422b9-ace3-4728-b679-4abe03c34ea7',
+            package_id: '77a7f143-7b2a-46db-98cf-be5cf73c33f0',
+            branch_id: branchId,
+            payment_method: 'cash',
+          }),
+        });
+        const topped = await accounts(donorId);
+
+        const multi = await (
+          await fund({
+            from_consultation_id: donorId,
+            allocations: [
+              { to_consultation_id: secondId, amount: 640000 },
+              { to_consultation_id: thirdId, amount: 640000 },
+            ],
+          })
+        ).json();
+
+        const donorAfter = await accounts(donorId);
+        const second = await accounts(secondId);
+        const third = await accounts(thirdId);
+
+        // Only 120,000 is spare now, which cannot cover the fourth client's
+        // 640,000 shortfall: the funder's own reserve is never touched.
+        const overAvail = await fund({
+          from_consultation_id: donorId,
+          allocations: [{ to_consultation_id: fourthId, amount: 640000 }],
+        });
+        const overBody = await overAvail.json();
+        const fourth = await accounts(fourthId);
+
+        return {
+          donorBefore,
+          topped: { remaining: topped.remaining, available: topped.available_to_fund },
+          funded: (multi.fundings || []).length,
+          fundedTotal: multi.total,
+          donorAfter: {
+            remaining: donorAfter.remaining,
+            required: donorAfter.required,
+            available: donorAfter.available_to_fund,
+          },
+          second: { remaining: second.remaining, needed: second.funding_needed },
+          third: { remaining: third.remaining, needed: third.funding_needed },
+          overAvail: [overAvail.status, overBody.detail],
+          fourthNeeded: fourth.funding_needed,
+          fourthFundedIn: fourth.funded_in,
+        };
+      },
+      { donorId, secondId, thirdId, fourthId, branchId: BRANCH },
+    );
+
+    expect(out.donorBefore.own).toBe(201);
+    // 700,000 held, 300,000 of it owed on its own permit expense.
+    expect(out.donorBefore.remaining).toBe(700000);
+    expect(out.donorBefore.required).toBe(300000);
+    expect(out.donorBefore.available).toBe(400000);
+    // The donor is not overdrawn, yet only the surplus is offered as a source.
+    expect(out.topped.available).toBe(1400000);
+
+    // One batch, two clients, each trimmed to its own 640,000 shortfall.
+    expect(out.funded).toBe(2);
+    expect(out.fundedTotal).toBe(1280000);
+    expect(out.second.remaining).toBe(320000);
+    expect(out.second.needed).toBe(0);
+    expect(out.third.remaining).toBe(320000);
+    expect(out.third.needed).toBe(0);
+
+    // 1,700,000 - 1,280,000 = 420,000 held, and the 300,000 reserve is intact,
+    // so only 120,000 is left to give.
+    expect(out.donorAfter.remaining).toBe(420000);
+    expect(out.donorAfter.required).toBe(300000);
+    expect(out.donorAfter.available).toBe(120000);
+
+    // A client that would need more than the surplus left is refused outright.
+    expect(out.overAvail[0]).toBe(400);
+    expect(out.overAvail[1]).toMatch(/exceeds the funding client/);
+    expect(out.overAvail[1]).toMatch(/120,000/);
+    expect(out.fourthFundedIn).toBe(0);
+    expect(out.fourthNeeded).toBe(640000);
   });
 });

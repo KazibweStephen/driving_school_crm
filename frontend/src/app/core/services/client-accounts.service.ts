@@ -18,7 +18,12 @@ export interface ClientAccount {
   funded_out: number;
   remaining: number;
   overdrawn: boolean;
+  /** What the client still has to pay on their own expenses. Kept back when
+   *  this client is used as a funding source. */
+  required: number;
   funding_needed: number;
+  /** Surplus over `required` — the only amount this client can give away. */
+  available_to_fund: number;
 }
 
 export interface ClientAccountsResponse {
@@ -31,7 +36,9 @@ export interface ClientAccountsResponse {
     funded_in: number;
     funded_out: number;
     remaining: number;
+    required: number;
     funding_needed: number;
+    available_to_fund: number;
   };
 }
 

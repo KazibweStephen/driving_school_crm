@@ -245,3 +245,21 @@ class PermitTrackerListResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+class PermitIssueReadinessRead(BaseModel):
+    """State the Issue Permit dialog gates on before allowing issuance."""
+    cart_item_id: str
+    consultation_id: str
+    client_name: str
+    outstanding_balance: float
+    has_zero_balance: bool
+    unsettled: list[str]
+    unfiled: list[str]
+    suggested_issue_date: str | None
+    permit_received_date: str | None
+    blockers: list[str]
+    can_issue: bool
+
+
+class PermitIssueCreate(BaseModel):
+    issued_date: date | None = None

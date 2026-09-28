@@ -194,6 +194,20 @@ export interface PermitExpenseChecklistResponse {
   items: PermitExpenseChecklistItem[];
 }
 
+export interface PermitIssueReadiness {
+  cart_item_id: string;
+  consultation_id: string;
+  client_name: string;
+  outstanding_balance: number;
+  has_zero_balance: boolean;
+  unsettled: string[];
+  unfiled: string[];
+  suggested_issue_date: string | null;
+  permit_received_date: string | null;
+  blockers: string[];
+  can_issue: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PermitProgressService {
   constructor(private http: HttpClient) {}
@@ -250,6 +264,19 @@ export class PermitProgressService {
   getPermitExpenses(cartItemId: string) {
     return this.http.get<PermitExpenseChecklistResponse>(
       `/api/v1/cart-items/${cartItemId}/permit-expenses`
+    );
+  }
+
+  getPermitIssueReadiness(cartItemId: string) {
+    return this.http.get<PermitIssueReadiness>(
+      `/api/v1/cart-items/${cartItemId}/permit-issue-readiness`
+    );
+  }
+
+  issuePermit(cartItemId: string, issuedDate: string) {
+    return this.http.post<PermitProgress>(
+      `/api/v1/cart-items/${cartItemId}/permit-issue`,
+      { issued_date: issuedDate }
     );
   }
 

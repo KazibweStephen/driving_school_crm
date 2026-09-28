@@ -1,0 +1,180 @@
+<p-dialog [visible]="visible()" (visibleChange)="$event ? null : close()"
+  [modal]="true" [style]="{ width: '760px' }" [breakpoints]="{ '640px': '95vw' }"
+  data-testid="permit-issue-dialog">
+  <ng-template pTemplate="header">
+    <div class="flex items-center gap-2">
+      <span class="pi pi-id-card text-emerald-600"></span>
+      <span class="font-semibold text-gray-800">Issue Permit</span>
+    </div>
+  </ng-template>
+
+  <div class="space-y-4" *ngIf="tracker">
+    <div class="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900" data-testid="issue-client">
+      <span class="font-medium">{{ readiness()?.client_name || tracker.client_name }}</span>
+      <span class="text-blue-700"> · {{ checklist()?.package_name || '' }}</span>
+    </div>
+
+    <div class="rounded-lg border p-3"
+      [class.border-emerald-200]="balanceOk" [class.bg-emerald-50]="balanceOk"
+      [class.border-red-200]="!balanceOk" [class.bg-red-50]="!balanceOk"
+      data-testid="issue-balance">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-sm font-medium text-gray-700">Outstanding balance</span>
+        <span class="text-sm font-semibold"
+          [class.text-emerald-700]="balanceOk" [class.text-red-700]="!balanceOk">
+          {{ (readiness()?.outstanding_balance ?? 0) | number:'1.0-0' }}
+        </span>
+      </div>
+      @if (!balanceOk) {
+        <p class="mt-1 text-xs text-red-700">
+          <i class="pi pi-lock mr-1"></i>The client must have a zero balance before a permit can be issued.
+        </p>
+      } @else {
+        <p class="mt-1 text-xs text-emerald-700"><i class="pi pi-check-circle mr-1"></i>Balance cleared.</p>
+      }
+    </div>
+
+    @if ((readiness()?.unsettled?.length ?? 0) > 0) {
+      <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        data-testid="issue-unsettled">
+        <p class="font-medium">Approve and pay these before issuing</p>
+        <ul class="mt-1 list-inside list-disc text-xs">
+          @for (name of readiness()!.unsettled; track name) { <li>{{ name }}</li> }
+        </ul>
+      </div>
+    }
+
+    @if ((readiness()?.unfiled?.length ?? 0) > 0) {
+      <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700"
+        data-testid="issue-unfiled">
+        <i class="pi pi-info-circle mr-1"></i>Not filed yet: {{ readiness()!.unfiled?.join(', ') }}.
+        File any that apply below.
+      </div>
+    }
+
+    <div class="rounded-lg border bg-white p-3" data-testid="issue-checklist">
+      <h4 class="mb-2 text-sm font-semibold text-gray-800">Permit Expenses</h4>
+      <p class="mb-2 text-xs text-gray-400">File, approve and pay each stage expense from here</p>
+      <div class="space-y-2">
+        @for (item of items; track item.category_code) {
+          <div class="rounded-lg border bg-gray-50 p-3" [attr.data-testid]="'issue-expense-' + item.category_code">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-medium text-gray-800">{{ item.category_name }}</span>
+                <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ statusClass(item.status) }}">
+                  {{ statusLabel(item.status) }}
+                </span>
+              </div>
+              @if (item.status) {
+                <span class="text-sm font-semibold text-gray-700">{{ item.amount | number:'1.0-0' }}</span>
+              }
+            </div>
+
+            @if (item.status === 'rejected' && item.rejection_reason) {
+              <div class="mt-1 text-xs text-red-600">Declined: {{ item.rejection_reason }}</div>
+            }
+
+            @if (item.can_file) {
+              <div class="mt-2 flex flex-wrap items-end gap-2">
+                <div>
+                  <label class="mb-1 block text-[11px] font-medium text-gray-500">Amount</label>
+                  <p-inputNumber [(ngModel)]="item.draft_amount" [min]="0" styleClass="w-32"
+                    inputStyleClass="w-full" placeholder="0" />
+                </div>
+                <div>
+                  <label class="mb-1 block text-[11px] font-medium text-gray-500">Date</label>
+                  <p-datepicker [(ngModel)]="item.draft_date" dateFormat="dd/mm/yy" styleClass="w-40" appendTo="body" />
+                </div>
+                @if (canCreateExpense) {
+                  <p-button label="File Expense" icon="pi pi-plus" size="small"
+                    (onClick)="fileExpense(item)" [loading]="saving()" [disabled]="!canFile(item)"
+                    [attr.data-testid]="'issue-file-' + item.category_code" />
+                }
+              </div>
+              @if (canCreateExpense && !canFile(item)) {
+                <div class="mt-1 text-xs text-amber-600" [attr.data-testid]="'issue-amount-required-' + item.category_code">
+                  <i class="pi pi-exclamation-triangle mr-1"></i>Enter an amount greater than zero to file {{ item.category_name }}.
+                </div>
+              }
+            } @else {
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                @if (item.status === 'pending') {
+                  @if (canApproveExpense) {
+                    <p-button label="Approve" icon="pi pi-check" size="small" severity="success"
+                      (onClick)="approveExpense(item)" [loading]="saving()"
+                      [attr.data-testid]="'issue-approve-' + item.category_code" />
+                  }
+                  @if (canRejectExpense) {
+                    <p-button label="Decline" icon="pi pi-times" size="small" severity="danger"
+                      (onClick)="openReject(item)" [attr.data-testid]="'issue-decline-' + item.category_code" />
+                  }
+                }
+                @if (item.status === 'approved') {
+                  @if (canPayExpense) {
+                    <p-button label="Pay" icon="pi pi-wallet" size="small"
+                      (onClick)="payExpense(item)" [loading]="saving()"
+                      [attr.data-testid]="'issue-pay-' + item.category_code" />
+                  }
+                }
+                @if (item.status === 'paid') {
+                  <span class="text-xs text-emerald-600"><i class="pi pi-check-circle mr-1"></i>Paid — no action needed</span>
+                }
+              </div>
+            }
+          </div>
+        }
+        @if (items.length === 0) {
+          <div class="py-2 text-xs text-gray-400">No permit expenses to file.</div>
+        }
+      </div>
+    </div>
+
+    <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3" data-testid="issue-form">
+      <h4 class="mb-1 text-sm font-semibold text-emerald-900">Permit issuance</h4>
+      <p class="mb-2 text-xs text-emerald-800">
+        Defaults to 15 days after the tested-on date, or 15 days after the booking date when the client has not been tested yet.
+      </p>
+      <div class="flex flex-wrap items-end gap-2">
+        <div>
+          <label class="mb-1 block text-[11px] font-medium text-emerald-800">Issuance date</label>
+          <p-datepicker [(ngModel)]="issueDate" dateFormat="dd/mm/yy" styleClass="w-44"
+            appendTo="body" data-testid="issue-date" />
+        </div>
+        <p-button label="Issue Permit" icon="pi pi-check-circle" severity="success"
+          (onClick)="submitIssue()" [disabled]="!canSubmit" [loading]="saving()"
+          data-testid="issue-submit" />
+      </div>
+      @if (!canSubmit) {
+        <p class="mt-2 text-xs text-emerald-800" data-testid="issue-blocked">
+          @if (!balanceOk) {
+            <i class="pi pi-lock mr-1"></i>Clear the client's outstanding balance first.
+          } @else if ((readiness()?.unsettled?.length ?? 0) > 0) {
+            <i class="pi pi-lock mr-1"></i>Approve and pay the outstanding stage expenses above first.
+          } @else if (!canIssuePermit) {
+            <i class="pi pi-lock mr-1"></i>You do not have permission to issue permits.
+          } @else {
+            <i class="pi pi-lock mr-1"></i>Choose an issuance date.
+          }
+        </p>
+      }
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <p-button label="Close" severity="secondary" (onClick)="close()" data-testid="issue-close" />
+  </ng-template>
+</p-dialog>
+
+<p-dialog [visible]="showReject()" (visibleChange)="$event ? null : showReject.set(false)"
+  [modal]="true" [style]="{ width: '420px' }" header="Decline expense" data-testid="issue-reject-dialog">
+  <label class="mb-1 block text-[11px] font-medium text-gray-500">Reason</label>
+  <textarea pTextarea [(ngModel)]="rejectReason" rows="3" class="w-full"
+    placeholder="Why is this expense declined?" data-testid="issue-reject-reason"></textarea>
+  <ng-template pTemplate="footer">
+    <p-button label="Cancel" severity="secondary" (onClick)="showReject.set(false)" />
+    <p-button label="Decline" severity="danger" [disabled]="!rejectReason.trim()"
+      (onClick)="submitReject()" [loading]="saving()" data-testid="issue-reject-confirm" />
+  </ng-template>
+</p-dialog>
+
+<p-toast position="top-right" />

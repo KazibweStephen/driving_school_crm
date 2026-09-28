@@ -275,11 +275,23 @@ async def _expected_amount_for(
     """The allocated amount for a tagged expense type on a cart item, used to
     cap amount + charges at create time. Returns None for untagged categories
     (permit milestones resolve through the permit categories, which have no
-    package allocation — those stay uncapped)."""
+    package allocation — those stay uncapped).
+
+    Permit stages are matched through the permit line matcher because a
+    package names its expected expense lines descriptively ("Permit Payment
+    (Class B)"), so the flat category name never matches exactly and the cap
+    would otherwise silently never apply."""
     if company_id is None:
         return None
     from app.services.expected_expense import cart_item_expected_amount
-    return await cart_item_expected_amount(db, cart_item_id, category, company_id)
+
+    matcher = None
+    from app.services.permit import permit_category_code, permit_line_matcher
+
+    matcher = permit_line_matcher(permit_category_code(category) or "")
+    return await cart_item_expected_amount(
+        db, cart_item_id, category, company_id, matcher=matcher
+    )
 
 
 async def list_expenses(
@@ -479,6 +491,19 @@ async def create_expense(
         if consultation_id is not None:
             await _assert_client_expense_cap(
                 db, consultation_id, float(amount) + float(charges or 0)
+            )
+    # A permit stage is a real fee — a zero (or negative) filing is always a
+    # mistake, and it would otherwise sit on the permit checklist as a
+    # "filed" row that can never be reconciled against the package.
+    if category:
+        from app.services.permit import is_permit_processing_category
+
+        if is_permit_processing_category(category) and float(amount) + float(charges or 0) <= 0:
+            from fastapi import HTTPException
+
+            raise HTTPException(
+                status_code=400,
+                detail=f"{category} must be filed with an amount greater than zero.",
             )
     # Prevent duplicate expenses per cart item: when a cart_item_id is linked,
     # block if an expense for the same cart_item + category already exists AND

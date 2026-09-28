@@ -324,10 +324,21 @@ async def cart_item_expected_amount(
     cart_item_id,
     category: str,
     company_id: uuid.UUID,
+    matcher=None,
 ) -> float | None:
     """The allocated (expected) amount for a single tagged expense type on a
     cart item's package, or None when the category is not tagged. Used to cap
-    the filed amount (amount + charges cannot exceed the allocation)."""
+    the filed amount (amount + charges cannot exceed the allocation) and to
+    prefill the permit checklist.
+
+    ``category`` is a flat expense-category name, but a package's expected
+    expense lines are named freely and descriptively ("Permit Payment (Class
+    B)"). An exact name match therefore misses every descriptive line, so
+    callers that know their own vocabulary can pass a ``matcher(entry)``
+    predicate, which receives the whole entry (its line ``category``, the
+    linked ``category_id``/``category_name``, and ``amount``); exact matches
+    always win.
+    """
     from app.models.cart import CartItem
 
     item = (
@@ -338,9 +349,17 @@ async def cart_item_expected_amount(
     low = (category or "").strip().lower()
     if not low:
         return None
-    for e in await get_cart_item_expense_types(db, item, company_id):
+    entries = await get_cart_item_expense_types(db, item, company_id)
+    for e in entries:
         if e["category"].lower() == low:
             return float(e.get("amount") or 0)
+    if matcher is not None:
+        for e in entries:
+            try:
+                if matcher(e):
+                    return float(e.get("amount") or 0)
+            except Exception:
+                continue
     return None
 
 

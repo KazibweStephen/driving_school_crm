@@ -18,6 +18,8 @@ from app.schemas.permit import (
     PermitExpenseChecklistResponse,
     PermitPromiseCreate,
     PermitPromiseRead,
+    PermitIssueReadinessRead,
+    PermitIssueCreate,
 )
 from app.services import permit as permit_service
 from app.services.permit import categorize_permit_expense, apply_permit_expense_effects
@@ -147,6 +149,45 @@ async def get_permit_expenses(
         company_id=current_user.company_id, current_user_role=current_user.role,
     )
     return data
+
+
+# ── Issuing a permit ─────────────────────────────────────────────────
+
+@router.get("/{cart_item_id}/permit-issue-readiness", response_model=PermitIssueReadinessRead)
+async def get_permit_issue_readiness(
+    cart_item_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("training.view")),
+):
+    try:
+        cid = uuid.UUID(cart_item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid cart item ID")
+    return await permit_service.permit_issue_readiness(
+        db, cid,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+    )
+
+
+@router.post("/{cart_item_id}/permit-issue", response_model=PermitProgressRead)
+async def issue_permit(
+    cart_item_id: str,
+    data: PermitIssueCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("training.edit")),
+):
+    try:
+        cid = uuid.UUID(cart_item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid cart item ID")
+    progress = await permit_service.issue_permit(
+        db, cid,
+        issued_date=data.issued_date,
+        company_id=current_user.company_id, current_user_role=current_user.role,
+        changed_by=current_user.phone,
+        changed_by_name=(current_user.first_name or "") + " " + (current_user.last_name or ""),
+    )
+    return PermitProgressRead.model_validate(progress)
 
 
 # ── Permit promises (drives expecting_permit_on_date / delayed_days) ─

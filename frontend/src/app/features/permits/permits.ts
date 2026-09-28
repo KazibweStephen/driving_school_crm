@@ -14,6 +14,7 @@ import { MessageService } from 'primeng/api';
 import { PermitProgressService, PermitTracker } from '../../core/services/permit-progress.service';
 import { PaymentService, BranchInfo } from '../../core/services/payment.service';
 import { PermitStagesDialog } from './permit-stages-dialog';
+import { PermitIssueDialog } from './permit-issue-dialog';
 
 interface StatusOption {
   label: string;
@@ -25,13 +26,14 @@ interface StatusOption {
   imports: [
     CommonModule, FormsModule, ButtonModule, TableModule,
     TagModule, ToastModule, InputTextModule, SelectModule, MultiSelectModule,
-    TooltipModule, PaginatorModule, PermitStagesDialog,
+    TooltipModule, PaginatorModule, PermitStagesDialog, PermitIssueDialog,
   ],
   providers: [MessageService],
   templateUrl: './permits.html',
 })
 export class PermitsCmp implements OnInit {
   stagesDialog = viewChild(PermitStagesDialog);
+  issueDialog = viewChild(PermitIssueDialog);
   trackers = signal<PermitTracker[]>([]);
   loading = signal(false);
   total = 0;
@@ -157,6 +159,10 @@ export class PermitsCmp implements OnInit {
 
   manageStages(t: PermitTracker) {
     this.stagesDialog()?.open(t);
+  }
+
+  issuePermit(t: PermitTracker) {
+    this.issueDialog()?.open(t);
   }
 
   onStagesChanged() {

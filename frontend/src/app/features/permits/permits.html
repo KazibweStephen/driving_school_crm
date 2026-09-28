@@ -126,6 +126,8 @@
           <div class="flex items-center gap-1">
             <p-button icon="pi pi-sliders-h" rounded="true" text="true" severity="warn"
               pTooltip="Manage Permit Stages" (onClick)="manageStages(t)" />
+            <p-button icon="pi pi-id-card" rounded="true" text="true" severity="success"
+              pTooltip="Issue Permit" (onClick)="issuePermit(t)" data-testid="issue-permit" />
             <p-button icon="pi pi-eye" rounded="true" text="true" severity="info"
               pTooltip="Manage Permit Stages" (onClick)="manageStages(t)" />
           </div>
@@ -148,3 +150,4 @@
 </div>
 
 <app-permit-stages-dialog #stagesDialog (changed)="onStagesChanged()"></app-permit-stages-dialog>
+<app-permit-issue-dialog #issueDialog (changed)="onStagesChanged()"></app-permit-issue-dialog>

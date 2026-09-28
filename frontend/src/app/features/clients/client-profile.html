@@ -1653,9 +1653,18 @@
                           @if (canCreateExpense()) {
                             <p-button label="File Expense" icon="pi pi-plus" size="small"
                                       (onClick)="filePermitExpense(activeCi, item)" [loading]="loading()"
+                                      [disabled]="!permitExpenseCanFile(item)"
                                       [attr.data-testid]="'file-' + item.category_code" />
                           }
                         </div>
+                        @if (canCreateExpense() && !permitExpenseCanFile(item)) {
+                          <div class="mt-1 text-xs text-amber-600" [attr.data-testid]="'amount-required-' + item.category_code">
+                            <i class="pi pi-exclamation-triangle mr-1"></i>Enter an amount greater than zero to file {{ item.category_name }}.
+                            @if (!item.expected_amount) {
+                              <span class="text-gray-500"> No amount is configured for this expense on the package.</span>
+                            }
+                          </div>
+                        }
                       } @else {
                         <div class="mt-2 flex flex-wrap items-center gap-2">
                           @if (item.status === 'pending') {

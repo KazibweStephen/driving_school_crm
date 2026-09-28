@@ -1022,8 +1022,12 @@ export class ClientProfile implements OnInit {
       .reduce((sum, i) => sum + (i.amount || 0), 0);
   }
 
-  permitExpenseStatusLabel(status: string | null): string {
-    switch (status) {
+  /** A permit stage is a real fee — never file it at zero (or blank). */
+  permitExpenseCanFile(item: PermitExpenseChecklistItem): boolean {
+    return item.can_file && !!item.draft_amount && item.draft_amount > 0;
+  }
+
+  permitExpenseStatusLabel(status: string | null): string {    switch (status) {
       case 'pending': return 'Pending Approval';
       case 'approved': return 'Pending Payment';
       case 'paid': return 'Paid';

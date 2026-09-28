@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import date, datetime, timedelta
 
@@ -1227,6 +1228,88 @@ _PERMIT_CATEGORY_ORDER = [
     ("permit_payment", "Permit Payment"),
 ]
 
+# A package's expected expense lines are named freely and descriptively
+# ("Permit Payment (Class B)", "Test Fees Booking", "Learners Permit
+# Payment"), so the checklist's flat category name will never match them
+# exactly. Each stage is matched by the tokens its line must contain, minus
+# the tokens that identify a *different* stage. This is what makes the
+# "Permit Payment" prefill resolve to the real line instead of the learner's
+# permit line. Comparison is on singular, punctuation-free tokens.
+_PERMIT_LINE_TOKENS: dict[str, tuple[set[str], set[str]]] = {
+    "learner_permit_payment": ({"learner", "permit", "payment"}, {"test", "police", "iov"}),
+    "test_booking": ({"test"}, {"police", "iov", "learner"}),
+    "police_booking": ({"police"}, {"test", "iov", "learner"}),
+    "iov_fees": ({"iov"}, {"test", "police", "learner"}),
+    # The final permit stage: must not steal the learner's permit line.
+    "permit_payment": ({"permit", "payment"}, {"learner", "test", "police", "iov"}),
+}
+
+
+def _line_tokens(line_name: str) -> set[str]:
+    out: set[str] = set()
+    for raw in re.split(r"[^a-z0-9]+", (line_name or "").lower()):
+        if not raw:
+            continue
+        out.add(raw[:-1] if len(raw) > 3 and raw.endswith("s") else raw)
+    return out
+
+
+def permit_category_code(category_name: str) -> str | None:
+    """The permit stage code for a flat expense-category name, or None."""
+    if not category_name:
+        return None
+    low = " ".join(str(category_name).split()).lower()
+    for code, name in _PERMIT_CATEGORY_RESOLVE.items():
+        if " ".join(name.split()).lower() == low:
+            return code
+    return None
+
+
+def permit_line_matcher(category_code: str, category_name: str | None = None):
+    """Predicate matching a package expected-expense line to a permit stage.
+
+    An expected-expense line is explicitly linked to an expense category, and
+    that link is the authoritative signal: "Learners Permit Payment(Class B)"
+    is linked to the Learner Permit Payment category, "…(Class A)" to Permit
+    Payment. The category link is therefore tried first, which also settles the
+    genuinely ambiguous Class A case correctly.
+
+    Only when a line has no usable category link do we fall back to matching
+    the descriptive line name by tokens, so the prefill still works on packages
+    whose lines were never categorised. Returns None for an unknown code (no
+    prefill rather than a wrong one).
+    """
+    spec = _PERMIT_LINE_TOKENS.get(category_code)
+    if spec is None:
+        return None
+    required, forbidden = spec
+    flat = " ".join((category_name or "").split()).lower()
+
+    def matches(entry: dict) -> bool:
+        # 1. The linked expense category is the authoritative signal.
+        linked = " ".join(str(entry.get("category_name") or "").split()).lower()
+        if linked:
+            if flat and linked == flat:
+                return True
+            # Fall through to the name test for a differently-named category.
+        # 2. Descriptive line name ("Permit Payment (Class B)").
+        name = entry.get("category") or ""
+        tokens = _line_tokens(name)
+        if not tokens:
+            return False
+        if not required.issubset(tokens) or (forbidden & tokens):
+            return False
+        # A line that is linked to a *different* known stage's category must
+        # not be borrowed by this stage.
+        for other_code, (o_req, o_forb) in _PERMIT_LINE_TOKENS.items():
+            if other_code == category_code:
+                continue
+            if o_req.issubset(tokens) and not (o_forb & tokens):
+                return False
+        return True
+
+    return matches
+
 
 async def list_permit_expense_checklist(
     db: AsyncSession,
@@ -1292,7 +1375,10 @@ async def list_permit_expense_checklist(
         default_date = await default_permit_expense_date(db, cons.id, name, ci.id)
         expected_amount = None
         if effective_cid is not None:
-            expected_amount = await cart_item_expected_amount(db, ci.id, name, effective_cid)
+            expected_amount = await cart_item_expected_amount(
+                db, ci.id, name, effective_cid,
+                matcher=permit_line_matcher(code, name),
+            )
         items.append({
             "category_code": code,
             "category_name": name,
@@ -1349,6 +1435,156 @@ async def list_permit_expense_checklist(
         "qualifying": qualifying,
         "items": items,
     }
+
+
+# ── Issuing a permit ────────────────────────────────────────────────
+
+# How long after the client sat the test the permit is issued. The testing
+# date is preferred; the booking date (the scheduled test) is the fallback.
+PERMIT_ISSUE_DAYS_AFTER_TEST = 15
+
+
+def default_permit_issue_date(progress: PermitProgress | None) -> date | None:
+    """The suggested permit issuance date: 15 days after the date the client
+    was tested, else 15 days after the test was booked. None when neither
+    date is on record — the caller then has to pick one."""
+    if progress is None:
+        return None
+    anchor = progress.tested_on_date or progress.test_date
+    if anchor is None:
+        return None
+    return anchor + timedelta(days=PERMIT_ISSUE_DAYS_AFTER_TEST)
+
+
+async def client_outstanding_balance(db: AsyncSession, consultation_id: uuid.UUID) -> dict:
+    """What the client still owes on a consultation.
+
+    Groups non-cancelled payments by product/package (independent collection
+    rows must not double-count), the same convention the clients list uses:
+    due is the largest recorded total_amount, paid is the sum of total_paid.
+    """
+    rows = (
+        await db.execute(
+            select(
+                Payment.product_id,
+                Payment.package_id,
+                func.max(Payment.total_amount).label("due"),
+                func.sum(Payment.total_paid).label("paid"),
+            )
+            .where(Payment.consultation_id == consultation_id, Payment.cancelled_at.is_(None))
+            .group_by(Payment.product_id, Payment.package_id)
+        )
+    ).all()
+    outstanding = 0.0
+    for r in rows:
+        outstanding += max(0.0, float(r.due or 0) - float(r.paid or 0))
+    return {"outstanding": round(outstanding, 2)}
+
+
+async def permit_issue_readiness(
+    db: AsyncSession,
+    cart_item_id: uuid.UUID,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+) -> dict:
+    """Everything the Issue Permit dialog needs: the balance gate, the
+    outstanding checklist rows to prompt about, and the suggested date."""
+    if not await _verify_cart_item_company(db, cart_item_id, company_id, current_user_role):
+        raise HTTPException(status_code=404, detail="Cart item not found")
+    ci = (await db.execute(select(CartItem).where(CartItem.id == cart_item_id))).scalar_one_or_none()
+    if ci is None:
+        raise HTTPException(status_code=404, detail="Cart item not found")
+    cons = (
+        await db.execute(select(Consultation).where(Consultation.id == ci.consultation_id))
+    ).scalar_one_or_none()
+    if cons is None:
+        raise HTTPException(status_code=404, detail="Client not found")
+    progress = (
+        await db.execute(select(PermitProgress).where(PermitProgress.cart_item_id == ci.id))
+    ).scalar_one_or_none()
+
+    balance = await client_outstanding_balance(db, cons.id)
+    checklist = await list_permit_expense_checklist(
+        db, ci.id, company_id=company_id, current_user_role=current_user_role
+    )
+    items = checklist.get("items", [])
+    unsettled = [i for i in items if i.get("status") in ("pending", "approved")]
+    unfiled = [i for i in items if not i.get("expense_id")]
+    suggested = default_permit_issue_date(progress)
+    blockers: list[str] = []
+    if balance["outstanding"] > 0.001:
+        blockers.append(
+            f"The client still owes {balance['outstanding']:,.0f}. "
+            "Clear the balance before issuing the permit."
+        )
+    for i in unsettled:
+        blockers.append(
+            f"{i['category_name']} is {'awaiting approval' if i.get('status') == 'pending' else 'approved but unpaid'}. "
+            "Approve and pay it before issuing the permit."
+        )
+    return {
+        "cart_item_id": str(ci.id),
+        "consultation_id": str(cons.id),
+        "client_name": _display_name(cons),
+        "outstanding_balance": balance["outstanding"],
+        "has_zero_balance": balance["outstanding"] <= 0.001,
+        "unsettled": [i["category_name"] for i in unsettled],
+        "unfiled": [i["category_name"] for i in unfiled],
+        "suggested_issue_date": suggested.isoformat() if suggested else None,
+        "permit_received_date": (
+            progress.permit_received_date.isoformat()
+            if progress and progress.permit_received_date
+            else None
+        ),
+        "blockers": blockers,
+        "can_issue": not blockers,
+    }
+
+
+async def issue_permit(
+    db: AsyncSession,
+    cart_item_id: uuid.UUID,
+    issued_date: date | None = None,
+    company_id: uuid.UUID | None = None,
+    current_user_role: UserRole | None = None,
+    changed_by: str | None = None,
+    changed_by_name: str | None = None,
+) -> PermitProgress:
+    """Record the permit as issued to the client.
+
+    Refuses while the client still owes money, and while any filed permit
+    expense is still awaiting approval or payment — those are exactly the
+    steps the Issue Permit dialog walks the user through. The date defaults
+    to 15 days after the test.
+    """
+    readiness = await permit_issue_readiness(
+        db, cart_item_id, company_id=company_id, current_user_role=current_user_role
+    )
+    if not readiness["can_issue"]:
+        raise HTTPException(status_code=400, detail=" ".join(readiness["blockers"]))
+
+    ci = (await db.execute(select(CartItem).where(CartItem.id == cart_item_id))).scalar_one_or_none()
+    progress = (
+        await db.execute(select(PermitProgress).where(PermitProgress.cart_item_id == ci.id))
+    ).scalar_one_or_none()
+    if issued_date is None:
+        issued_date = default_permit_issue_date(progress)
+    if issued_date is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter the permit issuance date (suggested: 15 days after the test).",
+        )
+    # upsert_permit_progress writes the permit_received_date audit entry itself.
+    updated = await upsert_permit_progress(
+        db,
+        ci.id,
+        permit_received_date=issued_date,
+        changed_by=changed_by,
+        changed_by_name=changed_by_name,
+    )
+    await db.commit()
+    await db.refresh(updated)
+    return updated
 
 
 # ── Permit promises ─────────────────────────────────────────────────
